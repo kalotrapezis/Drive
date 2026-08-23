@@ -22,6 +22,7 @@ public:
     bool ready() const { return m_ready; }
     QString errorMessage() const { return m_error; }
     QString localDeviceName() const { return m_localDeviceName; }
+    QString databasePath() const { return m_databasePath; }
     Q_INVOKABLE bool saveRoute(const QString &source, const QString &storageId, const QString &destination, const QString &behavior = QStringLiteral("Copy"));
     Q_INVOKABLE void refreshStorages();
     Q_INVOKABLE QString pathFromUrl(const QUrl &url) const { return url.toLocalFile(); }

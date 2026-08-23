@@ -8,6 +8,8 @@ Kirigami.ApplicationWindow {
     visible: true
     width: 900; height: 700
     title: qsTr("Local Drive — Setup")
+    property var selectedPreview: ({})
+    property string previewRouteId: ""
     function routeDescription() {
         return behavior.currentIndex === 0 ? qsTr("Copy and verify; keep source") : qsTr("Move policy saved; execution unavailable until verified cleanup is implemented")
     }
@@ -46,10 +48,21 @@ Kirigami.ApplicationWindow {
             Controls.Button { text: qsTr("Save route policy"); enabled: setupModel.ready && storage.currentIndex >= 0 && source.text.length > 0 && destination.text.length > 0; Accessible.name: qsTr("Save route policy"); onClicked: setupModel.saveRoute(source.text, storage.currentValue, destination.text, behavior.currentIndex === 0 ? "Copy" : "Move") }
             Kirigami.Heading { text: qsTr("Saved routes"); level: 2 }
             Repeater { model: setupModel.routes; delegate: Kirigami.Card { Layout.fillWidth: true
-                contentItem: Controls.Label { text: qsTr("%1 → %2: %3").arg(modelData.source).arg(modelData.destination).arg(modelData.behavior === "Copy" ? qsTr("Copy and verify; keep source") : qsTr("Move policy saved; execution unavailable until verified cleanup is implemented")); wrapMode: Text.Wrap; Accessible.name: text }
+                contentItem: ColumnLayout {
+                    Controls.Label { text: qsTr("%1 → %2: %3").arg(modelData.source).arg(modelData.destination).arg(modelData.behavior === "Copy" ? qsTr("Copy and verify; keep source") : qsTr("Move policy saved; execution unavailable until verified cleanup is implemented")); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
+                    RowLayout {
+                        Controls.Button { text: qsTr("Preview"); enabled: modelData.behavior === "Copy" && !copyEngine.running; onClicked: { previewRouteId = modelData.id; copyEngine.previewRoute(modelData.id) } }
+                        Controls.Button { text: qsTr("Start Copy"); enabled: modelData.behavior === "Copy" && previewRouteId === modelData.id && selectedPreview.ok === true && copyEngine.previewSuccessful && !copyEngine.running; onClicked: copyEngine.startCopy() }
+                        Controls.Button { text: qsTr("Cancel"); enabled: previewRouteId === modelData.id && copyEngine.running; onClicked: copyEngine.cancel() }
+                    }
+                    Controls.Label { visible: previewRouteId === modelData.id && selectedPreview.ok === true; text: qsTr("Preview: %1 files · %2 bytes · to copy %3 · identical %4 · conflicts %5 · unsupported %6 · free %7").arg(selectedPreview.files).arg(selectedPreview.bytes).arg(selectedPreview.toCopy).arg(selectedPreview.identical).arg(selectedPreview.conflicts).arg(selectedPreview.unsupported).arg(selectedPreview.freeBytes); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
+                    Controls.Label { visible: previewRouteId === modelData.id && selectedPreview.ok === false && selectedPreview.error !== undefined && selectedPreview.error.length > 0; text: qsTr("Preview failed: %1").arg(selectedPreview.error); color: Kirigami.Theme.negativeTextColor; wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
+                    Controls.Label { visible: previewRouteId === modelData.id && copyEngine.status.length > 0; text: copyEngine.status; Layout.fillWidth: true; Accessible.name: text }
+                }
             } }
         }
     }
+    Connections { target: copyEngine; function onPreviewChanged() { selectedPreview = copyEngine.previewData } }
     FolderDialog { id: sourceDialog; title: qsTr("Choose source folder"); onAccepted: source.text = setupModel.pathFromUrl(selectedFolder) }
     FolderDialog { id: destinationDialog; title: qsTr("Choose destination folder"); currentFolder: storage.currentIndex >= 0 ? "file://" + setupModel.storages[storage.currentIndex + 1].root : ""; onAccepted: destination.text = setupModel.pathFromUrl(selectedFolder) }
 }

@@ -1,5 +1,4 @@
 #include "setupmodel.h"
-
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
@@ -41,11 +40,13 @@ SetupModel::SetupModel(const QString &databasePath, const QVariantList &storageO
         refreshStorages();
     }
     QSqlQuery storageQuery(QSqlDatabase::database(m_connectionName));
-    for (const auto &value : m_storages) {
-        const auto storage = value.toMap();
+    for (int index = 0; index < m_storages.size(); ++index) {
+        auto storage = m_storages.at(index).toMap();
         if (storage.value("id") == "local") continue;
+        QString identity = storage.value("identity").toString();
+        if (identity.isEmpty()) identity = QStringLiteral("storage:%1").arg(storage.value("id").toString());
         if (!storageQuery.prepare("INSERT OR IGNORE INTO storage(id,stable_identity,device_id,kind,label,selected_root,presence) VALUES(?,?,?,?,?,?,?)")) { m_ready = false; fail(storageQuery.lastError().text()); return; }
-        storageQuery.addBindValue(storage.value("id")); storageQuery.addBindValue(storage.value("id")); storageQuery.addBindValue("local"); storageQuery.addBindValue(storage.value("kind", "removable")); storageQuery.addBindValue(storage.value("label")); storageQuery.addBindValue(storage.value("root")); storageQuery.addBindValue(storage.value("present").toBool() ? "present" : "missing");
+        storageQuery.addBindValue(storage.value("id")); storageQuery.addBindValue(identity); storageQuery.addBindValue("local"); storageQuery.addBindValue(storage.value("kind", "removable")); storageQuery.addBindValue(storage.value("label")); storageQuery.addBindValue(storage.value("root")); storageQuery.addBindValue(storage.value("present").toBool() ? "present" : "missing");
         if (!storageQuery.exec()) { m_ready = false; fail(storageQuery.lastError().text()); return; }
     }
     loadRoutes();
@@ -92,6 +93,7 @@ bool SetupModel::openCatalog() {
 }
 
 void SetupModel::refreshStorages() {
+    for (auto &value : m_storages) if (value.toMap().value("kind") == "removable") { auto storage = value.toMap(); storage.insert("present", false); value = storage; }
     QSqlQuery mark(QSqlDatabase::database(m_connectionName));
     if (!mark.exec("UPDATE storage SET presence='missing' WHERE kind='removable'")) { fail(mark.lastError().text()); return; }
     for (const auto &device : Solid::Device::listFromType(Solid::DeviceInterface::StorageAccess)) {
@@ -108,13 +110,14 @@ void SetupModel::refreshStorages() {
         const auto volume = device.as<Solid::StorageVolume>();
         const QString uuid = volume ? volume->uuid() : QString();
         if (uuid.isEmpty()) continue;
-        QVariantMap item{{"id", "storage:" + uuid}, {"label", volume->label().isEmpty() ? QFileInfo(root).fileName() : volume->label()}, {"root", root}, {"present", true}, {"kind", "removable"}};
+        const QString identity = QStringLiteral("storage:%1").arg(uuid);
+        QVariantMap item{{"id", "storage:" + uuid}, {"identity", identity}, {"label", volume->label().isEmpty() ? QFileInfo(root).fileName() : volume->label()}, {"root", root}, {"present", true}, {"kind", "removable"}};
         bool duplicate = false;
         for (auto &v : m_storages) if (v.toMap().value("id") == item.value("id")) { v = item; duplicate = true; }
         if (!duplicate) m_storages.append(item);
         QSqlQuery save(QSqlDatabase::database(m_connectionName));
-        save.prepare("INSERT INTO storage(id,stable_identity,device_id,kind,label,selected_root,presence) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET label=excluded.label,selected_root=excluded.selected_root,presence='present'");
-        save.addBindValue(item.value("id")); save.addBindValue(item.value("id")); save.addBindValue("local"); save.addBindValue("removable"); save.addBindValue(item.value("label")); save.addBindValue(root); save.addBindValue("present");
+        save.prepare("INSERT INTO storage(id,stable_identity,device_id,kind,label,selected_root,presence) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET stable_identity=excluded.stable_identity,label=excluded.label,selected_root=excluded.selected_root,presence='present'");
+        save.addBindValue(item.value("id")); save.addBindValue(identity); save.addBindValue("local"); save.addBindValue("removable"); save.addBindValue(item.value("label")); save.addBindValue(root); save.addBindValue("present");
         if (!save.exec()) { fail(save.lastError().text()); return; }
     }
     m_error.clear();
@@ -123,8 +126,8 @@ void SetupModel::refreshStorages() {
 
 void SetupModel::loadRoutes() {
     QSqlQuery q(QSqlDatabase::database(m_connectionName));
-    if (!q.exec("SELECT source_root,destination_root,behavior FROM routes ORDER BY created_at")) return;
-    while (q.next()) m_routes.append(QVariantMap{{"source", q.value(0)}, {"destination", q.value(1)}, {"behavior", q.value(2)}});
+    if (!q.exec("SELECT id,source_root,destination_root,behavior,destination_storage_id FROM routes WHERE enabled=1 ORDER BY created_at")) return;
+    while (q.next()) m_routes.append(QVariantMap{{"id", q.value(0)}, {"source", q.value(1)}, {"destination", q.value(2)}, {"behavior", q.value(3)}, {"storageId", q.value(4)}});
 }
 
 bool SetupModel::saveRoute(const QString &source, const QString &storageId, const QString &destination, const QString &behavior) {
@@ -133,11 +136,12 @@ bool SetupModel::saveRoute(const QString &source, const QString &storageId, cons
     QVariantMap selected; for (const auto &v : m_storages) if (v.toMap().value("id") == storageId) selected = v.toMap();
     const QString root = cleanPath(selected.value("root").toString());
     if (selected.isEmpty() || !selected.value("present").toBool() || root.isEmpty() || !underOrEqual(dst, root) || underOrEqual(src, root) || underOrEqual(src, dst) || underOrEqual(dst, src)) return fail("Destination is not a selected storage folder or overlaps the source.");
+    const QString routeId = QUuid::createUuid().toString(QUuid::Id128);
     auto db = QSqlDatabase::database(m_connectionName); if (!db.transaction()) return fail(db.lastError().text()); QSqlQuery q(db);
     q.prepare("INSERT INTO routes(id,source_storage_id,destination_storage_id,source_root,destination_root,behavior) VALUES(?,?,?,?,?,?)");
-    q.addBindValue(QUuid::createUuid().toString(QUuid::Id128)); q.addBindValue("local"); q.addBindValue(storageId); q.addBindValue(src); q.addBindValue(dst); q.addBindValue(behavior);
+    q.addBindValue(routeId); q.addBindValue("local"); q.addBindValue(storageId); q.addBindValue(src); q.addBindValue(dst); q.addBindValue(behavior);
     if (!q.exec()) { db.rollback(); return fail(q.lastError().text()); }
     if (!q.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1")) { db.rollback(); return fail(q.lastError().text()); }
     if (!db.commit()) { db.rollback(); return fail(db.lastError().text()); }
-    ++m_revision; m_error.clear(); m_routes.append(QVariantMap{{"source", src}, {"destination", dst}, {"behavior", behavior}}); emit changed(); return true;
+    ++m_revision; m_error.clear(); m_routes.append(QVariantMap{{"id", routeId}, {"source", src}, {"destination", dst}, {"behavior", behavior}, {"storageId", storageId}}); emit changed(); return true;
 }
