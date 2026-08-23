@@ -1,7 +1,7 @@
 # Local Drive 0.1 — Implementation Specification
 
-Status: Draft for approval  
-Date: 2026-08-22  
+Status: Draft for approval
+Date: 2026-08-22
 Source: `Plan.md`
 
 ## 1. Release objective
