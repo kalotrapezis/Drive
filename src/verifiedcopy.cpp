@@ -506,7 +506,7 @@ bool prepareCatalog(QSqlDatabase &db, const VerifiedCopy::Request &r, const Veri
     jobId = jobIdOverride.isEmpty() ? stableJobId(r, files) : jobIdOverride;
     if (!db.transaction()) { if (error) *error = db.lastError().text(); return false; }
     QSqlQuery q(db);
-    const QString sourceDeviceId = r.sourceDeviceId.isEmpty() ? QStringLiteral("local") : r.sourceDeviceId;
+    QString sourceDeviceId = r.sourceDeviceId.isEmpty() ? QStringLiteral("local") : r.sourceDeviceId;
     const QString sourceDeviceStableId = r.sourceDeviceStableId.isEmpty() ? sourceDeviceId : r.sourceDeviceStableId;
     const QString sourceDeviceName = r.sourceDeviceName.isEmpty() ? QStringLiteral("Computer") : r.sourceDeviceName;
     const QString sourceDeviceKind = r.sourceDeviceKind.isEmpty() ? QStringLiteral("Desktop") : r.sourceDeviceKind;
@@ -518,6 +518,12 @@ bool prepareCatalog(QSqlDatabase &db, const VerifiedCopy::Request &r, const Veri
     q.prepare("INSERT OR IGNORE INTO devices(id,stable_id,name,kind,is_local) VALUES('local','local','Computer','Desktop',1)");
     if (!q.exec()) { db.rollback(); if (error) *error = q.lastError().text(); return false; }
     if (sourceDeviceId != QStringLiteral("local")) {
+        if (sourceTransport == QStringLiteral("mtp") || sourceTransport == QStringLiteral("wireless")) {
+            q.prepare("SELECT device_id FROM device_aliases WHERE alias=?");
+            q.addBindValue(sourceDeviceStableId);
+            if (!q.exec()) { db.rollback(); if (error) *error = q.lastError().text(); return false; }
+            if (q.next()) sourceDeviceId = q.value(0).toString();
+        }
         q.prepare("INSERT OR IGNORE INTO devices(id,stable_id,name,kind,is_local) VALUES(?,?,?,?,0)");
         q.addBindValue(sourceDeviceId); q.addBindValue(sourceDeviceStableId); q.addBindValue(sourceDeviceName); q.addBindValue(sourceDeviceKind);
         if (!q.exec()) { db.rollback(); if (error) *error = q.lastError().text(); return false; }
