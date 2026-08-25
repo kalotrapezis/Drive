@@ -349,8 +349,9 @@ The setup model also persists first-seen acknowledgement and hidden state for
 detected phone and storage identities. Its current onboarding modal is
 informational and non-destructive: it explains USB/MTP and the fixed phone
 roots, identifies storage by stable identity, and never starts a transfer or
-formats a disk. The repository includes a source-only Android candidate beacon;
-wireless QR pairing and authenticated file access remain future capabilities.
+formats a disk. The repository includes a source-only Android candidate beacon
+and protocol sender backend; wireless QR pairing, profile UI, and authenticated
+file access remain future capabilities.
 
 1. Detect an unlocked MTP phone exposed through KDE/KIO.
 2. Save its stable available identity and friendly name.
@@ -381,8 +382,8 @@ fingerprint, and the sender pins the receiver CA certificate. Files use
 acknowledged chunk offsets and app-owned resumable partials; after the final
 SHA-256 check the staged upload is passed through `VerifiedCopy` and one normal
 catalog receipt is committed. The CLI pair is a deterministic LAN harness. The
-Android source currently emits the same candidate beacon only; it is not the
-final pairing UI or transfer client.
+Android source now includes the matching sender backend, but it is not yet
+wired to Android roots, the final pairing UI, or a real-phone transfer.
 
 The verified-import slice is intentionally one file at a time at the engine
 and now emits live received-byte progress while streaming each object. A

@@ -87,11 +87,12 @@ surface for verified transfers.
 
 ## Android discovery companion (Alpha source only)
 
-The minimal Android module under `android/` currently does one thing: while its
-foreground service is running, it broadcasts the versioned candidate-only
-discovery beacon every five seconds on the local network. It does not read
-files, pair, or authorize a transfer. The Linux listener remains the source of
-truth for device identity and trust.
+The minimal Android module under `android/` provides the foreground
+candidate-discovery beacon and an unconnected `WirelessSender` backend. The
+beacon broadcasts every five seconds; the sender implements the Alpha Linux
+framing, resumable chunks, TLS 1.3, and receipt verification, but the app does
+not yet expose it through a pairing/profile UI or read user files. The Linux
+listener remains the source of truth for device identity and trust.
 
 For a local build, use the installed Android SDK and Java 17:
 
