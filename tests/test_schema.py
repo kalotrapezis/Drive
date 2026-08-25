@@ -22,6 +22,8 @@ class CatalogSchemaTest(unittest.TestCase):
                 VALUES ('dst', 'disk-uuid', 'dev-1', 'removable', 'T7', '/mnt/T7', 'present');
                 INSERT INTO routes(id, source_storage_id, destination_storage_id, source_root, destination_root)
                 VALUES ('route-1', 'src', 'dst', '/home/test', '/mnt/T7/Local Drive');
+                INSERT INTO routes(id, source_storage_id, destination_storage_id, source_root, destination_root, content_type)
+                VALUES ('route-photos', 'src', 'dst', '/home/test/photos', '/mnt/T7/Local Drive/Photos', 'Photos');
                 INSERT INTO content(id, sha256, size_bytes, original_name)
                 VALUES ('content-1', lower(hex(zeroblob(32))), 5, 'a.txt');
                 INSERT INTO jobs(id, route_id, behavior, source_path, destination_path, bytes_total)
@@ -41,6 +43,18 @@ class CatalogSchemaTest(unittest.TestCase):
             """)
             self.assertEqual(db.execute("SELECT state FROM locations WHERE id='loc-1'").fetchone()[0], "verified")
             self.assertEqual(db.execute("SELECT event FROM history WHERE id='event-1'").fetchone()[0], "verified")
+            self.assertEqual(db.execute("SELECT version FROM schema_version").fetchone()[0], 6)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM device_aliases").fetchone()[0], 0)
+            for table in ("devices", "storage"):
+                columns = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+                self.assertTrue({"onboarding_seen", "hidden"} <= columns)
+            self.assertEqual(db.execute("SELECT keep_policy FROM routes WHERE id='route-1'").fetchone()[0], "Everything")
+            self.assertEqual(db.execute("SELECT content_type FROM routes WHERE id='route-1'").fetchone()[0], "Drive")
+            self.assertEqual(db.execute("SELECT content_type FROM routes WHERE id='route-photos'").fetchone()[0], "Photos")
+            self.assertIsNone(db.execute("SELECT staging_root FROM routes WHERE id='route-1'").fetchone()[0])
+
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("INSERT INTO routes(id, source_storage_id, destination_storage_id, source_root, destination_root, content_type) VALUES ('invalid-type', 'src', 'dst', '/home/invalid', '/mnt/T7/invalid', 'Archive')")
 
             db.execute("INSERT INTO locations(id, content_id, storage_id, relative_path, state, size_bytes) VALUES ('safe', 'content-1', 'dst', 'photo..jpg', 'present', 5)")
             for unsafe_path in ("..", "../x", "x/../y", "x/.."):

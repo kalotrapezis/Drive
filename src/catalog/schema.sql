@@ -5,7 +5,7 @@ CREATE TABLE schema_version (
     version         INTEGER NOT NULL CHECK (version >= 1),
     installed_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-INSERT INTO schema_version(singleton, version) VALUES (1, 1);
+INSERT INTO schema_version(singleton, version) VALUES (1, 6);
 
 CREATE TABLE app_config (
     singleton       INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -24,9 +24,18 @@ CREATE TABLE devices (
     is_local        INTEGER NOT NULL DEFAULT 0 CHECK (is_local IN (0, 1)),
     created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_seen_at    TEXT,
-    last_inventory_at TEXT
+    last_inventory_at TEXT,
+    onboarding_seen INTEGER NOT NULL DEFAULT 0 CHECK (onboarding_seen IN (0, 1)),
+    hidden          INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))
 );
 CREATE UNIQUE INDEX one_local_device ON devices(is_local) WHERE is_local = 1;
+
+CREATE TABLE device_aliases (
+    alias        TEXT PRIMARY KEY,
+    device_id    TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    transport    TEXT NOT NULL CHECK (transport IN ('mtp', 'wireless')),
+    last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE storage (
     id              TEXT PRIMARY KEY,
@@ -39,7 +48,9 @@ CREATE TABLE storage (
     presence        TEXT NOT NULL DEFAULT 'unknown'
                     CHECK (presence IN ('present', 'missing', 'offline', 'unknown')),
     last_seen_at    TEXT,
-    last_verified_at TEXT
+    last_verified_at TEXT,
+    onboarding_seen INTEGER NOT NULL DEFAULT 0 CHECK (onboarding_seen IN (0, 1)),
+    hidden          INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))
 );
 
 CREATE TABLE routes (
@@ -49,8 +60,11 @@ CREATE TABLE routes (
     source_root     TEXT NOT NULL CHECK (source_root <> ''),
     destination_root TEXT NOT NULL CHECK (destination_root <> ''),
     behavior        TEXT NOT NULL DEFAULT 'Copy' CHECK (behavior IN ('Copy', 'Move')),
+    keep_policy     TEXT NOT NULL DEFAULT 'Everything' CHECK (keep_policy IN ('Everything', 'Last month', 'Last week', 'Last day', 'Nothing')),
+    content_type    TEXT NOT NULL DEFAULT 'Drive' CHECK (content_type IN ('Drive', 'Photos')),
     enabled         INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     staging_max_bytes INTEGER CHECK (staging_max_bytes IS NULL OR staging_max_bytes >= 0),
+    staging_root    TEXT CHECK (staging_root IS NULL OR staging_root <> ''),
     minimum_free_bytes INTEGER CHECK (minimum_free_bytes IS NULL OR minimum_free_bytes >= 0),
     organize_photos INTEGER NOT NULL DEFAULT 0 CHECK (organize_photos IN (0, 1)),
     created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -92,6 +106,7 @@ CREATE TABLE jobs (
     id              TEXT PRIMARY KEY,
     route_id        TEXT NOT NULL REFERENCES routes(id),
     behavior        TEXT NOT NULL CHECK (behavior IN ('Copy', 'Move')),
+    keep_policy     TEXT NOT NULL DEFAULT 'Everything' CHECK (keep_policy IN ('Everything', 'Last month', 'Last week', 'Last day', 'Nothing')),
     state           TEXT NOT NULL DEFAULT 'Queued'
                     CHECK (state IN ('Queued', 'Copying', 'Verifying', 'Verified', 'Cleanup pending', 'Complete', 'Paused', 'Cancelled', 'Conflict', 'Failed')),
     source_path     TEXT NOT NULL CHECK (source_path <> ''),

@@ -4,20 +4,31 @@
 
 Build a simple local-first file and photo transfer app for Linux and Android.
 It should feel like a local Google Drive, without Syncthing's peer/share setup:
-the user chooses a source, a destination, and what should happen.
+the user chooses the library parent and the route policy. The app exposes two
+fixed content roots: **Drive** for ordinary files and **Photos** for photos and
+videos.
 
-The immediate need is **transfer**, not backup:
+The immediate need is **transfer**, with an explicit local **Backup** route to a
+configured storage node; this is not a cloud-backup service:
 
 ```text
-Phone / tablet → external HDD/SSD when connected
+Phone / tablet → configured storage node when available
               ↘ bounded laptop staging only while the disk is absent
 ```
 
-When the designated disk is connected, phone imports go directly to it so the
-laptop does not hold an unnecessary second full copy. When it is absent, a
-size-limited laptop staging folder may queue files. Once the disk returns, those
-files are copied, verified, recorded, and—only for a Move job—removed from the
-previous location.
+The storage node is selected by the user in Setup and may currently be a USB
+disk, a NAS, or another mounted network/removable storage location. The
+connection method is not part of the route identity: it is a transport/provider
+whose presence and capabilities the service detects. When the configured node
+is available, phone imports go directly to it so the laptop does not hold an
+unnecessary second full copy. When it is absent, a size-limited laptop staging
+folder may queue files. Once the node returns, those files are copied, verified,
+recorded, and—only for a Move job—removed from the previous location.
+
+For Linux filesystems, the route identifies a disk by its filesystem **UUID**
+when available, not by `/dev/sdX`, label, or current mount path. The catalog also
+keeps provider and filesystem checks so a reformatted or cloned disk is not
+silently accepted as the old backup node.
 
 Working name: **Local Drive**.
 
@@ -25,7 +36,9 @@ Working name: **Local Drive**.
 
 ## Words used in the app
 
-Direction and behavior are separate choices.
+Direction and retention are separate choices. The user-facing route model is
+Send/Receive plus Keep; the older Copy/Move terms remain internal M0
+compatibility names only.
 
 ### Direction
 
@@ -33,15 +46,37 @@ Direction and behavior are separate choices.
 - **Receive files** — this device accepts files into a selected folder.
 - **Send & receive** — both directions are allowed.
 
-### Behavior
+### Keep policy
 
-- **Copy / Backup** — copy and verify; keep the source.
-- **Move** — copy, verify, record the new location, then remove the source.
-- **Sync** — keep both sides aligned, with explicit deletion and conflict
-  handling. This is later work, not part of the first release.
+- **Keep Everything** — copy and verify; retain the source.
+- **Keep Last month**, **Keep Last week**, or **Keep Last day** — retain files
+  in that period and make older eligible files available for cleanup only after
+  the destination receipt and the user's confirmation.
+- **Keep Nothing** — verified Move semantics: copy, verify, record the receipt,
+  then clean the eligible source files.
+- **Send & receive** always forces **Keep Everything**, because two-way routes
+  retain data on both devices.
 
-The UI must say what will happen before a job starts. A Move must never be
-called a backup because, after cleanup, only one copy may remain.
+The timing option **When drive is connected** and the destination option
+**Archive Library** are separate settings. The UI states the exact result
+before a job starts. Internally, M0 maps Keep Everything to Copy and Keep
+Nothing to Move; a Move must never be called a backup.
+
+### Backup format
+
+Backup is a route-level purpose, not a photo-only operation. It covers the
+single library root and therefore includes both `Drive/` and `Photos/`:
+
+- **Mirror folders** — copy the ordinary `Drive/` and `Photos/` trees to the
+  storage node, preserving normal file access and folder structure.
+- **Library archive** — create one read-only `.ldrive` snapshot containing both
+  roots, a manifest, and per-file hashes. The app can browse it and extract a
+  verified copy; editing never happens inside the archive.
+- **Both** — create the ordinary mirror and the `.ldrive` snapshot when the
+  user wants immediate access plus a compact historical artifact.
+
+The active computer library remains ordinary folders in every mode. The archive
+is a backup/snapshot, not a replacement for `Drive/` or `Photos/`.
 
 ---
 
@@ -72,21 +107,78 @@ called a backup because, after cleanup, only one copy may remain.
 This is a first-class workflow, not a fallback:
 
 1. Connect the unlocked phone and select **File transfer / MTP**.
-2. The Linux app detects the phone and shows **Import new files from phone**.
-3. On first use, select source folders such as `DCIM/Camera`, Screenshots, or
-   Downloads and save them for that phone.
-4. The app compares the phone inventory with its catalog and shows only new,
+2. The Linux app detects the phone and shows the two available actions:
+   `Drive → Drive` and `DCIM → Photos`.
+3. The user selects an action in the detection popup and starts the transfer.
+4. The app compares the fixed phone root with its catalog and shows only new,
    changed, duplicate, and conflicting files.
-5. Choose the destination. If the configured external disk is connected, it is
-   preferred over laptop staging.
-6. Click **Copy new** or **Move new**.
-7. Linux copies each file, verifies it, updates history, and only then may
-   delete the phone copy for a Move.
+5. If the configured storage node is connected, it is preferred over laptop
+   staging.
+6. Linux copies each file, verifies it, updates history, and only then may
+   offer cleanup according to the selected Keep policy.
 
 Standard Android MTP is controlled by the Linux side. The Android app does not
 need to be open, but the phone normally must be unlocked and remain in File
 transfer mode. MTP import is user-started; it is not an unattended background
 sync while the cable is disconnected.
+
+The current first M1 slice discovers top-level devices through the installed KDE
+KIO MTP worker and shows the connected phone in the setup view. The CLI now has
+bounded directory inventory/live-logged copy, single-file `verified-import`,
+bounded `verified-import-dir`, and `verified-stage-dir`. The latter previews the
+complete selected tree, checks total on-disk staging occupancy against the
+explicit cap, and reuses the single-file KIO stream, independent hash,
+no-replace publication, and SQLite receipt path for each staged item. The
+existing verified local copy command drains that staging root later. These
+commands remain Copy-only; phone cleanup remains a later device-gated slice.
+
+The read-only `mtp-scan` command now recursively inventories one selected source
+with explicit file-count and byte bounds. On the connected Xiaomi 15,
+`SyncThing/Εκπαίδευση` completed at 18,709 files and 10,545,013,376 bytes under
+a 20,000-file bound; the source was not modified. A 10-file bound returned exit
+2 with an explicit bounds-exceeded result rather than claiming completion.
+
+Live smoke-test evidence on 2026-08-25: KDE/KIO exposed a Xiaomi 15 at
+`mtp:/Xiaomi 15/Εσωτ. κοινόχρ. αποθ. χώρος/`; its `SyncThing/Εκπαίδευση`
+top-level matched the PC `Projects/Defaulty` tree, and a real `DCIM` JPEG was
+copied to a fresh PC temporary directory with an independently matching
+SHA-256. A root-level `Drive` and user-review `trash` folder were created on
+the phone without deleting or overwriting any existing item. The canonical
+application folder policy remains undecided between this smoke-test layout and
+the configured `Documents/Local Drive/Drive` layout.
+
+The same verified-import path was then exercised against
+`DCIM/PXL_20220303_181453939.MP.jpg`: it completed to a fresh PC temporary
+destination with 275,936 bytes and SHA-256
+`ecd42246a0034f68debcdb5db963ab4874349963ae38a42d871278c5615a8ec0`. The phone
+source remained untouched.
+
+The connected-device M1 smoke then copied one JPEG (4,458,631 bytes) and one
+MP4 (3,451,666 bytes) from `DCIM/Camera` to a new T7 test directory, repeated
+both imports, and found two verified catalog locations, two matching receipts,
+and zero hash mismatches or duplicate destination files. The phone sources
+remained present. Physical phone unplug/reconnect during an active transfer is
+still the remaining M1 recovery action.
+MTP byte progress is now emitted live while each stream is received. A larger
+127,076,235-byte MP4 completed and repeated successfully on the same T7 test
+path; both source and destination hashes matched, and `/usr/bin/time -v`
+reported a maximum resident set of 37,508 KiB on the first run and 36,952 KiB
+on the repeat. This confirms bounded streaming for a large real file, not the
+physical disconnect recovery gate.
+The remote stream also has a deterministic unreliable-link test: cancelling
+after a received chunk records `Cancelled`, publishes no incomplete destination,
+retains the source, and retries to one verified receipt. The same engine now
+accepts a `wireless:` source identity in the CLI simulation and records a
+transport alias in the catalog. Repeated USB/MTP and wireless observations can
+therefore point to one paired device record; this tests the shared identity and
+transfer safety, not a real LAN protocol.
+
+The follow-up lock-state check used the installed Android SDK `adb`: while the
+Xiaomi reported `mInputRestricted=true`, `mDreamingLockscreen=true`, and
+`mWakefulness=Dozing`, the same verified-import completed successfully with the
+same 275,936-byte SHA-256 receipt. This proves a small locked-screen transfer,
+not an unattended long-duration guarantee; that still needs a larger controlled
+real-device run.
 
 ### 2. Android → Linux wirelessly
 
@@ -94,11 +186,13 @@ The Android app pairs with Linux on the same local network, watches only the
 folders the user selects, and queues new files. It sends them when the Linux
 receiver is reachable and receives a verified receipt before any cleanup.
 
-### 3. Linux staging folder → external HDD/SSD
+### 3. Linux staging folder → configured storage node
 
-The user selects an exact destination disk and folder. Linux identifies the
-disk by filesystem UUID when available—not by label or mount path alone—and
-runs the waiting Copy or Move job when that disk returns.
+The user selects an exact destination storage node and folder. For a mounted
+filesystem, Linux identifies the storage by filesystem UUID when available—not
+by label or mount path alone—and runs the waiting Copy or Move job when that
+node returns. NAS and other providers use their own stable identity and
+capability checks.
 
 ### 4. Android → attached USB HDD/SSD
 
@@ -116,8 +210,9 @@ The first-run guide uses the same visual sync map later available in Settings:
 
 1. Name this app instance and identify it as Server, Desktop, Laptop, Tablet, or
    Phone.
-2. Choose or confirm its Drive, Gallery, Camera/Screenshots, and optional staging
-   locations. Create missing app folders only after showing the exact paths.
+2. Choose or confirm the library parent on this computer and optional staging
+   location. The app creates only `Drive/` and `Photos/` below that parent after
+   showing the exact paths. Phone roots remain fixed.
 3. Discover other Local Drive instances on the current LAN or enter a pairing
    code. Pairing requires confirmation on both devices.
 4. If this is the first device, start a new shared map. If it joins an existing
@@ -142,13 +237,20 @@ user never has to learn a second configuration model.
 
 ### Transfer and clear space
 
-1. New phone photos enter the configured sources.
-2. They arrive by one-click cable import or wireless sending. If the disk is
-   connected, the content goes directly to it; otherwise it may enter staging.
-3. Linux independently verifies and acknowledges each file.
-4. When the external disk returns, Linux drains the bounded staging queue.
-5. A receipt for the final destination returns to Android when applicable.
-6. **Clear space** previews eligible files, total space, required destination,
+1. A phone or tablet becomes visible as an Online source node when discovered
+   over MTP, USB, or the configured wireless transport.
+2. Discovery opens one action prompt listing the numbered eligible actions from
+   the visual map, for example **1. Import new files to Drive** and **2. Import
+   photos to Photos**. Detection alone never starts a transfer.
+3. The user selects an action and presses **Start transfer**. The prompt closes,
+   the selected route becomes a queued job, and progress remains visible in the
+   tray and Sync panel. The prompt can be reopened from the device entry.
+4. If the disk/storage node is connected, content goes directly to it;
+   otherwise it may enter staging. Linux independently verifies and acknowledges
+   each file.
+5. When the destination node returns, Linux drains the bounded staging queue.
+6. A receipt for the final destination returns to Android when applicable.
+7. **Clear space** previews eligible files, total space, required destination,
    and excluded files before requesting deletion.
 
 Default rule:
@@ -176,7 +278,10 @@ Every Copy or Move follows the same transaction:
 6. Confirm source and destination size/hash match and the source did not change.
 7. Atomically rename the temporary file when supported.
 8. Record the verified location and completed event.
-9. For Move only, trash/delete the source and record that event.
+9. After the complete job has verified every selected destination and committed
+   its receipt, show the cleanup preview. Only after the user confirms may
+   Keep Nothing or an expired Keep-period policy move eligible sources to Trash
+   and record that event. If any selected item fails, no source cleanup starts.
 
 If any step fails, the source remains. Retry is idempotent: an already verified
 destination is recognized rather than copied again. Partial transfer resumes
@@ -202,8 +307,19 @@ disk.
 | Final receipt is lost | Sender asks for the job ID and destination hash status; do not blindly resend or delete |
 | Same request arrives twice | Stable job/file IDs make it idempotent: return the existing offset or completed receipt |
 | Wrong disk has the same label/path | Reject it because its stable storage identity differs |
+| Cleanup side effect may have preceded catalog commit | Keep the item pending and require Trash/catalog review; never infer Complete |
 | Android permission is revoked | Pause and create a Problems & Fixes action to choose/grant the folder again |
 | Catalog and filesystem disagree | Mark uncertain, rescan, and request review; absence alone never triggers deletion |
+
+### Eject and cleanup gate
+
+While a removable disk has active work, normal software eject shows the active
+job and offers **Continue** or **Cancel transfer and safely eject**. The app
+never forces an unmount. Physical unplug or an administrator-forced unmount is
+handled as a disconnect: the source remains, no cleanup occurs, and the job
+returns to a recoverable paused/failed state with a notification and history
+entry. Cleanup is enabled only after the complete job has a valid destination
+receipt; a receipt for one file never authorizes cleanup of the rest of the job.
 
 No transfer becomes Complete until the data is flushed, the destination is
 independently hashed, the catalog transaction commits, and a receipt exists.
@@ -359,20 +475,16 @@ engine—not a second storage system.
 
 ### Import and organization
 
-- Sources: Camera, Screenshots, Downloads, messaging-media folders, or any
-  user-selected folder.
-- On the first Android test phone, the fixed photo sources are `DCIM/Camera`
-  and `DCIM/Screenshots`. Save source paths per device because another Android
-  device may use `Pictures/Screenshots`. Bidirectional ordinary files use
-  `Documents/Local Drive/Drive/`; photos received onto the phone use
-  `Pictures/Local Drive/<year>/` so Android gallery applications can index them.
-- On Linux or the selected external disk, the default root separates
-  `Local Drive/Drive/` from `Local Drive/Gallery/`; first-run setup shows the
-  exact folders before creating them.
+- The phone exposes two fixed roots: `Drive/` for ordinary files and `DCIM/`
+  for photos and videos. The app does not offer arbitrary additional phone
+  roots in normal setup.
+- On Linux or the selected storage node, the library parent is chosen once and
+  the app creates `Local Drive/Drive/` and `Local Drive/Photos/`; first-run
+  setup shows the exact folders before creating them.
 - Preserve meaningful source collections/folders by default.
-- Put photos not assigned to a collection in `Local Drive/Gallery/<year>/` on disk.
+- Put photos not assigned to a collection in `Local Drive/Photos/<year>/` on disk.
 - Choose year from EXIF capture time, then Android media date, then file mtime;
-  unresolved items go to `Local Drive/Gallery/Unknown date/`.
+  unresolved items go to `Local Drive/Photos/Unknown date/`.
 - Never overwrite a collision. Same hash is a duplicate; a different hash gets
   a deterministic suffix.
 - Preserve metadata and sidecars.
@@ -433,31 +545,39 @@ model is needed for the first useful version.
 
 ---
 
-## Optional compressed Library
+## Backup and optional compressed Library
 
-A **Library** is an explicitly created archive for collections that are mostly
-finished: old documents, completed projects, exported albums, or other cold
-material. It is not the default Drive folder and is not used for active Camera
-uploads.
+A **Library** is an explicitly created read-only snapshot for backup or cold
+material. It is not the default Drive or Photos folder and is not used as the
+active working library. A backup snapshot contains the complete library root:
+
+```text
+Local Drive.ldrive
+├── Drive/...
+└── Photos/...
+```
+
+The same archive engine handles documents, projects, photos, videos, and other
+ordinary files. It is not a photo-only format.
 
 ### Portable first format
 
-Use the extension `.ldrive`, but make version 1 an ordinary **ZIP64** container
-with:
+Use the extension `.ldrive`, but make version 1 a **ZIP64 container with
+Zstandard (ZSTD) per-entry compression** where it helps, with:
 
 - one independently stored/compressed entry per file;
 - `manifest.json` containing format version, logical paths, sizes, SHA-256,
   dates, media metadata, tags, and version relationships;
 - optional thumbnails/index data that can always be rebuilt;
-- Deflate for text and other compressible entries;
+- Zstandard for text and other compressible entries;
 - Store/no recompression for JPEG, HEIC, PNG, MP4, compressed PDF, ZIP, and
   similar content that would gain little or nothing;
 - no encryption in the first format; encrypted libraries require a separate
   key-recovery design.
 
-The custom extension gives the app an identity and default opener, while the
-standard ZIP64 structure means ordinary archive tools can still recover and
-extract the original files.
+The custom extension gives the app an identity and default opener. ZIP64 keeps
+the container structure familiar, while the app remains the authoritative
+reader because older archive tools may not support the Zstandard method.
 
 ### Browse, open, edit, and extract
 
@@ -466,17 +586,17 @@ extract the original files.
 - Stream an entry to the internal viewer a piece at a time.
 - Store large video/audio entries without recompression so seeking is practical.
 - **Open read-only** directly where the viewer accepts a stream.
-- **Edit with another app** by materializing only that file into a managed work
-  area. On save/return, hash it and offer **Add as new version** or **Replace in
-  Library**; never edit the archive entry in place.
+- The Archive is view-only. To edit something, extract a verified copy, edit
+  the ordinary file outside the archive, and create a new Library explicitly;
+  never edit an archive entry in place.
 - Extract selected files/folders or the entire library to a chosen destination,
   with the normal conflict and verification flow.
 
-Library changes are transactional: build the replacement archive beside the
-old one, verify its manifest and every changed entry, then atomically replace
-the old archive where supported. Keep the previous library in Trash/history
-until retention expires. If there is insufficient room for both archives, do
-not begin a rewrite.
+Creating a new Library is transactional: build it beside the old one, verify
+its manifest and every entry, then publish it as a separate archive. Do not
+rewrite an existing Archive automatically or treat it as a continuously edited
+working folder. If there is insufficient room for both archives, do not begin
+creation.
 
 ### Limits and honest space expectations
 
@@ -496,10 +616,10 @@ not begin a rewrite.
 
 | Existing solution | Good at | Why it is not the default Library |
 |---|---|---|
-| ZIP/ZIP64 | Portable per-entry access and extraction on both platforms | Updating compressed entries generally requires archive reconstruction |
+| ZIP/ZIP64 + Zstandard | Per-entry access with a familiar container and better compression for text | Older archive tools may not read Zstandard entries; updating requires a new archive |
 | 7z or `tar.zst` | Higher compression for compressible collections | Poorer random access/editing and less native Android interoperability |
 | SquashFS | Compressed random-access read-only Linux filesystem | Read-only, Linux-oriented, awkward for Android and editing |
-| Seekable Zstandard | Fast chunk/frame seeking | A compression building block, not a full portable file library |
+| LZMA2 | High compression ratio | Slower/heavier and a worse fit for browsing and incremental extraction |
 | restic, Borg, or Kopia | Deduplicated, compressed, integrity-checked backup repositories; mount/restore | Backup/snapshot systems, not an Android-editable single library format |
 | Btrfs transparent compression | Ordinary editable Linux files with transparent compression | Filesystem-specific, not portable to Android, and requires a compatible formatted disk |
 
@@ -513,7 +633,7 @@ enough duplicate/version savings to justify losing ZIP's universal recovery.
 Use a persistent three-part bottom mode bar on Linux and Android:
 
 - **Drive Files**
-- **Gallery / Collections**
+- **Photos / Collections**
 - **New +**
 
 The active mode changes both the main content and the left sidebar. The old
@@ -521,12 +641,18 @@ sidebar slides/fades away and the selected mode's sidebar replaces it; the
 bottom bar and the top transfer-progress strip remain stable. Each mode
 remembers its most recently selected sidebar item.
 
+The top strip is global and remains visible above the active content whenever a
+job is running. Its label is dynamic—such as **Importing from phone**,
+**Transferring to T7**, or **Creating Local Drive.ldrive**—while the progress,
+Pause/Resume, safe-error state, and job details use the same surface in Drive,
+Photos, and Settings.
+
 **Drive Files sidebar:** Home, Recent, Favourites, Trash, Tags, Settings, plus
 connected-device/storage entries when useful.
 
-**Gallery / Collections sidebar:** Home/Timeline, Collections, Tags, and
+**Photos / Collections sidebar:** Home/Timeline, Collections, Tags, and
 Settings. Photo groups such as Favourites, Trash, Archive, Videos, Documents,
-People, and **Problems & Fixes** appear as collections in the Gallery content
+People, and **Problems & Fixes** appear as collections in the Photos content
 rather than becoming another bottom-level destination. Problems & Fixes is for
 photo duplicates, metadata conflicts, and photo-library permission issues.
 
@@ -552,24 +678,37 @@ bottom item is communicated by icon, text, and selection state—not colour alon
 Settings uses three peer tabs because Files and Photos share the transfer engine
 but need different defaults:
 
+The visual route map is available both in the first-run Setup and permanently in
+Settings. Settings exposes two map pages using the same editor and node records:
+
+- **Drive** — ordinary files, Drive routes, and file-backup routes;
+- **Photos** — photos/videos, Photos routes, and photo-backup routes.
+
+The pages are content filters, not separate catalogs. A storage node can be used
+by both pages, so a later-added disk can receive a Drive backup, a Photos backup,
+or one combined backup route without rebuilding the rest of the setup. The user
+can add a remembered storage node from Settings at any time.
+
 ### Global visual sync map
 
-Settings presents one shared device-and-route map instead of separate settings
+Setup and Settings present one shared device-and-route map instead of separate settings
 that must be mentally combined on each device. Server, Desktop, Laptop, Tablet,
 Phone, and attached storage are nodes. Files and Photos are filters over the same
 map. Connections are directional arrows whose labels state the complete rule in
-plain language, for example **Phone Photos → Server Gallery: Move after verified
-copy** or **Laptop Files ↔ Server Drive: Keep both updated**.
+plain language, for example **Phone Photos → Server Photos: Keep Nothing after
+verified copy** or **Laptop Files ↔ Server Drive: Send & receive, Keep
+Everything**.
 
 The map is introduced and initially built by the first-run guide; Settings is
 its continuing home after onboarding.
 
 Users add a known device to the canvas by dragging it from the device list, then
 connect two visible endpoints. Selecting a node edits that device's name and
-Drive/Gallery locations. Selecting an arrow edits content type, direction, and
-Copy/Move/Sync behavior. These are separate choices; the UI must not present
-Send, Receive, Move, and Copy as independent checkboxes that allow contradictory
-combinations. Every route is previewed as one readable sentence before saving.
+Drive/Photos locations. Selecting an arrow edits content type, direction, Keep
+policy, connection timing, and optional Archive Library destination. These are
+separate choices; the UI must not present Send, Receive, Keep, and Archive as
+contradictory independent checkboxes. Send & receive locks Keep Everything.
+Every route is previewed as one readable sentence before saving.
 
 The device list populates automatically from currently discovered instances and
 remembered paired devices. Each entry clearly says **New**, **Online**,
@@ -578,6 +717,30 @@ the two-device pairing confirmation; discovery alone never grants access.
 Dragging an already paired device only positions it. The user draws the intended
 connections and chooses plain-language behavior—the app resolves addresses,
 ports, interface changes, reconnects, and route delivery internally.
+
+### First-seen device onboarding
+
+When a new node is detected in the Sync/Map page, the app opens a guided modal
+based on the node's type and capabilities. The modal is an assistant, not an
+automatic transfer or formatting action:
+
+- **New disk, NAS, or attached storage:** identify the stable storage node,
+  explain whether it is empty or already contains data, and guide the user to
+  choose its library/backup role and the `Drive/` and `Photos/` roots. Creating
+  folders is allowed only after the exact paths are shown; formatting is never
+  offered as an automatic step.
+- **New phone:** show the fixed `Drive/` and `DCIM/` actions, USB/MTP connection
+  instructions, and—when wireless pairing is available—a one-time pairing QR
+  code plus the official app-install location. The QR contains pairing data, not
+  a permanent password or file access by itself.
+- **Server or other node:** show the capabilities it actually reports and guide
+  the user through the relevant pairing, storage, and route choices. Unknown
+  device types remain **Needs attention** rather than being guessed.
+
+The modal has **X** to close and a checkbox **Do not show this device again**.
+Closing leaves the node visible as New/Needs attention; checking the box hides it
+without deleting its identity, routes, or history. Settings contains **Hidden
+devices**, where the user can show a hidden node again.
 
 The map is a versioned global configuration replicated with the metadata-first
 history exchange. On first connection a paired device receives the whole map,
@@ -592,12 +755,19 @@ acknowledge the revision they applied. The initiating screen shows **Ready**,
 and route; the user does not configure matching send/receive rules separately on
 the other devices.
 
-A device becoming unreachable only changes its status to Offline. It is never
+A device or storage node becoming unreachable only changes its status to Offline.
+It is never
 removed from the sync network automatically. **Remove from sync network** exists
 only in Settings, shows affected routes and pending transfers, requires explicit
 confirmation, revokes that device's pairing access, and removes its active
 routes. It never deletes files. The device record and movement history remain as
 an archived device so old file locations and events stay understandable.
+
+A cold-backup disk follows the same rule. For example, the 5 TB HDD may remain
+on a shelf for months as a remembered Offline storage node. When it is connected,
+the app recognizes its stable identity, marks it Online, and offers or runs its
+saved Backup route according to that route's timing policy. Its absence never
+means deletion, failure, or loss of configuration.
 
 **General**
 
@@ -610,31 +780,31 @@ an archived device so old file locations and events stay understandable.
 **Files**
 
 - default source/destination folders and staging limits;
-- default Copy/Move/Sync suggestion, conflict behavior, hidden files, links, and
+- default direction and Keep policy, conflict behavior, hidden files, links, and
   verification options;
 - saved file-transfer jobs and their direction: Send, Receive, or Send & Receive.
 
 **Photos**
 
-- watched Camera/Screenshot folders and automatic-import conditions;
+- fixed phone roots `Drive/` and `DCIM/`, plus automatic-import conditions;
 - destination and staging policy, organization by year or year/month, album
   preservation, metadata/sidecar behavior, and phone cleanup receipt;
 - duplicate review, Problems & Fixes notifications, and later opt-in private
   intelligence features.
 
-Copy/Move/Sync mode and transfer direction belong to each saved job or paired
-device route. Settings may provide safe defaults for creating a job, but changing
-a default never silently changes existing jobs, and Move is never a global
-one-switch behavior.
+Direction and Keep policy belong to each saved job or paired-device route.
+Settings may provide safe defaults for creating a job, but changing a default
+never silently changes existing jobs. Send & receive always stores Keep
+Everything, and cleanup is never a global one-switch action.
 
-System roots—Camera, Screenshots, Drive, Gallery, staging, and the catalog—can
-be changed through an explicit **Change location and rebuild index** action.
-This is a guarded migration: pause affected jobs, scan the old and proposed
-roots, compare hashes, sizes, metadata, and folder structure, preview the new
-mapping, and commit it transactionally. Preserve the append-only movement
-history and rebuild only the current-location index. Do not move or delete files
-as part of this action. If a required device is absent, retain the old setup and
-show the migration as incomplete rather than guessing.
+The computer's library parent and staging location can be changed through an
+explicit **Change location and rebuild index** action. This is a guarded
+migration: pause affected jobs, scan the old and proposed roots, compare hashes,
+sizes, metadata, and folder structure, preview the new mapping, and commit it
+transactionally. Preserve the append-only movement history and rebuild only the
+current-location index. Do not move or delete files as part of this action. The
+phone roots remain fixed as `Drive/` and `DCIM/`; they are not arbitrary setup
+locations.
 
 ### Approved Linux Files layout
 
@@ -642,11 +812,11 @@ The selected desktop direction is a content-first KDE layout:
 
 - top bar with back/up, breadcrumbs, search, view/sort controls, and window controls;
 - a visible transfer strip with destination, progress, Pause, and Clear space;
-- left navigation for Home, Gallery, Recent, Favourites, Trash, Tags, and Settings;
+- left navigation for Home, Photos, Recent, Favourites, Trash, Tags, and Settings;
 - central detailed file list showing verification/location status;
 - right inspector for the selected file's preview, metadata, activity, known locations,
   and actions;
-- persistent bottom mode switch between Drive Files, Gallery / Collections,
+- persistent bottom mode switch between Drive, Photos / Collections,
   and New +; switching modes replaces the sidebar and main page together.
 
 The editable source of truth is `design/pixelruller/LocalDriveUI.json` in this
@@ -1026,20 +1196,23 @@ app storage.
 ### Security boundaries
 
 - pairing requires confirmation on both devices;
-- random per-device credentials, never a default password;
-- store credentials through Android's platform-backed secure storage and the
-  Linux desktop secret service when available, not as plaintext app settings;
-- wireless transfer always uses HTTPS, including trusted LANs and phone
-  hotspots; the Wi-Fi password controls network entry but does not authenticate
-  the particular receiver or every other device/router on that network;
-- generate a device certificate locally and pin its SHA-256 fingerprint during
-  QR/code pairing; discovery may find devices but never grants trust;
-- a certificate/fingerprint change stops transfer and appears in Problems &
-  Fixes for explicit re-pairing;
+- each installation generates its own asymmetric identity locally; private keys
+  stay in Linux KWallet or Android Keystore;
+- pairing uses a QR/code exchange, a high-entropy one-time token, and explicit
+  confirmation on both devices;
+- wireless transfer uses mutually authenticated TLS 1.3, including trusted LANs
+  and phone hotspots; every connection gets fresh session keys;
+- certificate/fingerprint changes, reinstallations, removal, or security reset
+  stop transfer and require explicit re-pairing; discovery/mDNS never grants
+  trust;
+- paired devices reconnect automatically without repeated password prompts while
+  the user/session is unlocked;
 - operations are restricted to configured roots;
 - reject path traversal, symlink escape, and changed-mount targets;
 - redact credentials and private filenames from diagnostics by default;
-- do not expose the receiver directly to the public internet.
+- do not expose the receiver directly to the public internet;
+- never use a shared permanent password/key, plaintext HTTP, private keys in
+  SQLite/settings, or `ignoreSslErrors()`.
 
 TLS protects confidentiality, peer identity, and integrity while bytes travel.
 Chunk checks catch and localize interrupted/corrupt writes; the final SHA-256
@@ -1070,15 +1243,88 @@ a separate product.
 - choose a local source and attached destination;
 - remember the exact destination disk;
 - preview count, total size, duplicates, conflicts, and free space;
-- Copy or verified Move;
+- Keep Everything or Keep Nothing (internally Copy or verified Move);
 - JSON/CSV readable manifest plus SQLite history;
 - safe retry after interruption;
 - staging size limit and minimum-free-space guard;
 - optionally organize unfiled photos into year folders.
 
+The current local slice persists that photo setting per route, previews the
+source-to-destination path mapping, uses available image metadata before file
+dates, keeps paired sidecars beside the organized original, and recovers active
+catalog jobs as explicit interrupted failures with per-item history on reopen,
+while reconstructing a final state when every item already has a receipt;
+uncertain cleanup remains visible and actionable instead of becoming Complete;
+verification is persisted as its own job/item phase before publication.
+Selected removable storage also persists the discovered filesystem type with
+its stable identity and selected root; the setup view can manually refresh
+mounted storage and MTP presence after a reconnect.
+The sandbox gate also deterministically simulates destination loss during both
+the copy stream and independent verification; both paths reject the job without
+a receipt and retain the source.
+The same M0 engine is now reachable from the keyboard-first `local-drive-cli`
+through `verified-preview` and `verified-copy`; it writes the same SQLite
+receipts and streams progress to the terminal or an append-only log.
+  The desktop setup surface also exposes `Ctrl+R` refresh, `Ctrl+S` save route,
+  `Ctrl+Enter` start for the selected successful preview, and `Esc` cancellation
+  for an active transfer while retaining ordinary Tab focus navigation.
+The current staging guard is a persisted per-job intake bound exposed in the
+route UI and CLI. The keyboard-first `verified-stage-dir` slice accepts an
+explicit staging root, uses the existing jobs/locations catalog as its receipt
+ledger, and enforces total on-disk occupancy before intake. The route UI now
+persists an optional laptop staging root and rejects one that overlaps the
+source or destination; it does not create, move, or clean that folder. The
+catalog also persists first-seen acknowledgement and hidden state for storage
+nodes and detected MTP phones. The setup surface opens a capability-aware
+onboarding modal, supports explicit hidden-device suppression, and exposes
+Show again without changing routes or history. Wireless QR/app pairing remains
+unavailable until the phone companion exists. The desktop surface now has a
+persistent keyboard-accessible `Sync / Drive / Photos / New +` mode bar, a
+separate Settings page reachable from New +, and phone actions for `Drive →
+Drive` and `DCIM → Photos`. Those actions bounded-scan the fixed phone root and
+reuse the asynchronous verified import/receipt path; they remain Copy-only and
+do not delete phone sources.
+The desktop `Sync` view now exposes the same bounded live status log used by
+the transfer engine; it retains recent entries for diagnosis without creating a
+second event ledger. CLI append-only logging and immutable SQLite history remain
+the durable records.
+The desktop process also owns a system-tray menu with Show, Pause/Resume,
+Cancel, and definitive Exit. Closing the window hides it while the tray remains;
+  Exit requests application shutdown so the verified engine's destructor can
+  cancel and join active work before the process ends. Headless sessions simply
+  run without a tray icon.
+  The same route records are now rendered as a visual `source → storage` map in
+  Sync and Settings. Settings provides Drive and Photos filter pages over the
+  shared map and shows each route's content type, Keep policy, and stable
+  storage identity.
+  The active transfer strip now asks for a pause duration through 1–99 and
+  minutes/hours/days rotors, and uses an in-process timer; definitive Exit still
+  ends the process without leaving a background service.
+  A remembered but disconnected removable disk can now retain its exact
+  destination route as **Waiting**; the route uses the stable storage identity,
+  creates no offline folders, and becomes previewable only after that storage
+  returns.
+  Cleanup cancellation now stops before the Trash side effect when requested,
+  while an ambiguous KIO Trash failure keeps items pending with a catalog error
+  for review instead of marking them falsely failed.
+
 **Gate:** deliberately interrupt a multi-file Move. After restart, every
 original is either still present or independently verified at the destination;
 nothing is overwritten, hashes match, and history explains every outcome.
+
+The current sandbox acceptance audit is green: the Qt suite covers the mixed
+tree, conflicts and duplicates, interruption/retry, destination loss and
+identity mismatch, source mutation, cancellation, receipt idempotence, ledger
+failure, and cleanup uncertainty; the CLI and schema smoke tests also pass.
+The remaining disk unplug/reconnect and real-phone checks are external gates,
+not sandbox evidence.
+An initial hardware smoke test also passed on 2026-08-25: the connected Xiaomi
+15's fixed `DCIM/` MTP root sent one 275,936-byte JPEG to a new test folder on
+the mounted Samsung T7 (`/mnt/T7`, UUID
+`f0544ced-baf2-47b4-9932-7f9b493e29f5`), with matching source/destination
+SHA-256 values and one SQLite verified receipt. Repeating the same import
+completed idempotently and left the phone source present; this is evidence for
+the path, receipt, and retry smoke only, not the full unplug/reconnect M1 gate.
 
 ### Phase 1 — One-click USB phone import on Linux
 
@@ -1087,7 +1333,8 @@ nothing is overwritten, hashes match, and history explains every outcome.
 - **Import new files from phone** preview and button;
 - import directly to the configured disk when it is connected, otherwise use
   bounded staging or leave the files on the phone;
-- Copy new / Move new, progress, conflict decisions, and cleanup list;
+- Copy new / Move new compatibility actions, with Keep policy shown in the
+  route preview, progress, conflict decisions, and cleanup list;
 - unplug/reconnect recovery without duplicates.
 
 **Gate:** import a mixed real photo/video set twice. The second scan finds no
@@ -1124,7 +1371,8 @@ and verify automatic expiry can be disabled.
   fall back to the other saved profiles, and remember the successful one;
 - per-profile unmetered, charging, ask-first, and maximum-size policies;
 - choose Camera and other source folders;
-- Send with Copy/Move policies;
+- Send, Receive, or Send & receive with the Keep policy; two-way locks Keep
+  Everything;
 - visible queued transfer, retry, receipts, and Clear space preview;
 - Files, Photos, and Transfers with current locations.
 
@@ -1246,9 +1494,10 @@ No cloud AI upload is assumed.
 ## Choices to record in `SPEC.md` when Phase 0 starts
 
 1. Current source folder(s) and first external target folder.
-2. Whether the existing photo-library job defaults to Copy or Move.
-3. Gallery layout: `Local Drive/Gallery/<year>/` or
-   `Local Drive/Gallery/<year>/<month>/`.
+2. Whether the existing photo-library job defaults to Keep Everything or Keep
+   Nothing.
+3. Photos layout: `Local Drive/Photos/<year>/` or
+   `Local Drive/Photos/<year>/<month>/`.
 4. Whether organization may change filenames or only paths.
 5. Which receipt permits phone cleanup: laptop or external disk.
 6. Recycle-bin behavior on the selected external filesystem.
