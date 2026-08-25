@@ -19,5 +19,9 @@
             android:name=".BeaconService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".TransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

@@ -96,11 +96,12 @@ surface for verified transfers.
 
 The minimal Android module under `android/` provides the foreground
 candidate-discovery beacon, a Keystore-backed client identity, pairing-profile
-import/export UI, and an unconnected `WirelessSender` backend. The beacon
-broadcasts every five seconds; the sender implements the Alpha Linux framing,
-resumable chunks, TLS 1.3, and receipt verification. The Linux listener remains
-the source of truth for device identity and trust; Android file selection and
-automatic transfer are intentionally not wired yet.
+import/export UI, and a foreground `WirelessSender` transfer service. The
+beacon broadcasts every five seconds; the sender implements the Alpha Linux
+framing, resumable chunks, TLS 1.3, and receipt verification. The Linux listener
+remains the source of truth for device identity and trust. The Android Alpha UI
+can send one user-selected file to `Drive/` or `Photos/`; automatic root
+scanning and queueing are still pending.
 
 For a local build, use the installed Android SDK and Java 17:
 

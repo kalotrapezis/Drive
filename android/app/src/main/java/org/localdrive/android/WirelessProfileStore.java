@@ -9,6 +9,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.cert.CertificateFactory;
 import java.util.Locale;
 
@@ -34,8 +36,7 @@ public final class WirelessProfileStore {
         final File temporary = new File(context.getFilesDir(), CA_FILE + ".new");
         try (FileOutputStream output = new FileOutputStream(temporary)) { output.write(caPem.getBytes(StandardCharsets.UTF_8)); }
         final File destination = new File(context.getFilesDir(), CA_FILE);
-        if (destination.exists() && !destination.delete()) throw new IllegalStateException("Could not replace server CA");
-        if (!temporary.renameTo(destination)) throw new IllegalStateException("Could not store server CA");
+        Files.move(temporary.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING);
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString(HOST, host).putInt(PORT, port).putString(FINGERPRINT, fingerprint).apply();
     }

@@ -349,9 +349,9 @@ The setup model also persists first-seen acknowledgement and hidden state for
 detected phone and storage identities. Its current onboarding modal is
 informational and non-destructive: it explains USB/MTP and the fixed phone
 roots, identifies storage by stable identity, and never starts a transfer or
-formats a disk. The repository includes a source-only Android candidate beacon
-and protocol sender backend; wireless QR pairing, profile UI, and authenticated
-file access remain future capabilities.
+formats a disk. The repository includes the Android candidate beacon, Keystore
+identity, profile UI, and authenticated foreground sender; automatic Android
+root scanning and the Linux GUI receiver configuration remain deferred.
 
 1. Detect an unlocked MTP phone exposed through KDE/KIO.
 2. Save its stable available identity and friendly name.
@@ -373,8 +373,8 @@ beacon after 15 seconds. The CLI `wireless-beacon` command sends the same
 candidate packet for simulation. Discovery does not pair devices, trust a
 network-provided device ID, or authorize file transfer. Alpha's visible
 **Pair with USB phone** action only links a candidate alias after an explicit
-user action; cryptographic pairing and authenticated transfer require the
-future pairing flow.
+user action. Cryptographic pairing is implemented through the Alpha JSON profile
+exchange; the GUI still needs to expose the receiver certificate setup directly.
 
 The Linux Alpha protocol gate is now available through `wireless-receive` and
 `wireless-send`: TLS 1.3 is mutual, the receiver pins the client certificate
@@ -382,8 +382,10 @@ fingerprint, and the sender pins the receiver CA certificate. Files use
 acknowledged chunk offsets and app-owned resumable partials; after the final
 SHA-256 check the staged upload is passed through `VerifiedCopy` and one normal
 catalog receipt is committed. The CLI pair is a deterministic LAN harness. The
-Android source now includes the matching sender backend, but it is not yet
-wired to Android roots, the final pairing UI, or a real-phone transfer.
+Android app imports the receiver profile, shares only its public client
+certificate, and can start one user-selected file through a foreground sender
+service with a `Drive/` or `Photos/` relative root. It does not yet scan and
+queue the fixed roots automatically, and no real-phone transfer has been run.
 
 The verified-import slice is intentionally one file at a time at the engine
 and now emits live received-byte progress while streaming each object. A

@@ -2,8 +2,11 @@ package org.localdrive.android;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -16,6 +19,8 @@ import java.nio.charset.StandardCharsets;
 /** Small Alpha surface: discovery stays visible while pairing/transfer are added. */
 public final class MainActivity extends Activity {
     private static final int IMPORT_PROFILE = 40;
+    private static final int PICK_DRIVE_FILE = 41;
+    private static final int PICK_PHOTO_FILE = 42;
     private TextView profileStatus;
 
     @Override protected void onCreate(Bundle state) {
@@ -55,6 +60,16 @@ public final class MainActivity extends Activity {
         shareIdentity.setOnClickListener(view -> sharePairingIdentity());
         layout.addView(shareIdentity, new LinearLayout.LayoutParams(-1, -2));
 
+        final Button driveSend = new Button(this);
+        driveSend.setText("Επιλογή αρχείου → Drive");
+        driveSend.setOnClickListener(view -> pickFile(PICK_DRIVE_FILE));
+        layout.addView(driveSend, new LinearLayout.LayoutParams(-1, -2));
+
+        final Button photoSend = new Button(this);
+        photoSend.setText("Επιλογή φωτογραφίας/βίντεο → Photos");
+        photoSend.setOnClickListener(view -> pickFile(PICK_PHOTO_FILE));
+        layout.addView(photoSend, new LinearLayout.LayoutParams(-1, -2));
+
         final Button stop = new Button(this);
         stop.setText("Παύση ανίχνευσης");
         stop.setOnClickListener(view -> stopService(new Intent(this, BeaconService.class)));
@@ -69,7 +84,12 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != IMPORT_PROFILE || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (requestCode == PICK_DRIVE_FILE || requestCode == PICK_PHOTO_FILE) {
+            startTransfer(data.getData(), requestCode == PICK_DRIVE_FILE ? "Drive" : "Photos");
+            return;
+        }
+        if (requestCode != IMPORT_PROFILE) return;
         try (InputStream input = getContentResolver().openInputStream(data.getData()); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             if (input == null) throw new IllegalStateException("Δεν ήταν δυνατή η ανάγνωση του profile");
             final byte[] buffer = new byte[4096];
@@ -80,6 +100,49 @@ public final class MainActivity extends Activity {
         } catch (Exception error) {
             profileStatus.setText("Pairing profile: αποτυχία εισαγωγής (" + error.getMessage() + ")");
         }
+    }
+
+    private void pickFile(int requestCode) {
+        if (!WirelessProfileStore.hasProfile(this)) {
+            profileStatus.setText("Πρώτα εισήγαγε Linux pairing profile.");
+            return;
+        }
+        final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(intent, requestCode);
+    }
+
+    private void startTransfer(Uri uri, String root) {
+        final String name = displayName(uri);
+        if (name.isEmpty()) {
+            profileStatus.setText("Μεταφορά: δεν βρέθηκε όνομα αρχείου.");
+            return;
+        }
+        final Intent transfer = new Intent(this, TransferService.class)
+                .setData(uri)
+                .putExtra("sourceUri", uri.toString())
+                .putExtra("relative", root + "/" + name)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(transfer);
+            else startService(transfer);
+            profileStatus.setText("Μεταφορά ξεκίνησε: " + root + "/" + name);
+        } catch (Exception error) {
+            profileStatus.setText("Μεταφορά: αποτυχία εκκίνησης (" + error.getMessage() + ")");
+        }
+    }
+
+    private String displayName(Uri uri) {
+        try (Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                final String value = cursor.getString(0);
+                if (value != null && !value.trim().isEmpty()) return value.replace('/', '_').replace('\\', '_');
+            }
+        }
+        final String fallback = uri.getLastPathSegment();
+        return fallback == null ? "" : fallback.replace('/', '_').replace('\\', '_');
     }
 
     private void sharePairingIdentity() {
