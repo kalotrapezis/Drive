@@ -5,6 +5,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
@@ -16,6 +17,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -24,14 +26,15 @@ import java.util.concurrent.TimeUnit;
 public final class BeaconService extends Service {
     private static final int PORT = 43170;
     private static final String CHANNEL = "local-drive-discovery";
+    private static final String PREFS = "local-drive-identity";
+    private static final String GENERATED_ID = "generated-id";
     private ScheduledExecutorService scheduler;
     private String identity;
     private String label;
 
     @Override public void onCreate() {
         super.onCreate();
-        final String androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
-        identity = "wireless:android-" + (androidId == null ? "unknown" : androidId.toLowerCase(Locale.ROOT));
+        identity = loadIdentity();
         label = (Build.MANUFACTURER + " " + Build.MODEL).trim();
         createChannel();
         startForeground(1001, notification());
@@ -70,6 +73,18 @@ public final class BeaconService extends Service {
         } catch (Exception ignored) {
             // Discovery is best-effort; the next scheduled beacon retries without exposing credentials.
         }
+    }
+
+    private String loadIdentity() {
+        final String androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+        if (androidId != null && !androidId.trim().isEmpty()) return "wireless:android-" + androidId.toLowerCase(Locale.ROOT);
+        final SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String generated = preferences.getString(GENERATED_ID, "");
+        if (generated.isEmpty()) {
+            generated = UUID.randomUUID().toString().replace("-", "");
+            preferences.edit().putString(GENERATED_ID, generated).apply();
+        }
+        return "wireless:android-generated-" + generated;
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
