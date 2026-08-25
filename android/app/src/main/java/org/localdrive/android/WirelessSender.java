@@ -108,6 +108,7 @@ public final class WirelessSender {
         final SSLContext context = SSLContext.getInstance("TLS");
         context.init(keys.getKeyManagers(), trust.getTrustManagers(), null);
         final SSLSocket socket = (SSLSocket) context.getSocketFactory().createSocket(profile.host, profile.port);
+        socket.setSoTimeout(120000);
         socket.setEnabledProtocols(new String[]{"TLSv1.3"});
         socket.startHandshake();
         final SSLSession session = socket.getSession();
