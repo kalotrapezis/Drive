@@ -362,6 +362,16 @@ future capability.
 
 The Android app is not required or opened.
 
+The current Alpha also has a Linux candidate-discovery listener on UDP port
+`43170`. It accepts only the versioned `local-drive-discovery-v1` JSON beacon,
+shows one Online/Offline entry per canonical identity, and expires a silent
+beacon after 15 seconds. The CLI `wireless-beacon` command sends the same
+candidate packet for simulation. Discovery does not pair devices, trust a
+network-provided device ID, or authorize file transfer. Alpha's visible
+**Pair with USB phone** action only links a candidate alias after an explicit
+user action; cryptographic pairing and authenticated transfer require the
+future pairing flow.
+
 The verified-import slice is intentionally one file at a time at the engine
 and now emits live received-byte progress while streaming each object. A
 127,076,235-byte real MP4 completed and repeated with matching hashes and

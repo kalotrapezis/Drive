@@ -34,6 +34,7 @@ copy into a local directory while printing live progress:
   verified-import 'mtp:/Xiaomi 15/Εσωτ. κοινόχρ. αποθ. χώρος/DCIM/example.jpg' /tmp/import/
 ./build/local-drive-cli --catalog-file /tmp/local-drive-wireless.sqlite \
   wireless-simulate 'file:///tmp/simulated-phone/example.jpg' /tmp/import/
+./build/local-drive-cli wireless-beacon 'wireless:sim-phone' 'Simulated phone' '127.0.0.1:43171'
 ./build/local-drive-cli --catalog-file /tmp/local-drive.sqlite \
   --scan-max-items 1000 --scan-max-bytes 1073741824 \
   verified-import-dir 'mtp:/Xiaomi 15/Εσωτ. κοινόχρ. αποθ. χώρος/DCIM/Camera/' /tmp/import/
@@ -59,7 +60,9 @@ first performs a bounded recursive preview, then reuses that single-file path
 for each item. `verified-stage-dir` uses the same receipt path into an explicitly
 chosen laptop staging root, checks total on-disk occupancy before intake, and
 can later drain with `verified-copy`. All are Copy-only; phone cleanup remains
-later. `wireless-simulate` deliberately uses the same verified path with a
+later. `wireless-beacon` broadcasts a candidate-only discovery packet to the
+Linux app on UDP port 43170; it does not pair or authorize transfers.
+`wireless-simulate` deliberately uses the same verified path with a
 `wireless:` catalog identity for deterministic interruption/retry testing; it
 does not discover a phone or open a LAN listener. `--staging-max-bytes` is per-job for local commands and a total on-disk
 cap for `verified-stage-dir`.

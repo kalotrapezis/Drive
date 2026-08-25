@@ -2,6 +2,9 @@
 #include <QTemporaryDir>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QUdpSocket>
 #include "../src/setupmodel.h"
 
 class SetupModelTest : public QObject {
@@ -125,14 +128,50 @@ private slots:
         QVERIFY(q.exec("INSERT INTO device_aliases(alias,device_id,transport) VALUES('mtp:Xiaomi 15','mtp-phone','mtp')"));
         q.finish(); seed.close(); seed = QSqlDatabase(); QSqlDatabase::removeDatabase("wireless-identity-seed");
         SetupModel model(dbPath); QVERIFY(model.ready());
-        const QVariantMap beacon{{"stableIdentity", "wireless:xiaomi-15"}, {"label", "Xiaomi 15"}, {"pairedDeviceId", "mtp-phone"}, {"endpoint", "192.168.1.10:4317"}, {"rssi", -58}};
+        const QVariantMap beacon{{"stableIdentity", "wireless:xiaomi-15"}, {"label", "Xiaomi 15"}, {"endpoint", "192.168.1.10:4317"}, {"rssi", -58}};
         QVERIFY(model.ingestWirelessBeacon(beacon)); QVERIFY(model.ingestWirelessBeacon(beacon));
+        QCOMPARE(model.wirelessDevices().size(), 1); const QString candidateId = model.wirelessDevices().first().toMap().value("id").toString(); QVERIFY(candidateId != QStringLiteral("mtp-phone"));
+        QVERIFY(model.pairWirelessDevice(candidateId, QStringLiteral("mtp-phone")));
         QCOMPARE(model.wirelessDevices().size(), 1); QCOMPARE(model.wirelessDevices().first().toMap().value("id").toString(), QStringLiteral("mtp-phone"));
+        bool targetVisible = false, candidateVisible = false;
+        for (const auto &device : model.deviceList()) { targetVisible = targetVisible || device.toMap().value("id") == QStringLiteral("mtp-phone"); candidateVisible = candidateVisible || device.toMap().value("id") == candidateId; }
+        QVERIFY(targetVisible); QVERIFY(!candidateVisible);
         QSqlDatabase check = QSqlDatabase::addDatabase("QSQLITE", "wireless-identity-check"); check.setDatabaseName(dbPath); QVERIFY(check.open()); QSqlQuery checkQuery(check);
-        QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM devices WHERE is_local=0")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 1);
+        QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM devices WHERE is_local=0 AND hidden=0")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 1);
         QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM device_aliases WHERE device_id='mtp-phone'")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 2);
         QVERIFY(checkQuery.exec("SELECT transport FROM device_aliases WHERE alias='wireless:xiaomi-15'")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toString(), QStringLiteral("wireless"));
         check.close(); check = QSqlDatabase(); QSqlDatabase::removeDatabase("wireless-identity-check");
+    }
+
+    void wirelessUdpDiscoveryDeduplicatesBeacon() {
+        QTemporaryDir d; QVERIFY(d.isValid());
+        SetupModel model(d.path() + "/catalog.sqlite"); QVERIFY(model.ready());
+        QUdpSocket sender;
+        const auto send = [&sender](const QJsonObject &object) {
+            const QByteArray payload = QJsonDocument(object).toJson(QJsonDocument::Compact);
+            return sender.writeDatagram(payload, QHostAddress::LocalHost, SetupModel::wirelessDiscoveryPort()) == payload.size();
+        };
+        QVERIFY(send(QJsonObject{{"magic", "not-local-drive"}, {"stableIdentity", "wireless:ignored"}, {"label", "Ignored"}}));
+        QTest::qWait(100);
+        QVERIFY(model.wirelessDevices().isEmpty());
+        const QJsonObject beacon{{"magic", "local-drive-discovery-v1"}, {"protocol", 1}, {"stableIdentity", "wireless:sim-phone"}, {"label", "Simulated phone"}, {"endpoint", "127.0.0.1:43171"}, {"rssi", -42}};
+        QVERIFY(send(beacon)); QTRY_VERIFY_WITH_TIMEOUT(model.wirelessDevices().size() == 1, 2000);
+        QVERIFY(send(beacon)); QTRY_VERIFY_WITH_TIMEOUT(model.wirelessDevices().size() == 1, 2000);
+        const QString wirelessId = model.wirelessDevices().first().toMap().value("id").toString();
+        int wirelessOccurrences = 0; for (const auto &device : model.connectedDevices()) if (device.toMap().value("id").toString() == wirelessId) ++wirelessOccurrences;
+        QCOMPARE(wirelessOccurrences, 1);
+        QCOMPARE(model.wirelessDevices().first().toMap().value("status").toString(), QStringLiteral("Online"));
+        QCOMPARE(model.wirelessDevices().first().toMap().value("endpoint").toString(), QStringLiteral("127.0.0.1:43171"));
+        QTRY_VERIFY_WITH_TIMEOUT(model.wirelessDevices().first().toMap().value("status").toString() == QStringLiteral("Offline"), 20000);
+    }
+
+    void rememberedWirelessCandidateCanPairAfterRestart() {
+        QTemporaryDir d; QVERIFY(d.isValid());
+        const QString dbPath = d.path() + "/catalog.sqlite";
+        QString candidateId;
+        { SetupModel model(dbPath); QVERIFY(model.ready()); QVERIFY(model.ingestWirelessBeacon(QVariantMap{{"stableIdentity", "wireless:remembered"}, {"label", "Remembered phone"}})); candidateId = model.wirelessDevices().first().toMap().value("id").toString(); }
+        QSqlDatabase seed = QSqlDatabase::addDatabase("QSQLITE", "remembered-pair-seed"); seed.setDatabaseName(dbPath); QVERIFY(seed.open()); QSqlQuery q(seed); QVERIFY(q.exec("INSERT INTO devices(id,stable_id,name,kind,is_local) VALUES('mtp-phone-2','mtp:Remembered','Remembered phone','Phone',0)")); q.finish(); seed.close(); seed = QSqlDatabase(); QSqlDatabase::removeDatabase("remembered-pair-seed");
+        { SetupModel model(dbPath); QVERIFY(model.ready()); QVERIFY(model.pairWirelessDevice(candidateId, QStringLiteral("mtp-phone-2"))); QCOMPARE(model.wirelessDevices().first().toMap().value("id").toString(), QStringLiteral("mtp-phone-2")); }
     }
 };
 QTEST_GUILESS_MAIN(SetupModelTest)

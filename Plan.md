@@ -186,6 +186,17 @@ The Android app pairs with Linux on the same local network, watches only the
 folders the user selects, and queues new files. It sends them when the Linux
 receiver is reachable and receives a verified receipt before any cleanup.
 
+The Alpha Linux side now listens on UDP port `43170` for the candidate-only
+`local-drive-discovery-v1` beacon (`magic`, protocol `1`, `stableIdentity`, and
+friendly `label`). It updates one in-process Online/Offline entry per canonical
+device and expires a silent beacon after 15 seconds; the CLI command
+`wireless-beacon` is the deterministic sender used by simulation. A beacon is
+never pairing or transfer authorization, and network-supplied pairing IDs are
+ignored. Alpha exposes a local **Pair with USB phone** action when exactly one
+MTP phone is present; it moves the wireless alias onto that canonical record,
+archives the candidate row, and leaves one visible device with both transports.
+Cryptographic pairing and authenticated transfer remain the next network gate.
+
 ### 3. Linux staging folder → configured storage node
 
 The user selects an exact destination storage node and folder. For a mounted

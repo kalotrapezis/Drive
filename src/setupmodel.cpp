@@ -8,6 +8,13 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QCryptographicHash>
+#include <QDateTime>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QHostAddress>
+#include <QNetworkDatagram>
+#include <QTimer>
+#include <QUdpSocket>
 #include <QUuid>
 
 #include <KIO/ListJob>
@@ -114,9 +121,10 @@ SetupModel::SetupModel(const QString &databasePath, const QVariantList &storageO
     loadRoutes();
     loadDeviceLists();
     refreshMtpDevices();
+    startWirelessDiscovery();
 }
 
-SetupModel::~SetupModel() { if (m_mtpJob) m_mtpJob->kill(); if (!m_connectionName.isEmpty()) QSqlDatabase::removeDatabase(m_connectionName); }
+SetupModel::~SetupModel() { if (m_mtpJob) m_mtpJob->kill(); stopWirelessDiscovery(); if (!m_connectionName.isEmpty()) QSqlDatabase::removeDatabase(m_connectionName); }
 
 bool SetupModel::fail(const QString &message) { m_error = message; emit changed(); return false; }
 
@@ -347,26 +355,106 @@ void SetupModel::refreshMtpDevices() {
     });
 }
 
+bool SetupModel::startWirelessDiscovery() {
+    if (m_wirelessSocket) return true;
+    auto *socket = new QUdpSocket(this);
+    if (!socket->bind(QHostAddress::AnyIPv4, wirelessDiscoveryPort(), QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
+        socket->deleteLater();
+        return false;
+    }
+    m_wirelessSocket = socket;
+    connect(socket, &QUdpSocket::readyRead, this, [this] {
+        while (m_wirelessSocket && m_wirelessSocket->hasPendingDatagrams()) {
+            QNetworkDatagram datagram = m_wirelessSocket->receiveDatagram();
+            QJsonParseError parseError;
+            const QJsonDocument document = QJsonDocument::fromJson(datagram.data(), &parseError);
+            if (parseError.error != QJsonParseError::NoError || !document.isObject()) continue;
+            const QJsonObject object = document.object();
+            if (object.value(QStringLiteral("magic")).toString() != QString::fromLatin1(LocalDrive::WirelessProtocol::Magic) || object.value(QStringLiteral("protocol")).toInt() != LocalDrive::WirelessProtocol::Version) continue;
+            QVariantMap beacon = object.toVariantMap();
+            // Discovery is candidate-only. Pairing data is accepted only from an explicit local pairing flow.
+            beacon.remove(QStringLiteral("pairedDeviceId"));
+            if (!beacon.contains(QStringLiteral("endpoint"))) beacon.insert(QStringLiteral("endpoint"), datagram.senderAddress().toString());
+            ingestWirelessBeacon(beacon);
+        }
+    });
+    m_wirelessExpiryTimer = new QTimer(this);
+    m_wirelessExpiryTimer->setInterval(5000);
+    connect(m_wirelessExpiryTimer, &QTimer::timeout, this, &SetupModel::expireWirelessDevices);
+    m_wirelessExpiryTimer->start();
+    return true;
+}
+
+void SetupModel::stopWirelessDiscovery() {
+    if (m_wirelessExpiryTimer) { m_wirelessExpiryTimer->stop(); m_wirelessExpiryTimer->deleteLater(); m_wirelessExpiryTimer = nullptr; }
+    if (m_wirelessSocket) { m_wirelessSocket->close(); m_wirelessSocket->deleteLater(); m_wirelessSocket = nullptr; }
+}
+
 bool SetupModel::ingestWirelessBeacon(const QVariantMap &beacon) {
     const QString stable = beacon.value("stableIdentity", beacon.value("deviceStableId")).toString().trimmed();
     const QString label = beacon.value("label", beacon.value("name")).toString().trimmed();
     if (!stable.startsWith(QStringLiteral("wireless:")) || label.isEmpty()) return fail(QStringLiteral("Wireless beacon needs a stable identity and name."));
     const QString deviceId = upsertDiscoveredPhone(stable, label, QStringLiteral("wireless"), beacon.value("pairedDeviceId").toString());
     if (deviceId.isEmpty()) return false;
-    QVariantMap item{{"id", deviceId}, {"stableIdentity", stable}, {"label", label}, {"kind", "wireless"}, {"transport", "wireless"}, {"present", true}};
+    QVariantMap item{{"id", deviceId}, {"stableIdentity", stable}, {"label", label}, {"kind", "wireless"}, {"transport", "wireless"}, {"present", true}, {"status", "Online"}, {"lastSeenMs", QDateTime::currentMSecsSinceEpoch()}};
     for (const auto &key : {QStringLiteral("endpoint"), QStringLiteral("rssi"), QStringLiteral("protocol")}) if (beacon.contains(key)) item.insert(key, beacon.value(key));
-    bool replaced = false;
-    for (auto &value : m_wirelessDevices) if (value.toMap().value("id") == deviceId) { value = item; replaced = true; break; }
-    if (!replaced) m_wirelessDevices.append(item);
+    QSqlQuery hidden(QSqlDatabase::database(m_connectionName)); hidden.prepare("SELECT hidden FROM devices WHERE id=?"); hidden.addBindValue(deviceId);
+    const bool isHidden = hidden.exec() && hidden.next() && hidden.value(0).toBool();
+    for (int index = m_wirelessDevices.size() - 1; index >= 0; --index) if (m_wirelessDevices.at(index).toMap().value("id") == deviceId) m_wirelessDevices.removeAt(index);
+    if (!isHidden) m_wirelessDevices.append(item);
     loadDeviceLists();
     m_error.clear();
     emit changed();
     return true;
 }
 
+bool SetupModel::pairWirelessDevice(const QString &wirelessDeviceId, const QString &targetDeviceId) {
+    if (wirelessDeviceId.trimmed().isEmpty() || targetDeviceId.trimmed().isEmpty() || wirelessDeviceId == targetDeviceId) return fail(QStringLiteral("Choose two different device identities to pair."));
+    QString wirelessAlias;
+    QVariantMap wirelessItem;
+    for (const auto &value : m_wirelessDevices) if (value.toMap().value("id").toString() == wirelessDeviceId) { wirelessItem = value.toMap(); wirelessAlias = wirelessItem.value("stableIdentity").toString(); break; }
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    if (wirelessAlias.isEmpty()) {
+        QSqlQuery remembered(db); remembered.prepare("SELECT a.alias,d.name FROM device_aliases a JOIN devices d ON d.id=a.device_id WHERE a.device_id=? AND a.transport='wireless' LIMIT 1"); remembered.addBindValue(wirelessDeviceId);
+        if (remembered.exec() && remembered.next()) {
+            wirelessAlias = remembered.value(0).toString();
+            wirelessItem = QVariantMap{{"id", wirelessDeviceId}, {"stableIdentity", wirelessAlias}, {"label", remembered.value(1)}, {"kind", "wireless"}, {"transport", "wireless"}, {"present", false}, {"status", "Offline"}, {"lastSeenMs", 0}};
+        }
+    }
+    if (wirelessAlias.isEmpty()) return fail(QStringLiteral("Unknown wireless device."));
+    if (!db.transaction()) return fail(db.lastError().text());
+    QSqlQuery target(db); target.prepare("SELECT 1 FROM devices WHERE id=? AND is_local=0 AND kind='Phone'"); target.addBindValue(targetDeviceId);
+    if (!target.exec() || !target.next()) { db.rollback(); return fail(QStringLiteral("Unknown phone device.")); }
+    QSqlQuery alias(db); alias.prepare("UPDATE device_aliases SET device_id=?,last_seen_at=CURRENT_TIMESTAMP WHERE alias=?"); alias.addBindValue(targetDeviceId); alias.addBindValue(wirelessAlias);
+    if (!alias.exec() || alias.numRowsAffected() != 1) { db.rollback(); return fail(QStringLiteral("Wireless identity is not pairable.")); }
+    QSqlQuery archive(db); archive.prepare("UPDATE devices SET hidden=1 WHERE id=? AND id<>?"); archive.addBindValue(wirelessDeviceId); archive.addBindValue(targetDeviceId);
+    if (!archive.exec()) { db.rollback(); return fail(archive.lastError().text()); }
+    if (!db.commit()) { db.rollback(); return fail(db.lastError().text()); }
+    for (int index = m_wirelessDevices.size() - 1; index >= 0; --index) if (m_wirelessDevices.at(index).toMap().value("id").toString() == wirelessDeviceId || m_wirelessDevices.at(index).toMap().value("id").toString() == targetDeviceId) m_wirelessDevices.removeAt(index);
+    wirelessItem.insert("id", targetDeviceId); wirelessItem.insert("paired", true); wirelessItem.insert("pairedDeviceId", targetDeviceId);
+    m_wirelessDevices.append(wirelessItem);
+    loadDeviceLists();
+    m_error.clear();
+    emit changed();
+    return true;
+}
+
+void SetupModel::expireWirelessDevices() {
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    bool changedState = false;
+    for (auto &value : m_wirelessDevices) {
+        auto item = value.toMap();
+        const bool online = now - item.value("lastSeenMs").toLongLong() <= 15000;
+        const QString status = online ? QStringLiteral("Online") : QStringLiteral("Offline");
+        if (item.value("present").toBool() != online || item.value("status").toString() != status) { item.insert("present", online); item.insert("status", status); value = item; changedState = true; }
+    }
+    if (changedState) { loadDeviceLists(); emit changed(); }
+}
+
 void SetupModel::loadDeviceLists() {
     m_firstSeenDevices.clear();
     m_hiddenDevices.clear();
+    m_deviceList.clear();
     QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     QSqlQuery devices(db);
     if (devices.exec("SELECT id,stable_id,name,kind,onboarding_seen,hidden FROM devices WHERE is_local=0 ORDER BY name")) {
@@ -374,8 +462,16 @@ void SetupModel::loadDeviceLists() {
             const QString stable = devices.value(1).toString();
             QVariantMap item{{"id", devices.value(0)}, {"stableIdentity", stable}, {"label", devices.value(2)}, {"kind", devices.value(3)}, {"category", "device"}, {"present", true}, {"hidden", devices.value(5).toBool()}};
             if (devices.value(3).toString() == QStringLiteral("Phone") && stable.startsWith(QStringLiteral("mtp:"))) item.insert("url", stable.mid(4));
+            QStringList transports;
+            QSqlQuery aliases(db); aliases.prepare("SELECT group_concat(transport, ',') FROM device_aliases WHERE device_id=?"); aliases.addBindValue(devices.value(0));
+            if (aliases.exec() && aliases.next()) transports = aliases.value(0).toString().split(',', Qt::SkipEmptyParts);
+            item.insert("transports", transports);
+            item.insert("wirelessCandidate", transports.contains(QStringLiteral("wireless")) && !transports.contains(QStringLiteral("mtp")));
+            QString status = QStringLiteral("Offline");
+            for (const auto &current : connectedDevices()) if (current.toMap().value("id") == devices.value(0)) { status = current.toMap().value("status", QStringLiteral("Online")).toString(); break; }
+            item.insert("status", status);
             if (devices.value(5).toBool()) m_hiddenDevices.append(item);
-            else if (!devices.value(4).toBool()) m_firstSeenDevices.append(item);
+            else { m_deviceList.append(item); if (!devices.value(4).toBool()) m_firstSeenDevices.append(item); }
         }
     }
     QSqlQuery storage(db);

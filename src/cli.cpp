@@ -7,10 +7,14 @@
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
+#include <QHostAddress>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QStorageInfo>
 #include <QStandardPaths>
 #include <QTextStream>
 #include <QUrl>
+#include <QUdpSocket>
 
 #include <memory>
 
@@ -19,6 +23,7 @@
 
 #include "verifiedcopy.h"
 #include "remoteinventory.h"
+#include "wirelessprotocol.h"
 
 namespace {
 
@@ -249,6 +254,18 @@ int runVerifiedRemote(Output &output, const QUrl &source, const QString &destina
     return 0;
 }
 
+int runWirelessBeacon(Output &output, const QString &stableIdentity, const QString &label, const QString &endpoint) {
+    if (!stableIdentity.startsWith(QStringLiteral("wireless:")) || label.trimmed().isEmpty()) return fail(output, QStringLiteral("wireless-beacon needs a wireless: identity and a non-empty name"));
+    QJsonObject beacon{{"magic", QString::fromLatin1(LocalDrive::WirelessProtocol::Magic)}, {"protocol", LocalDrive::WirelessProtocol::Version}, {"stableIdentity", stableIdentity}, {"label", label.trimmed()}};
+    if (!endpoint.trimmed().isEmpty()) beacon.insert(QStringLiteral("endpoint"), endpoint.trimmed());
+    const QByteArray payload = QJsonDocument(beacon).toJson(QJsonDocument::Compact);
+    QUdpSocket socket;
+    const qint64 sent = socket.writeDatagram(payload, QHostAddress::Broadcast, LocalDrive::WirelessProtocol::DiscoveryPort);
+    if (sent != payload.size()) return fail(output, QStringLiteral("could not broadcast wireless beacon: %1").arg(socket.errorString()));
+    output.write(QStringLiteral("INFO wireless beacon sent identity=%1 name=%2 port=%3").arg(stableIdentity, label, QString::number(LocalDrive::WirelessProtocol::DiscoveryPort)));
+    return 0;
+}
+
 int runVerifiedRemoteDirectory(Output &output, const QUrl &source, const QString &destination, const QString &catalog, qint64 maxItems, qint64 maxBytes, qint64 stagingCapBytes = 0, bool stagingMode = false) {
     if (!source.isValid() || !QFileInfo(destination).isDir()) return fail(output, QStringLiteral("source URL and existing local destination directory are required"));
     if (!QDir().mkpath(QFileInfo(catalog).absolutePath())) return fail(output, QStringLiteral("could not create catalog directory: %1").arg(QFileInfo(catalog).absolutePath()));
@@ -304,7 +321,7 @@ int main(int argc, char **argv) {
     const QCommandLineOption scanBytesOption(QStringLiteral("scan-max-bytes"), QStringLiteral("Maximum bytes for mtp-scan (0 means unlimited)."), QStringLiteral("BYTES"), QStringLiteral("68719476736"));
     parser.addOption(scanItemsOption);
     parser.addOption(scanBytesOption);
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("mtp-inventory, mtp-scan, copy, verified-import, wireless-simulate, verified-import-dir, verified-stage-dir, verified-preview, or verified-copy"));
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("mtp-inventory, mtp-scan, wireless-beacon, copy, verified-import, wireless-simulate, verified-import-dir, verified-stage-dir, verified-preview, or verified-copy"));
     parser.addPositionalArgument(QStringLiteral("arguments"), QStringLiteral("Command arguments."));
     if (!parser.parse(app.arguments())) {
         Output output;
@@ -338,6 +355,10 @@ int main(int argc, char **argv) {
         const qint64 maxBytes = parser.value(scanBytesOption).toLongLong(&bytesOk);
         if (!itemsOk || !bytesOk) return fail(output, QStringLiteral("scan limits must be integer values"));
         return runRecursiveInventory(app, output, url, maxItems, maxBytes);
+    }
+    if (command == QStringLiteral("wireless-beacon")) {
+        if (args.size() < 3 || args.size() > 4) return fail(output, QStringLiteral("usage: wireless-beacon WIRELESS_ID NAME [ENDPOINT]"));
+        return runWirelessBeacon(output, args.at(1), args.at(2), args.size() > 3 ? args.at(3) : QString());
     }
     if (command == QStringLiteral("copy")) {
         if (args.size() != 3) return fail(output, QStringLiteral("usage: copy SOURCE DESTINATION_DIRECTORY"));

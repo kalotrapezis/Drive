@@ -15,6 +15,8 @@ grep -q 'PROGRESS bytes=' <<<"$first"
 cmp "$root/source/Ελληνικά.txt" "$root/destination/Ελληνικά.txt"
 
 mkdir -p "$root/wireless-destination"
+beacon=$($cli wireless-beacon "wireless:sim-phone" "Simulated phone" "127.0.0.1:43171" 2>&1)
+grep -q 'INFO wireless beacon sent' <<<"$beacon"
 wireless=$($cli --catalog-file "$root/wireless.sqlite" wireless-simulate "$source_url" "$root/wireless-destination" 2>&1)
 grep -q 'INFO verified wireless simulation import completed' <<<"$wireless"
 grep -q 'PROGRESS bytes=' <<<"$wireless"

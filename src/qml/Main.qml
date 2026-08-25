@@ -44,6 +44,7 @@ Kirigami.ApplicationWindow {
         if (!setupModel.ready) return
         setupModel.refreshStorages()
         setupModel.refreshMtpDevices()
+        setupModel.startWirelessDiscovery()
         setupModel.refreshRoutes()
     }
     function saveCurrentRoute() {
@@ -264,6 +265,18 @@ Kirigami.ApplicationWindow {
             Kirigami.Heading { text: qsTr("Connection map"); level: 3 }
             Repeater { model: setupModel.routes; delegate: routeMapCard }
             Controls.Label { visible: setupModel.routes.length === 0; text: qsTr("No routes saved yet. The map will fill as Drive and Photos routes are configured."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Kirigami.Card { Layout.fillWidth: true
+                header: Controls.Label { text: qsTr("Devices"); Accessible.name: text }
+                contentItem: ColumnLayout {
+                    Repeater { model: setupModel.deviceList; delegate: RowLayout { Layout.fillWidth: true
+                        Controls.Label { text: modelData.label; font.bold: true; Layout.fillWidth: true; Accessible.name: text }
+                        Controls.Label { text: modelData.status || qsTr("Online"); Accessible.name: text }
+                        Controls.Label { text: (modelData.transports || []).join(" + "); Accessible.name: text }
+                        Controls.Button { visible: modelData.wirelessCandidate === true && setupModel.mtpDevices.length === 1; text: qsTr("Pair with USB phone"); onClicked: setupModel.pairWirelessDevice(modelData.id, setupModel.mtpDevices[0].id); Accessible.name: qsTr("Pair wireless device with USB phone") }
+                    } }
+                    Controls.Label { visible: setupModel.deviceList.length === 0; text: qsTr("No phone or wireless device detected."); Accessible.name: text }
+                }
+            }
             Controls.Button { text: qsTr("Refresh devices"); enabled: setupModel.ready; Accessible.name: qsTr("Refresh devices"); onClicked: refreshAll() }
             Controls.Label { text: qsTr("Keyboard: Ctrl+R refresh · Ctrl+S save route · Ctrl+Enter start selected route · Esc stop active transfer"); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { text: qsTr("Computer → %1: %2").arg(selectedStorageLabel()).arg(routeDescription()); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
@@ -274,7 +287,7 @@ Kirigami.ApplicationWindow {
             Kirigami.Card { Layout.fillWidth: true; visible: setupModel.connectedDevices.length > 0
                 header: Controls.Label { text: qsTr("Phone — %1").arg(setupModel.mtpDeviceLabel); Accessible.name: text }
                 contentItem: ColumnLayout {
-                    Controls.Label { text: qsTr("Connected by %1. Detection alone never starts a transfer.").arg(setupModel.connectedDevices[0].transports.join(" + ")); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                    Controls.Label { text: qsTr("%1 · %2. Detection alone never starts a transfer.").arg(setupModel.connectedDevices[0].status || qsTr("Online")).arg(setupModel.connectedDevices[0].transports.join(" + ")); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
                     RowLayout {
                         Controls.Button { text: qsTr("Drive → Drive"); enabled: !copyEngine.running && setupModel.connectedDevices[0].url !== undefined; onClicked: openPhoneActions(); Accessible.name: qsTr("Import phone Drive to Drive") }
                         Controls.Button { text: qsTr("DCIM → Photos"); enabled: !copyEngine.running && setupModel.connectedDevices[0].url !== undefined; onClicked: openPhoneActions(); Accessible.name: qsTr("Import phone DCIM to Photos") }
