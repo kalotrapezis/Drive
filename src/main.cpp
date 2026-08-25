@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     QQmlApplicationEngine engine;
     SetupModel model;
     VerifiedCopy copy(model.databasePath());
-    WirelessReceiverController wirelessReceiver(model.databasePath());
+    WirelessReceiverController wirelessReceiver(model.databasePath(), &model);
     engine.rootContext()->setContextProperty("setupModel", &model);
     engine.rootContext()->setContextProperty("copyEngine", &copy);
     engine.rootContext()->setContextProperty("wirelessReceiver", &wirelessReceiver);

@@ -50,6 +50,7 @@ public:
     Q_INVOKABLE bool startWirelessDiscovery();
     Q_INVOKABLE void stopWirelessDiscovery();
     Q_INVOKABLE bool ingestWirelessBeacon(const QVariantMap &beacon);
+    Q_INVOKABLE bool observeWirelessTransfer(const QString &stableIdentity, const QString &label);
     Q_INVOKABLE bool pairWirelessDevice(const QString &wirelessDeviceId, const QString &targetDeviceId);
     Q_INVOKABLE bool acknowledgeDevice(const QString &deviceId, bool hide);
     Q_INVOKABLE bool showDevice(const QString &deviceId);

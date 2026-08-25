@@ -9,6 +9,7 @@
 
 
 #include "verifiedcopy.h"
+#include "setupmodel.h"
 
 namespace {
 QString normalizedFingerprint(QString value) {
@@ -16,8 +17,8 @@ QString normalizedFingerprint(QString value) {
 }
 }
 
-WirelessReceiverController::WirelessReceiverController(const QString &databasePath, QObject *parent)
-    : QObject(parent), m_databasePath(databasePath), m_receiver(this) {
+WirelessReceiverController::WirelessReceiverController(const QString &databasePath, SetupModel *setupModel, QObject *parent)
+    : QObject(parent), m_databasePath(databasePath), m_setupModel(setupModel), m_receiver(this) {
     m_catalog = databasePath;
     m_receiver.setFinalizeHandler([this](const QJsonObject &header, const QString &partialPath, QString *error) {
         return finalize(header, partialPath, error);
@@ -25,6 +26,11 @@ WirelessReceiverController::WirelessReceiverController(const QString &databasePa
     connect(&m_receiver, &WirelessReceiver::receipt, this, [this](const QJsonObject &receipt) {
         m_status = QStringLiteral("Received %1 (%2 bytes)").arg(receipt.value("relative").toString()).arg(receipt.value("size").toInteger());
         log(QStringLiteral("RECEIPT %1 sha256=%2").arg(receipt.value("relative").toString(), receipt.value("sha256").toString()));
+        emit changed();
+    });
+    connect(&m_receiver, &WirelessReceiver::deviceObserved, this, [this](const QString &stableIdentity, const QString &label) {
+        if (m_setupModel) m_setupModel->observeWirelessTransfer(stableIdentity, label);
+        log(QStringLiteral("INFO authenticated wireless device=%1 name=%2").arg(stableIdentity, label));
         emit changed();
     });
     connect(&m_receiver, &WirelessReceiver::errorMessage, this, [this](const QString &message) {

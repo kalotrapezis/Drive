@@ -427,6 +427,11 @@ bool SetupModel::ingestWirelessBeacon(const QVariantMap &beacon) {
     return true;
 }
 
+bool SetupModel::observeWirelessTransfer(const QString &stableIdentity, const QString &label) {
+    // The receiver has already authenticated this identity; reuse the same alias path as discovery.
+    return ingestWirelessBeacon(QVariantMap{{"stableIdentity", stableIdentity}, {"label", label}, {"protocol", LocalDrive::WirelessProtocol::Version}});
+}
+
 bool SetupModel::pairWirelessDevice(const QString &wirelessDeviceId, const QString &targetDeviceId) {
     if (wirelessDeviceId.trimmed().isEmpty() || targetDeviceId.trimmed().isEmpty() || wirelessDeviceId == targetDeviceId) return fail(QStringLiteral("Choose two different device identities to pair."));
     QString wirelessAlias;

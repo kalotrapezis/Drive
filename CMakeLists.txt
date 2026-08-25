@@ -59,13 +59,16 @@ qt_add_executable(wirelessreceivercontroller_test
     src/wirelesssession.cpp
     src/wirelesssession.h
     src/wirelessprotocol.h
+    src/setupmodel.cpp
+    src/setupmodel.h
     src/verifiedcopy.cpp
     src/verifiedcopy.h
     src/remoteinventory.cpp
     src/remoteinventory.h
 )
 qt_add_resources(wirelessreceivercontroller_test wirelessreceivercontroller_test_assets PREFIX "/" FILES src/catalog/schema.sql)
-target_link_libraries(wirelessreceivercontroller_test PRIVATE Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network KF6::KIOCore)
+target_link_libraries(wirelessreceivercontroller_test PRIVATE Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network KF6::Solid KF6::KIOCore)
+target_compile_definitions(wirelessreceivercontroller_test PRIVATE LOCAL_DRIVE_TESTING)
 add_test(NAME wirelessreceivercontroller_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/wirelessreceivercontroller_smoke.sh $<TARGET_FILE:wirelessreceivercontroller_test> $<TARGET_FILE:local-drive-cli>)
 add_test(NAME local_drive_cli_m0_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_m0_smoke.sh $<TARGET_FILE:local-drive-cli>)
 add_test(NAME local_drive_cli_m1_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_m1_smoke.sh $<TARGET_FILE:local-drive-cli>)

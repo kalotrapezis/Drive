@@ -228,6 +228,7 @@ bool WirelessReceiver::handlePacket(Connection &connection, const LocalDrive::Wi
     if (!connection.helloReceived) {
         if (type != QStringLiteral("hello") || packet.header.value("protocol").toInt() != LocalDrive::WirelessProtocol::Version || !packet.header.value("deviceId").toString().startsWith(QStringLiteral("wireless:")) || packet.header.value("name").toString().trimmed().isEmpty()) { if (error) *error = QStringLiteral("Wireless hello is invalid"); return false; }
         connection.deviceId = packet.header.value("deviceId").toString(); connection.helloReceived = true;
+        emit deviceObserved(connection.deviceId, packet.header.value("name").toString().trimmed());
         return send(connection.socket, QJsonObject{{"type", "hello-ok"}, {"protocol", LocalDrive::WirelessProtocol::Version}});
     }
     if (type == QStringLiteral("file")) return startFile(connection, packet.header, error);

@@ -57,6 +57,7 @@ public:
     void setFinalizeHandler(FinalizeHandler handler) { m_finalize = std::move(handler); }
 
 signals:
+    void deviceObserved(const QString &stableIdentity, const QString &label);
     void receipt(const QJsonObject &receipt);
     void errorMessage(const QString &message);
 
