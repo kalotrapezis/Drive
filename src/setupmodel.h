@@ -54,6 +54,10 @@ public:
     Q_INVOKABLE bool acknowledgeDevice(const QString &deviceId, bool hide);
     Q_INVOKABLE bool showDevice(const QString &deviceId);
     Q_INVOKABLE QString pathFromUrl(const QUrl &url) const { return url.toLocalFile(); }
+#ifdef LOCAL_DRIVE_TESTING
+    void setMtpDevicesForTest(const QVariantList &devices);
+    void setWirelessDevicesForTest(const QVariantList &devices);
+#endif
 
 signals:
     void changed();

@@ -360,6 +360,20 @@ void SetupModel::refreshMtpDevices() {
     });
 }
 
+#ifdef LOCAL_DRIVE_TESTING
+void SetupModel::setMtpDevicesForTest(const QVariantList &devices) {
+    m_mtpDevices = devices;
+    loadDeviceLists();
+    emit changed();
+}
+
+void SetupModel::setWirelessDevicesForTest(const QVariantList &devices) {
+    m_wirelessDevices = devices;
+    loadDeviceLists();
+    emit changed();
+}
+#endif
+
 bool SetupModel::startWirelessDiscovery() {
     if (m_wirelessSocket) return true;
     auto *socket = new QUdpSocket(this);

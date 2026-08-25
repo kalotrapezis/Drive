@@ -128,11 +128,21 @@ private slots:
         QVERIFY(q.exec("INSERT INTO device_aliases(alias,device_id,transport) VALUES('mtp:Xiaomi 15','mtp-phone','mtp')"));
         q.finish(); seed.close(); seed = QSqlDatabase(); QSqlDatabase::removeDatabase("wireless-identity-seed");
         SetupModel model(dbPath); QVERIFY(model.ready());
+        model.setMtpDevicesForTest({QVariantMap{{"id", "mtp-phone"}, {"stableIdentity", "mtp:Xiaomi 15"}, {"label", "Xiaomi 15"}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}, {"url", "mtp:/Xiaomi 15"}, {"phoneRoot", "mtp:/Xiaomi 15"}}});
         const QVariantMap beacon{{"stableIdentity", "wireless:xiaomi-15"}, {"label", "Xiaomi 15"}, {"endpoint", "192.168.1.10:4317"}, {"rssi", -58}};
         QVERIFY(model.ingestWirelessBeacon(beacon)); QVERIFY(model.ingestWirelessBeacon(beacon));
         QCOMPARE(model.wirelessDevices().size(), 1); const QString candidateId = model.wirelessDevices().first().toMap().value("id").toString(); QVERIFY(candidateId != QStringLiteral("mtp-phone"));
         QVERIFY(model.pairWirelessDevice(candidateId, QStringLiteral("mtp-phone")));
         QCOMPARE(model.wirelessDevices().size(), 1); QCOMPARE(model.wirelessDevices().first().toMap().value("id").toString(), QStringLiteral("mtp-phone"));
+        QCOMPARE(model.connectedDevices().size(), 1);
+        const QVariantMap combined = model.connectedDevices().first().toMap();
+        QVERIFY(combined.value("transports").toStringList().contains("mtp"));
+        QVERIFY(combined.value("transports").toStringList().contains("wireless"));
+        QCOMPARE(combined.value("status").toString(), QStringLiteral("Online"));
+        QVariantMap expiredWireless = model.wirelessDevices().first().toMap(); expiredWireless.insert("present", false); expiredWireless.insert("status", "Offline"); expiredWireless.insert("lastSeenMs", 0);
+        model.setWirelessDevicesForTest({expiredWireless});
+        QCOMPARE(model.connectedDevices().size(), 1);
+        QCOMPARE(model.connectedDevices().first().toMap().value("status").toString(), QStringLiteral("Online"));
         bool targetVisible = false, candidateVisible = false;
         for (const auto &device : model.deviceList()) { targetVisible = targetVisible || device.toMap().value("id") == QStringLiteral("mtp-phone"); candidateVisible = candidateVisible || device.toMap().value("id") == candidateId; }
         QVERIFY(targetVisible); QVERIFY(!candidateVisible);

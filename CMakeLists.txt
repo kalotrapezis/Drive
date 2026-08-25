@@ -43,6 +43,7 @@ enable_testing()
 qt_add_executable(setupmodel_test tests/setupmodel_test.cpp src/setupmodel.cpp src/setupmodel.h src/wirelessprotocol.h)
 qt_add_resources(setupmodel_test setupmodel_test_assets PREFIX "/" FILES src/catalog/schema.sql)
 target_link_libraries(setupmodel_test PRIVATE Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network Qt6::Test KF6::Solid KF6::KIOCore)
+target_compile_definitions(setupmodel_test PRIVATE LOCAL_DRIVE_TESTING)
 add_test(NAME setupmodel_test COMMAND setupmodel_test)
 
 qt_add_executable(verifiedcopy_test tests/verifiedcopy_test.cpp src/verifiedcopy.cpp src/verifiedcopy.h src/remoteinventory.cpp src/remoteinventory.h)
