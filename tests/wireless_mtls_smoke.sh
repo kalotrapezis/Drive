@@ -66,4 +66,16 @@ assert db.execute("select count(*) from history where event='verified'").fetchon
 assert db.execute("select source_sha256=destination_sha256 from locations where state='verified'").fetchone()[0] == 1
 PY
 
+printf '%s\n' 'wireless photos root payload ελληνικά' > "$root/source/video.mp4"
+$cli --catalog-file "$catalog" wireless-receive "$root/destination" "$root/server.crt" "$root/server.key" "$root/client.crt" "$fingerprint" 43274 > "$root/receiver-photos.log" 2>&1 &
+receiver=$!
+for attempt in $(seq 1 40); do
+    grep -q 'listening port=43274' "$root/receiver-photos.log" && break
+    sleep 0.1
+done
+$cli wireless-send "$root/source/video.mp4" localhost 43274 "$root/client.crt" "$root/client.key" "$root/server.crt" wireless:test-phone 'Test phone' Photos/video.mp4 > "$root/sender-photos.log" 2>&1
+wait "$receiver"
+cmp "$root/source/video.mp4" "$root/destination/Photos/video.mp4"
+grep -q 'RECEIPT wireless path=Photos/video.mp4' "$root/receiver-photos.log"
+
 printf 'PASS: mutual-TLS wireless sender/receiver, receipt, and catalog verification\n'

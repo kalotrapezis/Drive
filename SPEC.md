@@ -649,8 +649,10 @@ Cleanup cancellation is honored before the Trash side effect. If KIO reports a
 failure after items were marked pending, the items remain pending and the job
 requires catalog/Trash review rather than being marked falsely failed.
 
-The complete Photos library, duplicate quiz, Trash collection browser, scanner, and
-wireless pairing UI are deferred even if their mockups exist.
+The complete Photos library, duplicate quiz, and Trash collection browser are
+deferred even if their mockups exist. Alpha wireless pairing/profile UI and the
+foreground fixed-root scanner are implemented; QR-based automatic certificate
+onboarding remains deferred.
 
 ## 14. Settings required in 0.1
 
