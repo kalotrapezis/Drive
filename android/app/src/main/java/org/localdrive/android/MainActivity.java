@@ -19,7 +19,14 @@ public final class MainActivity extends Activity {
         layout.setGravity(Gravity.CENTER_HORIZONTAL);
 
         final TextView title = new TextView(this);
-        title.setText("Local Drive\n\nΤο κινητό είναι διαθέσιμο για ασύρματη ανίχνευση.\nΗ ανίχνευση δεν δίνει πρόσβαση σε αρχεία.");
+        String identityStatus;
+        try {
+            AndroidIdentity.ensureGenerated();
+            identityStatus = "\nΤο ασφαλές client identity είναι έτοιμο για pairing.";
+        } catch (Exception error) {
+            identityStatus = "\nΔεν ήταν δυνατή η δημιουργία του client identity.";
+        }
+        title.setText("Local Drive\n\nΤο κινητό είναι διαθέσιμο για ασύρματη ανίχνευση.\nΗ ανίχνευση δεν δίνει πρόσβαση σε αρχεία." + identityStatus);
         title.setTextSize(18);
         layout.addView(title, new LinearLayout.LayoutParams(-1, -2));
 

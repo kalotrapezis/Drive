@@ -33,6 +33,7 @@ public final class WirelessSender {
         public final int port;
         public final byte[] clientPkcs12;
         public final char[] clientPassword;
+        public final String clientKeyAlias;
         public final byte[] serverCaPem;
         public final String serverFingerprint;
         public final String deviceId;
@@ -44,6 +45,20 @@ public final class WirelessSender {
             this.port = port;
             this.clientPkcs12 = clientPkcs12;
             this.clientPassword = clientPassword == null ? new char[0] : clientPassword.clone();
+            this.clientKeyAlias = "";
+            this.serverCaPem = serverCaPem;
+            this.serverFingerprint = serverFingerprint;
+            this.deviceId = deviceId;
+            this.deviceName = deviceName;
+        }
+
+        public Profile(String host, int port, String clientKeyAlias, byte[] serverCaPem,
+                       String serverFingerprint, String deviceId, String deviceName) {
+            this.host = host;
+            this.port = port;
+            this.clientPkcs12 = null;
+            this.clientPassword = new char[0];
+            this.clientKeyAlias = clientKeyAlias;
             this.serverCaPem = serverCaPem;
             this.serverFingerprint = serverFingerprint;
             this.deviceId = deviceId;
@@ -55,7 +70,8 @@ public final class WirelessSender {
     public static void send(File source, String relative, Profile profile) throws Exception {
         if (source == null || !source.isFile() || !source.canRead()) throw new IOException("Wireless source is not readable");
         if (profile == null || profile.host == null || profile.host.trim().isEmpty() || profile.port <= 0 || profile.port > 65535) throw new IOException("Wireless profile is invalid");
-        if (profile.clientPkcs12 == null || profile.clientPkcs12.length == 0 || profile.serverCaPem == null || profile.serverCaPem.length == 0) throw new IOException("Wireless profile has no credentials");
+        if ((profile.clientKeyAlias == null || profile.clientKeyAlias.isEmpty()) && (profile.clientPkcs12 == null || profile.clientPkcs12.length == 0)) throw new IOException("Wireless profile has no client credentials");
+        if (profile.serverCaPem == null || profile.serverCaPem.length == 0) throw new IOException("Wireless profile has no server CA");
         if (profile.deviceId == null || !profile.deviceId.startsWith("wireless:") || profile.deviceName == null || profile.deviceName.trim().isEmpty()) throw new IOException("Wireless device identity is invalid");
         final String cleanRelative = safeRelative(relative);
         final long size = source.length();
@@ -92,10 +108,20 @@ public final class WirelessSender {
     }
 
     private static SSLSocket open(Profile profile) throws Exception {
-        final KeyStore clientStore = KeyStore.getInstance("PKCS12");
-        clientStore.load(new ByteArrayInputStream(profile.clientPkcs12), profile.clientPassword);
+        final KeyStore clientStore;
+        final char[] clientPassword;
+        if (profile.clientKeyAlias != null && !profile.clientKeyAlias.isEmpty()) {
+            clientStore = KeyStore.getInstance("AndroidKeyStore");
+            clientStore.load(null);
+            if (!clientStore.containsAlias(profile.clientKeyAlias)) throw new IOException("Android client key is not paired");
+            clientPassword = new char[0];
+        } else {
+            clientStore = KeyStore.getInstance("PKCS12");
+            clientStore.load(new ByteArrayInputStream(profile.clientPkcs12), profile.clientPassword);
+            clientPassword = profile.clientPassword;
+        }
         final KeyManagerFactory keys = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        keys.init(clientStore, profile.clientPassword);
+        keys.init(clientStore, clientPassword);
 
         final CertificateFactory factory = CertificateFactory.getInstance("X.509");
         final Certificate serverCa = factory.generateCertificate(new ByteArrayInputStream(profile.serverCaPem));
