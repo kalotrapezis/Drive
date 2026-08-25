@@ -170,6 +170,11 @@ QVariantList SetupModel::connectedDevices() const {
             if (!transport.isEmpty() && !transports.contains(transport)) transports.append(transport);
             current.insert("transports", transports);
             for (auto it = incoming.cbegin(); it != incoming.cend(); ++it) if (!current.contains(it.key()) || current.value(it.key()).toString().isEmpty()) current.insert(it.key(), it.value());
+            if (incoming.value("present").toBool() || incoming.value("status").toString() == QStringLiteral("Online")) {
+                current.insert("present", true);
+                current.insert("status", QStringLiteral("Online"));
+            }
+            if (incoming.value("lastSeenMs").toLongLong() > current.value("lastSeenMs").toLongLong()) current.insert("lastSeenMs", incoming.value("lastSeenMs"));
             value = current;
             return;
         }
@@ -323,7 +328,7 @@ void SetupModel::refreshMtpDevices() {
             if (deviceId.isEmpty()) continue;
             QSqlQuery hidden(QSqlDatabase::database(m_connectionName)); hidden.prepare("SELECT hidden FROM devices WHERE id=?"); hidden.addBindValue(deviceId);
             if (!hidden.exec() || !hidden.next() || !hidden.value(0).toBool()) {
-                const QVariantMap phone{{"id", deviceId}, {"stableIdentity", stable}, {"label", name}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"url", url}, {"phoneRoot", url}};
+                const QVariantMap phone{{"id", deviceId}, {"stableIdentity", stable}, {"label", name}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}, {"url", url}, {"phoneRoot", url}};
                 m_mtpDevices.append(phone);
                 if (!url.isEmpty()) {
                     QUrl storageUrl(url);
