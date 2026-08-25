@@ -350,8 +350,9 @@ detected phone and storage identities. Its current onboarding modal is
 informational and non-destructive: it explains USB/MTP and the fixed phone
 roots, identifies storage by stable identity, and never starts a transfer or
 formats a disk. The repository includes the Android candidate beacon, Keystore
-identity, profile UI, and authenticated foreground sender; automatic Android
-root scanning and the Linux GUI receiver configuration remain deferred.
+identity, profile UI, authenticated foreground sender, and a manual Linux GUI
+receiver panel; automatic Android root scanning and automatic certificate
+onboarding remain deferred.
 
 1. Detect an unlocked MTP phone exposed through KDE/KIO.
 2. Save its stable available identity and friendly name.
@@ -374,7 +375,8 @@ candidate packet for simulation. Discovery does not pair devices, trust a
 network-provided device ID, or authorize file transfer. Alpha's visible
 **Pair with USB phone** action only links a candidate alias after an explicit
 user action. Cryptographic pairing is implemented through the Alpha JSON profile
-exchange; the GUI still needs to expose the receiver certificate setup directly.
+exchange; Settings exposes the receiver certificate paths, pinned fingerprint,
+destination, Start/Stop controls, and live log.
 
 The Linux Alpha protocol gate is now available through `wireless-receive` and
 `wireless-send`: TLS 1.3 is mutual, the receiver pins the client certificate

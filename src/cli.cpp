@@ -378,8 +378,10 @@ int runWirelessReceive(QCoreApplication &app, Output &output, const QString &des
     configuration.clientCaPath = clientCaPath;
     configuration.expectedClientFingerprint = clientFingerprint.toLatin1();
     receiver.setFinalizeHandler([&output, &destination, &catalog, identity](const QJsonObject &header, const QString &partialPath, QString *error) {
-        const QString sourceRoot = QFileInfo(partialPath).absolutePath();
         const QString relative = QDir::cleanPath(header.value("relative").toString());
+        QString sourceRoot = QFileInfo(partialPath).absolutePath();
+        const int parentLevels = qMax(0, int(relative.split('/', Qt::SkipEmptyParts).size()) - 1);
+        for (int level = 0; level < parentLevels; ++level) sourceRoot = QFileInfo(sourceRoot).absolutePath();
         const QString deviceStableId = header.value("deviceId").toString();
         const QString deviceName = header.value("name").toString();
         const QString deviceDigest = QString::fromLatin1(QCryptographicHash::hash(deviceStableId.toUtf8(), QCryptographicHash::Sha256).toHex().left(16));
@@ -427,13 +429,14 @@ int runWirelessReceive(QCoreApplication &app, Output &output, const QString &des
 
 int runWirelessSend(QCoreApplication &app, Output &output, const QString &sourcePath, const QString &host, quint16 port,
                     const QString &certificatePath, const QString &privateKeyPath, const QString &serverCaPath,
-                    const QString &deviceId, const QString &deviceName) {
+                    const QString &deviceId, const QString &deviceName, const QString &requestedRelative = {}) {
     QFile source(sourcePath);
     if (!source.open(QIODevice::ReadOnly)) return fail(output, source.errorString());
     const qint64 size = source.size();
     QCryptographicHash digest(QCryptographicHash::Sha256);
     while (!source.atEnd()) digest.addData(source.read(1024 * 1024));
-    const QString relative = QFileInfo(sourcePath).fileName();
+    const QString relative = requestedRelative.trimmed().isEmpty() ? QFileInfo(sourcePath).fileName() : QDir::cleanPath(requestedRelative);
+    if (relative.isEmpty() || QDir::isAbsolutePath(relative) || relative == QStringLiteral(".") || relative == QStringLiteral("..") || relative.startsWith(QStringLiteral("../")) || relative.contains(QStringLiteral("/../"))) return fail(output, QStringLiteral("wireless sender relative path is unsafe"));
     QSslCertificate localCertificate, serverCa;
     QSslKey privateKey;
     QString loadError;
@@ -610,12 +613,12 @@ int main(int argc, char **argv) {
         return runWirelessReceive(app, output, destination, args.at(2), args.at(3), args.at(4), args.at(5), port, catalog);
     }
     if (command == QStringLiteral("wireless-send")) {
-        if (args.size() != 9) return fail(output, QStringLiteral("usage: wireless-send SOURCE_FILE HOST PORT CLIENT_CERT CLIENT_KEY SERVER_CA WIRELESS_ID DEVICE_NAME"));
+        if (args.size() != 9 && args.size() != 10) return fail(output, QStringLiteral("usage: wireless-send SOURCE_FILE HOST PORT CLIENT_CERT CLIENT_KEY SERVER_CA WIRELESS_ID DEVICE_NAME [RELATIVE_PATH]"));
         bool portOk = false; const quint16 port = args.at(3).toUShort(&portOk);
         if (!portOk || port == 0 || !args.at(7).startsWith(QStringLiteral("wireless:"))) return fail(output, QStringLiteral("wireless sender needs a valid port and wireless: device identity"));
         const QString source = localPathFromArgument(args.at(1));
         if (source.isEmpty()) return fail(output, QStringLiteral("wireless sender source must be a local file"));
-        return runWirelessSend(app, output, source, args.at(2), port, args.at(4), args.at(5), args.at(6), args.at(7), args.at(8));
+        return runWirelessSend(app, output, source, args.at(2), port, args.at(4), args.at(5), args.at(6), args.at(7), args.at(8), args.size() == 10 ? args.at(9) : QString());
     }
     if (command == QStringLiteral("copy")) {
         if (args.size() != 3) return fail(output, QStringLiteral("usage: copy SOURCE DESTINATION_DIRECTORY"));

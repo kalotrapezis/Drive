@@ -7,6 +7,7 @@
 #include <QWindow>
 #include "setupmodel.h"
 #include "verifiedcopy.h"
+#include "wirelessreceivercontroller.h"
 
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
@@ -16,8 +17,10 @@ int main(int argc, char **argv) {
     QQmlApplicationEngine engine;
     SetupModel model;
     VerifiedCopy copy(model.databasePath());
+    WirelessReceiverController wirelessReceiver(model.databasePath());
     engine.rootContext()->setContextProperty("setupModel", &model);
     engine.rootContext()->setContextProperty("copyEngine", &copy);
+    engine.rootContext()->setContextProperty("wirelessReceiver", &wirelessReceiver);
     engine.load(QUrl(QStringLiteral("qrc:/src/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return 1;
     auto *window = qobject_cast<QWindow *>(engine.rootObjects().first());

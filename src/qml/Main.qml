@@ -404,6 +404,40 @@ Kirigami.ApplicationWindow {
                     Controls.Label { visible: setupModel.routes.filter(function(route) { return route.contentType === "Photos" }).length === 0; text: qsTr("No Photos route saved yet."); Accessible.name: text }
                 }
             }
+            Kirigami.Heading { text: qsTr("Wireless receiver"); level: 3 }
+            Kirigami.Card {
+                Layout.fillWidth: true
+                contentItem: ColumnLayout {
+                    Controls.Label { text: qsTr("The receiver accepts only TLS 1.3 clients whose certificate fingerprint is pinned. Nothing starts automatically when a phone is detected."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                    Controls.Label { text: qsTr("Status: %1").arg(wirelessReceiver.status); Layout.fillWidth: true; Accessible.name: text }
+                    RowLayout { Layout.fillWidth: true
+                        Controls.TextField { id: receiverDestination; placeholderText: qsTr("Local Drive root / destination folder"); Layout.fillWidth: true; Accessible.name: qsTr("Wireless destination root") }
+                        Controls.Button { text: qsTr("Choose…"); onClicked: receiverDestinationDialog.open(); Accessible.name: qsTr("Choose wireless destination root") }
+                    }
+                    RowLayout { Layout.fillWidth: true
+                        Controls.TextField { id: receiverCertificate; placeholderText: qsTr("Server certificate PEM"); Layout.fillWidth: true; Accessible.name: qsTr("Server certificate") }
+                        Controls.Button { text: qsTr("Choose…"); onClicked: receiverCertificateDialog.open(); Accessible.name: qsTr("Choose server certificate") }
+                    }
+                    RowLayout { Layout.fillWidth: true
+                        Controls.TextField { id: receiverPrivateKey; placeholderText: qsTr("Server private key PEM"); Layout.fillWidth: true; Accessible.name: qsTr("Server private key") }
+                        Controls.Button { text: qsTr("Choose…"); onClicked: receiverPrivateKeyDialog.open(); Accessible.name: qsTr("Choose server private key") }
+                    }
+                    RowLayout { Layout.fillWidth: true
+                        Controls.TextField { id: receiverClientCa; placeholderText: qsTr("Android client certificate PEM"); Layout.fillWidth: true; Accessible.name: qsTr("Android client certificate") }
+                        Controls.Button { text: qsTr("Choose…"); onClicked: receiverClientCaDialog.open(); Accessible.name: qsTr("Choose Android client certificate") }
+                    }
+                    RowLayout { Layout.fillWidth: true
+                        Controls.TextField { id: receiverFingerprint; placeholderText: qsTr("Pinned Android SHA-256 fingerprint"); Layout.fillWidth: true; Accessible.name: qsTr("Pinned Android certificate fingerprint") }
+                        Controls.TextField { id: receiverPort; text: "43171"; inputMethodHints: Qt.ImhDigitsOnly; width: 100; Accessible.name: qsTr("Wireless receiver port") }
+                    }
+                    RowLayout { Layout.fillWidth: true
+                        Controls.Button { text: qsTr("Start receiver"); enabled: !wirelessReceiver.listening; onClicked: wirelessReceiver.start(receiverDestination.text, receiverCertificate.text, receiverPrivateKey.text, receiverClientCa.text, receiverFingerprint.text, Number(receiverPort.text)); Accessible.name: qsTr("Start wireless receiver") }
+                        Controls.Button { text: qsTr("Stop receiver"); enabled: wirelessReceiver.listening; onClicked: wirelessReceiver.stop(); Accessible.name: qsTr("Stop wireless receiver") }
+                    }
+                    Controls.Label { text: qsTr("Live receiver log"); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
+                    Repeater { model: wirelessReceiver.logEntries.slice(Math.max(0, wirelessReceiver.logEntries.length - 12)); delegate: Controls.Label { text: modelData; elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } }
+                }
+            }
             Kirigami.Heading { text: qsTr("Hidden devices"); level: 3 }
             Controls.Label { text: qsTr("Hidden devices stay in the catalog and history. Show one again when you want it back in the map and device list."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Repeater { model: setupModel.hiddenDevices; delegate: RowLayout { Layout.fillWidth: true
@@ -420,6 +454,10 @@ Kirigami.ApplicationWindow {
     FolderDialog { id: sourceDialog; title: qsTr("Choose source folder"); onAccepted: source.text = setupModel.pathFromUrl(selectedFolder) }
     FolderDialog { id: destinationDialog; title: qsTr("Choose destination folder"); currentFolder: storage.currentIndex >= 0 ? "file://" + setupModel.storages[storage.currentIndex + 1].root : ""; onAccepted: destination.text = setupModel.pathFromUrl(selectedFolder) }
     FolderDialog { id: stagingDialog; title: qsTr("Choose laptop staging folder"); onAccepted: stagingRoot.text = setupModel.pathFromUrl(selectedFolder) }
+    FolderDialog { id: receiverDestinationDialog; title: qsTr("Choose wireless destination root"); onAccepted: receiverDestination.text = setupModel.pathFromUrl(selectedFolder) }
+    FileDialog { id: receiverCertificateDialog; title: qsTr("Choose server certificate"); fileMode: FileDialog.OpenFile; onAccepted: receiverCertificate.text = setupModel.pathFromUrl(selectedFile) }
+    FileDialog { id: receiverPrivateKeyDialog; title: qsTr("Choose server private key"); fileMode: FileDialog.OpenFile; onAccepted: receiverPrivateKey.text = setupModel.pathFromUrl(selectedFile) }
+    FileDialog { id: receiverClientCaDialog; title: qsTr("Choose Android client certificate"); fileMode: FileDialog.OpenFile; onAccepted: receiverClientCa.text = setupModel.pathFromUrl(selectedFile) }
     FileDialog { id: manifestDialog; title: qsTr("Export manifest"); fileMode: FileDialog.SaveFile; nameFilters: [qsTr("JSON manifest (*.json)"), qsTr("CSV manifest (*.csv)")]; onAccepted: { const format = selectedFile.toString().toLowerCase().endsWith(".csv") ? "csv" : "json"; manifestStatus = copyEngine.exportManifest(selectedFile, format) ? qsTr("Manifest exported") : qsTr("Could not export manifest"); } }
     Controls.Dialog { id: pauseDialog; title: qsTr("Pause transfer"); modal: true; width: 560; standardButtons: Controls.Dialog.NoButton
         contentItem: ColumnLayout {
@@ -455,7 +493,7 @@ Kirigami.ApplicationWindow {
             Controls.Label { visible: onboardingDevice.category === "storage"; text: qsTr("Filesystem: %1 · selected root: %2").arg(onboardingDevice.filesystemType || qsTr("unknown")).arg(onboardingDevice.root || qsTr("not available")); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.category === "storage"; text: qsTr("Choose its role and the Drive/Photos roots in the connection map. Local Drive will never format this storage automatically."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.kind === "Phone"; text: qsTr("Phone setup: unlock Android and select USB mode ‘File transfer / MTP’. Local Drive uses the fixed phone roots Drive/ for files and DCIM/ for photos and videos."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Label { visible: onboardingDevice.kind === "Phone"; text: qsTr("Available actions after setup: Drive → Drive and DCIM → Photos. Detection alone never starts a transfer. Wireless pairing and its one-time QR code will appear when the phone companion is available."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Label { visible: onboardingDevice.kind === "Phone"; text: qsTr("Available actions after setup: Drive → Drive and DCIM → Photos. Detection alone never starts a transfer. Wireless pairing uses the Android profile exchange and the Wireless receiver panel in Settings."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.wirelessCandidate === true; text: qsTr("Wireless candidate detected. Discovery does not grant file access. If the same phone is also connected by USB, confirm that here to keep one device entry with both transports."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.ComboBox { id: wirelessMtpTarget; visible: onboardingDevice.wirelessCandidate === true && setupModel.mtpDevices.length > 1; model: setupModel.mtpDevices; textRole: "label"; valueRole: "id"; Layout.fillWidth: true; Accessible.name: qsTr("Choose the USB phone matching this wireless phone") }
             Controls.Button { visible: onboardingDevice.wirelessCandidate === true && setupModel.mtpDevices.length > 0; text: qsTr("Pair with the selected USB phone"); Layout.alignment: Qt.AlignLeft; onClicked: { const targetId = setupModel.mtpDevices.length === 1 ? setupModel.mtpDevices[0].id : wirelessMtpTarget.currentValue; if (targetId && setupModel.pairWirelessDevice(onboardingDevice.id, targetId)) finishOnboarding(false) } Accessible.name: qsTr("Pair wireless candidate with the selected USB phone") }

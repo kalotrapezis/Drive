@@ -201,8 +201,9 @@ The repository now also contains the Android candidate beacon, a Keystore-backed
 client identity, a saved pairing profile, and a protocol-compatible sender
 running from a foreground transfer service. The Android Alpha surface lets the
 user choose one file for the fixed `Drive/` or `Photos/` destination root; it
-does not delete the source. Automatic root scanning/queueing and the Linux GUI's
-automatic receiver configuration remain next.
+does not delete the source. Automatic root scanning/queueing and automatic
+profile/certificate onboarding remain next; Settings now exposes the manual
+Linux receiver configuration and live receiver log.
 
 The next Alpha gate is now executable without Android: `wireless-receive` and
 `wireless-send` establish mutual TLS 1.3 with a pinned client certificate,
