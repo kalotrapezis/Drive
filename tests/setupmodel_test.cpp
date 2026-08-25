@@ -156,6 +156,30 @@ private slots:
         check.close(); check = QSqlDatabase(); QSqlDatabase::removeDatabase("wireless-identity-check");
     }
 
+    void wirelessCandidateCanPairAfterMtpAppears() {
+        QTemporaryDir d; QVERIFY(d.isValid());
+        SetupModel model(d.path() + "/catalog.sqlite"); QVERIFY(model.ready());
+        QVERIFY(model.ingestWirelessBeacon(QVariantMap{{"stableIdentity", "wireless:late-usb"}, {"label", "Late USB phone"}}));
+        const QString candidateId = model.wirelessDevices().first().toMap().value("id").toString();
+        QVERIFY(!candidateId.isEmpty());
+        QVERIFY(model.connectedDevices().size() == 1);
+
+#ifdef LOCAL_DRIVE_TESTING
+        QSqlDatabase seed = QSqlDatabase::addDatabase("QSQLITE", "late-mtp-seed"); seed.setDatabaseName(d.path() + "/catalog.sqlite"); QVERIFY(seed.open()); QSqlQuery seedQuery(seed);
+        QVERIFY(seedQuery.exec("INSERT INTO devices(id,stable_id,name,kind,is_local) VALUES('mtp-late-phone','mtp:late-phone','Late USB phone','Phone',0)"));
+        QVERIFY(seedQuery.exec("INSERT INTO device_aliases(alias,device_id,transport) VALUES('mtp:late-phone','mtp-late-phone','mtp')"));
+        seedQuery.finish(); seed.close(); seed = QSqlDatabase(); QSqlDatabase::removeDatabase("late-mtp-seed");
+        model.setMtpDevicesForTest({QVariantMap{{"id", "mtp-late-phone"}, {"stableIdentity", "mtp:late-phone"}, {"label", "Late USB phone"}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}}});
+#endif
+        QCOMPARE(model.connectedDevices().size(), 2);
+        QVERIFY(model.pairWirelessDevice(candidateId, QStringLiteral("mtp-late-phone")));
+        QCOMPARE(model.connectedDevices().size(), 1);
+        const QVariantMap merged = model.connectedDevices().first().toMap();
+        QCOMPARE(merged.value("id").toString(), QStringLiteral("mtp-late-phone"));
+        QVERIFY(merged.value("transports").toStringList().contains("mtp"));
+        QVERIFY(merged.value("transports").toStringList().contains("wireless"));
+    }
+
     void wirelessUdpDiscoveryDeduplicatesBeacon() {
         QTemporaryDir d; QVERIFY(d.isValid());
         SetupModel model(d.path() + "/catalog.sqlite"); QVERIFY(model.ready());
