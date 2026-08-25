@@ -84,3 +84,23 @@ creates, moves, or deletes files there.
 The desktop surface exposes `Ctrl+R` (refresh), `Ctrl+S` (save route), `Ctrl+Enter`
 (start the selected previewed route), and `Esc` (stop an active transfer); the terminal utility remains the complete keyboard-first
 surface for verified transfers.
+
+## Android discovery companion (Alpha source only)
+
+The minimal Android module under `android/` currently does one thing: while its
+foreground service is running, it broadcasts the versioned candidate-only
+discovery beacon every five seconds on the local network. It does not read
+files, pair, or authorize a transfer. The Linux listener remains the source of
+truth for device identity and trust.
+
+For a local build, use the installed Android SDK and Java 17:
+
+```sh
+ANDROID_HOME=/home/teo/Android/Sdk \
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH \
+/home/teo/Έγγραφα/Claude/Coding/Notes-Android/gradlew -p android assembleDebug --no-daemon
+```
+
+The generated APK and Gradle state are deliberately ignored and are not an
+Alpha release package.

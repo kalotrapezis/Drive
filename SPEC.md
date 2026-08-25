@@ -31,7 +31,8 @@ transport providers according to stable identity, presence, and capabilities.
 
 ## 2. Non-goals for 0.1
 
-- Android application and wireless transfer;
+- Android file-transfer application and wireless transfer (the Alpha source
+  currently contains only a candidate-discovery beacon);
 - bidirectional continuous synchronization;
 - deletion propagation or tombstones;
 - remote access, cloud relay, accounts, or internet exposure;
@@ -348,8 +349,8 @@ The setup model also persists first-seen acknowledgement and hidden state for
 detected phone and storage identities. Its current onboarding modal is
 informational and non-destructive: it explains USB/MTP and the fixed phone
 roots, identifies storage by stable identity, and never starts a transfer or
-formats a disk. Wireless QR pairing and the official companion source remain a
-future capability.
+formats a disk. The repository includes a source-only Android candidate beacon;
+wireless QR pairing and authenticated file access remain future capabilities.
 
 1. Detect an unlocked MTP phone exposed through KDE/KIO.
 2. Save its stable available identity and friendly name.
@@ -379,8 +380,9 @@ The Linux Alpha protocol gate is now available through `wireless-receive` and
 fingerprint, and the sender pins the receiver CA certificate. Files use
 acknowledged chunk offsets and app-owned resumable partials; after the final
 SHA-256 check the staged upload is passed through `VerifiedCopy` and one normal
-catalog receipt is committed. The CLI pair is a deterministic LAN harness, not
-the Android companion or the final QR pairing UI.
+catalog receipt is committed. The CLI pair is a deterministic LAN harness. The
+Android source currently emits the same candidate beacon only; it is not the
+final pairing UI or transfer client.
 
 The verified-import slice is intentionally one file at a time at the engine
 and now emits live received-byte progress while streaming each object. A

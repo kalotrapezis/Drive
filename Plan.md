@@ -197,14 +197,17 @@ never pairing or transfer authorization, and network-supplied pairing IDs are
 ignored. Alpha exposes a local **Pair with USB phone** action when exactly one
 MTP phone is present; it moves the wireless alias onto that canonical record,
 archives the candidate row, and leaves one visible device with both transports.
-Cryptographic pairing and authenticated transfer remain the next network gate.
+The repository now also contains a source-only Android candidate beacon. It
+does not read files or pair; cryptographic pairing and authenticated transfer
+remain the next network gate.
 
 The next Alpha gate is now executable without Android: `wireless-receive` and
 `wireless-send` establish mutual TLS 1.3 with a pinned client certificate,
 exchange acknowledged chunks, resume an app-owned partial, and pass the
 completed upload through `VerifiedCopy` for the ordinary SHA-256 receipt. The
-CLI smoke test proves the local protocol and catalog path; it is not yet the
-Android companion or a real-phone hardware test.
+CLI smoke test proves the local protocol and catalog path. The Android source
+currently proves candidate discovery only; it is not yet a real-phone transfer
+or hardware test.
 
 ### 3. Linux staging folder → configured storage node
 
