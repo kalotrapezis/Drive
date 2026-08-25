@@ -10,11 +10,17 @@
 #include <QHostAddress>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QStorageInfo>
 #include <QStandardPaths>
 #include <QTextStream>
+#include <QTimer>
 #include <QUrl>
 #include <QUdpSocket>
+#include <QSslCertificate>
+#include <QSslConfiguration>
+#include <QSslKey>
+#include <QSslSocket>
 
 #include <memory>
 
@@ -24,6 +30,7 @@
 #include "verifiedcopy.h"
 #include "remoteinventory.h"
 #include "wirelessprotocol.h"
+#include "wirelesssession.h"
 
 namespace {
 
@@ -267,6 +274,157 @@ int runWirelessBeacon(Output &output, const QString &stableIdentity, const QStri
     return 0;
 }
 
+bool loadWirelessCertificate(const QString &path, QSslCertificate *certificate, QString *error) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) { if (error) *error = file.errorString(); return false; }
+    const auto certificates = QSslCertificate::fromDevice(&file, QSsl::Pem);
+    if (certificates.isEmpty()) { if (error) *error = QStringLiteral("no PEM certificate found in %1").arg(path); return false; }
+    *certificate = certificates.first();
+    return true;
+}
+
+bool loadWirelessKey(const QString &path, QSslKey *key, QString *error) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) { if (error) *error = file.errorString(); return false; }
+    *key = QSslKey(&file, QSsl::Rsa, QSsl::Pem);
+    if (key->isNull()) { if (error) *error = QStringLiteral("no readable PEM private key found in %1").arg(path); return false; }
+    return true;
+}
+
+int runWirelessReceive(QCoreApplication &app, Output &output, const QString &destination, const QString &certificatePath,
+                       const QString &privateKeyPath, const QString &clientCaPath, const QString &clientFingerprint, quint16 port,
+                       const QString &catalog) {
+    if (!QFileInfo(destination).isDir()) return fail(output, QStringLiteral("wireless-receive needs an existing destination directory"));
+    if (!QDir().mkpath(QFileInfo(catalog).absolutePath())) return fail(output, QStringLiteral("could not create catalog directory"));
+    const QString identity = VerifiedCopy::liveStorageIdentity(destination);
+    if (identity.isEmpty()) return fail(output, QStringLiteral("could not identify destination storage"));
+    WirelessReceiver receiver;
+    WirelessReceiver::Configuration configuration;
+    configuration.port = port;
+    configuration.destinationRoot = destination;
+    configuration.stagingRoot = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("wireless-staging"));
+    configuration.certificatePath = certificatePath;
+    configuration.privateKeyPath = privateKeyPath;
+    configuration.clientCaPath = clientCaPath;
+    configuration.expectedClientFingerprint = clientFingerprint.toLatin1();
+    receiver.setFinalizeHandler([&output, &destination, &catalog, identity](const QJsonObject &header, const QString &partialPath, QString *error) {
+        const QString sourceRoot = QFileInfo(partialPath).absolutePath();
+        const QString relative = QDir::cleanPath(header.value("relative").toString());
+        const QString deviceStableId = header.value("deviceId").toString();
+        const QString deviceName = header.value("name").toString();
+        const QString deviceDigest = QString::fromLatin1(QCryptographicHash::hash(deviceStableId.toUtf8(), QCryptographicHash::Sha256).toHex().left(16));
+        const QString destinationDigest = QString::fromLatin1(QCryptographicHash::hash(destination.toUtf8(), QCryptographicHash::Sha256).toHex().left(16));
+        VerifiedCopy::Request request;
+        request.sourceRoot = sourceRoot;
+        request.destinationRoot = destination;
+        request.selectedStorageRoot = destination;
+        request.storageIdentity = identity;
+        request.filesystemType = QStorageInfo(destination).fileSystemType();
+        request.databasePath = catalog;
+        request.routeId = QStringLiteral("wireless-route-%1-%2").arg(deviceDigest, destinationDigest);
+        request.destinationStorageId = QStringLiteral("wireless-destination-%1").arg(destinationDigest);
+        request.sourceStorageId = QStringLiteral("wireless-storage-%1").arg(deviceDigest);
+        request.sourceStorageIdentity = deviceStableId;
+        request.sourceStorageKind = QStringLiteral("mtp");
+        request.sourceStorageLabel = deviceName;
+        request.sourceDeviceId = QStringLiteral("wireless-device-%1").arg(deviceDigest);
+        request.sourceDeviceStableId = deviceStableId;
+        request.sourceDeviceName = deviceName;
+        request.sourceDeviceKind = QStringLiteral("Phone");
+        request.behavior = QStringLiteral("Copy");
+        request.keepPolicy = QStringLiteral("Everything");
+        if (relative.isEmpty()) { if (error) *error = QStringLiteral("wireless receipt has no relative path"); return QJsonObject(); }
+        VerifiedCopy::Preview preview = VerifiedCopy::inspect(request);
+        if (!preview.ok) { if (error) *error = preview.error; return QJsonObject(); }
+        if (!QFileInfo::exists(partialPath)) { if (error) *error = QStringLiteral("wireless partial disappeared before verification"); return QJsonObject(); }
+        VerifiedCopy engine(catalog);
+        QObject::connect(&engine, &VerifiedCopy::progressChanged, [&output](qint64 done, qint64 total, const QString &path) {
+            output.write(QStringLiteral("PROGRESS wireless bytes=%1 total=%2 path=%3").arg(done).arg(total).arg(path));
+        });
+        if (!engine.executeBlocking(request, error)) return QJsonObject();
+        return QJsonObject{{"relative", relative}, {"deviceId", deviceStableId}, {"name", deviceName}};
+    });
+    QString startError;
+    if (!receiver.start(configuration, &startError)) return fail(output, startError);
+    output.write(QStringLiteral("INFO wireless receiver listening port=%1").arg(receiver.port()));
+    QObject::connect(&receiver, &WirelessReceiver::receipt, &app, [&app, &output](const QJsonObject &receipt) {
+        output.write(QStringLiteral("RECEIPT wireless path=%1 sha256=%2 size=%3").arg(receipt.value("relative").toString(), receipt.value("sha256").toString()).arg(receipt.value("size").toInteger()));
+        QTimer::singleShot(100, &app, [&app] { app.exit(0); });
+    });
+    QObject::connect(&receiver, &WirelessReceiver::errorMessage, &app, [&output](const QString &message) { output.write(QStringLiteral("ERROR wireless receiver: %1").arg(message)); });
+    return app.exec();
+}
+
+int runWirelessSend(QCoreApplication &app, Output &output, const QString &sourcePath, const QString &host, quint16 port,
+                    const QString &certificatePath, const QString &privateKeyPath, const QString &serverCaPath,
+                    const QString &deviceId, const QString &deviceName) {
+    QFile source(sourcePath);
+    if (!source.open(QIODevice::ReadOnly)) return fail(output, source.errorString());
+    const qint64 size = source.size();
+    QCryptographicHash digest(QCryptographicHash::Sha256);
+    while (!source.atEnd()) digest.addData(source.read(1024 * 1024));
+    const QString relative = QFileInfo(sourcePath).fileName();
+    QSslCertificate localCertificate, serverCa;
+    QSslKey privateKey;
+    QString loadError;
+    if (!loadWirelessCertificate(certificatePath, &localCertificate, &loadError) || !loadWirelessKey(privateKeyPath, &privateKey, &loadError) || !loadWirelessCertificate(serverCaPath, &serverCa, &loadError)) return fail(output, loadError);
+    QSslConfiguration ssl = QSslConfiguration::defaultConfiguration();
+    ssl.setLocalCertificate(localCertificate); ssl.setPrivateKey(privateKey); ssl.setCaCertificates({serverCa});
+    ssl.setPeerVerifyMode(QSslSocket::VerifyPeer); ssl.setProtocol(QSsl::TlsV1_3OrLater);
+    QSslSocket socket; socket.setSslConfiguration(ssl);
+    QByteArray buffer; qint64 offset = -1, awaitingAck = -1; int exitCode = 1;
+    QEventLoop loop; QTimer timeout; timeout.setSingleShot(true); timeout.setInterval(120000);
+    const auto failAsync = [&](const QString &message) { if (exitCode == 1) { output.write(QStringLiteral("ERROR wireless sender: %1").arg(message)); exitCode = 2; loop.quit(); } };
+    std::function<void()> sendNext;
+    sendNext = [&] {
+        if (offset < 0 || awaitingAck >= 0 || offset >= size) return;
+        if (!source.seek(offset)) { failAsync(source.errorString()); return; }
+        const QByteArray chunk = source.read(std::min<qint64>(LocalDrive::WirelessProtocol::MaxPayloadBytes, size - offset));
+        if (chunk.isEmpty()) { failAsync(source.errorString().isEmpty() ? QStringLiteral("source read failed") : source.errorString()); return; }
+        const qint64 end = offset + chunk.size();
+        const QByteArray packet = LocalDrive::WirelessProtocol::encodePacket(QJsonObject{{"type", "chunk"}, {"offset", offset}}, chunk);
+        if (socket.write(packet) != packet.size()) { failAsync(socket.errorString()); return; }
+        awaitingAck = end;
+    };
+    QObject::connect(&timeout, &QTimer::timeout, &loop, [&] { failAsync(QStringLiteral("wireless sender timed out")); });
+    QObject::connect(&socket, &QSslSocket::encrypted, &loop, [&] {
+        timeout.start();
+        socket.write(LocalDrive::WirelessProtocol::encodePacket(QJsonObject{{"type", "hello"}, {"protocol", LocalDrive::WirelessProtocol::Version}, {"deviceId", deviceId}, {"name", deviceName}}));
+    });
+    QObject::connect(&socket, &QSslSocket::readyRead, &loop, [&] {
+        buffer.append(socket.readAll());
+        for (;;) {
+            LocalDrive::WirelessProtocol::Packet packet; QString decodeError;
+            const auto decoded = LocalDrive::WirelessProtocol::decodePacket(buffer, &packet, &decodeError);
+            if (decoded == LocalDrive::WirelessProtocol::DecodeResult::Incomplete) return;
+            if (decoded == LocalDrive::WirelessProtocol::DecodeResult::Invalid) { failAsync(decodeError); return; }
+            const QString type = packet.header.value("type").toString();
+            if (type == QStringLiteral("hello-ok")) {
+                const QByteArray header = LocalDrive::WirelessProtocol::encodePacket(QJsonObject{{"type", "file"}, {"protocol", LocalDrive::WirelessProtocol::Version}, {"deviceId", deviceId}, {"name", deviceName}, {"relative", relative}, {"size", size}, {"sha256", QString::fromLatin1(digest.result().toHex())}, {"mtime", QFileInfo(sourcePath).lastModified().toMSecsSinceEpoch()}});
+                socket.write(header);
+            } else if (type == QStringLiteral("file-ready")) {
+                offset = packet.header.value("offset").toVariant().toLongLong();
+                if (offset < 0 || offset > size) { failAsync(QStringLiteral("receiver returned an invalid resume offset")); return; }
+                sendNext();
+            } else if (type == QStringLiteral("chunk-ack")) {
+                const qint64 acknowledged = packet.header.value("offset").toVariant().toLongLong();
+                if (acknowledged != awaitingAck) { failAsync(QStringLiteral("receiver acknowledged an unexpected offset")); return; }
+                offset = acknowledged; awaitingAck = -1; sendNext();
+            } else if (type == QStringLiteral("receipt")) {
+                if (packet.header.value("sha256").toString().toLatin1() != digest.result().toHex() || packet.header.value("size").toVariant().toLongLong() != size) { failAsync(QStringLiteral("receiver receipt does not match the source")); return; }
+                output.write(QStringLiteral("INFO wireless send completed path=%1 size=%2").arg(relative).arg(size)); exitCode = 0; loop.quit(); return;
+            } else if (type == QStringLiteral("error")) { failAsync(packet.header.value("message").toString()); return; }
+        }
+    });
+    QObject::connect(&socket, &QSslSocket::sslErrors, &loop, [&](const QList<QSslError> &errors) { failAsync(errors.isEmpty() ? QStringLiteral("TLS verification failed") : errors.first().errorString()); });
+    QObject::connect(&socket, &QSslSocket::errorOccurred, &loop, [&](QAbstractSocket::SocketError) { failAsync(socket.errorString()); });
+    QObject::connect(&socket, &QSslSocket::disconnected, &loop, [&] { failAsync(QStringLiteral("wireless receiver disconnected before receipt")); });
+    socket.connectToHostEncrypted(host, port);
+    const int result = loop.exec();
+    Q_UNUSED(result);
+    return exitCode;
+}
+
 int runVerifiedRemoteDirectory(Output &output, const QUrl &source, const QString &destination, const QString &catalog, qint64 maxItems, qint64 maxBytes, qint64 stagingCapBytes = 0, bool stagingMode = false) {
     if (!source.isValid() || !QFileInfo(destination).isDir()) return fail(output, QStringLiteral("source URL and existing local destination directory are required"));
     if (!QDir().mkpath(QFileInfo(catalog).absolutePath())) return fail(output, QStringLiteral("could not create catalog directory: %1").arg(QFileInfo(catalog).absolutePath()));
@@ -322,7 +480,7 @@ int main(int argc, char **argv) {
     const QCommandLineOption scanBytesOption(QStringLiteral("scan-max-bytes"), QStringLiteral("Maximum bytes for mtp-scan (0 means unlimited)."), QStringLiteral("BYTES"), QStringLiteral("68719476736"));
     parser.addOption(scanItemsOption);
     parser.addOption(scanBytesOption);
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("mtp-inventory, mtp-scan, wireless-beacon, copy, verified-import, wireless-simulate, verified-import-dir, verified-stage-dir, verified-preview, or verified-copy"));
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("mtp-inventory, mtp-scan, wireless-beacon, wireless-receive, wireless-send, copy, verified-import, wireless-simulate, verified-import-dir, verified-stage-dir, verified-preview, or verified-copy"));
     parser.addPositionalArgument(QStringLiteral("arguments"), QStringLiteral("Command arguments."));
     if (!parser.parse(app.arguments())) {
         Output output;
@@ -360,6 +518,24 @@ int main(int argc, char **argv) {
     if (command == QStringLiteral("wireless-beacon")) {
         if (args.size() < 3 || args.size() > 4) return fail(output, QStringLiteral("usage: wireless-beacon WIRELESS_ID NAME [ENDPOINT]"));
         return runWirelessBeacon(output, args.at(1), args.at(2), args.size() > 3 ? args.at(3) : QString());
+    }
+    if (command == QStringLiteral("wireless-receive")) {
+        if (args.size() < 6 || args.size() > 7) return fail(output, QStringLiteral("usage: wireless-receive DESTINATION_DIRECTORY SERVER_CERT SERVER_KEY CLIENT_CA CLIENT_FINGERPRINT [PORT]"));
+        bool portOk = true; const quint16 port = args.size() == 7 ? args.at(6).toUShort(&portOk) : 43171;
+        if (!portOk || port == 0) return fail(output, QStringLiteral("wireless receiver port must be a valid non-zero integer"));
+        const QString destination = localPathFromArgument(args.at(1));
+        const QString catalog = parser.value(catalogOption).isEmpty()
+            ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("catalog.sqlite"))
+            : parser.value(catalogOption);
+        return runWirelessReceive(app, output, destination, args.at(2), args.at(3), args.at(4), args.at(5), port, catalog);
+    }
+    if (command == QStringLiteral("wireless-send")) {
+        if (args.size() != 9) return fail(output, QStringLiteral("usage: wireless-send SOURCE_FILE HOST PORT CLIENT_CERT CLIENT_KEY SERVER_CA WIRELESS_ID DEVICE_NAME"));
+        bool portOk = false; const quint16 port = args.at(3).toUShort(&portOk);
+        if (!portOk || port == 0 || !args.at(7).startsWith(QStringLiteral("wireless:"))) return fail(output, QStringLiteral("wireless sender needs a valid port and wireless: device identity"));
+        const QString source = localPathFromArgument(args.at(1));
+        if (source.isEmpty()) return fail(output, QStringLiteral("wireless sender source must be a local file"));
+        return runWirelessSend(app, output, source, args.at(2), port, args.at(4), args.at(5), args.at(6), args.at(7), args.at(8));
     }
     if (command == QStringLiteral("copy")) {
         if (args.size() != 3) return fail(output, QStringLiteral("usage: copy SOURCE DESTINATION_DIRECTORY"));

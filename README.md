@@ -35,6 +35,10 @@ copy into a local directory while printing live progress:
 ./build/local-drive-cli --catalog-file /tmp/local-drive-wireless.sqlite \
   wireless-simulate 'file:///tmp/simulated-phone/example.jpg' /tmp/import/
 ./build/local-drive-cli wireless-beacon 'wireless:sim-phone' 'Simulated phone' '127.0.0.1:43171'
+./build/local-drive-cli --catalog-file /tmp/local-drive-wireless.sqlite \
+  wireless-receive /tmp/import/ server.crt server.key client-ca.crt CLIENT_SHA256_FINGERPRINT 43171
+./build/local-drive-cli wireless-send /tmp/simulated-phone/example.jpg localhost 43171 \
+  client.crt client.key server-ca.crt 'wireless:sim-phone' 'Simulated phone'
 ./build/local-drive-cli --catalog-file /tmp/local-drive.sqlite \
   --scan-max-items 1000 --scan-max-bytes 1073741824 \
   verified-import-dir 'mtp:/Xiaomi 15/Εσωτ. κοινόχρ. αποθ. χώρος/DCIM/Camera/' /tmp/import/
@@ -66,6 +70,10 @@ Linux app on UDP port 43170; it does not pair or authorize transfers.
 `wireless:` catalog identity for deterministic interruption/retry testing; it
 retains a bounded `.local-drive-partials/*.partial`, verifies the acknowledged
 prefix before resuming, and does not discover a phone or open a LAN listener.
+`wireless-receive` and `wireless-send` exercise the real Alpha LAN gate: TLS 1.3,
+mutual certificate verification with a pinned client fingerprint, acknowledged
+chunk offsets, and final `VerifiedCopy` catalog receipts. They require PEM
+certificates/keys supplied by the caller; no key material is stored in SQLite.
 `--staging-max-bytes` is per-job for local commands and a total on-disk
 cap for `verified-stage-dir`.
 

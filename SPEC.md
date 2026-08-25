@@ -374,6 +374,14 @@ network-provided device ID, or authorize file transfer. Alpha's visible
 user action; cryptographic pairing and authenticated transfer require the
 future pairing flow.
 
+The Linux Alpha protocol gate is now available through `wireless-receive` and
+`wireless-send`: TLS 1.3 is mutual, the receiver pins the client certificate
+fingerprint, and the sender pins the receiver CA certificate. Files use
+acknowledged chunk offsets and app-owned resumable partials; after the final
+SHA-256 check the staged upload is passed through `VerifiedCopy` and one normal
+catalog receipt is committed. The CLI pair is a deterministic LAN harness, not
+the Android companion or the final QR pairing UI.
+
 The verified-import slice is intentionally one file at a time at the engine
 and now emits live received-byte progress while streaming each object. A
 127,076,235-byte real MP4 completed and repeated with matching hashes and

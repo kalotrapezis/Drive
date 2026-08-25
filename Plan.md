@@ -199,6 +199,13 @@ MTP phone is present; it moves the wireless alias onto that canonical record,
 archives the candidate row, and leaves one visible device with both transports.
 Cryptographic pairing and authenticated transfer remain the next network gate.
 
+The next Alpha gate is now executable without Android: `wireless-receive` and
+`wireless-send` establish mutual TLS 1.3 with a pinned client certificate,
+exchange acknowledged chunks, resume an app-owned partial, and pass the
+completed upload through `VerifiedCopy` for the ordinary SHA-256 receipt. The
+CLI smoke test proves the local protocol and catalog path; it is not yet the
+Android companion or a real-phone hardware test.
+
 ### 3. Linux staging folder → configured storage node
 
 The user selects an exact destination storage node and folder. For a mounted
