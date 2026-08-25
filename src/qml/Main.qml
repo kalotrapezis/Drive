@@ -408,7 +408,7 @@ Kirigami.ApplicationWindow {
             Kirigami.Card {
                 Layout.fillWidth: true
                 contentItem: ColumnLayout {
-                    Controls.Label { text: qsTr("The receiver accepts only TLS 1.3 clients whose certificate fingerprint is pinned. Nothing starts automatically when a phone is detected."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                    Controls.Label { text: qsTr("The receiver accepts only TLS 1.3 clients whose certificate fingerprint is pinned. A successful Start is remembered locally and starts again with the application; Stop disables that auto-start."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
                     Controls.Label { text: qsTr("Status: %1").arg(wirelessReceiver.status); Layout.fillWidth: true; Accessible.name: text }
                     RowLayout { Layout.fillWidth: true
                         Controls.TextField { id: receiverDestination; placeholderText: qsTr("Local Drive root / destination folder"); Layout.fillWidth: true; Accessible.name: qsTr("Wireless destination root") }
@@ -524,7 +524,16 @@ Kirigami.ApplicationWindow {
             Controls.Button { text: qsTr("Cancel"); Layout.alignment: Qt.AlignRight; onClicked: phoneActionDialog.close(); Accessible.name: text }
         }
     }
-    Component.onCompleted: showOnboardingIfNeeded()
+    Component.onCompleted: {
+        receiverDestination.text = wirelessReceiver.savedDestination
+        receiverCertificate.text = wirelessReceiver.savedCertificate
+        receiverPrivateKey.text = wirelessReceiver.savedPrivateKey
+        receiverClientCa.text = wirelessReceiver.savedClientCa
+        receiverFingerprint.text = wirelessReceiver.savedFingerprint
+        receiverPort.text = wirelessReceiver.savedPort > 0 ? String(wirelessReceiver.savedPort) : "43171"
+        if (wirelessReceiver.savedEnabled) wirelessReceiver.startSaved()
+        showOnboardingIfNeeded()
+    }
     onClosing: function(close) {
         if (!allowQuit && trayAvailable) {
             close.accepted = false

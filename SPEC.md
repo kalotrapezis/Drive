@@ -351,8 +351,8 @@ informational and non-destructive: it explains USB/MTP and the fixed phone
 roots, identifies storage by stable identity, and never starts a transfer or
 formats a disk. The repository includes the Android candidate beacon, Keystore
 identity, profile UI, authenticated foreground sender, receipt-backed fixed-root
-scan/queue service, and a manual Linux GUI receiver panel; automatic certificate
-onboarding remains deferred.
+scan/queue service, and a Linux GUI receiver panel whose successful configuration
+is remembered locally; automatic certificate onboarding remains deferred.
 
 1. Detect an unlocked MTP phone exposed through KDE/KIO.
 2. Save its stable available identity and friendly name.

@@ -207,8 +207,10 @@ them sent only after a verified receipt. Each wireless send retries a bounded
 number of times after a link loss and reuses the receiver's committed partial
 offset; the service also restores discovery and automatic sync after reboot only
 when the saved profile, both roots, and auto-sync flag are present. Automatic
-profile/certificate onboarding remains next; Settings exposes the manual Linux
-receiver configuration and live receiver log.
+profile/certificate onboarding remains next; Settings exposes the remembered
+Linux receiver configuration and live receiver log. A successful receiver Start
+enables restart on the next application launch; explicit Stop disables it, and
+the tray Exit still terminates the process rather than leaving a service behind.
 
 The next Alpha gate is now executable without Android: `wireless-receive` and
 `wireless-send` establish mutual TLS 1.3 with a pinned client certificate,

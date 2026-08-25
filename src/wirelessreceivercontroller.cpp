@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QStorageInfo>
 #include <QStandardPaths>
+#include <QSettings>
 
 
 #include "verifiedcopy.h"
@@ -20,6 +21,15 @@ QString normalizedFingerprint(QString value) {
 WirelessReceiverController::WirelessReceiverController(const QString &databasePath, SetupModel *setupModel, QObject *parent)
     : QObject(parent), m_databasePath(databasePath), m_setupModel(setupModel), m_receiver(this) {
     m_catalog = databasePath;
+    QSettings settings(QStringLiteral("LocalDrive"), QStringLiteral("LocalDrive"));
+    m_savedDestination = settings.value(QStringLiteral("wireless/destination")).toString();
+    m_savedCertificate = settings.value(QStringLiteral("wireless/certificate")).toString();
+    m_savedPrivateKey = settings.value(QStringLiteral("wireless/privateKey")).toString();
+    m_savedClientCa = settings.value(QStringLiteral("wireless/clientCa")).toString();
+    m_savedFingerprint = settings.value(QStringLiteral("wireless/fingerprint")).toString();
+    const uint savedPort = settings.value(QStringLiteral("wireless/port"), 43171u).toUInt();
+    m_savedPort = savedPort <= 65535u ? static_cast<quint16>(savedPort) : 0;
+    m_savedEnabled = settings.value(QStringLiteral("wireless/enabled"), false).toBool();
     m_receiver.setFinalizeHandler([this](const QJsonObject &header, const QString &partialPath, QString *error) {
         return finalize(header, partialPath, error);
     });
@@ -68,18 +78,49 @@ bool WirelessReceiverController::start(const QString &destination, const QString
         return false;
     }
     m_destination = root;
+    saveConfiguration(root, certificate, privateKey, clientCa, fingerprint, port);
     m_status = QStringLiteral("Listening on port %1").arg(m_receiver.port());
     log(QStringLiteral("INFO wireless receiver listening port=%1 destination=%2").arg(m_receiver.port()).arg(root));
     emit changed();
     return true;
 }
 
+bool WirelessReceiverController::startSaved() {
+    if (!m_savedEnabled || m_savedDestination.isEmpty() || m_savedPort == 0) return false;
+    return start(m_savedDestination, m_savedCertificate, m_savedPrivateKey, m_savedClientCa, m_savedFingerprint, m_savedPort);
+}
+
 void WirelessReceiverController::stop() {
-    if (!m_receiver.listening()) return;
-    m_receiver.stop();
+    const bool wasListening = m_receiver.listening();
+    if (wasListening) m_receiver.stop();
+    if (!m_savedEnabled && !wasListening) return;
+    QSettings settings(QStringLiteral("LocalDrive"), QStringLiteral("LocalDrive"));
+    settings.setValue(QStringLiteral("wireless/enabled"), false);
+    settings.sync();
+    m_savedEnabled = false;
     m_status = QStringLiteral("Stopped");
-    log(QStringLiteral("INFO wireless receiver stopped"));
+    if (wasListening) log(QStringLiteral("INFO wireless receiver stopped"));
     emit changed();
+}
+
+void WirelessReceiverController::saveConfiguration(const QString &destination, const QString &certificate, const QString &privateKey,
+                                                   const QString &clientCa, const QString &fingerprint, quint16 port) {
+    QSettings settings(QStringLiteral("LocalDrive"), QStringLiteral("LocalDrive"));
+    settings.setValue(QStringLiteral("wireless/destination"), destination);
+    settings.setValue(QStringLiteral("wireless/certificate"), certificate);
+    settings.setValue(QStringLiteral("wireless/privateKey"), privateKey);
+    settings.setValue(QStringLiteral("wireless/clientCa"), clientCa);
+    settings.setValue(QStringLiteral("wireless/fingerprint"), fingerprint);
+    settings.setValue(QStringLiteral("wireless/port"), port);
+    settings.setValue(QStringLiteral("wireless/enabled"), true);
+    settings.sync();
+    m_savedDestination = destination;
+    m_savedCertificate = certificate;
+    m_savedPrivateKey = privateKey;
+    m_savedClientCa = clientCa;
+    m_savedFingerprint = fingerprint;
+    m_savedPort = port;
+    m_savedEnabled = true;
 }
 
 void WirelessReceiverController::log(const QString &message) {

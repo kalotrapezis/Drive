@@ -1,6 +1,8 @@
 #include <QCoreApplication>
+#include <QDir>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QSettings>
 #include <QTimer>
 #include <QDebug>
 
@@ -11,6 +13,8 @@ int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QCoreApplication::setQuitLockEnabled(false);
     if (argc != 7) return 2;
+    const QString databasePath = QString::fromLocal8Bit(argv[1]);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, QDir(argv[1]).filePath(QStringLiteral("settings")));
     SetupModel model(argv[1]);
     if (!model.ready()) return 3;
     QSqlDatabase seed = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), QStringLiteral("controller-seed"));
@@ -33,13 +37,13 @@ int main(int argc, char **argv) {
     timeout.setSingleShot(true);
     timeout.setInterval(30000);
     QObject::connect(&timeout, &QTimer::timeout, &app, [&app] { app.exit(4); });
-    QObject::connect(&controller, &WirelessReceiverController::changed, &app, [&controller, &model, &app] {
+    QObject::connect(&controller, &WirelessReceiverController::changed, &app, [&controller, &model, &app, databasePath] {
         static bool finishing = false;
         const QStringList entries = controller.logEntries();
         if (!entries.isEmpty()) qInfo().noquote() << entries.last();
         if (!finishing && controller.status().startsWith(QStringLiteral("Received "))) {
             finishing = true;
-            QTimer::singleShot(500, &app, [&app, &model] {
+            QTimer::singleShot(500, &app, [&app, &model, &controller, databasePath] {
                 const auto devices = model.connectedDevices();
                 bool oneMerged = devices.size() == 1;
                 if (oneMerged) {
@@ -47,7 +51,11 @@ int main(int argc, char **argv) {
                     const QStringList transports = device.value("transports").toStringList();
                     oneMerged = device.value("id").toString() == QStringLiteral("mtp-phone") && transports.contains("mtp") && transports.contains("wireless");
                 }
-                app.exit(oneMerged ? 0 : 7);
+                WirelessReceiverController restored(databasePath);
+                const bool remembered = restored.savedEnabled() && restored.savedPort() == 43273 && restored.savedDestination() == controller.savedDestination();
+                restored.stop();
+                WirelessReceiverController stopped(databasePath);
+                app.exit(oneMerged && remembered && !stopped.savedEnabled() ? 0 : 7);
             });
         }
     });
