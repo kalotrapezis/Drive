@@ -98,12 +98,14 @@ The minimal Android module under `android/` provides the foreground
 candidate-discovery beacon, a Keystore-backed client identity, pairing-profile
 import/export UI, and a foreground `WirelessSender` transfer service. The
 beacon broadcasts every five seconds; the sender implements the Alpha Linux
-framing, resumable chunks, TLS 1.3, and receipt verification. The Linux listener
-remains the source of truth for device identity and trust; the desktop app now
-exposes the manual receiver configuration and live log in Settings. After one
-persistable system permission for each fixed root, the Android Alpha service
-scans `Drive/` and `DCIM/`, sends new/changed files to `Drive/` or `Photos/`,
-and records them only after a receipt. A real-phone run is still pending.
+framing, resumable chunks, TLS 1.3, receipt verification, and bounded reconnect
+retry. The Linux listener remains the source of truth for device identity and
+trust; the desktop app now exposes the manual receiver configuration and live
+log in Settings. After one persistable system permission for each fixed root,
+the Android Alpha service scans `Drive/` and `DCIM/`, sends new/changed files to
+`Drive/` or `Photos/`, records them only after a receipt, and restores the
+foreground beacon and sync after reboot when the saved setup is complete. A
+real-phone run is still pending.
 
 For a local build, use the installed Android SDK and Java 17:
 

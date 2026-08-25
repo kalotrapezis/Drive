@@ -25,6 +25,7 @@ public final class WirelessSender {
     private static final int PROTOCOL = 1;
     private static final int MAX_HEADER_BYTES = 64 * 1024;
     private static final int MAX_PAYLOAD_BYTES = 8 * 1024 * 1024;
+    private static final int MAX_ATTEMPTS = 4;
 
     private WirelessSender() {}
 
@@ -76,34 +77,45 @@ public final class WirelessSender {
         final String cleanRelative = safeRelative(relative);
         final long size = source.length();
         final byte[] digest = sha256(source);
-        try (SSLSocket socket = open(profile);
-             DataInputStream input = new DataInputStream(socket.getInputStream());
-             DataOutputStream output = new DataOutputStream(socket.getOutputStream());
-             RandomAccessFile file = new RandomAccessFile(source, "r")) {
-            writeFrame(output, new JSONObject().put("type", "hello").put("protocol", PROTOCOL)
-                    .put("deviceId", profile.deviceId).put("name", profile.deviceName), null, 0);
-            requireType(readFrame(input), "hello-ok");
-            writeFrame(output, new JSONObject().put("type", "file").put("protocol", PROTOCOL)
-                    .put("deviceId", profile.deviceId).put("name", profile.deviceName)
-                    .put("relative", cleanRelative).put("size", size)
-                    .put("sha256", hex(digest)).put("mtime", source.lastModified()), null, 0);
-            long offset = requireOffset(readFrame(input), "file-ready");
-            if (offset < 0 || offset > size) throw new IOException("Wireless receiver returned an invalid resume offset");
-            final byte[] chunk = new byte[MAX_PAYLOAD_BYTES];
-            while (offset < size) {
-                file.seek(offset);
-                final int wanted = (int) Math.min(chunk.length, size - offset);
-                final int read = file.read(chunk, 0, wanted);
-                if (read <= 0) throw new IOException("Wireless source changed during read");
-                final long end = offset + read;
-                writeFrame(output, new JSONObject().put("type", "chunk").put("offset", offset), chunk, read);
-                final long acknowledged = requireOffset(readFrame(input), "chunk-ack");
-                if (acknowledged != end) throw new IOException("Wireless receiver acknowledged an unexpected offset");
-                offset = acknowledged;
+        for (int attempt = 0; attempt < MAX_ATTEMPTS; ++attempt) {
+            try (SSLSocket socket = open(profile);
+                 DataInputStream input = new DataInputStream(socket.getInputStream());
+                 DataOutputStream output = new DataOutputStream(socket.getOutputStream());
+                 RandomAccessFile file = new RandomAccessFile(source, "r")) {
+                writeFrame(output, new JSONObject().put("type", "hello").put("protocol", PROTOCOL)
+                        .put("deviceId", profile.deviceId).put("name", profile.deviceName), null, 0);
+                requireType(readFrame(input), "hello-ok");
+                writeFrame(output, new JSONObject().put("type", "file").put("protocol", PROTOCOL)
+                        .put("deviceId", profile.deviceId).put("name", profile.deviceName)
+                        .put("relative", cleanRelative).put("size", size)
+                        .put("sha256", hex(digest)).put("mtime", source.lastModified()), null, 0);
+                long offset = requireOffset(readFrame(input), "file-ready");
+                if (offset < 0 || offset > size) throw new IOException("Wireless receiver returned an invalid resume offset");
+                final byte[] chunk = new byte[MAX_PAYLOAD_BYTES];
+                while (offset < size) {
+                    file.seek(offset);
+                    final int wanted = (int) Math.min(chunk.length, size - offset);
+                    final int read = file.read(chunk, 0, wanted);
+                    if (read <= 0) throw new IOException("Wireless source changed during read");
+                    final long end = offset + read;
+                    writeFrame(output, new JSONObject().put("type", "chunk").put("offset", offset), chunk, read);
+                    final long acknowledged = requireOffset(readFrame(input), "chunk-ack");
+                    if (acknowledged != end) throw new IOException("Wireless receiver acknowledged an unexpected offset");
+                    offset = acknowledged;
+                }
+                final JSONObject receipt = readFrame(input);
+                if (!"receipt".equals(receipt.optString("type")) || receipt.optLong("size", -1) != size
+                        || !hex(digest).equalsIgnoreCase(receipt.optString("sha256"))) throw new IOException("Wireless receipt does not match the source");
+                return;
+            } catch (Exception error) {
+                if (attempt == MAX_ATTEMPTS - 1) throw error;
+                try {
+                    Thread.sleep(1000L << attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw error;
+                }
             }
-            final JSONObject receipt = readFrame(input);
-            if (!"receipt".equals(receipt.optString("type")) || receipt.optLong("size", -1) != size
-                    || !hex(digest).equalsIgnoreCase(receipt.optString("sha256"))) throw new IOException("Wireless receipt does not match the source");
         }
     }
 

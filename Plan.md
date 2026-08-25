@@ -203,9 +203,12 @@ running from a foreground transfer service. The Android Alpha surface lets the
 user choose one file for the fixed `Drive/` or `Photos/` destination root; it
 does not delete the source. After one persistable system permission for each
 fixed root, its foreground service scans and queues new/changed files and marks
-them sent only after a verified receipt. Automatic profile/certificate
-onboarding remains next; Settings exposes the manual Linux receiver
-configuration and live receiver log.
+them sent only after a verified receipt. Each wireless send retries a bounded
+number of times after a link loss and reuses the receiver's committed partial
+offset; the service also restores discovery and automatic sync after reboot only
+when the saved profile, both roots, and auto-sync flag are present. Automatic
+profile/certificate onboarding remains next; Settings exposes the manual Linux
+receiver configuration and live receiver log.
 
 The next Alpha gate is now executable without Android: `wireless-receive` and
 `wireless-send` establish mutual TLS 1.3 with a pinned client certificate,
@@ -214,8 +217,10 @@ completed upload through `VerifiedCopy` for the ordinary SHA-256 receipt. The
 CLI smoke test proves the local protocol and catalog path. The Android UI now
 imports the Linux server profile, shares its public client certificate, grants
 the two fixed roots once through SAF, and starts the matching receipt-backed
-scan/send loop in a foreground service. This is still not a real-phone transfer
-or hardware test until a phone and Linux receiver are used together on the LAN.
+scan/send loop in a foreground service. A bounded reconnect retry keeps the same
+file/relative path and lets the Linux partial offset resume after a short Wi-Fi
+interruption. This is still not a real-phone transfer or hardware test until a
+phone and Linux receiver are used together on the LAN.
 
 ### 3. Linux staging folder → configured storage node
 

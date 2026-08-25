@@ -380,15 +380,17 @@ destination, Start/Stop controls, and live log.
 
 The Linux Alpha protocol gate is now available through `wireless-receive` and
 `wireless-send`: TLS 1.3 is mutual, the receiver pins the client certificate
-fingerprint, and the sender pins the receiver CA certificate. Files use
+fingerprint on both synchronous and asynchronous handshake completion, and the
+sender pins the receiver CA certificate. Files use
 acknowledged chunk offsets and app-owned resumable partials; after the final
 SHA-256 check the staged upload is passed through `VerifiedCopy` and one normal
 catalog receipt is committed. The CLI pair is a deterministic LAN harness. The
 Android app imports the receiver profile, shares only its public client
 certificate, accepts one persistable system grant for each fixed `Drive/` and
 `DCIM/` root, and scans/sends new or changed files through a foreground service.
-It records a sent item only after the Linux receipt; no real-phone transfer has
-been run yet.
+It records a sent item only after the Linux receipt; a bounded Android retry
+reconnects after a short link loss and resumes from the Linux committed partial.
+No real-phone transfer has been run yet.
 
 The verified-import slice is intentionally one file at a time at the engine
 and now emits live received-byte progress while streaming each object. A

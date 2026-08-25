@@ -186,9 +186,16 @@ void WirelessReceiver::acceptConnection() {
         connect(socket, &QSslSocket::readyRead, this, &WirelessReceiver::readSocket);
         connect(socket, &QSslSocket::disconnected, this, &WirelessReceiver::socketDisconnected);
         connect(socket, &QSslSocket::sslErrors, this, &WirelessReceiver::socketSslErrors);
-        if (!socket->isEncrypted()) connect(socket, &QSslSocket::encrypted, this, [this, socket] { acceptConnection(); });
-        else if (socket->peerCertificate().digest(QCryptographicHash::Sha256).toHex().toLower() != m_configuration.expectedClientFingerprint) closeConnection(socket);
+        if (!socket->isEncrypted()) connect(socket, &QSslSocket::encrypted, this, [this, socket] {
+            if (!expectedPeer(socket)) closeConnection(socket);
+        });
+        else if (!expectedPeer(socket)) closeConnection(socket);
     }
+}
+
+bool WirelessReceiver::expectedPeer(QSslSocket *socket) const {
+    return socket && !socket->peerCertificate().isNull()
+        && socket->peerCertificate().digest(QCryptographicHash::Sha256).toHex().toLower() == m_configuration.expectedClientFingerprint;
 }
 
 void WirelessReceiver::closeConnection(QSslSocket *socket) {

@@ -70,6 +70,7 @@ private slots:
 private:
     struct Connection;
     void closeConnection(QSslSocket *socket);
+    bool expectedPeer(QSslSocket *socket) const;
     bool send(QSslSocket *socket, const QJsonObject &header, const QByteArray &payload = {});
     bool handlePacket(Connection &connection, const LocalDrive::WirelessProtocol::Packet &packet, QString *error);
     bool startFile(Connection &connection, const QJsonObject &header, QString *error);

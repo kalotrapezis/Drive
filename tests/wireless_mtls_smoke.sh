@@ -47,6 +47,22 @@ cmp "$root/source/photo.txt" "$root/destination/photo.txt"
 grep -q 'RECEIPT wireless path=photo.txt' "$root/receiver.log"
 grep -q 'INFO wireless send completed path=photo.txt' "$root/sender.log"
 
+wrong_fingerprint=$(printf '%064d' 0)
+$cli --catalog-file "$root/rejected-catalog.sqlite" wireless-receive "$root/destination" "$root/server.crt" "$root/server.key" "$root/client.crt" "$wrong_fingerprint" 43270 > "$root/rejected-receiver.log" 2>&1 &
+receiver=$!
+for attempt in $(seq 1 40); do
+    grep -q 'listening port=43270' "$root/rejected-receiver.log" && break
+    sleep 0.1
+done
+set +e
+$cli wireless-send "$root/source/photo.txt" localhost 43270 "$root/client.crt" "$root/client.key" "$root/server.crt" wireless:test-phone 'Test phone' > "$root/rejected-sender.log" 2>&1
+sender_status=$?
+set -e
+test "$sender_status" -ne 0
+kill "$receiver" 2>/dev/null || true
+wait "$receiver" 2>/dev/null || true
+! grep -q 'RECEIPT wireless path=' "$root/rejected-receiver.log"
+
 $cli --catalog-file "$catalog" wireless-receive "$root/destination" "$root/server.crt" "$root/server.key" "$root/client.crt" "$fingerprint" 43272 > "$root/receiver-repeat.log" 2>&1 &
 receiver=$!
 for attempt in $(seq 1 40); do
