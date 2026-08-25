@@ -22,6 +22,7 @@ Kirigami.ApplicationWindow {
     property bool showingSettings: false
     property int settingsContentIndex: 0
     property var phoneActionDevice: ({})
+    property var connectedPhone: setupModel.connectedDevices.length > 0 ? setupModel.connectedDevices[0] : ({})
     property string phoneActionStatus: ""
     property double pauseRemainingMilliseconds: 0
     property var contentTypes: ["Drive", "Photos"]
@@ -91,7 +92,7 @@ Kirigami.ApplicationWindow {
         return "mtp:" + base + root + "/"
     }
     function openPhoneActions() {
-        phoneActionDevice = setupModel.connectedDevices.length > 0 ? setupModel.connectedDevices[0] : ({})
+        phoneActionDevice = connectedPhone
         phoneActionStatus = ""
         phoneActionDialog.open()
     }
@@ -285,12 +286,12 @@ Kirigami.ApplicationWindow {
                 contentItem: Controls.Label { text: storage.currentIndex < 0 ? qsTr("No external storage detected") : (!setupModel.storages[storage.currentIndex + 1].present ? qsTr("Missing") : qsTr("Present") + (setupModel.storages[storage.currentIndex + 1].filesystemType ? qsTr(" · %1").arg(setupModel.storages[storage.currentIndex + 1].filesystemType) : "")); Accessible.name: text }
             }
             Kirigami.Card { Layout.fillWidth: true; visible: setupModel.connectedDevices.length > 0
-                header: Controls.Label { text: qsTr("Phone — %1").arg(setupModel.mtpDeviceLabel); Accessible.name: text }
+                header: Controls.Label { text: qsTr("Phone — %1").arg(connectedPhone.label || setupModel.mtpDeviceLabel); Accessible.name: text }
                 contentItem: ColumnLayout {
-                    Controls.Label { text: qsTr("%1 · %2. Detection alone never starts a transfer.").arg(setupModel.connectedDevices[0].status || qsTr("Online")).arg(setupModel.connectedDevices[0].transports.join(" + ")); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                    Controls.Label { text: qsTr("%1 · %2. Detection alone never starts a transfer.").arg(connectedPhone.status || qsTr("Online")).arg((connectedPhone.transports || []).join(" + ")); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
                     RowLayout {
-                        Controls.Button { text: qsTr("Drive → Drive"); enabled: !copyEngine.running && setupModel.connectedDevices[0].url !== undefined; onClicked: openPhoneActions(); Accessible.name: qsTr("Import phone Drive to Drive") }
-                        Controls.Button { text: qsTr("DCIM → Photos"); enabled: !copyEngine.running && setupModel.connectedDevices[0].url !== undefined; onClicked: openPhoneActions(); Accessible.name: qsTr("Import phone DCIM to Photos") }
+                        Controls.Button { text: qsTr("Drive → Drive"); enabled: !copyEngine.running && connectedPhone.url !== undefined; onClicked: openPhoneActions(); Accessible.name: qsTr("Import phone Drive to Drive") }
+                        Controls.Button { text: qsTr("DCIM → Photos"); enabled: !copyEngine.running && connectedPhone.url !== undefined; onClicked: openPhoneActions(); Accessible.name: qsTr("Import phone DCIM to Photos") }
                     }
                 }
             }
@@ -455,6 +456,8 @@ Kirigami.ApplicationWindow {
             Controls.Label { visible: onboardingDevice.category === "storage"; text: qsTr("Choose its role and the Drive/Photos roots in the connection map. Local Drive will never format this storage automatically."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.kind === "Phone"; text: qsTr("Phone setup: unlock Android and select USB mode ‘File transfer / MTP’. Local Drive uses the fixed phone roots Drive/ for files and DCIM/ for photos and videos."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.kind === "Phone"; text: qsTr("Available actions after setup: Drive → Drive and DCIM → Photos. Detection alone never starts a transfer. Wireless pairing and its one-time QR code will appear when the phone companion is available."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Label { visible: onboardingDevice.wirelessCandidate === true; text: qsTr("Wireless candidate detected. Discovery does not grant file access. If the same phone is also connected by USB, confirm that here to keep one device entry with both transports."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Button { visible: onboardingDevice.wirelessCandidate === true && setupModel.mtpDevices.length === 1; text: qsTr("Pair with the connected USB phone"); Layout.alignment: Qt.AlignLeft; onClicked: if (setupModel.pairWirelessDevice(onboardingDevice.id, setupModel.mtpDevices[0].id)) finishOnboarding(false); Accessible.name: qsTr("Pair wireless candidate with the connected USB phone") }
             Controls.Label { visible: onboardingDevice.category !== "storage" && onboardingDevice.kind !== "Phone"; text: qsTr("Only detected capabilities are shown. Choose the matching pairing or storage step; Local Drive will not guess a server protocol."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.CheckBox { id: hideOnboarding; text: qsTr("Do not show this device again"); Accessible.name: qsTr("Do not show this device again") }
             Controls.Label { text: qsTr("X closes this guide without deleting the device, routes, or history. Hidden devices remain available in Settings."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
