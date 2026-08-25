@@ -23,5 +23,9 @@
             android:name=".TransferService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <service
+            android:name=".AutoSyncService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

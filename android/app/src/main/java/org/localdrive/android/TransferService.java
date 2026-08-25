@@ -42,14 +42,7 @@ public final class TransferService extends Service {
     private void transfer(int startId, Uri sourceUri, String relative) {
         File temporary = null;
         try {
-            temporary = File.createTempFile("local-drive-transfer-", ".partial", getCacheDir());
-            try (InputStream input = getContentResolver().openInputStream(sourceUri);
-                 FileOutputStream output = new FileOutputStream(temporary)) {
-                if (input == null) throw new IllegalStateException("Δεν ήταν δυνατή η ανάγνωση του αρχείου");
-                final byte[] buffer = new byte[1024 * 1024];
-                int read;
-                while ((read = input.read(buffer)) >= 0) if (read > 0) output.write(buffer, 0, read);
-            }
+            temporary = copyToCache(this, sourceUri);
             WirelessSender.send(temporary, relative, WirelessProfileStore.senderProfile(this));
             finish(startId, "Ολοκληρώθηκε: " + relative);
         } catch (Exception error) {
@@ -57,6 +50,21 @@ public final class TransferService extends Service {
         } finally {
             if (temporary != null) temporary.delete();
         }
+    }
+
+    static File copyToCache(android.content.Context context, Uri sourceUri) throws Exception {
+        final File temporary = File.createTempFile("local-drive-transfer-", ".partial", context.getCacheDir());
+        try (InputStream input = context.getContentResolver().openInputStream(sourceUri);
+             FileOutputStream output = new FileOutputStream(temporary)) {
+            if (input == null) throw new IllegalStateException("Δεν ήταν δυνατή η ανάγνωση του αρχείου");
+            final byte[] buffer = new byte[1024 * 1024];
+            int read;
+            while ((read = input.read(buffer)) >= 0) if (read > 0) output.write(buffer, 0, read);
+        } catch (Exception error) {
+            temporary.delete();
+            throw error;
+        }
+        return temporary;
     }
 
     private void finish(int startId, String message) {

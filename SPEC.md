@@ -350,9 +350,9 @@ detected phone and storage identities. Its current onboarding modal is
 informational and non-destructive: it explains USB/MTP and the fixed phone
 roots, identifies storage by stable identity, and never starts a transfer or
 formats a disk. The repository includes the Android candidate beacon, Keystore
-identity, profile UI, authenticated foreground sender, and a manual Linux GUI
-receiver panel; automatic Android root scanning and automatic certificate
-onboarding remain deferred.
+identity, profile UI, authenticated foreground sender, receipt-backed fixed-root
+scan/queue service, and a manual Linux GUI receiver panel; automatic certificate
+onboarding remains deferred.
 
 1. Detect an unlocked MTP phone exposed through KDE/KIO.
 2. Save its stable available identity and friendly name.
@@ -385,9 +385,10 @@ acknowledged chunk offsets and app-owned resumable partials; after the final
 SHA-256 check the staged upload is passed through `VerifiedCopy` and one normal
 catalog receipt is committed. The CLI pair is a deterministic LAN harness. The
 Android app imports the receiver profile, shares only its public client
-certificate, and can start one user-selected file through a foreground sender
-service with a `Drive/` or `Photos/` relative root. It does not yet scan and
-queue the fixed roots automatically, and no real-phone transfer has been run.
+certificate, accepts one persistable system grant for each fixed `Drive/` and
+`DCIM/` root, and scans/sends new or changed files through a foreground service.
+It records a sent item only after the Linux receipt; no real-phone transfer has
+been run yet.
 
 The verified-import slice is intentionally one file at a time at the engine
 and now emits live received-byte progress while streaming each object. A

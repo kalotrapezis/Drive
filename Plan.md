@@ -201,19 +201,21 @@ The repository now also contains the Android candidate beacon, a Keystore-backed
 client identity, a saved pairing profile, and a protocol-compatible sender
 running from a foreground transfer service. The Android Alpha surface lets the
 user choose one file for the fixed `Drive/` or `Photos/` destination root; it
-does not delete the source. Automatic root scanning/queueing and automatic
-profile/certificate onboarding remain next; Settings now exposes the manual
-Linux receiver configuration and live receiver log.
+does not delete the source. After one persistable system permission for each
+fixed root, its foreground service scans and queues new/changed files and marks
+them sent only after a verified receipt. Automatic profile/certificate
+onboarding remains next; Settings exposes the manual Linux receiver
+configuration and live receiver log.
 
 The next Alpha gate is now executable without Android: `wireless-receive` and
 `wireless-send` establish mutual TLS 1.3 with a pinned client certificate,
 exchange acknowledged chunks, resume an app-owned partial, and pass the
 completed upload through `VerifiedCopy` for the ordinary SHA-256 receipt. The
 CLI smoke test proves the local protocol and catalog path. The Android UI now
-imports the Linux server profile, shares its public client certificate, and
-starts the matching sender in a foreground service. This is still not a
-real-phone transfer or hardware test until a phone and Linux receiver are used
-together on the LAN.
+imports the Linux server profile, shares its public client certificate, grants
+the two fixed roots once through SAF, and starts the matching receipt-backed
+scan/send loop in a foreground service. This is still not a real-phone transfer
+or hardware test until a phone and Linux receiver are used together on the LAN.
 
 ### 3. Linux staging folder → configured storage node
 

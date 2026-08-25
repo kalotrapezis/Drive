@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.view.Gravity;
 import android.widget.Button;
@@ -21,7 +22,12 @@ public final class MainActivity extends Activity {
     private static final int IMPORT_PROFILE = 40;
     private static final int PICK_DRIVE_FILE = 41;
     private static final int PICK_PHOTO_FILE = 42;
+    private static final int PICK_DRIVE_ROOT = 43;
+    private static final int PICK_PHOTOS_ROOT = 44;
     private TextView profileStatus;
+    private TextView rootStatus;
+    private Button autoSync;
+    private boolean autoSyncRunning;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -60,6 +66,27 @@ public final class MainActivity extends Activity {
         shareIdentity.setOnClickListener(view -> sharePairingIdentity());
         layout.addView(shareIdentity, new LinearLayout.LayoutParams(-1, -2));
 
+        final Button driveRoot = new Button(this);
+        driveRoot.setText("Επίλεξε fixed root Drive");
+        driveRoot.setOnClickListener(view -> pickRoot(PICK_DRIVE_ROOT));
+        layout.addView(driveRoot, new LinearLayout.LayoutParams(-1, -2));
+
+        final Button photosRoot = new Button(this);
+        photosRoot.setText("Επίλεξε fixed root DCIM → Photos");
+        photosRoot.setOnClickListener(view -> pickRoot(PICK_PHOTOS_ROOT));
+        layout.addView(photosRoot, new LinearLayout.LayoutParams(-1, -2));
+
+        rootStatus = new TextView(this);
+        layout.addView(rootStatus, new LinearLayout.LayoutParams(-1, -2));
+
+        autoSync = new Button(this);
+        autoSync.setText("Έναρξη αυτόματου συγχρονισμού");
+        autoSync.setOnClickListener(view -> {
+            if (autoSyncRunning) stopAutoSync();
+            else startAutoSync();
+        });
+        layout.addView(autoSync, new LinearLayout.LayoutParams(-1, -2));
+
         final Button driveSend = new Button(this);
         driveSend.setText("Επιλογή αρχείου → Drive");
         driveSend.setOnClickListener(view -> pickFile(PICK_DRIVE_FILE));
@@ -80,11 +107,17 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(service);
         else startService(service);
         refreshProfileStatus();
+        refreshRootStatus();
+        maybeStartAutoSync();
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (requestCode == PICK_DRIVE_ROOT || requestCode == PICK_PHOTOS_ROOT) {
+            saveRoot(data.getData(), requestCode == PICK_DRIVE_ROOT ? "Drive" : "DCIM");
+            return;
+        }
         if (requestCode == PICK_DRIVE_FILE || requestCode == PICK_PHOTO_FILE) {
             startTransfer(data.getData(), requestCode == PICK_DRIVE_FILE ? "Drive" : "Photos");
             return;
@@ -97,9 +130,63 @@ public final class MainActivity extends Activity {
             while ((read = input.read(buffer)) >= 0) if (read > 0) output.write(buffer, 0, read);
             WirelessProfileStore.importJson(this, output.toString(StandardCharsets.UTF_8.name()));
             refreshProfileStatus();
+            maybeStartAutoSync();
         } catch (Exception error) {
             profileStatus.setText("Pairing profile: αποτυχία εισαγωγής (" + error.getMessage() + ")");
         }
+    }
+
+    private void pickRoot(int requestCode) {
+        final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(intent, requestCode);
+    }
+
+    private void saveRoot(Uri uri, String expectedName) {
+        try {
+            final String actualName = documentName(uri);
+            if (!expectedName.equalsIgnoreCase(actualName)) throw new IllegalArgumentException("Επίλεξε τον φάκελο " + expectedName + ", όχι " + actualName);
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if ("Drive".equals(expectedName)) RootStore.saveDrive(this, uri.toString());
+            else RootStore.savePhotos(this, uri.toString());
+            refreshRootStatus();
+            maybeStartAutoSync();
+        } catch (Exception error) {
+            rootStatus.setText("Fixed root: αποτυχία (" + error.getMessage() + ")");
+        }
+    }
+
+    private String documentName(Uri uri) {
+        try (Cursor cursor = getContentResolver().query(uri, new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) return cursor.getString(0) == null ? "" : cursor.getString(0);
+        }
+        return "";
+    }
+
+    private void maybeStartAutoSync() {
+        if (RootStore.autoEnabled(this) && WirelessProfileStore.hasProfile(this) && RootStore.hasRoots(this)) startAutoSync();
+    }
+
+    private void startAutoSync() {
+        if (!WirelessProfileStore.hasProfile(this) || !RootStore.hasRoots(this)) {
+            rootStatus.setText("Πρώτα αποθήκευσε pairing profile και τα δύο fixed roots.");
+            return;
+        }
+        RootStore.setAutoEnabled(this, true);
+        final Intent service = new Intent(this, AutoSyncService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(service);
+        else startService(service);
+        autoSyncRunning = true;
+        autoSync.setText("Διακοπή αυτόματου συγχρονισμού");
+        rootStatus.setText("Αυτόματος συγχρονισμός: " + RootStore.status(this));
+    }
+
+    private void stopAutoSync() {
+        RootStore.setAutoEnabled(this, false);
+        stopService(new Intent(this, AutoSyncService.class));
+        autoSyncRunning = false;
+        autoSync.setText("Έναρξη αυτόματου συγχρονισμού");
+        rootStatus.setText("Αυτόματος συγχρονισμός: σταματημένος.");
     }
 
     private void pickFile(int requestCode) {
@@ -160,5 +247,19 @@ public final class MainActivity extends Activity {
         profileStatus.setText(WirelessProfileStore.hasProfile(this)
                 ? "Pairing profile: αποθηκευμένο· έτοιμο για έλεγχο receiver."
                 : "Pairing profile: δεν έχει εισαχθεί Linux receiver profile.");
+    }
+
+    private void refreshRootStatus() {
+        if (rootStatus == null) return;
+        rootStatus.setText("Drive: " + (RootStore.drive(this).isEmpty() ? "δεν έχει δοθεί" : "έτοιμο")
+                + " · DCIM/Photos: " + (RootStore.photos(this).isEmpty() ? "δεν έχει δοθεί" : "έτοιμο")
+                + "\n" + RootStore.status(this));
+        if (autoSync != null && !RootStore.hasRoots(this)) autoSync.setText("Έναρξη αυτόματου συγχρονισμού");
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        refreshProfileStatus();
+        refreshRootStatus();
     }
 }
