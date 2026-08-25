@@ -35,6 +35,8 @@ copy into a local directory while printing live progress:
 ./build/local-drive-cli --catalog-file /tmp/local-drive-wireless.sqlite \
   wireless-simulate 'file:///tmp/simulated-phone/example.jpg' /tmp/import/
 ./build/local-drive-cli wireless-beacon 'wireless:sim-phone' 'Simulated phone' '127.0.0.1:43171'
+./build/local-drive-cli wireless-profile-export /tmp/server-profile.json 192.168.1.20 43171 server.crt SERVER_SHA256_FINGERPRINT
+./build/local-drive-cli wireless-profile-accept /tmp/android-pairing.json client.crt
 ./build/local-drive-cli --catalog-file /tmp/local-drive-wireless.sqlite \
   wireless-receive /tmp/import/ server.crt server.key client-ca.crt CLIENT_SHA256_FINGERPRINT 43171
 ./build/local-drive-cli wireless-send /tmp/simulated-phone/example.jpg localhost 43171 \
@@ -74,6 +76,11 @@ prefix before resuming, and does not discover a phone or open a LAN listener.
 mutual certificate verification with a pinned client fingerprint, acknowledged
 chunk offsets, and final `VerifiedCopy` catalog receipts. They require PEM
 certificates/keys supplied by the caller; no key material is stored in SQLite.
+`wireless-profile-export` writes only the receiver host, port, public server
+certificate, and its SHA-256 fingerprint to a JSON profile for the Android app.
+After the Android app shares its public pairing JSON, `wireless-profile-accept`
+validates the certificate/fingerprint pair and writes the client certificate for
+use as the receiver CA. Private keys never enter either profile.
 `--staging-max-bytes` is per-job for local commands and a total on-disk
 cap for `verified-stage-dir`.
 
@@ -88,11 +95,12 @@ surface for verified transfers.
 ## Android discovery companion (Alpha source only)
 
 The minimal Android module under `android/` provides the foreground
-candidate-discovery beacon and an unconnected `WirelessSender` backend. The
-beacon broadcasts every five seconds; the sender implements the Alpha Linux
-framing, resumable chunks, TLS 1.3, and receipt verification, but the app does
-not yet expose it through a pairing/profile UI or read user files. The Linux
-listener remains the source of truth for device identity and trust.
+candidate-discovery beacon, a Keystore-backed client identity, pairing-profile
+import/export UI, and an unconnected `WirelessSender` backend. The beacon
+broadcasts every five seconds; the sender implements the Alpha Linux framing,
+resumable chunks, TLS 1.3, and receipt verification. The Linux listener remains
+the source of truth for device identity and trust; Android file selection and
+automatic transfer are intentionally not wired yet.
 
 For a local build, use the installed Android SDK and Java 17:
 

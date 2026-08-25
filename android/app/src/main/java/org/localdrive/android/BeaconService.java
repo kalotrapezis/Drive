@@ -32,6 +32,18 @@ public final class BeaconService extends Service {
     private String identity;
     private String label;
 
+    public static String identityFor(android.content.Context context) {
+        final String androidId = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ANDROID_ID);
+        if (androidId != null && !androidId.trim().isEmpty()) return "wireless:android-" + androidId.toLowerCase(Locale.ROOT);
+        final SharedPreferences preferences = context.getSharedPreferences(PREFS, MODE_PRIVATE);
+        String generated = preferences.getString(GENERATED_ID, "");
+        if (generated.isEmpty()) {
+            generated = UUID.randomUUID().toString().replace("-", "");
+            preferences.edit().putString(GENERATED_ID, generated).apply();
+        }
+        return "wireless:android-generated-" + generated;
+    }
+
     @Override public void onCreate() {
         super.onCreate();
         identity = loadIdentity();
@@ -76,15 +88,7 @@ public final class BeaconService extends Service {
     }
 
     private String loadIdentity() {
-        final String androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
-        if (androidId != null && !androidId.trim().isEmpty()) return "wireless:android-" + androidId.toLowerCase(Locale.ROOT);
-        final SharedPreferences preferences = getSharedPreferences(PREFS, MODE_PRIVATE);
-        String generated = preferences.getString(GENERATED_ID, "");
-        if (generated.isEmpty()) {
-            generated = UUID.randomUUID().toString().replace("-", "");
-            preferences.edit().putString(GENERATED_ID, generated).apply();
-        }
-        return "wireless:android-generated-" + generated;
+        return identityFor(this);
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }

@@ -1,5 +1,7 @@
 package org.localdrive.android;
 
+import android.content.Context;
+import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Base64;
@@ -46,6 +48,16 @@ public final class AndroidIdentity {
 
     public static String certificateFingerprint() throws Exception {
         return hex(MessageDigest.getInstance("SHA-256").digest(certificate().getEncoded()));
+    }
+
+    public static String pairingJson(Context context) throws Exception {
+        return new org.json.JSONObject()
+                .put("protocol", 1)
+                .put("deviceId", BeaconService.identityFor(context))
+                .put("deviceName", (Build.MANUFACTURER + " " + Build.MODEL).trim())
+                .put("clientCertificatePem", certificatePem())
+                .put("clientFingerprint", certificateFingerprint())
+                .toString(2);
     }
 
     private static X509Certificate certificate() throws Exception {

@@ -10,6 +10,28 @@ openssl req -x509 -newkey rsa:2048 -nodes -keyout "$root/server.key" -out "$root
 openssl req -x509 -newkey rsa:2048 -nodes -keyout "$root/client.key" -out "$root/client.crt" -subj /CN=local-drive-client -days 1 >/dev/null 2>&1
 printf '%s\n' 'wireless mTLS payload ελληνικά' > "$root/source/photo.txt"
 fingerprint=$(openssl x509 -in "$root/client.crt" -noout -fingerprint -sha256 | sed 's/.*=//; s/://g')
+server_fingerprint=$(openssl x509 -in "$root/server.crt" -noout -fingerprint -sha256 | sed 's/.*=//; s/://g')
+
+$cli wireless-profile-export "$root/server-profile.json" localhost 43271 "$root/server.crt" "$server_fingerprint" > "$root/profile-export.log" 2>&1
+python3 - "$root/server-profile.json" "$root/client.crt" "$fingerprint" "$root/android-pairing.json" <<'PY'
+import json
+import sys
+
+profile = json.load(open(sys.argv[1]))
+assert profile["protocol"] == 1
+assert profile["serverFingerprint"]
+certificate = open(sys.argv[2]).read()
+json.dump({
+    "protocol": 1,
+    "deviceId": "wireless:test-phone",
+    "deviceName": "Test phone",
+    "clientCertificatePem": certificate,
+    "clientFingerprint": sys.argv[3].lower(),
+}, open(sys.argv[4], "w"))
+PY
+$cli wireless-profile-accept "$root/android-pairing.json" "$root/imported-client.crt" > "$root/profile-accept.log" 2>&1
+imported_fingerprint=$(openssl x509 -in "$root/imported-client.crt" -noout -fingerprint -sha256 | sed 's/.*=//; s/://g')
+test "$imported_fingerprint" = "$fingerprint"
 
 catalog="$root/catalog.sqlite"
 $cli --catalog-file "$catalog" wireless-receive "$root/destination" "$root/server.crt" "$root/server.key" "$root/client.crt" "$fingerprint" 43271 > "$root/receiver.log" 2>&1 &

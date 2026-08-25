@@ -9,7 +9,9 @@
 #include <QFileInfo>
 #include <QHostAddress>
 #include <QJsonDocument>
+#include <QJsonParseError>
 #include <QJsonObject>
+#include <QSaveFile>
 #include <QJsonValue>
 #include <QStorageInfo>
 #include <QStandardPaths>
@@ -291,6 +293,74 @@ bool loadWirelessKey(const QString &path, QSslKey *key, QString *error) {
     return true;
 }
 
+QString certificateFingerprint(const QSslCertificate &certificate) {
+    return QString::fromLatin1(certificate.digest(QCryptographicHash::Sha256).toHex());
+}
+
+bool writeJsonFile(const QString &path, const QJsonObject &object, QString *error) {
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) { if (error) *error = file.errorString(); return false; }
+    if (file.write(QJsonDocument(object).toJson(QJsonDocument::Indented)) < 0 || !file.commit()) {
+        if (error) *error = file.errorString();
+        return false;
+    }
+    return true;
+}
+
+bool readJsonFile(const QString &path, QJsonObject *object, QString *error) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) { if (error) *error = file.errorString(); return false; }
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        if (error) *error = QStringLiteral("invalid JSON profile: %1").arg(parseError.errorString());
+        return false;
+    }
+    *object = document.object();
+    return true;
+}
+
+QString normalizedFingerprint(QString fingerprint) {
+    return fingerprint.remove(QLatin1Char(':')).remove(QLatin1Char(' ')).toLower();
+}
+
+int runWirelessProfileExport(Output &output, const QString &path, const QString &host, quint16 port,
+                             const QString &serverCertificatePath, const QString &fingerprint) {
+    if (host.trimmed().isEmpty() || port == 0) return fail(output, QStringLiteral("wireless-profile-export needs a host and non-zero port"));
+    QSslCertificate certificate;
+    QString loadError;
+    if (!loadWirelessCertificate(serverCertificatePath, &certificate, &loadError)) return fail(output, loadError);
+    const QString expected = certificateFingerprint(certificate);
+    if (normalizedFingerprint(fingerprint) != expected) return fail(output, QStringLiteral("server fingerprint does not match SERVER_CERT (expected %1)").arg(expected));
+    QFile source(serverCertificatePath);
+    if (!source.open(QIODevice::ReadOnly)) return fail(output, source.errorString());
+    QString writeError;
+    if (!writeJsonFile(path, QJsonObject{{"protocol", 1}, {"host", host.trimmed()}, {"port", static_cast<int>(port)},
+                                         {"serverFingerprint", expected}, {"serverCaPem", QString::fromUtf8(source.readAll())}}, &writeError)) return fail(output, writeError);
+    output.write(QStringLiteral("INFO wireless pairing profile exported path=%1").arg(path));
+    return 0;
+}
+
+int runWirelessProfileAccept(Output &output, const QString &inputPath, const QString &clientCaPath) {
+    if (QFileInfo(inputPath).absoluteFilePath() == QFileInfo(clientCaPath).absoluteFilePath()) return fail(output, QStringLiteral("profile input and client certificate output must differ"));
+    QJsonObject profile;
+    QString readError;
+    if (!readJsonFile(inputPath, &profile, &readError)) return fail(output, readError);
+    if (profile.value(QStringLiteral("protocol")).toInt(-1) != 1) return fail(output, QStringLiteral("unsupported pairing profile protocol"));
+    const QString deviceId = profile.value(QStringLiteral("deviceId")).toString();
+    if (!deviceId.startsWith(QStringLiteral("wireless:"))) return fail(output, QStringLiteral("pairing profile has no wireless device identity"));
+    const QByteArray pem = profile.value(QStringLiteral("clientCertificatePem")).toString().toUtf8();
+    const auto certificates = QSslCertificate::fromData(pem, QSsl::Pem);
+    if (certificates.isEmpty()) return fail(output, QStringLiteral("pairing profile has no readable client certificate"));
+    const QString actual = certificateFingerprint(certificates.first());
+    if (normalizedFingerprint(profile.value(QStringLiteral("clientFingerprint")).toString()) != actual) return fail(output, QStringLiteral("client fingerprint does not match the certificate (actual %1)").arg(actual));
+    QSaveFile outputFile(clientCaPath);
+    if (!outputFile.open(QIODevice::WriteOnly)) return fail(output, outputFile.errorString());
+    if (outputFile.write(certificates.first().toPem()) < 0 || !outputFile.commit()) return fail(output, outputFile.errorString());
+    output.write(QStringLiteral("INFO wireless client certificate accepted device=%1 fingerprint=%2 path=%3").arg(deviceId, actual, clientCaPath));
+    return 0;
+}
+
 int runWirelessReceive(QCoreApplication &app, Output &output, const QString &destination, const QString &certificatePath,
                        const QString &privateKeyPath, const QString &clientCaPath, const QString &clientFingerprint, quint16 port,
                        const QString &catalog) {
@@ -480,7 +550,7 @@ int main(int argc, char **argv) {
     const QCommandLineOption scanBytesOption(QStringLiteral("scan-max-bytes"), QStringLiteral("Maximum bytes for mtp-scan (0 means unlimited)."), QStringLiteral("BYTES"), QStringLiteral("68719476736"));
     parser.addOption(scanItemsOption);
     parser.addOption(scanBytesOption);
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("mtp-inventory, mtp-scan, wireless-beacon, wireless-receive, wireless-send, copy, verified-import, wireless-simulate, verified-import-dir, verified-stage-dir, verified-preview, or verified-copy"));
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("mtp-inventory, mtp-scan, wireless-beacon, wireless-profile-export, wireless-profile-accept, wireless-receive, wireless-send, copy, verified-import, wireless-simulate, verified-import-dir, verified-stage-dir, verified-preview, or verified-copy"));
     parser.addPositionalArgument(QStringLiteral("arguments"), QStringLiteral("Command arguments."));
     if (!parser.parse(app.arguments())) {
         Output output;
@@ -518,6 +588,16 @@ int main(int argc, char **argv) {
     if (command == QStringLiteral("wireless-beacon")) {
         if (args.size() < 3 || args.size() > 4) return fail(output, QStringLiteral("usage: wireless-beacon WIRELESS_ID NAME [ENDPOINT]"));
         return runWirelessBeacon(output, args.at(1), args.at(2), args.size() > 3 ? args.at(3) : QString());
+    }
+    if (command == QStringLiteral("wireless-profile-export")) {
+        if (args.size() != 6) return fail(output, QStringLiteral("usage: wireless-profile-export OUTPUT_JSON HOST PORT SERVER_CERT SERVER_FINGERPRINT"));
+        bool portOk = false; const quint16 port = args.at(3).toUShort(&portOk);
+        if (!portOk || port == 0) return fail(output, QStringLiteral("wireless profile port must be a valid non-zero integer"));
+        return runWirelessProfileExport(output, args.at(1), args.at(2), port, args.at(4), args.at(5));
+    }
+    if (command == QStringLiteral("wireless-profile-accept")) {
+        if (args.size() != 3) return fail(output, QStringLiteral("usage: wireless-profile-accept ANDROID_PAIRING_JSON CLIENT_CERT_OUTPUT"));
+        return runWirelessProfileAccept(output, args.at(1), args.at(2));
     }
     if (command == QStringLiteral("wireless-receive")) {
         if (args.size() < 6 || args.size() > 7) return fail(output, QStringLiteral("usage: wireless-receive DESTINATION_DIRECTORY SERVER_CERT SERVER_KEY CLIENT_CA CLIENT_FINGERPRINT [PORT]"));
