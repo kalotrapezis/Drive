@@ -434,6 +434,8 @@ bool SetupModel::pairWirelessDevice(const QString &wirelessDeviceId, const QStri
     if (!alias.exec() || alias.numRowsAffected() != 1) { db.rollback(); return fail(QStringLiteral("Wireless identity is not pairable.")); }
     QSqlQuery archive(db); archive.prepare("UPDATE devices SET hidden=1 WHERE id=? AND id<>?"); archive.addBindValue(wirelessDeviceId); archive.addBindValue(targetDeviceId);
     if (!archive.exec()) { db.rollback(); return fail(archive.lastError().text()); }
+    QSqlQuery acknowledge(db); acknowledge.prepare("UPDATE devices SET onboarding_seen=1 WHERE id=?"); acknowledge.addBindValue(targetDeviceId);
+    if (!acknowledge.exec() || acknowledge.numRowsAffected() != 1) { db.rollback(); return fail(QStringLiteral("Could not acknowledge the paired phone.")); }
     if (!db.commit()) { db.rollback(); return fail(db.lastError().text()); }
     for (int index = m_wirelessDevices.size() - 1; index >= 0; --index) if (m_wirelessDevices.at(index).toMap().value("id").toString() == wirelessDeviceId || m_wirelessDevices.at(index).toMap().value("id").toString() == targetDeviceId) m_wirelessDevices.removeAt(index);
     wirelessItem.insert("id", targetDeviceId); wirelessItem.insert("paired", true); wirelessItem.insert("pairedDeviceId", targetDeviceId);

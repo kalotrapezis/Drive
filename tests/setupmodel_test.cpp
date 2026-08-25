@@ -136,6 +136,9 @@ private slots:
         bool targetVisible = false, candidateVisible = false;
         for (const auto &device : model.deviceList()) { targetVisible = targetVisible || device.toMap().value("id") == QStringLiteral("mtp-phone"); candidateVisible = candidateVisible || device.toMap().value("id") == candidateId; }
         QVERIFY(targetVisible); QVERIFY(!candidateVisible);
+        bool targetNeedsOnboarding = false;
+        for (const auto &device : model.firstSeenDevices()) targetNeedsOnboarding = targetNeedsOnboarding || device.toMap().value("id") == QStringLiteral("mtp-phone");
+        QVERIFY(!targetNeedsOnboarding);
         QSqlDatabase check = QSqlDatabase::addDatabase("QSQLITE", "wireless-identity-check"); check.setDatabaseName(dbPath); QVERIFY(check.open()); QSqlQuery checkQuery(check);
         QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM devices WHERE is_local=0 AND hidden=0")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 1);
         QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM device_aliases WHERE device_id='mtp-phone'")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 2);
