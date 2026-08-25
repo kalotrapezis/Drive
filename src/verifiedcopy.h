@@ -66,6 +66,7 @@ public:
         qint64 minimumFreeBytes = 0;
         qint64 progressOffset = 0;
         qint64 progressTotal = 0;
+        bool resumable = false;
     };
     struct Preview {
         struct ManifestEntry { QString relative; QString destination; qint64 size = 0; qint64 mtime = 0; };
@@ -139,6 +140,7 @@ private:
     void setStatus(const QString &status);
     void appendLog(const QString &message);
     bool waitIfPaused(QSqlDatabase &db, const QString &jobId, QString *error);
+    bool executeResumableLocalRemoteBlocking(const RemoteRequest &request, QString *error);
     QVariantMap routeMap(const QString &routeId);
     bool execute(const Request &request, const Preview &authorized, QString *error, QString *completionMessage = nullptr);
     Preview m_preview;

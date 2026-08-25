@@ -821,6 +821,31 @@ PublishResult publishNoReplaceFd(int partialFd, int parentFd, const QString &fin
 #endif
 }
 
+PublishResult publishNamedNoReplaceFd(int partialParent, const QString &partialName,
+                                      int destinationParent, const QString &final,
+                                      QString *error) {
+#ifdef __linux__
+    const QByteArray oldName = partialName.toLocal8Bit();
+    const QByteArray newName = QFileInfo(final).fileName().toLocal8Bit();
+    errno = 0;
+    if (::linkat(partialParent, oldName.constData(), destinationParent, newName.constData(), 0) != 0) {
+        const int saved = errno;
+        if (saved == EEXIST) return PublishResult::AlreadyExists;
+        if (error) *error = QString::fromLocal8Bit(strerror(saved));
+        return PublishResult::Failed;
+    }
+    if (::fsync(destinationParent) != 0 || ::unlinkat(partialParent, oldName.constData(), 0) != 0 || ::fsync(partialParent) != 0) {
+        if (error) *error = "Named partial publication could not be made durable";
+        return PublishResult::Failed;
+    }
+    return PublishResult::Published;
+#else
+    Q_UNUSED(partialParent); Q_UNUSED(partialName); Q_UNUSED(destinationParent); Q_UNUSED(final);
+    if (error) *error = "Named partial publication is unavailable";
+    return PublishResult::Failed;
+#endif
+}
+
 bool flushPublishedFd(int rootFd, dev_t device, const QString &root, const QString &path, struct stat *verified, QString *error, int *keepFd = nullptr) {
 #ifdef __linux__
     const QString relative = QDir(root).relativeFilePath(path);
@@ -1073,6 +1098,7 @@ bool VerifiedCopy::startRemoteImportDirectory(const QVariantMap &options) {
     base.sourceDeviceId = options.value("sourceDeviceId").toString();
     base.sourceDeviceStableId = options.value("sourceDeviceStableId").toString();
     base.sourceDeviceName = options.value("sourceDeviceName", QStringLiteral("MTP phone")).toString();
+    base.resumable = options.value("resumable").toBool() || base.sourceStorageIdentity.startsWith(QStringLiteral("wireless:"));
     const QString destinationPrefix = QDir::cleanPath(options.value("destinationPrefix").toString());
     bool itemsOk = false, bytesOk = false;
     const qint64 maxItems = options.value("maxItems", 100000).toLongLong(&itemsOk);
@@ -1179,9 +1205,155 @@ bool VerifiedCopy::executeBlocking(const Request &request, QString *error) {
     return execute(request, plan, error);
 }
 
+bool VerifiedCopy::executeResumableLocalRemoteBlocking(const RemoteRequest &remote, QString *error) {
+    if (error) error->clear();
+    const QFileInfo sourceInputInfo(remote.sourceUrl.toLocalFile());
+    if (sourceInputInfo.isSymLink()) { if (error) *error = "Wireless simulation source must not be a symlink"; return false; }
+    const QString sourcePath = QFileInfo(remote.sourceUrl.toLocalFile()).canonicalFilePath();
+    const QFileInfo sourceInfo(sourcePath);
+    if (sourcePath.isEmpty() || !sourceInfo.isFile() || sourceInfo.isSymLink()) { if (error) *error = "Wireless simulation source is not a regular local file"; return false; }
+    const QString destinationRoot = canonicalDir(remote.destinationRoot);
+    const QString selectedRoot = canonicalDir(remote.selectedStorageRoot.isEmpty() ? remote.destinationRoot : remote.selectedStorageRoot);
+    if (destinationRoot.isEmpty() || selectedRoot.isEmpty() || !under(destinationRoot, selectedRoot)) { if (error) *error = "Destination is outside the selected storage root"; return false; }
+    const QString destinationRelative = QDir::cleanPath(remote.destinationRelative);
+    if (destinationRelative.isEmpty() || destinationRelative == "." || destinationRelative == ".." || destinationRelative.startsWith("../") || destinationRelative.contains("/../") || QFileInfo(destinationRelative).isAbsolute()) { if (error) *error = "Destination path is unsafe"; return false; }
+    QString identityError;
+    if (remote.storageIdentity.isEmpty() || storageIdentity(destinationRoot, &identityError) != remote.storageIdentity) { if (error) *error = identityError.isEmpty() ? "Destination storage identity could not be verified" : identityError; return false; }
+
+    QFile sourceFile(sourcePath);
+    if (!sourceFile.open(QIODevice::ReadOnly)) { if (error) *error = sourceFile.errorString(); return false; }
+    struct stat sourceStat{};
+    if (::fstat(sourceFile.handle(), &sourceStat) != 0 || !S_ISREG(sourceStat.st_mode)) { if (error) *error = "Wireless source is not a regular file"; return false; }
+    const qint64 sourceSize = sourceStat.st_size;
+    const qint64 sourceMtime = sourceStat.st_mtim.tv_sec * 1000 + sourceStat.st_mtim.tv_nsec / 1000000;
+    if (sourceSize > QStorageInfo(destinationRoot).bytesAvailable() || QStorageInfo(destinationRoot).bytesAvailable() - sourceSize < remote.minimumFreeBytes) { if (error) *error = "Not enough free space including the configured safety margin"; return false; }
+
+    Request request;
+    request.sourceRoot = sourcePath;
+    request.destinationRoot = destinationRoot;
+    request.selectedStorageRoot = selectedRoot;
+    request.storageIdentity = remote.storageIdentity;
+    request.filesystemType = remote.filesystemType;
+    request.databasePath = remote.databasePath.isEmpty() ? defaultCatalogPath() : remote.databasePath;
+    request.routeId = remote.routeId;
+    request.destinationStorageId = remote.destinationStorageId;
+    request.minimumFreeBytes = remote.minimumFreeBytes;
+    request.sourceStorageId = remote.sourceStorageId;
+    request.sourceStorageIdentity = remote.sourceStorageIdentity;
+    request.sourceStorageKind = QStringLiteral("mtp");
+    request.sourceStorageLabel = remote.sourceStorageLabel;
+    request.sourceDeviceId = remote.sourceDeviceId;
+    request.sourceDeviceStableId = remote.sourceDeviceStableId;
+    request.sourceDeviceName = remote.sourceDeviceName;
+    request.sourceDeviceKind = QStringLiteral("Phone");
+    SourceFile source{remote.sourceRelative.isEmpty() ? sourceInfo.fileName() : remote.sourceRelative, sourcePath, destinationRelative, sourceSize, sourceMtime};
+    Preview plan;
+    plan.ok = true; plan.files = 1; plan.bytes = sourceSize; plan.toCopy = sourceSize; plan.freeBytes = QStorageInfo(destinationRoot).bytesAvailable();
+    plan.manifest.append({source.relative, destinationRelative, sourceSize, sourceMtime});
+
+    RootPins roots;
+    if (!pinRoot(destinationRoot, roots.destination, &roots.destinationDevice, &roots.destinationInode, error)) return false;
+    const QString connection = QStringLiteral("wireless-resume-%1").arg(QUuid::createUuid().toString(QUuid::Id128));
+    auto db = QSqlDatabase::addDatabase("QSQLITE", connection); db.setDatabaseName(request.databasePath);
+    if (!db.open()) { if (error) *error = db.lastError().text(); closePins(roots); releaseDatabase(db, connection); return false; }
+    QString routeId, jobId, catalogError;
+    if (!prepareCatalog(db, request, plan, {source}, routeId, jobId, &catalogError)) { if (error) *error = catalogError; closePins(roots); releaseDatabase(db, connection); return false; }
+    const QString destination = QDir(destinationRoot).filePath(destinationRelative);
+    const QString itemId = stableItemId(jobId, source.relative);
+    QFile partial;
+    FdGuard partialParent;
+    auto failRemote = [&](const QString &message, const QString &state = QStringLiteral("Failed"), const QString &event = QStringLiteral("failed")) {
+        partial.close();
+        QString terminalError;
+        if (!terminalizeJob(db, jobId, &source, destination, state, event, message, &terminalError)) { if (error) *error = "Catalog terminalization failed: " + terminalError; }
+        else if (error) *error = message;
+        closePins(roots); releaseDatabase(db, connection); return false;
+    };
+    if (!setItemState(db, itemId, QStringLiteral("Copying"), &catalogError)) return failRemote(catalogError);
+
+    auto hashPath = [](const QString &path, qint64 size, QByteArray *hash, QString *hashError) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) { if (hashError) *hashError = file.errorString(); return false; }
+        return hashFd(file.handle(), size, hash, nullptr, hashError);
+    };
+    struct stat existing{}; QString statError;
+    if (statPinned(roots.destination, destinationRoot, destinationRelative, &existing, &statError)) {
+        if (!S_ISREG(existing.st_mode) || existing.st_size != sourceSize) return failRemote("Destination differs", QStringLiteral("Conflict"), QStringLiteral("conflict"));
+        QByteArray sourceHash, existingHash;
+        QString hashError;
+        if (!hashPath(sourcePath, sourceSize, &sourceHash, &hashError) || !hashPath(destination, sourceSize, &existingHash, &hashError)) return failRemote(hashError.isEmpty() ? QStringLiteral("Existing destination could not be verified") : hashError);
+        if (sourceHash != existingHash) return failRemote("Destination differs", QStringLiteral("Conflict"), QStringLiteral("conflict"));
+        FdGuard existingFd; struct stat flushed{};
+        if (!flushPublishedFd(roots.destination, roots.destinationDevice, destinationRoot, destination, &flushed, &catalogError, &existingFd.fd) || !recordReceipt(db, request, jobId, source, destination, sourceHash, &catalogError)) return failRemote(catalogError);
+        QSqlQuery complete(db); complete.prepare("UPDATE jobs SET state='Complete',completed_at=CURRENT_TIMESTAMP,error_code=NULL,error_message=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?"); complete.addBindValue(jobId);
+        if (!complete.exec()) return failRemote(complete.lastError().text());
+        emit progressChanged(sourceSize, sourceSize, source.relative);
+        closePins(roots); releaseDatabase(db, connection); return true;
+    }
+    if (!statError.isEmpty()) return failRemote(statError);
+
+    const QString partialToken = QString::fromLatin1(QCryptographicHash::hash((sourcePath + "\n" + destinationRelative + "\n" + QString::number(sourceSize) + "\n" + QString::number(sourceMtime)).toUtf8(), QCryptographicHash::Sha256).toHex());
+    const QString partialRelative = QStringLiteral(".local-drive-partials/%1.partial").arg(partialToken);
+    const QString partialPath = QDir(destinationRoot).filePath(partialRelative);
+    const int partialParentFd = openDestinationParentFd(roots.destination, destinationRoot, partialPath, roots.destinationDevice, &catalogError);
+    if (partialParentFd < 0) return failRemote(catalogError.isEmpty() ? QStringLiteral("Wireless partial staging could not be opened") : catalogError);
+    partialParent.fd = partialParentFd;
+    const QByteArray partialName = QFileInfo(partialPath).fileName().toLocal8Bit();
+    const int partialFd = ::openat(partialParent.fd, partialName.constData(), O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600);
+    if (partialFd < 0 || !partial.open(partialFd, QIODevice::ReadWrite, QFileDevice::AutoCloseHandle)) return failRemote(QStringLiteral("Wireless partial staging could not be opened: %1").arg(partial.isOpen() ? partial.errorString() : QString::fromLocal8Bit(strerror(errno))));
+    struct stat partialStat{};
+    if (::fstat(partial.handle(), &partialStat) != 0 || !S_ISREG(partialStat.st_mode) || partialStat.st_size > sourceSize) return failRemote("Wireless partial is invalid; it was retained for inspection");
+    const qint64 resumed = partialStat.st_size;
+    QCryptographicHash sourceHash(QCryptographicHash::Sha256);
+    if (!sourceFile.seek(0) || !partial.seek(0)) return failRemote("Wireless partial could not be rewound");
+    qint64 checked = 0;
+    while (checked < resumed) {
+        const qint64 wanted = std::min<qint64>(1024 * 1024, resumed - checked);
+        const QByteArray expected = sourceFile.read(wanted);
+        const QByteArray actual = partial.read(wanted);
+        if (expected.size() != wanted || actual != expected) return failRemote("Wireless partial does not match the source; it was retained for inspection");
+        sourceHash.addData(expected); checked += wanted;
+    }
+    if (!sourceFile.seek(resumed) || !partial.seek(0) || !partial.seek(partial.size())) return failRemote("Wireless partial seek failed");
+    emit progressChanged(remote.progressOffset + resumed, remote.progressTotal > 0 ? remote.progressTotal : sourceSize, source.relative);
+    while (checked < sourceSize) {
+        if (m_cancelled.load()) { partial.flush(); ::fsync(partial.handle()); return failRemote("Wireless transfer cancelled; source retained and partial retained", QStringLiteral("Cancelled"), QStringLiteral("cancelled")); }
+        const QByteArray chunk = sourceFile.read(std::min<qint64>(1024 * 1024, sourceSize - checked));
+        if (chunk.isEmpty()) return failRemote(sourceFile.errorString().isEmpty() ? QStringLiteral("Wireless source read failed") : sourceFile.errorString());
+        if (partial.write(chunk) != chunk.size()) return failRemote(partial.errorString());
+        sourceHash.addData(chunk); checked += chunk.size();
+        emit progressChanged(remote.progressOffset + checked, remote.progressTotal > 0 ? remote.progressTotal : sourceSize, source.relative);
+        if (m_testHook) m_testHook(source.relative, QStringLiteral("wireless-during-copy"));
+    }
+    if (!partial.flush() || ::fsync(partial.handle()) != 0) return failRemote("Wireless partial could not be flushed");
+    if (!setItemState(db, itemId, QStringLiteral("Verifying"), &catalogError)) return failRemote(catalogError);
+    QByteArray verifiedHash; struct stat verifiedStat{}; FdGuard verifiedFd;
+    if (!hashFd(partial.handle(), sourceSize, &verifiedHash, &verifiedStat, &catalogError, &verifiedFd.fd) || verifiedHash != sourceHash.result()) return failRemote(catalogError.isEmpty() ? QStringLiteral("Wireless destination hash mismatch") : catalogError);
+    struct stat sourceAfter{};
+    if (::fstat(sourceFile.handle(), &sourceAfter) != 0 || sourceAfter.st_size != sourceStat.st_size || sourceAfter.st_mtim.tv_sec != sourceStat.st_mtim.tv_sec || sourceAfter.st_mtim.tv_nsec != sourceStat.st_mtim.tv_nsec) return failRemote("Wireless source changed during transfer");
+    partial.close();
+    if (m_testHook) m_testHook(destination, QStringLiteral("before-wireless-publish"));
+    if (storageIdentity(destinationRoot, &identityError) != remote.storageIdentity) return failRemote("Destination storage identity changed");
+    FdGuard destinationParent;
+    if ((destinationParent.fd = openDestinationParentFd(roots.destination, destinationRoot, destination, roots.destinationDevice, &catalogError)) < 0) return failRemote(catalogError);
+    const PublishResult publication = publishNamedNoReplaceFd(partialParent.fd, QString::fromLocal8Bit(partialName), destinationParent.fd, destination, &catalogError);
+    if (publication == PublishResult::AlreadyExists) return failRemote("Destination appeared during wireless import", QStringLiteral("Conflict"), QStringLiteral("conflict"));
+    if (publication != PublishResult::Published) return failRemote(catalogError.isEmpty() ? QStringLiteral("Wireless destination publication failed") : catalogError);
+    FdGuard publishedFd; struct stat publishedStat{};
+    if (!flushPublishedFd(roots.destination, roots.destinationDevice, destinationRoot, destination, &publishedStat, &catalogError, &publishedFd.fd) || publishedStat.st_dev != verifiedStat.st_dev || publishedStat.st_ino != verifiedStat.st_ino) return failRemote(catalogError.isEmpty() ? QStringLiteral("Published wireless destination changed") : catalogError);
+    QByteArray finalHash; struct stat finalStat{};
+    SourceFile finalSource = source;
+    if (!sameFileOpenedFd(roots.destination, destinationRelative, finalSource, &finalHash, &finalStat, &catalogError) || finalHash != verifiedHash || finalStat.st_dev != publishedStat.st_dev || finalStat.st_ino != publishedStat.st_ino) return failRemote(catalogError.isEmpty() ? QStringLiteral("Published wireless destination failed final verification") : catalogError);
+    if (!recordReceipt(db, request, jobId, source, destination, finalHash, &catalogError)) return failRemote(catalogError);
+    QSqlQuery complete(db); complete.prepare("UPDATE jobs SET state='Complete',completed_at=CURRENT_TIMESTAMP,error_code=NULL,error_message=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?"); complete.addBindValue(jobId);
+    if (!complete.exec()) return failRemote(complete.lastError().text());
+    closePins(roots); releaseDatabase(db, connection); return true;
+}
+
 bool VerifiedCopy::executeRemoteBlocking(const RemoteRequest &remote, QString *error) {
     if (error) error->clear();
     if (!remote.sourceUrl.isValid() || (remote.sourceUrl.scheme() != QStringLiteral("mtp") && remote.sourceUrl.scheme() != QStringLiteral("file"))) { if (error) *error = "MTP import requires a valid mtp:/ or file:// source"; return false; }
+    if (remote.resumable && remote.sourceUrl.isLocalFile()) return executeResumableLocalRemoteBlocking(remote, error);
     const QString destinationRoot = canonicalDir(remote.destinationRoot);
     const QString selectedRoot = canonicalDir(remote.selectedStorageRoot.isEmpty() ? remote.destinationRoot : remote.selectedStorageRoot);
     if (destinationRoot.isEmpty() || selectedRoot.isEmpty() || !under(destinationRoot, selectedRoot)) { if (error) *error = "Destination is outside the selected storage root"; return false; }

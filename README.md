@@ -64,7 +64,9 @@ later. `wireless-beacon` broadcasts a candidate-only discovery packet to the
 Linux app on UDP port 43170; it does not pair or authorize transfers.
 `wireless-simulate` deliberately uses the same verified path with a
 `wireless:` catalog identity for deterministic interruption/retry testing; it
-does not discover a phone or open a LAN listener. `--staging-max-bytes` is per-job for local commands and a total on-disk
+retains a bounded `.local-drive-partials/*.partial`, verifies the acknowledged
+prefix before resuming, and does not discover a phone or open a LAN listener.
+`--staging-max-bytes` is per-job for local commands and a total on-disk
 cap for `verified-stage-dir`.
 
 The setup route also remembers an optional laptop staging folder. It must already

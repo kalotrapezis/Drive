@@ -167,11 +167,13 @@ on the repeat. This confirms bounded streaming for a large real file, not the
 physical disconnect recovery gate.
 The remote stream also has a deterministic unreliable-link test: cancelling
 after a received chunk records `Cancelled`, publishes no incomplete destination,
-retains the source, and retries to one verified receipt. The same engine now
-accepts a `wireless:` source identity in the CLI simulation and records a
-transport alias in the catalog. Repeated USB/MTP and wireless observations can
-therefore point to one paired device record; this tests the shared identity and
-transfer safety, not a real LAN protocol.
+retains the source, and retries to one verified receipt. The wireless simulation
+now keeps a bounded app-owned partial, verifies its already-received prefix, and
+continues from that offset. The same engine accepts a `wireless:` source identity
+in the CLI simulation and records a transport alias in the catalog. Repeated
+USB/MTP and wireless observations can therefore point to one paired device
+record; this tests the shared identity and transfer safety, not a real LAN
+protocol.
 
 The follow-up lock-state check used the installed Android SDK `adb`: while the
 Xiaomi reported `mInputRestricted=true`, `mDreamingLockscreen=true`, and

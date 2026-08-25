@@ -227,6 +227,7 @@ VerifiedCopy::RemoteRequest remoteRequest(const QUrl &source, const QString &sou
     request.sourceDeviceId = QStringLiteral("%1-device-%2").arg(transport, sourceDigest.left(16));
     request.sourceDeviceName = transport == QStringLiteral("wireless") ? QStringLiteral("Wireless simulation") : QStringLiteral("MTP source");
     request.sourceStorageLabel = request.sourceDeviceName;
+    request.resumable = transport == QStringLiteral("wireless");
     return request;
 }
 

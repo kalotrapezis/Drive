@@ -311,8 +311,10 @@ Directory creation is allowed only below the selected destination root.
   has a verified receipt, reopen reconstructs the final `Complete`, `Cleanup
   pending`, or `Conflict` state instead; retry rechecks the source and reuses
   only verified destinations.
-- M0 may restart a file from zero if a safe partial-resume spike fails; it must
-  explain this and keep the source.
+- The current MTP path may restart a file from zero because KIO/MTP range
+  resume is not yet proven. The wireless simulation retains a bounded,
+  app-owned `.local-drive-partials/*.partial`, verifies its prefix against the
+  source, and resumes only after that check; it keeps the source in all cases.
 - Cancel stops scheduling new files, allows the current bounded write to stop
   safely, and never triggers source cleanup for an incomplete file.
 - A completed verified file is skipped on retry.
