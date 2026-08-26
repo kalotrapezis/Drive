@@ -31,8 +31,9 @@ transport providers according to stable identity, presence, and capabilities.
 
 ## 2. Non-goals for 0.1
 
-- Android file-transfer application and wireless transfer (the Alpha source
-  currently contains only a candidate-discovery beacon);
+- The complete Android wireless product beyond the current Alpha slice
+  (Alpha already contains candidate discovery, explicit pairing, a foreground
+  sender, fixed-root auto-sync, receipts, and bounded resume);
 - bidirectional continuous synchronization;
 - deletion propagation or tombstones;
 - remote access, cloud relay, accounts, or internet exposure;
@@ -390,7 +391,10 @@ certificate, accepts one persistable system grant for each fixed `Drive/` and
 `DCIM/` root, and scans/sends new or changed files through a foreground service.
 It records a sent item only after the Linux receipt; a bounded Android retry
 reconnects after a short link loss and resumes from the Linux committed partial.
-No real-phone transfer has been run yet.
+The Android emulator has now verified fixed-root setup, automatic retry after an
+unavailable receiver, a receipt-verified `Drive/auto-sync.txt` upload with a
+matching SHA-256, and no second upload after service restart. No real-phone
+wireless transfer or physical unplug/reconnect run has been completed yet.
 
 The verified-import slice is intentionally one file at a time at the engine
 and now emits live received-byte progress while streaming each object. A
