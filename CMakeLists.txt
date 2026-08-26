@@ -78,3 +78,5 @@ add_test(NAME local_drive_cli_m0_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/
 add_test(NAME local_drive_cli_m1_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_m1_smoke.sh $<TARGET_FILE:local-drive-cli>)
 add_test(NAME wireless_mtls_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/wireless_mtls_smoke.sh $<TARGET_FILE:local-drive-cli>)
 add_test(NAME wireless_discovery_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/wireless_discovery_smoke.sh $<TARGET_FILE:local-drive-cli>)
+set_tests_properties(setupmodel_test wireless_discovery_smoke wirelessreceivercontroller_smoke PROPERTIES RESOURCE_LOCK wireless_discovery RUN_SERIAL TRUE)
+set_tests_properties(wirelessreceivercontroller_smoke wireless_mtls_smoke PROPERTIES RESOURCE_LOCK wireless_protocol)
