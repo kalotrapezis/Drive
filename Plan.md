@@ -206,9 +206,10 @@ fixed root, its foreground service scans and queues new/changed files and marks
 them sent only after a verified receipt. Each wireless send retries a bounded
 number of times after a link loss and reuses the receiver's committed partial
 offset; the service also restores discovery and automatic sync after reboot only
-when the saved profile, both roots, and auto-sync flag are present. Automatic
-profile/certificate onboarding remains next; Settings exposes the remembered
-Linux receiver configuration and live receiver log. A successful receiver Start
+when the saved profile, both roots, and auto-sync flag are present. Settings now
+exports the Linux receiver profile and accepts the Android public certificate
+through the same validated JSON exchange as the CLI; QR-based automatic
+onboarding remains next. A successful receiver Start
 enables restart on the next application launch; explicit Stop disables it, and
 the tray Exit still terminates the process rather than leaving a service behind.
 The Android SAF setup now persists the provider's returned read/write grant

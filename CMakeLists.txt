@@ -21,6 +21,8 @@ qt_add_executable(local-drive
     src/remoteinventory.cpp
     src/remoteinventory.h
     src/wirelessprotocol.h
+    src/wirelessprofile.cpp
+    src/wirelessprofile.h
     src/wirelesssession.cpp
     src/wirelesssession.h
     src/wirelessreceivercontroller.cpp
@@ -37,7 +39,7 @@ qt_add_resources(local-drive local_drive_qml
 target_link_libraries(local-drive PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Sql Qt6::Network KF6::Kirigami KF6::Solid KF6::KIOCore)
 set_property(TARGET local-drive PROPERTY QT_QML_MODULE_NO_IMPORT_SCAN TRUE)
 
-qt_add_executable(local-drive-cli src/cli.cpp src/verifiedcopy.cpp src/verifiedcopy.h src/remoteinventory.cpp src/remoteinventory.h src/wirelessprotocol.h src/wirelesssession.cpp src/wirelesssession.h)
+qt_add_executable(local-drive-cli src/cli.cpp src/verifiedcopy.cpp src/verifiedcopy.h src/remoteinventory.cpp src/remoteinventory.h src/wirelessprotocol.h src/wirelessprofile.cpp src/wirelessprofile.h src/wirelesssession.cpp src/wirelesssession.h)
 qt_add_resources(local-drive-cli local_drive_cli_assets PREFIX "/" FILES src/catalog/schema.sql)
 target_link_libraries(local-drive-cli PRIVATE Qt6::Core Qt6::Gui Qt6::Sql Qt6::Network KF6::KIOCore)
 
@@ -59,6 +61,8 @@ qt_add_executable(wirelessreceivercontroller_test
     src/wirelesssession.cpp
     src/wirelesssession.h
     src/wirelessprotocol.h
+    src/wirelessprofile.cpp
+    src/wirelessprofile.h
     src/setupmodel.cpp
     src/setupmodel.h
     src/verifiedcopy.cpp

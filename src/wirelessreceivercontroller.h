@@ -14,6 +14,7 @@ class WirelessReceiverController final : public QObject {
     Q_PROPERTY(QStringList logEntries READ logEntries NOTIFY changed)
     Q_PROPERTY(quint16 port READ port NOTIFY changed)
     Q_PROPERTY(QString savedDestination READ savedDestination NOTIFY changed)
+    Q_PROPERTY(QString savedHost READ savedHost NOTIFY changed)
     Q_PROPERTY(QString savedCertificate READ savedCertificate NOTIFY changed)
     Q_PROPERTY(QString savedPrivateKey READ savedPrivateKey NOTIFY changed)
     Q_PROPERTY(QString savedClientCa READ savedClientCa NOTIFY changed)
@@ -28,6 +29,7 @@ public:
     QStringList logEntries() const { return m_logEntries; }
     quint16 port() const { return m_receiver.port(); }
     QString savedDestination() const { return m_savedDestination; }
+    QString savedHost() const { return m_savedHost; }
     QString savedCertificate() const { return m_savedCertificate; }
     QString savedPrivateKey() const { return m_savedPrivateKey; }
     QString savedClientCa() const { return m_savedClientCa; }
@@ -39,6 +41,9 @@ public:
                            const QString &clientCa, const QString &clientFingerprint, quint16 port = 43171);
     Q_INVOKABLE bool startSaved();
     Q_INVOKABLE void stop();
+    Q_INVOKABLE bool exportProfile(const QString &path, const QString &host, quint16 port,
+                                   const QString &serverCertificate, const QString &fingerprint);
+    Q_INVOKABLE QString acceptPairingProfile(const QString &inputPath, const QString &clientCertificate);
 
 signals:
     void changed();
@@ -54,7 +59,7 @@ private:
     QString m_databasePath;
     QString m_destination;
     QString m_catalog;
-    QString m_savedDestination, m_savedCertificate, m_savedPrivateKey, m_savedClientCa, m_savedFingerprint;
+    QString m_savedDestination, m_savedHost, m_savedCertificate, m_savedPrivateKey, m_savedClientCa, m_savedFingerprint;
     quint16 m_savedPort = 0;
     bool m_savedEnabled = false;
     QString m_status = QStringLiteral("Stopped");

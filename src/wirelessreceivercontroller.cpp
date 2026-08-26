@@ -11,6 +11,7 @@
 
 #include "verifiedcopy.h"
 #include "setupmodel.h"
+#include "wirelessprofile.h"
 
 namespace {
 QString normalizedFingerprint(QString value) {
@@ -23,6 +24,7 @@ WirelessReceiverController::WirelessReceiverController(const QString &databasePa
     m_catalog = databasePath;
     QSettings settings(QStringLiteral("LocalDrive"), QStringLiteral("LocalDrive"));
     m_savedDestination = settings.value(QStringLiteral("wireless/destination")).toString();
+    m_savedHost = settings.value(QStringLiteral("wireless/host"), QStringLiteral("127.0.0.1")).toString();
     m_savedCertificate = settings.value(QStringLiteral("wireless/certificate")).toString();
     m_savedPrivateKey = settings.value(QStringLiteral("wireless/privateKey")).toString();
     m_savedClientCa = settings.value(QStringLiteral("wireless/clientCa")).toString();
@@ -101,6 +103,39 @@ void WirelessReceiverController::stop() {
     m_status = QStringLiteral("Stopped");
     if (wasListening) log(QStringLiteral("INFO wireless receiver stopped"));
     emit changed();
+}
+
+bool WirelessReceiverController::exportProfile(const QString &path, const QString &host, quint16 port,
+                                                const QString &serverCertificate, const QString &fingerprint) {
+    QString error;
+    if (!LocalDrive::WirelessProfile::exportProfile(path, host, port, serverCertificate, fingerprint, &error)) {
+        m_status = QStringLiteral("Profile export failed");
+        log(QStringLiteral("ERROR profile export: %1").arg(error));
+        emit changed();
+        return false;
+    }
+    QSettings settings(QStringLiteral("LocalDrive"), QStringLiteral("LocalDrive"));
+    settings.setValue(QStringLiteral("wireless/host"), host.trimmed());
+    settings.sync();
+    m_savedHost = host.trimmed();
+    m_status = QStringLiteral("Pairing profile exported");
+    log(QStringLiteral("INFO wireless pairing profile exported path=%1").arg(path));
+    emit changed();
+    return true;
+}
+
+QString WirelessReceiverController::acceptPairingProfile(const QString &inputPath, const QString &clientCertificate) {
+    QString error, deviceId, fingerprint;
+    if (!LocalDrive::WirelessProfile::acceptProfile(inputPath, clientCertificate, &deviceId, &fingerprint, &error)) {
+        m_status = QStringLiteral("Profile import failed");
+        log(QStringLiteral("ERROR profile import: %1").arg(error));
+        emit changed();
+        return {};
+    }
+    m_status = QStringLiteral("Android certificate accepted");
+    log(QStringLiteral("INFO Android certificate accepted device=%1 fingerprint=%2").arg(deviceId, fingerprint));
+    emit changed();
+    return fingerprint;
 }
 
 void WirelessReceiverController::saveConfiguration(const QString &destination, const QString &certificate, const QString &privateKey,

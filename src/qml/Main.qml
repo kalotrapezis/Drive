@@ -24,6 +24,7 @@ Kirigami.ApplicationWindow {
     property var phoneActionDevice: ({})
     property var connectedPhone: setupModel.connectedDevices.length > 0 ? setupModel.connectedDevices[0] : ({})
     property string phoneActionStatus: ""
+    property string pendingPairingProfilePath: ""
     property double pauseRemainingMilliseconds: 0
     property var contentTypes: ["Drive", "Photos"]
     property var onboardingDevice: {
@@ -417,6 +418,10 @@ Kirigami.ApplicationWindow {
                     Controls.Label { text: qsTr("The receiver accepts only TLS 1.3 clients whose certificate fingerprint is pinned. A successful Start is remembered locally and starts again with the application; Stop disables that auto-start."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
                     Controls.Label { text: qsTr("Status: %1").arg(wirelessReceiver.status); Layout.fillWidth: true; Accessible.name: text }
                     RowLayout { Layout.fillWidth: true
+                        Controls.TextField { id: receiverHost; placeholderText: qsTr("Laptop LAN address or hostname"); Layout.fillWidth: true; Accessible.name: qsTr("Laptop LAN address for Android profile") }
+                        Controls.Label { text: qsTr("host"); Accessible.name: text }
+                    }
+                    RowLayout { Layout.fillWidth: true
                         Controls.TextField { id: receiverDestination; placeholderText: qsTr("Local Drive root / destination folder"); Layout.fillWidth: true; Accessible.name: qsTr("Wireless destination root") }
                         Controls.Button { text: qsTr("Choose…"); onClicked: receiverDestinationDialog.open(); Accessible.name: qsTr("Choose wireless destination root") }
                     }
@@ -440,6 +445,11 @@ Kirigami.ApplicationWindow {
                         Controls.Button { text: qsTr("Start receiver"); enabled: !wirelessReceiver.listening; onClicked: wirelessReceiver.start(receiverDestination.text, receiverCertificate.text, receiverPrivateKey.text, receiverClientCa.text, receiverFingerprint.text, Number(receiverPort.text)); Accessible.name: qsTr("Start wireless receiver") }
                         Controls.Button { text: qsTr("Stop receiver"); enabled: wirelessReceiver.listening; onClicked: wirelessReceiver.stop(); Accessible.name: qsTr("Stop wireless receiver") }
                     }
+                    RowLayout { Layout.fillWidth: true
+                        Controls.Button { text: qsTr("Export Android profile…"); enabled: receiverHost.text.trim().length > 0 && receiverCertificate.text.trim().length > 0; onClicked: receiverProfileExportDialog.open(); Accessible.name: qsTr("Export Android pairing profile") }
+                        Controls.Button { text: qsTr("Accept Android certificate…"); onClicked: receiverProfileImportDialog.open(); Accessible.name: qsTr("Accept Android public certificate") }
+                    }
+                    Controls.Label { text: qsTr("Export the profile to Android, then accept the Android public certificate here. Private keys never leave this computer."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
                     Controls.Label { text: qsTr("Live receiver log"); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
                     Repeater { model: wirelessReceiver.logEntries.slice(Math.max(0, wirelessReceiver.logEntries.length - 12)); delegate: Controls.Label { text: modelData; elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } }
                 }
@@ -464,6 +474,9 @@ Kirigami.ApplicationWindow {
     FileDialog { id: receiverCertificateDialog; title: qsTr("Choose server certificate"); fileMode: FileDialog.OpenFile; onAccepted: receiverCertificate.text = setupModel.pathFromUrl(selectedFile) }
     FileDialog { id: receiverPrivateKeyDialog; title: qsTr("Choose server private key"); fileMode: FileDialog.OpenFile; onAccepted: receiverPrivateKey.text = setupModel.pathFromUrl(selectedFile) }
     FileDialog { id: receiverClientCaDialog; title: qsTr("Choose Android client certificate"); fileMode: FileDialog.OpenFile; onAccepted: receiverClientCa.text = setupModel.pathFromUrl(selectedFile) }
+    FileDialog { id: receiverProfileExportDialog; title: qsTr("Save Android pairing profile"); fileMode: FileDialog.SaveFile; onAccepted: wirelessReceiver.exportProfile(setupModel.pathFromUrl(selectedFile), receiverHost.text, Number(receiverPort.text), receiverCertificate.text, receiverFingerprint.text) }
+    FileDialog { id: receiverProfileImportDialog; title: qsTr("Choose Android pairing certificate"); fileMode: FileDialog.OpenFile; onAccepted: { pendingPairingProfilePath = setupModel.pathFromUrl(selectedFile); receiverClientCaSaveDialog.open() } }
+    FileDialog { id: receiverClientCaSaveDialog; title: qsTr("Save Android client certificate"); fileMode: FileDialog.SaveFile; onAccepted: { const output = setupModel.pathFromUrl(selectedFile); const fingerprint = wirelessReceiver.acceptPairingProfile(pendingPairingProfilePath, output); if (fingerprint.length > 0) { receiverClientCa.text = output; receiverFingerprint.text = fingerprint } pendingPairingProfilePath = "" } }
     FileDialog { id: manifestDialog; title: qsTr("Export manifest"); fileMode: FileDialog.SaveFile; nameFilters: [qsTr("JSON manifest (*.json)"), qsTr("CSV manifest (*.csv)")]; onAccepted: { const format = selectedFile.toString().toLowerCase().endsWith(".csv") ? "csv" : "json"; manifestStatus = copyEngine.exportManifest(selectedFile, format) ? qsTr("Manifest exported") : qsTr("Could not export manifest"); } }
     Controls.Dialog { id: pauseDialog; title: qsTr("Pause transfer"); modal: true; width: 560; standardButtons: Controls.Dialog.NoButton
         contentItem: ColumnLayout {
@@ -534,6 +547,7 @@ Kirigami.ApplicationWindow {
     }
     Component.onCompleted: {
         receiverDestination.text = wirelessReceiver.savedDestination
+        receiverHost.text = wirelessReceiver.savedHost
         receiverCertificate.text = wirelessReceiver.savedCertificate
         receiverPrivateKey.text = wirelessReceiver.savedPrivateKey
         receiverClientCa.text = wirelessReceiver.savedClientCa

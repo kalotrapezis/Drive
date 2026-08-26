@@ -100,9 +100,10 @@ import/export UI, and a foreground `WirelessSender` transfer service. The
 beacon broadcasts every five seconds; the sender implements the Alpha Linux
 framing, resumable chunks, TLS 1.3, receipt verification, and bounded reconnect
 retry. The Linux listener remains the source of truth for device identity and
-trust; the desktop app exposes the receiver configuration and live log in
-Settings, remembers the setup locally, and restarts the receiver only when the
-user has left it enabled. After one persistable system permission for each fixed root,
+trust; the desktop app exposes the receiver configuration, validated profile
+export, Android public-certificate acceptance, and live log in Settings, remembers
+the setup locally, and restarts the receiver only when the user has left it enabled.
+After one persistable system permission for each fixed root,
 the Android Alpha service scans `Drive/` and `DCIM/`, sends new/changed files to
 `Drive/` or `Photos/`, records them only after a receipt, and restores the
 foreground beacon and sync after reboot when the saved setup is complete. The

@@ -32,6 +32,7 @@
 #include "verifiedcopy.h"
 #include "remoteinventory.h"
 #include "wirelessprotocol.h"
+#include "wirelessprofile.h"
 #include "wirelesssession.h"
 
 namespace {
@@ -293,70 +294,18 @@ bool loadWirelessKey(const QString &path, QSslKey *key, QString *error) {
     return true;
 }
 
-QString certificateFingerprint(const QSslCertificate &certificate) {
-    return QString::fromLatin1(certificate.digest(QCryptographicHash::Sha256).toHex());
-}
-
-bool writeJsonFile(const QString &path, const QJsonObject &object, QString *error) {
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) { if (error) *error = file.errorString(); return false; }
-    if (file.write(QJsonDocument(object).toJson(QJsonDocument::Indented)) < 0 || !file.commit()) {
-        if (error) *error = file.errorString();
-        return false;
-    }
-    return true;
-}
-
-bool readJsonFile(const QString &path, QJsonObject *object, QString *error) {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) { if (error) *error = file.errorString(); return false; }
-    QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-        if (error) *error = QStringLiteral("invalid JSON profile: %1").arg(parseError.errorString());
-        return false;
-    }
-    *object = document.object();
-    return true;
-}
-
-QString normalizedFingerprint(QString fingerprint) {
-    return fingerprint.remove(QLatin1Char(':')).remove(QLatin1Char(' ')).toLower();
-}
-
 int runWirelessProfileExport(Output &output, const QString &path, const QString &host, quint16 port,
                              const QString &serverCertificatePath, const QString &fingerprint) {
-    if (host.trimmed().isEmpty() || port == 0) return fail(output, QStringLiteral("wireless-profile-export needs a host and non-zero port"));
-    QSslCertificate certificate;
     QString loadError;
-    if (!loadWirelessCertificate(serverCertificatePath, &certificate, &loadError)) return fail(output, loadError);
-    const QString expected = certificateFingerprint(certificate);
-    if (normalizedFingerprint(fingerprint) != expected) return fail(output, QStringLiteral("server fingerprint does not match SERVER_CERT (expected %1)").arg(expected));
-    QFile source(serverCertificatePath);
-    if (!source.open(QIODevice::ReadOnly)) return fail(output, source.errorString());
-    QString writeError;
-    if (!writeJsonFile(path, QJsonObject{{"protocol", 1}, {"host", host.trimmed()}, {"port", static_cast<int>(port)},
-                                         {"serverFingerprint", expected}, {"serverCaPem", QString::fromUtf8(source.readAll())}}, &writeError)) return fail(output, writeError);
+    if (!LocalDrive::WirelessProfile::exportProfile(path, host, port, serverCertificatePath, fingerprint, &loadError)) return fail(output, loadError);
     output.write(QStringLiteral("INFO wireless pairing profile exported path=%1").arg(path));
     return 0;
 }
 
 int runWirelessProfileAccept(Output &output, const QString &inputPath, const QString &clientCaPath) {
-    if (QFileInfo(inputPath).absoluteFilePath() == QFileInfo(clientCaPath).absoluteFilePath()) return fail(output, QStringLiteral("profile input and client certificate output must differ"));
-    QJsonObject profile;
     QString readError;
-    if (!readJsonFile(inputPath, &profile, &readError)) return fail(output, readError);
-    if (profile.value(QStringLiteral("protocol")).toInt(-1) != 1) return fail(output, QStringLiteral("unsupported pairing profile protocol"));
-    const QString deviceId = profile.value(QStringLiteral("deviceId")).toString();
-    if (!deviceId.startsWith(QStringLiteral("wireless:"))) return fail(output, QStringLiteral("pairing profile has no wireless device identity"));
-    const QByteArray pem = profile.value(QStringLiteral("clientCertificatePem")).toString().toUtf8();
-    const auto certificates = QSslCertificate::fromData(pem, QSsl::Pem);
-    if (certificates.isEmpty()) return fail(output, QStringLiteral("pairing profile has no readable client certificate"));
-    const QString actual = certificateFingerprint(certificates.first());
-    if (normalizedFingerprint(profile.value(QStringLiteral("clientFingerprint")).toString()) != actual) return fail(output, QStringLiteral("client fingerprint does not match the certificate (actual %1)").arg(actual));
-    QSaveFile outputFile(clientCaPath);
-    if (!outputFile.open(QIODevice::WriteOnly)) return fail(output, outputFile.errorString());
-    if (outputFile.write(certificates.first().toPem()) < 0 || !outputFile.commit()) return fail(output, outputFile.errorString());
+    QString deviceId, actual;
+    if (!LocalDrive::WirelessProfile::acceptProfile(inputPath, clientCaPath, &deviceId, &actual, &readError)) return fail(output, readError);
     output.write(QStringLiteral("INFO wireless client certificate accepted device=%1 fingerprint=%2 path=%3").arg(deviceId, actual, clientCaPath));
     return 0;
 }
