@@ -35,6 +35,7 @@ copy into a local directory while printing live progress:
 ./build/local-drive-cli --catalog-file /tmp/local-drive-wireless.sqlite \
   wireless-simulate 'file:///tmp/simulated-phone/example.jpg' /tmp/import/
 ./build/local-drive-cli wireless-beacon 'wireless:sim-phone' 'Simulated phone' '127.0.0.1:43171'
+./build/local-drive-cli wireless-discover 60
 ./build/local-drive-cli wireless-profile-export /tmp/server-profile.json 192.168.1.20 43171 server.crt SERVER_SHA256_FINGERPRINT
 ./build/local-drive-cli wireless-profile-accept /tmp/android-pairing.json client.crt
 ./build/local-drive-cli --catalog-file /tmp/local-drive-wireless.sqlite \
@@ -68,6 +69,9 @@ chosen laptop staging root, checks total on-disk occupancy before intake, and
 can later drain with `verified-copy`. All are Copy-only; phone cleanup remains
 later. `wireless-beacon` broadcasts a candidate-only discovery packet to the
 Linux app on UDP port 43170; it does not pair or authorize transfers.
+`wireless-discover [SECONDS]` is the keyboard-first diagnostic listener for
+that same port: it prints one `DEVICE ONLINE` line per stable identity and
+reports an identity Offline after 15 seconds without a beacon.
 `wireless-simulate` deliberately uses the same verified path with a
 `wireless:` catalog identity for deterministic interruption/retry testing; it
 retains a bounded `.local-drive-partials/*.partial`, verifies the acknowledged

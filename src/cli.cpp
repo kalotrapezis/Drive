@@ -2,6 +2,7 @@
 #include <QCommandLineParser>
 #include <QCryptographicHash>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QEventLoop>
@@ -13,6 +14,8 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QJsonValue>
+#include <QHash>
+#include <QNetworkDatagram>
 #include <QStorageInfo>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -277,6 +280,55 @@ int runWirelessBeacon(Output &output, const QString &stableIdentity, const QStri
     return 0;
 }
 
+int runWirelessDiscover(QCoreApplication &app, Output &output, int durationSeconds) {
+    if (durationSeconds <= 0) return fail(output, QStringLiteral("wireless-discover duration must be positive"));
+    QUdpSocket socket;
+    if (!socket.bind(QHostAddress::AnyIPv4, LocalDrive::WirelessProtocol::DiscoveryPort, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint))
+        return fail(output, QStringLiteral("could not listen for wireless discovery: %1").arg(socket.errorString()));
+    QHash<QString, qint64> lastSeen;
+    output.write(QStringLiteral("INFO wireless discovery listening port=%1 duration=%2s").arg(LocalDrive::WirelessProtocol::DiscoveryPort).arg(durationSeconds));
+    QTimer expiry;
+    expiry.setInterval(5000);
+    QObject::connect(&socket, &QUdpSocket::readyRead, [&] {
+        while (socket.hasPendingDatagrams()) {
+            const QNetworkDatagram datagram = socket.receiveDatagram();
+            QJsonParseError parseError;
+            const QJsonDocument document = QJsonDocument::fromJson(datagram.data(), &parseError);
+            if (parseError.error != QJsonParseError::NoError || !document.isObject()) continue;
+            const QJsonObject object = document.object();
+            const QString identity = object.value(QStringLiteral("stableIdentity")).toString().trimmed();
+            const QString label = object.value(QStringLiteral("label")).toString().trimmed();
+            if (object.value(QStringLiteral("magic")).toString() != QString::fromLatin1(LocalDrive::WirelessProtocol::Magic)
+                || object.value(QStringLiteral("protocol")).toInt() != LocalDrive::WirelessProtocol::Version
+                || !identity.startsWith(QStringLiteral("wireless:")) || label.isEmpty()) continue;
+            const qint64 now = QDateTime::currentMSecsSinceEpoch();
+            if (!lastSeen.contains(identity)) {
+                const QString endpoint = object.value(QStringLiteral("endpoint")).toString().trimmed().isEmpty()
+                    ? datagram.senderAddress().toString() : object.value(QStringLiteral("endpoint")).toString().trimmed();
+                output.write(QStringLiteral("DEVICE ONLINE identity=%1 name=%2 endpoint=%3").arg(identity, label, endpoint));
+            }
+            lastSeen.insert(identity, now);
+        }
+    });
+    QObject::connect(&expiry, &QTimer::timeout, [&] {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        for (auto it = lastSeen.begin(); it != lastSeen.end();) {
+            if (now - it.value() > 15000) {
+                output.write(QStringLiteral("DEVICE OFFLINE identity=%1").arg(it.key()));
+                it = lastSeen.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    });
+    expiry.start();
+    QTimer::singleShot(durationSeconds * 1000, &app, [&app, &output] {
+        output.write(QStringLiteral("INFO wireless discovery stopped"));
+        app.quit();
+    });
+    return app.exec();
+}
+
 bool loadWirelessCertificate(const QString &path, QSslCertificate *certificate, QString *error) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) { if (error) *error = file.errorString(); return false; }
@@ -502,7 +554,7 @@ int main(int argc, char **argv) {
     const QCommandLineOption scanBytesOption(QStringLiteral("scan-max-bytes"), QStringLiteral("Maximum bytes for mtp-scan (0 means unlimited)."), QStringLiteral("BYTES"), QStringLiteral("68719476736"));
     parser.addOption(scanItemsOption);
     parser.addOption(scanBytesOption);
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("mtp-inventory, mtp-scan, wireless-beacon, wireless-profile-export, wireless-profile-accept, wireless-receive, wireless-send, copy, verified-import, wireless-simulate, verified-import-dir, verified-stage-dir, verified-preview, or verified-copy"));
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("mtp-inventory, mtp-scan, wireless-beacon, wireless-discover, wireless-profile-export, wireless-profile-accept, wireless-receive, wireless-send, copy, verified-import, wireless-simulate, verified-import-dir, verified-stage-dir, verified-preview, or verified-copy"));
     parser.addPositionalArgument(QStringLiteral("arguments"), QStringLiteral("Command arguments."));
     if (!parser.parse(app.arguments())) {
         Output output;
@@ -540,6 +592,13 @@ int main(int argc, char **argv) {
     if (command == QStringLiteral("wireless-beacon")) {
         if (args.size() < 3 || args.size() > 4) return fail(output, QStringLiteral("usage: wireless-beacon WIRELESS_ID NAME [ENDPOINT]"));
         return runWirelessBeacon(output, args.at(1), args.at(2), args.size() > 3 ? args.at(3) : QString());
+    }
+    if (command == QStringLiteral("wireless-discover")) {
+        if (args.size() > 2) return fail(output, QStringLiteral("usage: wireless-discover [SECONDS]"));
+        bool durationOk = true;
+        const int duration = args.size() == 2 ? args.at(1).toInt(&durationOk) : 30;
+        if (!durationOk) return fail(output, QStringLiteral("wireless discovery duration must be an integer"));
+        return runWirelessDiscover(app, output, duration);
     }
     if (command == QStringLiteral("wireless-profile-export")) {
         if (args.size() != 6) return fail(output, QStringLiteral("usage: wireless-profile-export OUTPUT_JSON HOST PORT SERVER_CERT SERVER_FINGERPRINT"));

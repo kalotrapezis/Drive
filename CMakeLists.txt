@@ -77,3 +77,4 @@ add_test(NAME wirelessreceivercontroller_smoke COMMAND bash ${CMAKE_CURRENT_SOUR
 add_test(NAME local_drive_cli_m0_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_m0_smoke.sh $<TARGET_FILE:local-drive-cli>)
 add_test(NAME local_drive_cli_m1_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_m1_smoke.sh $<TARGET_FILE:local-drive-cli>)
 add_test(NAME wireless_mtls_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/wireless_mtls_smoke.sh $<TARGET_FILE:local-drive-cli>)
+add_test(NAME wireless_discovery_smoke COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/wireless_discovery_smoke.sh $<TARGET_FILE:local-drive-cli>)

@@ -191,8 +191,9 @@ receiver is reachable and receives a verified receipt before any cleanup.
 The Alpha Linux side now listens on UDP port `43170` for the candidate-only
 `local-drive-discovery-v1` beacon (`magic`, protocol `1`, `stableIdentity`, and
 friendly `label`). It updates one in-process Online/Offline entry per canonical
-device and expires a silent beacon after 15 seconds; the CLI command
-`wireless-beacon` is the deterministic sender used by simulation. A beacon is
+device and expires a silent beacon after 15 seconds; the CLI commands
+`wireless-beacon` and `wireless-discover` provide the deterministic sender and
+keyboard-first listener used by simulation and physical preflight. A beacon is
 never pairing or transfer authorization, and network-supplied pairing IDs are
 ignored. Alpha exposes a local **Pair with USB phone** action when exactly one
 MTP phone is present; it moves the wireless alias onto that canonical record,
