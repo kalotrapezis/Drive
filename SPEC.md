@@ -394,7 +394,10 @@ reconnects after a short link loss and resumes from the Linux committed partial.
 The Android emulator has now verified fixed-root setup, automatic retry after an
 unavailable receiver, a receipt-verified `Drive/auto-sync.txt` upload with a
 matching SHA-256, and no second upload after service restart. No real-phone
-wireless transfer or physical unplug/reconnect run has been completed yet.
+wireless transfer or physical unplug/reconnect run has been completed yet. A
+separate emulator run with `mWakefulness=Asleep` uploaded a 128 MiB file with a
+matching independent SHA-256 receipt, so screen-off foreground behavior is
+verified only for the emulator.
 
 The verified-import slice is intentionally one file at a time at the engine
 and now emits live received-byte progress while streaming each object. A

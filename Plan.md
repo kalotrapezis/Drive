@@ -217,6 +217,11 @@ so the two fixed roots survive setup correctly. Emulator evidence now covers the
 foreground auto-sync retry after an unavailable receiver, a receipt-verified
 `Drive/auto-sync.txt` upload with matching SHA-256, and a restart with no second
 upload because the receipt-backed sent marker is retained.
+With the emulator display asleep (`mWakefulness=Asleep`), the same foreground
+service also uploaded a 128 MiB `Drive/` file automatically; the Linux receipt
+and independent source/destination SHA-256 matched, and the Android sent marker
+was recorded. This validates screen-off behavior in the emulator, not yet the
+user's physical phone's lock/power-management policy.
 
 The next Alpha gate is now executable without Android: `wireless-receive` and
 `wireless-send` establish mutual TLS 1.3 with a pinned client certificate,
