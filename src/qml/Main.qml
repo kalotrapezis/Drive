@@ -177,6 +177,12 @@ Kirigami.ApplicationWindow {
         onboardingDialog.close()
         Qt.callLater(showOnboardingIfNeeded)
     }
+    function openWirelessSettingsFromOnboarding() {
+        finishOnboarding(false)
+        currentMode = "New"
+        settingsContentIndex = 0
+        showingSettings = true
+    }
     Shortcut { sequence: "Ctrl+R"; onActivated: refreshAll() }
     Shortcut { sequence: "Ctrl+S"; onActivated: saveCurrentRoute() }
     Shortcut { sequence: "Ctrl+Enter"; onActivated: startSelectedRoute() }
@@ -494,7 +500,9 @@ Kirigami.ApplicationWindow {
             Controls.Label { visible: onboardingDevice.category === "storage"; text: qsTr("Choose its role and the Drive/Photos roots in the connection map. Local Drive will never format this storage automatically."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.kind === "Phone"; text: qsTr("Phone setup: unlock Android and select USB mode ‘File transfer / MTP’. Local Drive uses the fixed phone roots Drive/ for files and DCIM/ for photos and videos."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.kind === "Phone"; text: qsTr("Available actions after setup: Drive → Drive and DCIM → Photos. Detection alone never starts a transfer. Wireless pairing uses the Android profile exchange and the Wireless receiver panel in Settings."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Label { visible: onboardingDevice.wirelessCandidate === true; text: qsTr("Wireless candidate detected. Discovery does not grant file access. If the same phone is also connected by USB, confirm that here to keep one device entry with both transports."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Label { visible: onboardingDevice.wirelessCandidate === true; text: qsTr("Wireless setup — 1) On Android, import the Linux receiver profile and share the Android public certificate back. 2) In Settings, choose the destination and certificate files, then pin the Android SHA-256 fingerprint. 3) Start the receiver. 4) Keep both devices on the same LAN and let the phone connect. Discovery only finds the phone; it never grants file access."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Button { visible: onboardingDevice.wirelessCandidate === true; text: qsTr("Open Wireless receiver settings"); Layout.alignment: Qt.AlignLeft; onClicked: openWirelessSettingsFromOnboarding(); Accessible.name: qsTr("Open Wireless receiver settings") }
+            Controls.Label { visible: onboardingDevice.wirelessCandidate === true; text: qsTr("If this is the same phone as a USB device, select it below and pair explicitly so the list keeps one device with both transports. The Alpha setup uses JSON profile exchange; automatic QR certificate onboarding is not enabled yet."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.ComboBox { id: wirelessMtpTarget; visible: onboardingDevice.wirelessCandidate === true && setupModel.mtpDevices.length > 1; model: setupModel.mtpDevices; textRole: "label"; valueRole: "id"; Layout.fillWidth: true; Accessible.name: qsTr("Choose the USB phone matching this wireless phone") }
             Controls.Button { visible: onboardingDevice.wirelessCandidate === true && setupModel.mtpDevices.length > 0; text: qsTr("Pair with the selected USB phone"); Layout.alignment: Qt.AlignLeft; onClicked: { const targetId = setupModel.mtpDevices.length === 1 ? setupModel.mtpDevices[0].id : wirelessMtpTarget.currentValue; if (targetId && setupModel.pairWirelessDevice(onboardingDevice.id, targetId)) finishOnboarding(false) } Accessible.name: qsTr("Pair wireless candidate with the selected USB phone") }
             Controls.Label { visible: onboardingDevice.category !== "storage" && onboardingDevice.kind !== "Phone"; text: qsTr("Only detected capabilities are shown. Choose the matching pairing or storage step; Local Drive will not guess a server protocol."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
