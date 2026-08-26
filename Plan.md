@@ -224,6 +224,15 @@ and independent source/destination SHA-256 matched, and the Android sent marker
 was recorded. This validates screen-off behavior in the emulator, not yet the
 user's physical phone's lock/power-management policy.
 
+The current Alpha was also exercised live with the Android `notes_phone` emulator:
+the Linux host received three real `local-drive-discovery-v1` UDP beacons with the
+same `wireless:` identity, then a newly pushed `Drive/` file first recorded the
+expected receiver-unavailable retry and was delivered on the next scan after the
+receiver started. The 54-byte destination was cataloged as `verified`, its
+source/destination SHA-256 was identical, and Android returned to `Αναμονή για νέα
+αρχεία` with a new receipt-backed sent marker. This is an emulator LAN run, not a
+physical-phone or USB/MTP test.
+
 The next Alpha gate is now executable without Android: `wireless-receive` and
 `wireless-send` establish mutual TLS 1.3 with a pinned client certificate,
 exchange acknowledged chunks, resume an app-owned partial, and pass the

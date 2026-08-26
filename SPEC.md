@@ -402,6 +402,14 @@ separate emulator run with `mWakefulness=Asleep` uploaded a 128 MiB file with a
 matching independent SHA-256 receipt, so screen-off foreground behavior is
 verified only for the emulator.
 
+A live `notes_phone` emulator run then broadcast three real discovery beacons to
+the Linux UDP listener with one stable `wireless:` identity. A new `Drive/` file
+survived an initial receiver-unavailable retry, uploaded on the next scheduled
+scan after the receiver started, and produced one `verified` catalog location with
+equal source/destination SHA-256 values and a receipt-backed Android sent marker.
+This remains emulator evidence; the physical phone and USB/MTP unplug/reconnect
+gate are still unverified.
+
 The verified-import slice is intentionally one file at a time at the engine
 and now emits live received-byte progress while streaming each object. A
 127,076,235-byte real MP4 completed and repeated with matching hashes and
