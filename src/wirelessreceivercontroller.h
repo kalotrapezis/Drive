@@ -42,7 +42,7 @@ public:
     Q_INVOKABLE bool startSaved();
     Q_INVOKABLE void stop();
     Q_INVOKABLE bool exportProfile(const QString &path, const QString &host, quint16 port,
-                                   const QString &serverCertificate, const QString &fingerprint);
+                                   const QString &serverCertificate);
     Q_INVOKABLE QString acceptPairingProfile(const QString &inputPath, const QString &clientCertificate);
 
 signals:

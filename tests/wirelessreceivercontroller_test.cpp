@@ -1,7 +1,11 @@
 #include <QCoreApplication>
+#include <QFile>
 #include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSqlDatabase>
 #include <QSqlQuery>
+#include <QSaveFile>
 #include <QSettings>
 #include <QTimer>
 #include <QDebug>
@@ -34,6 +38,19 @@ int main(int argc, char **argv) {
     const QString candidateId = model.wirelessDevices().first().toMap().value("id").toString();
     if (candidateId == QStringLiteral("mtp-phone") || !model.pairWirelessDevice(candidateId, QStringLiteral("mtp-phone"))) return 8;
     WirelessReceiverController controller(argv[1], &model);
+    const QString profilePath = databasePath + QStringLiteral(".profile.json");
+    if (!controller.exportProfile(profilePath, QStringLiteral("127.0.0.1"), 43273, argv[3])) return 9;
+    QFile clientCertificate(argv[5]);
+    if (!clientCertificate.open(QIODevice::ReadOnly)) return 10;
+    const QString pairingPath = databasePath + QStringLiteral(".pairing.json");
+    QSaveFile pairing(pairingPath);
+    if (!pairing.open(QIODevice::WriteOnly | QIODevice::Text)) return 11;
+    const QJsonObject pairingObject{{"protocol", 1}, {"deviceId", "wireless:controller-phone"}, {"deviceName", "Controller phone"},
+                                    {"clientCertificatePem", QString::fromUtf8(clientCertificate.readAll())}, {"clientFingerprint", QString::fromLocal8Bit(argv[6]).toLower()}};
+    if (pairing.write(QJsonDocument(pairingObject).toJson(QJsonDocument::Indented)) < 0 || !pairing.commit()) return 12;
+    const QString acceptedCertificate = databasePath + QStringLiteral(".accepted-client.crt");
+    const QString acceptedFingerprint = controller.acceptPairingProfile(pairingPath, acceptedCertificate);
+    if (acceptedFingerprint.compare(QString::fromLocal8Bit(argv[6]), Qt::CaseInsensitive) != 0) return 13;
     if (!controller.start(argv[2], argv[3], argv[4], argv[5], argv[6], 43273)) return 3;
     qInfo().noquote() << QStringLiteral("LISTENING port=%1").arg(controller.port());
     QTimer timeout;

@@ -2,6 +2,7 @@
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonObject>
 #include <QStorageInfo>
@@ -106,22 +107,28 @@ void WirelessReceiverController::stop() {
 }
 
 bool WirelessReceiverController::exportProfile(const QString &path, const QString &host, quint16 port,
-                                                const QString &serverCertificate, const QString &fingerprint) {
+                                                const QString &serverCertificate) {
+    QFile certificate(serverCertificate);
     QString error;
-    if (!LocalDrive::WirelessProfile::exportProfile(path, host, port, serverCertificate, fingerprint, &error)) {
-        m_status = QStringLiteral("Profile export failed");
-        log(QStringLiteral("ERROR profile export: %1").arg(error));
-        emit changed();
-        return false;
+    if (!certificate.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        error = certificate.errorString();
+    } else {
+        const QString fingerprint = LocalDrive::WirelessProfile::certificateFingerprint(certificate.readAll(), &error);
+        if (!fingerprint.isEmpty() && LocalDrive::WirelessProfile::exportProfile(path, host, port, serverCertificate, fingerprint, &error)) {
+            QSettings settings(QStringLiteral("LocalDrive"), QStringLiteral("LocalDrive"));
+            settings.setValue(QStringLiteral("wireless/host"), host.trimmed());
+            settings.sync();
+            m_savedHost = host.trimmed();
+            m_status = QStringLiteral("Pairing profile exported");
+            log(QStringLiteral("INFO wireless pairing profile exported path=%1").arg(path));
+            emit changed();
+            return true;
+        }
     }
-    QSettings settings(QStringLiteral("LocalDrive"), QStringLiteral("LocalDrive"));
-    settings.setValue(QStringLiteral("wireless/host"), host.trimmed());
-    settings.sync();
-    m_savedHost = host.trimmed();
-    m_status = QStringLiteral("Pairing profile exported");
-    log(QStringLiteral("INFO wireless pairing profile exported path=%1").arg(path));
+    m_status = QStringLiteral("Profile export failed");
+    log(QStringLiteral("ERROR profile export: %1").arg(error));
     emit changed();
-    return true;
+    return false;
 }
 
 QString WirelessReceiverController::acceptPairingProfile(const QString &inputPath, const QString &clientCertificate) {
