@@ -211,6 +211,12 @@ profile/certificate onboarding remains next; Settings exposes the remembered
 Linux receiver configuration and live receiver log. A successful receiver Start
 enables restart on the next application launch; explicit Stop disables it, and
 the tray Exit still terminates the process rather than leaving a service behind.
+The Android SAF setup now persists the provider's returned read/write grant
+flags and queries the root's document URI (rather than the unsupported tree URI),
+so the two fixed roots survive setup correctly. Emulator evidence now covers the
+foreground auto-sync retry after an unavailable receiver, a receipt-verified
+`Drive/auto-sync.txt` upload with matching SHA-256, and a restart with no second
+upload because the receipt-backed sent marker is retained.
 
 The next Alpha gate is now executable without Android: `wireless-receive` and
 `wireless-send` establish mutual TLS 1.3 with a pinned client certificate,

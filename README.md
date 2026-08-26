@@ -105,7 +105,9 @@ Settings, remembers the setup locally, and restarts the receiver only when the
 user has left it enabled. After one persistable system permission for each fixed root,
 the Android Alpha service scans `Drive/` and `DCIM/`, sends new/changed files to
 `Drive/` or `Photos/`, records them only after a receipt, and restores the
-foreground beacon and sync after reboot when the saved setup is complete. A
+foreground beacon and sync after reboot when the saved setup is complete. The
+emulator smoke test also verifies fixed-root setup, receipt-backed automatic
+retry, matching SHA-256, and no duplicate upload after service restart. A
 real-phone run is still pending.
 
 For a local build, use the installed Android SDK and Java 17:

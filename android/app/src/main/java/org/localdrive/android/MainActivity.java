@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
+import android.util.Log;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -19,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 
 /** Small Alpha surface: discovery stays visible while pairing/transfer are added. */
 public final class MainActivity extends Activity {
+    private static final String TAG = "LocalDrive";
     private static final int IMPORT_PROFILE = 40;
     private static final int PICK_DRIVE_FILE = 41;
     private static final int PICK_PHOTO_FILE = 42;
@@ -113,9 +115,11 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        Log.d(TAG, "activity result request=" + requestCode + " result=" + resultCode + " flags=" + (data == null ? 0 : data.getFlags()) + " uri=" + (data == null ? null : data.getData()));
         if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
         if (requestCode == PICK_DRIVE_ROOT || requestCode == PICK_PHOTOS_ROOT) {
-            saveRoot(data.getData(), requestCode == PICK_DRIVE_ROOT ? "Drive" : "DCIM");
+            final int grantFlags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            saveRoot(data.getData(), requestCode == PICK_DRIVE_ROOT ? "Drive" : "DCIM", grantFlags);
             return;
         }
         if (requestCode == PICK_DRIVE_FILE || requestCode == PICK_PHOTO_FILE) {
@@ -132,32 +136,37 @@ public final class MainActivity extends Activity {
             refreshProfileStatus();
             maybeStartAutoSync();
         } catch (Exception error) {
+            Log.e(TAG, "profile import failed", error);
             profileStatus.setText("Pairing profile: αποτυχία εισαγωγής (" + error.getMessage() + ")");
         }
     }
 
     private void pickRoot(int requestCode) {
         final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         startActivityForResult(intent, requestCode);
     }
 
-    private void saveRoot(Uri uri, String expectedName) {
+    private void saveRoot(Uri uri, String expectedName, int grantFlags) {
         try {
             final String actualName = documentName(uri);
             if (!expectedName.equalsIgnoreCase(actualName)) throw new IllegalArgumentException("Επίλεξε τον φάκελο " + expectedName + ", όχι " + actualName);
-            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if ((grantFlags & Intent.FLAG_GRANT_READ_URI_PERMISSION) == 0) throw new SecurityException("Ο provider δεν έδωσε δικαίωμα ανάγνωσης");
+            getContentResolver().takePersistableUriPermission(uri, grantFlags);
             if ("Drive".equals(expectedName)) RootStore.saveDrive(this, uri.toString());
             else RootStore.savePhotos(this, uri.toString());
             refreshRootStatus();
             maybeStartAutoSync();
         } catch (Exception error) {
+            Log.e(TAG, "fixed root save failed for " + expectedName, error);
             rootStatus.setText("Fixed root: αποτυχία (" + error.getMessage() + ")");
         }
     }
 
     private String documentName(Uri uri) {
-        try (Cursor cursor = getContentResolver().query(uri, new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME}, null, null, null)) {
+        final String documentId = DocumentsContract.getTreeDocumentId(uri);
+        final Uri documentUri = DocumentsContract.buildDocumentUriUsingTree(uri, documentId);
+        try (Cursor cursor = getContentResolver().query(documentUri, new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME}, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) return cursor.getString(0) == null ? "" : cursor.getString(0);
         }
         return "";
