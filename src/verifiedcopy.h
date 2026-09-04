@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QUrl>
 #include <QStringList>
+#include <QHash>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QVector>
@@ -37,6 +38,7 @@ public:
         qint64 minimumFreeBytes = 0;
         qint64 stagingMaxBytes = 0;
         bool organizePhotos = false;
+        QString contentType;
         QString sourceStorageId = QStringLiteral("local");
         QString sourceStorageIdentity = QStringLiteral("local");
         QString sourceStorageKind = QStringLiteral("local");
@@ -45,9 +47,21 @@ public:
         QString sourceDeviceStableId = QStringLiteral("local");
         QString sourceDeviceName = QStringLiteral("Computer");
         QString sourceDeviceKind = QStringLiteral("Desktop");
+        bool detectDestinationDuplicates = false;
+        bool routeEnabled = true;
+        QStringList excludedSourcePaths;
+        QHash<QString, QString> destinationOverrides;
+        QStringList acceptedUnsupportedEvidence;
+        QString destinationStorageKind = QStringLiteral("removable");
+        QString destinationStorageLabel = QStringLiteral("Destination");
+        QString destinationDeviceId = QStringLiteral("local");
+        QString destinationDeviceStableId = QStringLiteral("local");
+        QString destinationDeviceName = QStringLiteral("Computer");
+        QString destinationDeviceKind = QStringLiteral("Desktop");
     };
     struct RemoteRequest {
         QUrl sourceUrl;
+        QUrl sourceRootUrl;
         QString sourceRelative;
         QString destinationRoot;
         QString destinationRelative;
@@ -64,9 +78,15 @@ public:
         QString sourceDeviceStableId;
         QString sourceDeviceName = QStringLiteral("MTP phone");
         qint64 minimumFreeBytes = 0;
+        qint64 stagingMaxBytes = 0;
         qint64 progressOffset = 0;
         qint64 progressTotal = 0;
         bool resumable = false;
+        QString destinationStorageKind = QStringLiteral("removable");
+        QString destinationStorageLabel = QStringLiteral("Destination");
+        QString destinationDeviceId = QStringLiteral("local");
+        QString destinationDeviceStableId = QStringLiteral("local");
+        QString destinationDeviceName = QStringLiteral("Computer");
     };
     struct Preview {
         struct ManifestEntry { QString relative; QString destination; qint64 size = 0; qint64 mtime = 0; };
@@ -80,6 +100,7 @@ public:
         qint64 toCopy = 0;
         qint64 identical = 0;
         qint64 duplicates = 0;
+        qint64 destinationDuplicates = 0;
         qint64 organized = 0;
         qint64 conflicts = 0;
         qint64 unsupported = 0;
@@ -89,18 +110,41 @@ public:
         qint64 stagingMaxBytes = 0;
         QVector<QString> paths;
         QStringList conflictPaths;
+        QStringList conflictEvidence;
+        QStringList duplicatePaths;
+        QStringList unsupportedPaths;
+        QStringList unsupportedEvidence;
         QVector<ManifestEntry> manifest;
         QVariantMap toMap() const;
+    };
+    struct ExportRequest {
+        QString sourcePath;
+        QUrl destinationUrl;
+        QUrl destinationRootUrl;
+        QString destinationRelative;
+        QString databasePath;
+        QString routeId;
+        QString destinationStorageId;
+        QString destinationStorageIdentity;
+        QString destinationStorageLabel;
+        QString destinationDeviceId;
+        QString destinationDeviceStableId;
+        QString destinationDeviceName;
     };
 
     explicit VerifiedCopy(const QString &databasePath = {}, QObject *parent = nullptr);
     ~VerifiedCopy() override;
 
     static QString liveStorageIdentity(const QString &root, QString *error = nullptr);
-    static Preview inspect(const Request &request);
+    static bool stagingUsage(const QString &root, qint64 *bytes, QString *error = nullptr);
+    static bool ensureCatalog(const QString &databasePath, QString *error = nullptr);
+    static Preview inspect(const Request &request, const std::atomic_bool *cancelled = nullptr);
+    static QVariantList recentHistoryForRoute(const QString &databasePath, const QString &routeId);
 
     bool executeBlocking(const Request &request, QString *error = nullptr);
+    bool executePreviewBlocking(const Request &request, const Preview &preview, QString *error = nullptr, QString *completionMessage = nullptr);
     bool executeRemoteBlocking(const RemoteRequest &request, QString *error = nullptr);
+    bool executeExportBlocking(const ExportRequest &request, QString *error = nullptr);
     bool running() const { return m_running.load(); }
     bool previewSuccessful() const { return m_preview.ok; }
     bool cleanupReady() const { return m_cleanupReady.load(); }
@@ -112,6 +156,7 @@ public:
     Q_INVOKABLE bool previewRoute(const QString &routeId);
     Q_INVOKABLE QVariantMap cleanupPreview() const;
     Q_INVOKABLE QVariantList recentHistory() const;
+    QVariantMap manifestData() const;
     Q_INVOKABLE bool exportManifest(const QUrl &url, const QString &format = QStringLiteral("json")) const;
     Q_INVOKABLE bool startCopy();
     Q_INVOKABLE bool startRemoteImportDirectory(const QVariantMap &options);

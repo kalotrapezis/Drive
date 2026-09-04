@@ -71,6 +71,11 @@ The implementation is unacceptable if any invariant can be violated.
 7. A wrong disk with the same label or mount path is rejected.
    Linux routes prefer the filesystem UUID and also validate the recorded
    provider/filesystem identity; a format or clone event requires review.
+   A physically connected but unmounted volume is visible as mount-required,
+   remains unavailable to jobs, and is matched by UUID when mounted. If its
+   mount root changed, saved destination paths are rebased to the new root while
+   preserving their relative subpaths. The dashboard may request the native
+   Solid mount operation, but it never auto-mounts or unmounts a disk.
 8. A crash, cancellation, disconnect, full disk, or hash mismatch leaves the
    source intact.
 9. A retry is idempotent: an already verified result is recognized.
@@ -85,7 +90,55 @@ The implementation is unacceptable if any invariant can be violated.
 
 - Initial target: current Kubuntu/KDE Plasma installation.
 - Language: C++20.
-- UI: Qt 6, QML, Kirigami, KDE/Breeze theme roles.
+- Current Alpha UI: Qt 6, QML, Kirigami, KDE/Breeze theme roles.
+- In-progress UI replacement: browser-first frontend on a loopback-only local API,
+  then the same approved frontend packaged in Electron. This does not replace
+  the C++ transfer engine or expose control to the LAN. Use React + TypeScript
+  with React Flow for the shared device-and-relationship map; install these
+  dependencies only as each migration slice needs them. The current browser UI
+  uses read-only `/api/v1/health`, `/api/v1/state`, `/api/v1/files`,
+  `/api/v1/photos`, `/api/v1/photo-thumbnail`, and `/api/v1/problems` endpoints
+  bound to `127.0.0.1:43172`; protected `/api/v1/save-route`, asynchronous
+  `/api/v1/route-preview` and `/api/v1/route-execute`, and
+  `/api/v1/route-manifest` and `/api/v1/route-control` endpoints require a per-launch authorization token
+  and strict request validation. `/api/v1/route-history` is read-only.
+  Save-route creates only a missing Drive or Photos route and refuses existing-root
+  replacement until a migration review is available. The desktop primary
+  sections are top tabs: Sync & Connections, Drive Files, Photos & Videos, and
+  New +. Sync & Connections is the default read-only health surface; the same
+  sections move to bottom navigation on Android.
+  Existing-folder preview and execution are protected operations: the UI obtains a
+  no-store per-launch session token and sends it in a custom header to
+  `/api/v1/import-preview`. Hashing runs off the UI thread and the result is
+  polled by an unguessable preview ID. Execution accepts only that completed,
+  clean preview ID and runs asynchronously through the existing verified-copy
+  engine. It is copy-only, retains the source, rejects changed manifests, and
+  cannot rename or delete content. Its duplicate, conflict, permission,
+  and unsupported findings are persisted idempotently in `review_items` and
+  remain visible across restarts; resolution actions are still gated on the
+  verified receipt/history implementation.
+  The Linux process also watches every configured Drive/Photos source root.
+  Directory notifications are debounced and backed by a five-minute safety
+  reconciliation. New or changed files enter `managed_inventory` only after a
+  stable size/mtime check and SHA-256; `inventory_events` records add, change,
+  missing, and reappearance evidence append-only. Missing/inaccessible roots
+  are Not checked and cannot manufacture deletion or missing-file history.
+  Problems decisions use the same per-launch token boundary. The allowed
+  actions are Save for review, Use existing copies for an exact imported
+  duplicate group, Keep both safely for an imported same-path conflict, Keep
+  unsupported in source for an exact symlink/special-file evidence group, and
+  dismissal of a clean external observation;
+  the latter is rejected when any changed or missing file is present. The app
+  writes an evidence-hashed append-only `review_resolutions` row before changing
+  the active review projection. `accept_existing` only authorizes omission of
+  source paths whose complete duplicate-pair evidence still matches on a fresh
+  verified preview; it never removes either copy. No Problems action in this
+  slice removes or overwrites file bytes. `keep_both` revalidates the exact
+  source manifest, conflict paths, and both versions' SHA-256 evidence, then publishes the incoming bytes under
+  the first free ` (imported)` filename through Copy → Verify → Receipt.
+  `skip_unsupported` authorizes only omission of the exact reported unsupported
+  paths/types. They stay untouched in the source and are rechecked again inside
+  execution before any regular file is copied.
 - Build: CMake with Extra CMake Modules.
 - Catalog: SQLite through Qt SQL.
 - Mounted storage/device discovery: Solid plus mount information.
@@ -144,6 +197,10 @@ exact paths. The parent is the only computer-side location choice.
 ### Networked first-run guide
 
 The full networked product uses the global visual sync map as its onboarding
+overview, but connection cards are authoritative for editing. A card names two
+devices and exposes direction, Copy/Move, cache, and retention directly. The
+read-only desktop flowchart is derived from saved cards, so it cannot diverge
+from executable routes. Technical roots stay under an Advanced disclosure.
 flow and later reuses the identical surface in Settings. The guide:
 
 1. names and classifies the local app instance;
@@ -165,6 +222,32 @@ may retain an absolute destination under a remembered removable storage root
 while that storage is disconnected; the app does not create folders or start a
 transfer until the same stable storage identity is present again.
 
+### Existing-folder import and managed-root observation
+
+The Linux app offers **Import existing folder** for an existing Syncthing or
+ordinary folder. The user maps it to Drive or Photos and receives a bounded
+preview of destination paths, extracted metadata/sidecars, new content, exact
+duplicates, conflicts, unreadable items, and required space. Import uses the
+same copy, independent destination SHA-256, receipt, and history transaction as
+other verified transfers. It preserves the source by default and records
+`imported externally`; it never fabricates history from before the import.
+
+Drive/Photos remain ordinary filesystem folders. While the application is open
+or in the system tray, filesystem notifications enqueue changed paths for a
+debounced stability check and hash/index pass. A notification is only a hint:
+startup, catalog recovery, and storage reconnect perform a bounded
+reconciliation scan to catch changes made while the app was not running or
+events lost by the operating system. Definitive Exit stops observation and
+leaves no separate background service.
+
+An externally added file is indexed in place only after size and modification
+time remain stable across the scan and SHA-256 completes without the file
+changing. The app does not silently relocate or delete it. External additions,
+moves, removals, metadata changes, incomplete writes, and same-hash/different-
+path findings create batched **External changes** or **Duplicates** entries in
+Problems & Fixes. A clean auto-indexed observation remains visible there until
+dismissed or included in resolved history.
+
 ### Android
 
 The phone has two fixed roots: **Drive/** for ordinary files and **DCIM/** for
@@ -181,6 +264,71 @@ DCIM/                           fixed phone photos/videos root
 
 The app does not request unrestricted access to unrelated phone storage merely
 to add another root.
+
+### Android metadata preflight and pending work
+
+Regardless of whether the selected mode is **Files**, **Photos**, or **Backup**,
+filesystem/media events update the phone's local queue for the fixed `Drive/`
+and `DCIM/` roots. Small metadata deltas leave immediately through the permitted
+local connection; they do not wait for a content transfer. The delta contains
+stable item ID, relative path, size, modification/capture time, relevant media
+metadata, content identity when available, and the originating
+device/sequence. No file bytes move during this preflight.
+
+The computer merges that delta into the shared catalog and records the work as
+`Pending backup`. It can therefore show the exact number of files, total bytes,
+roots, and last metadata update that will be transferred at the next eligible
+connection. The later content transfer uses those planned items, rechecks the
+source metadata, and publishes a verified receipt; changed or missing items
+return to review instead of being silently treated as complete. The same
+pending summary is shared with paired devices through the metadata/history
+exchange. The selected mode changes which content operation is eligible, not
+whether metadata is sent.
+
+The exchange is bidirectional: the phone can publish new local observations
+and pending work, while the computer, server, or another paired device can
+publish locations, receipts, conflicts, and pending work visible to the phone.
+Android has a touch-first Dashboard over the same converged catalog/history;
+it is not a reduced sender screen with a separate state model.
+
+The bounded bidirectional slice reuses the metadata acknowledgement: Linux
+returns at most 64 missing immutable resolution events and 32 active reviews,
+and Android performs a
+metadata-only heartbeat even when no files are queued. Android validates and
+stores each event idempotently in app-private preferences and advances a
+generation/sequence cursor scoped to the paired receiver certificate
+fingerprint. Every active review includes its evidence hash and only the actions
+currently allowed by Linux. Android may return at most 16 queued decisions per
+heartbeat; Linux applies one only if its evidence is unchanged, records the
+append-only resolution using the phone as origin, and acknowledges its ID so
+Android can move it into decision history. The only remote filesystem action is
+the non-destructive `recheck_location`; no mutation is implemented. The acknowledgement also carries
+a bounded read-only catalog snapshot with pending totals, active-transfer
+progress, device presence/last report, and storage presence plus total/free and
+known verified bytes. Capacity is persisted in schema v14 so an offline disk
+retains its last reported information; Android validates all bounds and values
+before replacing its app-private dashboard snapshot. Up to 64 recent location
+rows carry only relative paths and receipt evidence; absolute local paths are
+not exported. A location is presented as verified only when its content and
+destination SHA-256 values match and `verifiedAt` is present. If the complete
+acknowledgement approaches 64 KiB, older location rows are removed first and
+the snapshot is marked truncated instead of failing the heartbeat. Location
+pages use a descending SQLite row cursor rather than an offset, so rows inserted
+between requests cannot shift or duplicate the next page. The response cursor
+is recalculated after packet-size trimming. Android requests pages explicitly,
+validates that each response matches the requested peer cursor, and exposes
+Latest/Older plus All/Verified/Attention controls.
+
+Schema v16 adds append-only device correction requests and results linked to
+their Problems & Fixes review. The only
+implemented action is `recheck_location`; it never writes, renames, moves, or
+deletes a file. Requests are limited to a paired target device, fixed `Drive`
+or `DCIM` root, safe relative path, expected byte count, and SHA-256. Android
+rechecks the SAF entry before and after hashing and returns one idempotent
+result. A claimed verified result is rejected by Linux unless its observed size
+and hash exactly match the request. Pending and completed results are projected
+into desktop and Android history. Destructive corrections require a later,
+separately reviewed executor and physical-phone evidence.
 
 ### Backup target formats
 
@@ -251,7 +399,12 @@ command.
    - minimum laptop free-space floor;
    - organization of otherwise unfiled photos into
      `Local Drive/Photos/<year>/`.
-6. Save the route.
+6. When computer and destination parents are chosen for both content types,
+   create distinct `Drive/` and `Photos/` children below both parents and save
+   both routes in one SQLite
+   transaction and one configuration revision. If persistence fails, newly
+   created empty children are removed; existing folders are never removed.
+   Saving a single content route remains available for later additions.
 
 The current local implementation persists the discovered filesystem type with
 the storage identity, friendly label, mount, and selected root; older v1 catalogs
@@ -329,6 +482,14 @@ Directory creation is allowed only below the selected destination root.
 
 ### 7.1 Device setup
 
+The connection guide has three explicit states. A raw Android USB connection is
+shown only as **Phone — Charging only** and is never persisted under generic
+descriptors such as `Google` or `Nexus One`. After the user unlocks Android and
+chooses **File transfers / Android Auto**, a live KIO/MTP root upgrades the card
+to the reported model plus **Files available**. On disconnect, the remembered
+model is **Last reported**; pending work, receipts, and history remain, while no
+transfer or cleanup can start. USB debugging is unrelated and never required.
+
 The current first device slice lists top-level phones through KDE/KIO's `mtp:/`
 worker and reports the friendly name in the setup view. The companion
 `local-drive-cli` provides bounded read-only `mtp-inventory URL` and recursive
@@ -344,13 +505,31 @@ file transfer fail, no later item is scheduled and all phone sources remain.
 `verified-stage-dir` is the disk-absent variant: it requires an explicit local
 staging root, checks existing regular-file occupancy plus incoming bytes against
 `--staging-max-bytes`, records the same receipts in SQLite, and leaves the
-staged files for a later verified local drain. All commands are Copy-only; there
-is no phone deletion or move command.
+staged files for a later verified local drain. `verified-export` and the Files
+view's **Send to phone** action copy one selected local file into the fixed phone
+`Drive/`, verify SHA-256 before recording its receipt, and refuse replacement
+when a different file already has that name. All commands retain their source;
+there is no phone deletion or move command.
+Missing destination subfolders are created one level at a time through KIO/MTP;
+the catalog stores the phone-storage root and the complete Drive-relative file
+path rather than flattening the file into `Drive/`.
+
+The Sync panel's phone card exposes two explicit inbound actions: `Drive/` to
+the configured Files destination and `DCIM/` to the configured Photos
+destination. They are available only for a stable, unlocked MTP phone and a
+mounted destination route, retain every phone source, preserve relative paths,
+apply the route's minimum-free-space margin, and publish progress/failure through
+the same catalog operation state. If that storage is absent, a configured
+laptop staging root is used only after the shared directory importer counts its
+existing regular files plus incoming absent paths and proves they fit beneath
+the route's total staging cap; otherwise no phone bytes are received.
 The setup model also persists first-seen acknowledgement and hidden state for
 detected phone and storage identities. Its current onboarding modal is
 informational and non-destructive: it explains USB/MTP and the fixed phone
 roots, identifies storage by stable identity, and never starts a transfer or
-formats a disk. The repository includes the Android candidate beacon, Keystore
+formats a disk. A participating storage then offers Drive, Photos, or both and
+states explicitly that the currently executable peer is the laptop; it does not
+silently imply support for another device-to-device route. The repository includes the Android candidate beacon, Keystore
 identity, profile UI, authenticated foreground sender, receipt-backed fixed-root
 scan/queue service, and a Linux GUI receiver panel whose successful configuration
 is remembered locally. The GUI can export the Linux profile and accept the Android
@@ -552,7 +731,8 @@ SQLite is an index and journal; file content remains on the filesystem.
 **History event**
 
 - queued, copying, verifying, verified, moved, trashed, conflict, failed,
-  cancelled, retried;
+  cancelled, retried, observed externally, imported externally, and problem
+  resolved;
 - job/item, source, destination, time, and result.
 - immutable origin device ID, catalog generation, and per-origin sequence;
 - wall-clock time is descriptive only and never resolves ordering or authority.
@@ -563,6 +743,8 @@ SQLite is an index and journal; file content remains on the filesystem.
 - missing sequence ranges and catalog integrity state;
 - last local inventory check and whether each root was accessible;
 - planned transfer count, remaining bytes, and measured-speed time estimate.
+- pending metadata-delta count, total bytes, fixed source root, and last update;
+- next eligible connection/profile and whether the content preflight is stale.
 
 Wireless sync exchanges and commits missing metadata/history events before file
 content. Each device reports observations only for storage it can currently
@@ -571,6 +753,14 @@ file on an accessible root becomes Missing and prompts the user, while an
 offline root remains Not checked. Neither condition is treated as deletion.
 Catalog reset creates a new generation and requires catalog validation plus full
 inventory reconciliation before normal transfers resume.
+
+A Problems & Fixes decision creates a new immutable resolution event containing
+the reviewed problem/group ID, expected hashes and location revision, requested
+action, and result. Other devices merge it idempotently. Catalog/UI corrections
+appear after merge, but moving, renaming, or trashing bytes on another device is
+pending until that device can access the root and re-verify those preconditions.
+If its file or location changed, it performs no side effect and republishes the
+item as unresolved Problems & Fixes work.
 
 ### 10.2 Transaction boundary
 
@@ -643,14 +833,26 @@ review; transfer failures use the transfer strip, job history, and notifications
 in 0.1.
 
 The current keyboard-first desktop surface implements the persistent `Sync /
-Drive / Photos / New +` mode bar (`Alt+1` through `Alt+4`) and a separate
+Files / Photos / New +` mode bar (`Alt+1` through `Alt+4`) and a separate
 Settings page from New +. A connected phone exposes `Drive → Drive` and
 `DCIM → Photos`; each action bounded-scans the fixed root and uses the same
 verified import and SQLite receipt path as the CLI. These UI actions are
 Copy-only until a later device-gated cleanup design.
+First-run Setup is a three-step guide: what Local Drive does, the computer
+library folder, and the backup disk/server folder. Files/Photos relationship
+behavior is configured only on the visual map.
+Computer library selection starts at the current user's home and cannot leave
+that home in the UI. The guide uses folder choosers instead of typed paths and
+does not expose numeric backend limits. The computer itself is always a device;
+the phone's `Drive/` and `DCIM/` roots remain fixed and are not configured as
+PC folders.
 The Sync surface also shows a bounded live status log fed by the same verified
 engine; SQLite history remains the durable per-file record and CLI append-only
 logs remain available for headless runs.
+The Sync dashboard is a read-only projection of the converged catalog and
+append-only history exchanged through paired devices. Every remote observation
+is labelled `Online now`, `Last reported`, or `Not checked`; the UI never
+invents a current storage value for an offline device.
 Keyboard operation includes `Ctrl+Enter` to start the selected successful
 preview and `Esc` to stop an active transfer.
 On Linux, closing the window hides the application to the system tray; the tray
@@ -658,10 +860,27 @@ offers Show, Pause/Resume, Cancel, and a definitive Exit. Definitive Exit
 terminates the application after the verified engine has been asked to cancel
 and its worker has joined. Sessions without a system tray retain normal process
 lifecycle behavior without emitting tray warnings.
-The route records are rendered as a shared visual `source → storage` map in
-Sync and Settings. Settings exposes Drive and Photos filter pages over that
+The route records are rendered as a shared node-and-arrow connection map in
+Sync and Settings. Selecting two nodes opens the Send/Receive/Keep relationship
+modal. For Alpha, Apply persists the supported computer-to-storage Send rule
+and Keep's Copy/Move policy; Receive and non-local pairs fail visibly instead
+of creating inert configuration. Each detailed route card offers Preview, verified Transfer, manifest
+export, and—only after a verified non-Keep-Everything job—recoverable Trash
+cleanup, with preview/conflict/error details and recent history. Settings uses
+a fixed-width sidebar of small categories and exposes Files and Photos filter tabs over the
 same map, including each route's content type, Keep policy, and stable storage
-identity.
+identity. Phones are Online only while live MTP or wireless discovery reports
+them; remembered phones are shown as Offline/last-known. EFI and boot/system
+partitions are never valid backup destinations, even if a platform enumerates
+them as removable storage.
+The desktop settings shell uses a fixed 250 px Qt `SplitView` navigation pane,
+grouped searchable `ItemDelegate` rows, and KDE `FormLayout` alignment for
+labelled controls. The application enforces a 900 x 640 minimum desktop window
+so KWin session restoration cannot collapse the navigation into the content.
+First setup is a floating modal over the window and includes the connection
+preview plus a plain-language explanation of Keep. Device rows expose an eye
+control for persistent hide/show. Settings is separated at the bottom of the
+main Sync sidebar, and Settings back navigation remains at the upper left.
 The active transfer strip asks for a pause duration from 1 to 99 with minutes,
 hours, or days. The timer is process-local; definitive Exit still terminates the
 process and leaves no background sync service.
@@ -672,9 +891,31 @@ requires catalog/Trash review rather than being marked falsely failed.
 The complete Photos library, duplicate quiz, and Trash collection browser are
 deferred even if their mockups exist. Alpha wireless pairing/profile UI and the
 foreground fixed-root scanner are implemented; QR-based automatic certificate
-onboarding remains deferred.
+onboarding remains deferred. Existing-folder preview, Linux managed-root
+observation, external-change review, and catalog-only Android receipt plus a
+small read-only presentation of cross-device resolution events are implemented.
+The native packaged folder chooser, richer Android visual design, and verified
+physical-phone correction remain later gates.
 
 ## 14. Settings required in 0.1
+
+### First-seen mounted storage
+
+A successful mount does not silently create a route. For storage whose stable
+identity has not been acknowledged, the UI asks whether it participates in
+Drive. Declining persists `hidden=1` and suppresses future prompts until the
+user restores it from Hidden devices. Accepting adds the storage node and opens
+the Files map editor. The editor builds one validated relationship at a time,
+offers another relationship after each save, and then offers a one-time clone
+of the completed Files topology and policies to Photos. Declining that clone
+starts the same relationship flow independently for Photos. The storage UUID or
+other stable identity remains authoritative; a changed mount path is only live
+location evidence.
+The 0.1 chooser exposes only executable relationships. It proposes, but does
+not force, `~/Local Drive/<content>` on the computer and
+`<mounted root>/Local Drive/<content>` on storage. A Files-to-Photos map clone
+is an atomic one-time copy of topology and policies; the two maps are
+independent afterward.
 
 ### General
 
@@ -709,16 +950,40 @@ storage; directional, labelled connections represent Files or Photos routes and
 their Send/Receive direction and Keep policy. Devices apply the relevant portion
 of the same map rather than maintaining independent sender/receiver settings.
 
-The same visual map is available in Setup and in Settings on two content pages:
-**Drive** for ordinary-file routes and **Photos** for photo/video routes. These
-are filtered pages over one catalog and one node list. A later-added storage
-node can receive a Drive backup, a Photos backup, or one combined backup route.
-Adding it in Settings does not require rerunning first setup.
+The same visual map has one node layout and two edge layers: **Files** for
+ordinary-file routes and **Photos** for photo/video routes. Switching tabs never
+repositions or duplicates nodes. Policies remain independent so Files can Copy
+and Keep across many devices while Photos can verified-Move a large library to
+external storage.
+
+Opening an empty layer when the other layer is configured creates a draft clone
+of its relationships. Nothing is persisted until **Apply**. The map menu exposes
+explicit Files-to-Photos and Photos-to-Files copy actions plus Import Map and
+Export Map; every target-layer replacement has a preview.
+
+Portable `local-drive-map-v1` metadata includes stable node IDs, capabilities,
+canvas positions, both relationship layers, author/revision, and behavior. It
+does not include private credentials as usable authority. On import, pinned
+identities match existing nodes; unmatched devices and device-local locations
+remain unresolved. Import never pairs a device, grants trust, or starts content
+transfer. A paired server, desktop, or mobile app receives the same committed
+map through metadata synchronization, locates its own node, and executes only
+the relevant edges.
+
+Alpha staging converges on one application-managed queue parent with a separate
+**Use as hub** switch on the laptop node. Its default 80% whole-disk ceiling is
+editable from 1% through 95%; the equivalent free-space floor is enforced for
+every phone intake. When the preferred storage is absent, verified files stay
+under `~/Local Drive/.incoming` and the dashboard reports the staged byte count
+and the stable destination label that must be connected.
+subdirectory per route ID. Files and Photos may share that parent safely, but
+never share an un-namespaced queue path. Relationship editing does not ask the
+user for a staging folder.
 
 The device palette is populated automatically from LAN discovery plus remembered
 paired devices and labels each as New, Online, Offline, or Needs attention.
-Dragging a New device onto the map begins explicit pairing; discovery itself
-does not grant trust. After the user commits the visual plan, reachable devices
+Choosing two nodes opens the relationship modal; discovery itself does not grant
+trust. After the user commits the visual plan, reachable devices
 exchange and acknowledge the same configuration revision. Network addresses,
 ports, interface selection, and complementary sender/receiver setup remain
 implementation details rather than user settings.
@@ -828,6 +1093,12 @@ the catalog retained two verified locations and receipts with zero hash
 mismatches or duplicate destination files. The phone sources remained present.
 Only the physical unplug/reconnect-during-copy recovery action remains for this
 M1 slice.
+On 2026-09-02 a 1 MiB fixture was transferred and SHA-256 verified across
+Xiaomi 15 → laptop, Xiaomi 15 → UUID `EFFE-724A`, laptop → that exFAT disk,
+laptop → disk after MTP staging, and disk → Xiaomi 15 with a read-back hash.
+Retries produced no duplicate destination names. The shared catalog now
+canonicalizes a physical storage by stable identity while recording each file
+relative to the filesystem root, so different route folders remain distinct.
 
 ### M1 gate
 
@@ -868,8 +1139,10 @@ validation.
 - Developer build on the current Kubuntu machine first.
 - No background autostart by default during early testing.
 - No privileged daemon or root service.
-- Package format is chosen after the app passes M0 locally; packaging must not
-  block executor/safety validation.
+- The first native package is Debian `amd64`, version `0.1.0~alpha1`. It contains
+  the GUI, diagnostic CLI, desktop launcher, icon, licence, generated shared-
+  library dependencies, and explicit Qt/Kirigami QML-module dependencies.
+- Package generation never installs or starts a privileged/background service.
 
 ## 19. Decisions and assumptions for this draft
 

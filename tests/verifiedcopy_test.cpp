@@ -38,6 +38,27 @@ VerifiedCopy::Request requestFor(const QString &source, const QString &destinati
 class VerifiedCopyTest final : public QObject {
     Q_OBJECT
 private slots:
+    void retainedMoveWaitsForCleanup() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString source = temp.filePath("source"), destination = temp.filePath("destination");
+        QVERIFY(QDir().mkpath(source)); QVERIFY(QDir().mkpath(destination));
+        writeFile(source + "/sample.txt", "retained source");
+        writeFile(source + "/.templates/example.txt", "application template");
+        auto request = requestFor(source, destination, VerifiedCopy::liveStorageIdentity(destination), temp.filePath("catalog.sqlite"));
+        request.behavior = "Move";
+        request.keepPolicy = "Everything"; QVERIFY(!VerifiedCopy::inspect(request).ok);
+        for (const QString &policy : {QStringLiteral("Last day"), QStringLiteral("Last week"), QStringLiteral("Last month")}) {
+            request.keepPolicy = policy;
+            const auto preview = VerifiedCopy::inspect(request); QVERIFY2(preview.ok, qPrintable(preview.error));
+            QCOMPARE(preview.files, 1);
+        }
+        VerifiedCopy copy(request.databasePath); QString error; QVERIFY2(copy.executeBlocking(request, &error), qPrintable(error));
+        QVERIFY(copy.previewRoute(request.routeId));
+        QTRY_VERIFY_WITH_TIMEOUT(!copy.running(), 10000);
+        QVERIFY(copy.cleanupReady());
+        QVERIFY(QFileInfo::exists(source + "/sample.txt"));
+        QVERIFY(QFileInfo::exists(destination + "/sample.txt"));
+    }
     void previewAndVerifiedReceipt() {
         QTemporaryDir temp; QVERIFY(temp.isValid());
         const QStorageInfo t7("/mnt/T7");
@@ -91,6 +112,25 @@ private slots:
         QVERIFY(q.exec("SELECT COUNT(*) FROM job_items WHERE state='Complete'")); QVERIFY(q.next()); QCOMPARE(q.value(0).toInt(), 4);
         QVERIFY(q.exec("SELECT COUNT(*) FROM history")); QVERIFY(q.next()); QCOMPARE(q.value(0).toInt(), 5);
         q.finish(); check.close(); check = QSqlDatabase(); QSqlDatabase::removeDatabase("mixed-tree-check");
+    }
+
+    void importPreviewFindsExistingContentAtAnotherPath() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString source = temp.path() + "/source", destination = temp.path() + "/destination";
+        QVERIFY(QDir().mkpath(source)); QVERIFY(QDir().mkpath(destination + "/archive"));
+        writeFile(source + "/copy-too.jpg", "same-photo");
+        writeFile(source + "/incoming.jpg", "same-photo");
+        writeFile(destination + "/archive/already-here.jpg", "same-photo");
+        auto request = requestFor(source, destination, VerifiedCopy::liveStorageIdentity(destination), temp.path() + "/catalog.sqlite");
+        request.detectDestinationDuplicates = true;
+        const auto preview = VerifiedCopy::inspect(request);
+        QVERIFY2(preview.ok, qPrintable(preview.error));
+        QCOMPARE(preview.files, 2);
+        QCOMPARE(preview.toCopy, 0);
+        QCOMPARE(preview.duplicates, 1);
+        QCOMPARE(preview.destinationDuplicates, 1);
+        QCOMPARE(preview.duplicatePaths, QStringList({QStringLiteral("copy-too.jpg ↔ archive/already-here.jpg"), QStringLiteral("incoming.jpg ↔ copy-too.jpg")}));
+        QCOMPARE(preview.toMap().value("destinationDuplicates").toLongLong(), 1);
     }
 
     void conflictNeverEnablesCleanup() {
@@ -397,6 +437,7 @@ private slots:
         const QString identity = VerifiedCopy::liveStorageIdentity(destination);
         auto request = requestFor(source, destination, identity, temp.path() + "/catalog.sqlite");
         const auto preview = VerifiedCopy::inspect(request); QVERIFY(preview.ok); QCOMPARE(preview.unsupported, 1);
+        request.acceptedUnsupportedEvidence = preview.unsupportedEvidence;
         VerifiedCopy copy; copy.setTestHook([](const QString &path, const QString &stage) { if (stage == "before-source-recheck") { QFile file(path); QVERIFY(file.open(QIODevice::Append)); QVERIFY(file.write("changed") > 0); } });
         QString error; QVERIFY(!copy.executeBlocking(request, &error)); QVERIFY(error.contains("changed"));
         QVERIFY(QFileInfo::exists(source + "/file")); QVERIFY(!QFileInfo::exists(destination + "/file"));
@@ -522,6 +563,7 @@ private slots:
         QVERIFY(::mkfifo((destination + "/regular").toLocal8Bit().constData(), 0600) == 0);
         auto request = requestFor(source, destination, VerifiedCopy::liveStorageIdentity(destination), temp.path() + "/catalog.sqlite");
         const auto preview = VerifiedCopy::inspect(request); QVERIFY2(preview.ok, qPrintable(preview.error)); QCOMPARE(preview.unsupported, 1); QCOMPARE(preview.conflicts, 1);
+        request.acceptedUnsupportedEvidence = preview.unsupportedEvidence;
         VerifiedCopy copy; QString error; QVERIFY2(copy.executeBlocking(request, &error), qPrintable(error));
         QVERIFY(QFileInfo::exists(destination + "/other")); QVERIFY(QFileInfo(destination + "/regular").isSymLink() == false); QVERIFY(!QFileInfo::exists(destination + "/pipe"));
     }
@@ -642,7 +684,7 @@ private slots:
         VerifiedCopy first; QString error; QVERIFY2(first.executeBlocking(request, &error), qPrintable(error));
         QSqlDatabase downgrade = QSqlDatabase::addDatabase("QSQLITE", "verifiedcopy-v3"); downgrade.setDatabaseName(dbPath); QVERIFY(downgrade.open()); QSqlQuery q(downgrade); QVERIFY(q.exec("UPDATE schema_version SET version=3 WHERE singleton=1")); q.finish(); downgrade.close(); downgrade = QSqlDatabase(); QSqlDatabase::removeDatabase("verifiedcopy-v3");
         QVERIFY2(first.executeBlocking(request, &error), qPrintable(error));
-        QSqlDatabase check = QSqlDatabase::addDatabase("QSQLITE", "verifiedcopy-v4"); check.setDatabaseName(dbPath); QVERIFY(check.open()); QSqlQuery checkQuery(check); QVERIFY(checkQuery.exec("SELECT version FROM schema_version")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 6); QVERIFY(checkQuery.exec("SELECT content_type FROM routes WHERE id='route-test'")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toString(), QStringLiteral("Drive")); checkQuery.finish(); check.close(); check = QSqlDatabase(); QSqlDatabase::removeDatabase("verifiedcopy-v4");
+        QSqlDatabase check = QSqlDatabase::addDatabase("QSQLITE", "verifiedcopy-v4"); check.setDatabaseName(dbPath); QVERIFY(check.open()); QSqlQuery checkQuery(check); QVERIFY(checkQuery.exec("SELECT version FROM schema_version")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 17); QVERIFY(checkQuery.exec("SELECT content_type FROM routes WHERE id='route-test'")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toString(), QStringLiteral("Drive")); QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM review_items")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 0); QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM managed_inventory")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 0); QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM review_resolutions")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 0); checkQuery.finish(); check.close(); check = QSqlDatabase(); QSqlDatabase::removeDatabase("verifiedcopy-v4");
     }
 
     void asyncRemoteDirectoryImportUsesVerifiedReceipts() {
@@ -654,6 +696,24 @@ private slots:
         VerifiedCopy copy(dbPath); QSignalSpy progress(&copy, &VerifiedCopy::progressChanged); QVERIFY(copy.startRemoteImportDirectory(options)); QTRY_VERIFY_WITH_TIMEOUT(!copy.running(), 15000); QCOMPARE(copy.status(), QStringLiteral("Complete")); QVERIFY(progress.count() > 0); const QList<QVariant> lastProgress = progress.last(); QCOMPARE(lastProgress.at(0).toLongLong(), lastProgress.at(1).toLongLong());
         QVERIFY(QFileInfo::exists(destination + "/nested/one.txt")); QVERIFY(QFileInfo::exists(destination + "/two.txt"));
         QSqlDatabase check = QSqlDatabase::addDatabase("QSQLITE", "remote-directory-check"); check.setDatabaseName(dbPath); QVERIFY(check.open()); QSqlQuery q(check); QVERIFY(q.exec("SELECT COUNT(*) FROM locations WHERE state='verified'")); QVERIFY(q.next()); QCOMPARE(q.value(0).toInt(), 2); QVERIFY(q.exec("SELECT COUNT(*) FROM storage WHERE kind='mtp'")); QVERIFY(q.next()); QCOMPARE(q.value(0).toInt(), 1); q.finish(); check.close(); check = QSqlDatabase(); QSqlDatabase::removeDatabase("remote-directory-check");
+    }
+
+    void samePhysicalStorageReusesCatalogIdentity() {
+        QTemporaryDir temp; QVERIFY(temp.isValid());
+        const QString localSource = temp.path() + "/local-source", firstDestination = temp.path() + "/first", remoteSource = temp.path() + "/phone.bin", secondDestination = temp.path() + "/second", dbPath = temp.path() + "/catalog.sqlite";
+        QVERIFY(QDir().mkpath(localSource)); QVERIFY(QDir().mkpath(firstDestination)); QVERIFY(QDir().mkpath(secondDestination));
+        writeFile(localSource + "/local.bin", "local"); writeFile(remoteSource, "phone");
+        const QString identity = VerifiedCopy::liveStorageIdentity(firstDestination);
+        auto local = requestFor(localSource, firstDestination, identity, dbPath); local.destinationStorageId = "first-folder-id";
+        VerifiedCopy copy(dbPath); QString error; QVERIFY2(copy.executeBlocking(local, &error), qPrintable(error));
+        VerifiedCopy::RemoteRequest remote;
+        remote.sourceUrl = QUrl::fromLocalFile(remoteSource); remote.sourceRelative = "phone.bin"; remote.destinationRoot = secondDestination; remote.destinationRelative = "phone.bin"; remote.selectedStorageRoot = secondDestination; remote.storageIdentity = identity; remote.filesystemType = QStorageInfo(secondDestination).fileSystemType(); remote.databasePath = dbPath; remote.routeId = "phone-second-folder"; remote.destinationStorageId = "second-folder-id"; remote.sourceStorageId = "phone-storage"; remote.sourceStorageIdentity = "mtp:test-phone"; remote.sourceDeviceId = "phone-device"; remote.sourceDeviceStableId = "mtp:test-phone"; remote.sourceDeviceName = "Test phone";
+        QVERIFY2(copy.executeRemoteBlocking(remote, &error), qPrintable(error));
+        QSqlDatabase check = QSqlDatabase::addDatabase("QSQLITE", "same-storage-check"); check.setDatabaseName(dbPath); QVERIFY(check.open()); QSqlQuery q(check);
+        q.prepare("SELECT COUNT(*) FROM storage WHERE stable_identity=?"); q.addBindValue(identity); QVERIFY(q.exec()); QVERIFY(q.next()); QCOMPARE(q.value(0).toInt(), 1);
+        QVERIFY(q.exec("SELECT destination_storage_id FROM routes WHERE id='phone-second-folder'")); QVERIFY(q.next()); QCOMPARE(q.value(0).toString(), QStringLiteral("first-folder-id"));
+        QVERIFY(q.exec("SELECT COUNT(*) FROM locations WHERE state='verified'")); QVERIFY(q.next()); QCOMPARE(q.value(0).toInt(), 2);
+        q.finish(); check.close(); check = QSqlDatabase(); QSqlDatabase::removeDatabase("same-storage-check");
     }
 
     void interruptedRemoteStreamRetainsSourceAndRetries() {

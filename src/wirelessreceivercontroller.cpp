@@ -5,9 +5,14 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonObject>
+#include <QJsonDocument>
 #include <QStorageInfo>
 #include <QStandardPaths>
 #include <QSettings>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
+#include <QUuid>
 
 
 #include "verifiedcopy.h"
@@ -69,6 +74,7 @@ bool WirelessReceiverController::start(const QString &destination, const QString
     configuration.port = port;
     configuration.destinationRoot = root;
     configuration.stagingRoot = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("wireless-staging"));
+    configuration.catalogPath = m_catalog;
     configuration.certificatePath = certificate;
     configuration.privateKeyPath = privateKey;
     configuration.clientCaPath = clientCa;
@@ -214,5 +220,31 @@ QJsonObject WirelessReceiverController::finalize(const QJsonObject &header, cons
         log(QStringLiteral("PROGRESS wireless bytes=%1 total=%2 path=%3").arg(done).arg(total).arg(path));
     });
     if (!engine.executeBlocking(request, error)) return {};
+    const QString wireHash = header.value(QStringLiteral("sha256")).toString().toLower();
+    const QStringList parts = relative.split('/', Qt::SkipEmptyParts);
+    const QString metadataRoot = parts.isEmpty() ? QString() : parts.first() == QStringLiteral("Drive") ? QStringLiteral("Drive") : parts.first() == QStringLiteral("Photos") ? QStringLiteral("DCIM") : QString();
+    const QString metadataRelative = parts.mid(1).join('/');
+    if (!metadataRoot.isEmpty() && !metadataRelative.isEmpty()) {
+        const QString connection = QStringLiteral("wireless-metadata-receipt-%1").arg(QUuid::createUuid().toString(QUuid::Id128));
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connection); db.setDatabaseName(m_catalog);
+        if (!db.open() || !db.transaction()) { if (error) *error = db.lastError().text(); db = {}; QSqlDatabase::removeDatabase(connection); return {}; }
+        QSqlQuery update(db); bool sizeMismatch = false; QString itemId;
+        update.prepare("SELECT item_id,size_bytes FROM pending_metadata WHERE origin_device_id=(SELECT id FROM devices WHERE stable_id=?) AND source_root=? AND relative_path=?"); update.addBindValue(deviceStableId); update.addBindValue(metadataRoot); update.addBindValue(metadataRelative);
+        if (!update.exec()) { db.rollback(); if (error) *error = update.lastError().text(); db.close(); db = {}; QSqlDatabase::removeDatabase(connection); return {}; }
+        const qint64 receivedSize = header.value(QStringLiteral("size")).toVariant().toLongLong();
+        if (update.next()) { itemId = update.value(0).toString(); sizeMismatch = update.value(1).toLongLong() != receivedSize; }
+        update.prepare("UPDATE pending_metadata SET content_sha256=?,state=CASE WHEN size_bytes=? THEN 'complete' ELSE 'review' END,size_bytes=?,updated_at=CURRENT_TIMESTAMP WHERE origin_device_id=(SELECT id FROM devices WHERE stable_id=?) AND source_root=? AND relative_path=?");
+        update.addBindValue(wireHash); update.addBindValue(receivedSize); update.addBindValue(receivedSize); update.addBindValue(deviceStableId); update.addBindValue(metadataRoot); update.addBindValue(metadataRelative);
+        if (!update.exec()) { db.rollback(); if (error) *error = update.lastError().text(); db.close(); db = {}; QSqlDatabase::removeDatabase(connection); return {}; }
+        if (sizeMismatch) {
+            const QString sourceId = QString::fromLatin1(QCryptographicHash::hash((deviceStableId + '\n' + metadataRoot + '\n' + metadataRelative + '\n' + QString::number(receivedSize) + '\n' + wireHash).toUtf8(), QCryptographicHash::Sha256).toHex());
+            const QJsonObject details{{"deviceStableId", deviceStableId}, {"root", metadataRoot}, {"path", metadataRelative}, {"expectedSize", receivedSize}, {"expectedSha256", wireHash}, {"itemId", itemId}};
+            update.prepare("INSERT INTO review_items(id,category,source_kind,source_id,title,summary,details_json,item_count,state) VALUES(?, 'External changes','metadata',?,'Phone item changed before transfer','The transferred bytes were verified, but the metadata preflight size had changed. Recheck the current phone location before any correction.',?,1,'needs_decision') ON CONFLICT(source_kind,source_id,category) DO UPDATE SET summary=excluded.summary,details_json=excluded.details_json,updated_at=CURRENT_TIMESTAMP");
+            update.addBindValue(QStringLiteral("review-%1").arg(sourceId)); update.addBindValue(sourceId); update.addBindValue(QString::fromUtf8(QJsonDocument(details).toJson(QJsonDocument::Compact)));
+            if (!update.exec()) { db.rollback(); if (error) *error = update.lastError().text(); db.close(); db = {}; QSqlDatabase::removeDatabase(connection); return {}; }
+        }
+        if (!db.commit()) { db.rollback(); if (error) *error = db.lastError().text(); db.close(); db = {}; QSqlDatabase::removeDatabase(connection); return {}; }
+        db.close(); db = {}; QSqlDatabase::removeDatabase(connection);
+    }
     return QJsonObject{{QStringLiteral("relative"), relative}, {QStringLiteral("deviceId"), deviceStableId}, {QStringLiteral("name"), deviceName}};
 }

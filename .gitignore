@@ -1,5 +1,8 @@
 build/
+build-release/
 .gradle/
 local.properties
 __pycache__/
 *.py[cod]
+web/node_modules/
+web/dist/

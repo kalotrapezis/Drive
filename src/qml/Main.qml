@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
+import QtCore
 import org.kde.kirigami as Kirigami
 
 Kirigami.ApplicationWindow {
@@ -9,7 +10,8 @@ Kirigami.ApplicationWindow {
     property bool allowQuit: false
     property bool trayAvailable: true
     width: 900; height: 700
-    title: qsTr("Local Drive — Setup")
+    minimumWidth: 900; minimumHeight: 640
+    title: qsTr("Local Drive")
     property var selectedPreview: ({})
     property var selectedCleanup: ({files: 0, bytes: 0})
     property var selectedHistory: []
@@ -21,12 +23,25 @@ Kirigami.ApplicationWindow {
     property string currentMode: "Sync"
     property bool showingSettings: false
     property int settingsContentIndex: 0
+    property int settingsCategoryIndex: 0
+    property int settingsConnectionIndex: 0
+    property int setupStep: 1
+    property int syncSectionIndex: 0
+    property bool configuringRoute: false
     property var phoneActionDevice: ({})
     property var connectedPhone: setupModel.connectedDevices.length > 0 ? setupModel.connectedDevices[0] : ({})
     property string phoneActionStatus: ""
     property string pendingPairingProfilePath: ""
+    property bool pendingPhonePhotos: false
+    property var firstMapNode: ({})
+    property var secondMapNode: ({})
+    property string selectedMapContentType: "Drive"
+    property string pendingSetupContentType: "Drive"
+    property string pendingSetupKeepPolicy: "Everything"
+    property bool pendingSetupBoth: true
+    property bool pendingMountedStorageFlow: false
+    property string pendingMountedStorageId: ""
     property double pauseRemainingMilliseconds: 0
-    property var contentTypes: ["Drive", "Photos"]
     property var onboardingDevice: {
         const devices = setupModel.firstSeenDevices
         for (let index = 0; index < devices.length; ++index) {
@@ -42,6 +57,107 @@ Kirigami.ApplicationWindow {
         return ({})
     }
     property var keepPolicies: ["Everything", "Last month", "Last week", "Last day", "Nothing"]
+    function homeRoot() {
+        return decodeURIComponent(StandardPaths.writableLocation(StandardPaths.HomeLocation).toString().replace(/^file:\/\//, ""))
+    }
+    function isUnderHome(path) {
+        const clean = path.length > 0 ? path.replace(/\/$/, "") : ""
+        const home = homeRoot().replace(/\/$/, "")
+        return clean === home || clean.indexOf(home + "/") === 0
+    }
+    function storageCandidates() {
+        return setupModel.storages.slice(1).filter(function(item) {
+            const label = (item.label || "").toLowerCase()
+            const root = item.root || ""
+            return label !== "efi" && label !== "system reserved" && root !== "/boot/efi" && root.indexOf("/boot/efi/") !== 0
+        })
+    }
+    function bytesText(bytes) {
+        if (bytes === undefined || Number(bytes) < 0) return qsTr("unknown")
+        const units = ["B", "KB", "MB", "GB", "TB"]
+        let value = Number(bytes), index = 0
+        while (value >= 1024 && index < units.length - 1) { value /= 1024; ++index }
+        return qsTr("%1 %2").arg(Math.round(value * 10) / 10).arg(units[index])
+    }
+    function storagePercent(item) {
+        const total = Number(item.bytesTotal), free = Number(item.bytesFree)
+        return total > 0 && free >= 0 ? Math.round((1 - free / total) * 100) : -1
+    }
+    function settingsMatches(label) {
+        const term = settingsSearch.text.trim().toLowerCase()
+        return term.length === 0 || label.toLowerCase().indexOf(term) >= 0
+    }
+    function storageLabel(storageId) {
+        const items = setupModel.storages
+        for (let index = 0; index < items.length; ++index) if (items[index].id === storageId) return items[index].label
+        return qsTr("Storage")
+    }
+    function routeForSelectedNodes() {
+        const storageNode = firstMapNode.kind === "storage" ? firstMapNode : (secondMapNode.kind === "storage" ? secondMapNode : ({}))
+        if (storageNode.id === undefined) return ({})
+        const routes = setupModel.routes.filter(function(route) { return route.storageId === storageNode.id && route.contentType === selectedMapContentType })
+        return routes.length > 0 ? routes[0] : ({})
+    }
+    function selectMapNode(node, contentType) {
+        selectedMapContentType = contentType
+        if (firstMapNode.id === undefined || (firstMapNode.id === node.id && firstMapNode.kind === node.kind)) {
+            firstMapNode = node
+            secondMapNode = ({})
+            return
+        }
+        secondMapNode = node
+        const route = routeForSelectedNodes()
+        relationshipSend.checked = true
+        relationshipReceive.checked = false
+        relationshipKeep.checked = route.id === undefined || route.keepPolicy !== "Nothing"
+        relationshipStatus.text = ""
+        relationshipDialog.open()
+    }
+    function applyRelationship() {
+        const route = routeForSelectedNodes()
+        const storageNode = firstMapNode.kind === "storage" ? firstMapNode : (secondMapNode.kind === "storage" ? secondMapNode : ({}))
+        const hasLocal = firstMapNode.kind === "local" || secondMapNode.kind === "local"
+        if (!hasLocal || storageNode.id === undefined) { relationshipStatus.text = qsTr("This alpha can apply a relationship only between this computer and backup storage."); return }
+        if (!relationshipSend.checked || relationshipReceive.checked) { relationshipStatus.text = qsTr("This alpha supports Send to backup storage. Receive will be enabled for paired computers and servers."); return }
+        if (route.id !== undefined) {
+            if (setupModel.updateRouteRelationship(route.id, relationshipSend.checked, relationshipReceive.checked, relationshipKeep.checked)) relationshipDialog.close()
+            else relationshipStatus.text = setupModel.errorMessage
+            return
+        }
+        relationshipDialog.close()
+        openRouteSetup(selectedMapContentType === "Drive" ? 0 : 1, storageNode.id, false,
+                       relationshipKeep.checked ? "Everything" : "Nothing")
+    }
+    function notificationItems() {
+        const items = []
+        if (setupModel.routes.length === 0) items.push({title: qsTr("First setup is not finished"), detail: qsTr("Choose the computer library and a backup destination."), action: qsTr("Open setup"), target: "setup"})
+        if (setupModel.connectedDevices.length > 0) items.push({title: qsTr("Phone detected"), detail: qsTr("%1 is ready for Files and Photos over %2.").arg(setupModel.connectedDevices[0].label).arg((setupModel.connectedDevices[0].transports || []).join(" + ")), action: qsTr("Open phone"), target: "phone"})
+        const waiting = setupModel.routes.filter(function(route) { return route.jobState === "Waiting" })
+        if (waiting.length > 0) items.push({title: qsTr("Backup storage is offline"), detail: qsTr("A saved route is waiting for its exact disk or server."), action: qsTr("Open map"), target: "map"})
+        if (setupModel.errorMessage.length > 0) items.push({title: qsTr("Needs attention"), detail: setupModel.errorMessage, action: qsTr("Open settings"), target: "settings"})
+        return items
+    }
+    function openDashboardAction(target) {
+        if (target === "setup") openRouteSetup(0, "", setupModel.routes.length === 0)
+        else if (target === "phone") openPhoneActions()
+        else if (target === "map") { showingSettings = true; settingsCategoryIndex = 1 }
+        else if (target === "settings") { showingSettings = true; settingsCategoryIndex = 2 }
+    }
+    function openRouteSetup(typeIndex, storageId, both, keepPolicy) {
+        currentMode = "Sync"
+        showingSettings = false
+        syncSectionIndex = 0
+        configuringRoute = true
+        setupStep = both ? 1 : 2
+        pendingSetupContentType = typeIndex === 0 ? "Drive" : "Photos"
+        pendingSetupBoth = both
+        pendingSetupKeepPolicy = keepPolicy || "Everything"
+        source.text = ""
+        destination.text = ""
+        const options = storageCandidates()
+        for (let index = 0; index < options.length; ++index) if (options[index].id === storageId) { storage.currentIndex = index; break }
+        setupDialog.open()
+    }
     function refreshAll() {
         if (!setupModel.ready) return
         setupModel.refreshStorages()
@@ -51,14 +167,18 @@ Kirigami.ApplicationWindow {
     }
     function saveCurrentRoute() {
         if (!saveRouteButton.enabled) return
-        setupModel.saveRoute(source.text, storage.currentValue, destination.text, keepPolicies[keepPolicy.currentIndex], minimumFreeSpace.value * 1024 * 1024, organizePhotos.checked && contentTypes[contentType.currentIndex] === "Photos", stagingMaximum.value * 1024 * 1024, stagingRoot.text, contentTypes[contentType.currentIndex])
+        if (!isUnderHome(source.text)) return
+        const save = function(type) { return setupModel.saveRoute(source.text, storage.currentValue, destination.text, pendingSetupKeepPolicy, 0, false, 0, "", type) }
+        const saved = pendingSetupBoth ? setupModel.saveInitialRoutes(source.text, storage.currentValue, destination.text, "Everything", 0, false, 0, "") : save(pendingSetupContentType)
+        if (saved) {
+            const continueMountedFlow = pendingMountedStorageFlow && pendingSetupContentType === "Drive"
+            setupStep = 1; configuringRoute = false; setupDialog.close(); syncSectionIndex = pendingSetupContentType === "Photos" ? 2 : 3
+            if (continueMountedFlow) Qt.callLater(function() { moreRelationshipsDialog.open() })
+        }
     }
     function startSelectedRoute() {
         if (copyEngine.running || previewRouteId.length === 0 || selectedPreview.ok !== true || !copyEngine.previewSuccessful) return
         copyEngine.startCopy()
-    }
-    function routeDescription() {
-        return keepPolicyDescription(keepPolicies[keepPolicy.currentIndex])
     }
     function keepPolicyDescription(policy) {
         if (policy === "Nothing") return qsTr("Keep Nothing — verified Move; requires explicit Trash confirmation")
@@ -79,7 +199,6 @@ Kirigami.ApplicationWindow {
         if (code === "unsupported_trash") return qsTr("Keep the source and retry cleanup when Trash is available.")
         return qsTr("Check the reported problem, then retry safely.")
     }
-    function selectedStorageLabel() { return storage.currentIndex >= 0 ? storage.currentText : qsTr("No external storage detected") }
     function modeIndex() { return showingSettings ? 4 : ["Sync", "Drive", "Photos", "New"].indexOf(currentMode) }
     function firstRouteFor(type) {
         const routes = setupModel.routes.filter(function(route) { return route.contentType === type })
@@ -117,6 +236,15 @@ Kirigami.ApplicationWindow {
         })
         if (started) { phoneActionDialog.close(); currentMode = "Sync" }
         else phoneActionStatus = qsTr("Could not start the import. Check the route, storage identity, and phone connection.")
+    }
+    function startPhoneTransferAll() {
+        if (firstRouteFor("Drive").id === undefined || firstRouteFor("Photos").id === undefined) {
+            phoneActionStatus = qsTr("Save both a Files route and a Photos route first.")
+            return
+        }
+        pendingPhonePhotos = true
+        startPhoneImport("Drive", "Drive")
+        if (!copyEngine.running) pendingPhonePhotos = false
     }
     function pauseDurationMilliseconds() {
         const multipliers = [60 * 1000, 60 * 60 * 1000, 24 * 60 * 60 * 1000]
@@ -161,6 +289,55 @@ Kirigami.ApplicationWindow {
                 Controls.Label { text: qsTr("%1 · %2").arg(route.contentType || qsTr("Drive")).arg(keepPolicyDescription(route.keepPolicy)); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
                 Controls.Label { text: qsTr("Stable storage: %1%2").arg(route.storageIdentity || qsTr("not available")).arg(route.filesystemType ? qsTr(" · %1").arg(route.filesystemType) : ""); elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text }
                 Controls.Label { visible: route.jobState === "Waiting"; text: qsTr("Waiting for this exact storage to reconnect. No transfer starts and no folders are created while it is offline."); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
+                Controls.Label { visible: route.jobError && route.jobError.length > 0; text: qsTr("%1: %2\n%3").arg(route.jobState || qsTr("Problem")).arg(route.jobError).arg(errorNextAction(route.jobErrorCode)); wrapMode: Text.Wrap; Layout.fillWidth: true; color: Kirigami.Theme.negativeTextColor; Accessible.name: text }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Controls.Button { text: qsTr("Preview"); enabled: !copyEngine.running && route.storagePresent; onClicked: { previewRouteId = route.id; selectedPreview = ({}); manifestStatus = ""; copyEngine.previewRoute(route.id) } Accessible.name: qsTr("Preview transfer") }
+                    Controls.Button { text: qsTr("Transfer"); enabled: !copyEngine.running && previewRouteId === route.id && selectedPreview.ok === true && copyEngine.previewSuccessful; onClicked: startSelectedRoute(); Accessible.name: qsTr("Start verified transfer") }
+                    Controls.Button { text: qsTr("Export manifest"); enabled: previewRouteId === route.id && selectedPreview.ok === true && !copyEngine.running; onClicked: manifestDialog.open(); Accessible.name: qsTr("Export transfer manifest") }
+                    Controls.Button { text: qsTr("Cleanup"); visible: route.keepPolicy !== "Everything"; enabled: !copyEngine.running && previewRouteId === route.id && copyEngine.cleanupReady; onClicked: cleanupDialog.open(); Accessible.name: qsTr("Move verified sources to Trash") }
+                }
+                Controls.Label { visible: previewRouteId === route.id && selectedPreview.ok === true; text: qsTr("Preview: %1 files · %2 bytes · %3 to transfer · %4 identical · %5 conflicts").arg(selectedPreview.files).arg(bytesText(selectedPreview.bytes)).arg(selectedPreview.toCopy).arg(selectedPreview.identical).arg(selectedPreview.conflicts); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
+                Controls.Label { visible: previewRouteId === route.id && selectedPreview.ok === false && selectedPreview.error; text: qsTr("Preview failed: %1").arg(selectedPreview.error); wrapMode: Text.Wrap; Layout.fillWidth: true; color: Kirigami.Theme.negativeTextColor; Accessible.name: text }
+                Controls.Label { visible: previewRouteId === route.id && manifestStatus.length > 0; text: manifestStatus; Layout.fillWidth: true; Accessible.name: text }
+                Controls.Label { visible: previewRouteId === route.id && selectedHistory.length > 0; text: qsTr("Recent: %1").arg(selectedHistory.slice(0, 3).map(function(entry) { return entry.event + " · " + entry.result }).join("\n")); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
+            }
+        }
+    }
+    Component {
+        id: connectionMap
+        ColumnLayout {
+            property string mapContentType: "Drive"
+            Layout.fillWidth: true
+            Controls.Label { text: qsTr("Devices are nodes. Arrows are saved connections; the rule beside each arrow controls transfer direction and what remains on the source."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            RowLayout { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                Kirigami.Card { Layout.minimumWidth: 180; Layout.maximumWidth: 180; Layout.alignment: Qt.AlignTop
+                    header: Controls.Label { text: qsTr("Devices"); font.bold: true; Accessible.name: text }
+                    contentItem: ColumnLayout {
+                        Controls.Button { text: qsTr("This computer"); checkable: true; checked: firstMapNode.id === "local" || secondMapNode.id === "local"; onClicked: selectMapNode({id: "local", kind: "local", label: setupModel.localDeviceName}, mapContentType); Layout.fillWidth: true; Accessible.name: qsTr("Select this computer") }
+                        Kirigami.Card { Layout.fillWidth: true; contentItem: ColumnLayout {
+                            Controls.CheckBox { id: hubEnabled; text: qsTr("Use as hub"); checked: setupModel.hubEnabled; Accessible.name: qsTr("Use laptop as hub") }
+                            Controls.Label { text: qsTr("Keep usage below"); Accessible.name: text }
+                            Controls.SpinBox { id: hubLimit; from: 1; to: 95; value: setupModel.hubLimitPercent; editable: true; textFromValue: function(value) { return value + "%" }; valueFromText: function(text) { return Number(text.replace("%", "")) }; Accessible.name: qsTr("Laptop hub storage limit") }
+                            Controls.Button { text: qsTr("Apply"); onClicked: setupModel.setHubConfig(hubEnabled.checked, hubLimit.value); Accessible.name: qsTr("Apply laptop hub settings") }
+                        } }
+                        Repeater { model: setupModel.deviceList; delegate: Controls.Button { text: qsTr("%1  %2").arg(modelData.present ? "●" : "○").arg(modelData.label); checkable: true; checked: firstMapNode.id === modelData.id || secondMapNode.id === modelData.id; onClicked: selectMapNode({id: modelData.id, kind: "device", label: modelData.label}, mapContentType); Layout.fillWidth: true; Accessible.name: qsTr("Select %1").arg(modelData.label) } }
+                        Repeater { model: storageCandidates(); delegate: Controls.Button { text: qsTr("%1  %2").arg(modelData.present ? "●" : "○").arg(modelData.label); checkable: true; checked: firstMapNode.id === modelData.id || secondMapNode.id === modelData.id; onClicked: selectMapNode({id: modelData.id, kind: "storage", label: modelData.label}, mapContentType); Layout.fillWidth: true; Accessible.name: qsTr("Select %1").arg(modelData.label) } }
+                    }
+                }
+                ColumnLayout { Layout.fillWidth: true
+                    Repeater { model: setupModel.routes.filter(function(route) { return route.contentType === mapContentType }); delegate: Kirigami.Card { Layout.fillWidth: true
+                        contentItem: RowLayout { Layout.fillWidth: true
+                            Kirigami.Card { Layout.preferredWidth: 170; contentItem: ColumnLayout { Controls.Label { text: qsTr("This computer"); font.bold: true; Accessible.name: text } Controls.Label { text: modelData.source; elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } } }
+                            ColumnLayout { Layout.preferredWidth: 230
+                                Controls.Label { text: modelData.behavior === "Move" ? qsTr("→ verified move →") : qsTr("→ verified copy →"); font.bold: true; Layout.alignment: Qt.AlignHCenter; Accessible.name: text }
+                                Controls.Label { text: qsTr("Send · Receive off · %1").arg(keepPolicyDescription(modelData.keepPolicy)); wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; Layout.fillWidth: true; Accessible.name: text }
+                            }
+                            Kirigami.Card { Layout.fillWidth: true; contentItem: ColumnLayout { Controls.Label { text: storageLabel(modelData.storageId); font.bold: true; Accessible.name: text } Controls.Label { text: modelData.destination; elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } Controls.Label { text: modelData.storagePresent ? qsTr("Online") : qsTr("Offline"); color: modelData.storagePresent ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor; Accessible.name: text } } }
+                        }
+                    } }
+                    Controls.Label { visible: setupModel.routes.filter(function(route) { return route.contentType === mapContentType }).length === 0; text: qsTr("No %1 connection exists yet. Open Setup to connect this computer to a storage device.").arg(mapContentType === "Drive" ? qsTr("Files") : qsTr("Photos")); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                }
             }
         }
     }
@@ -178,10 +355,15 @@ Kirigami.ApplicationWindow {
         onboardingDialog.close()
         Qt.callLater(showOnboardingIfNeeded)
     }
+    function deferOnboarding() {
+        onboardingDeviceId = ""
+        onboardingDialog.close()
+    }
     function openWirelessSettingsFromOnboarding() {
         finishOnboarding(false)
         currentMode = "New"
-        settingsContentIndex = 0
+        settingsCategoryIndex = 2
+        settingsConnectionIndex = 1
         showingSettings = true
     }
     Shortcut { sequence: "Ctrl+R"; onActivated: refreshAll() }
@@ -198,278 +380,282 @@ Kirigami.ApplicationWindow {
         if (pauseRemainingMilliseconds <= 0) { pauseRemainingMilliseconds = 0; copyEngine.resume() }
         else scheduleResumeTimer()
     } }
-    header: Controls.ToolBar {
-        visible: copyEngine.running
-        height: visible ? implicitHeight : 0
-        contentItem: ColumnLayout {
-            spacing: Kirigami.Units.smallSpacing
-            RowLayout {
-                Layout.fillWidth: true
-                Controls.Label {
-                    text: qsTr("%1 · %2").arg(copyEngine.status).arg(activeRoute.destination || qsTr("selected route"))
-                    elide: Text.ElideMiddle
-                    Layout.fillWidth: true
-                    Accessible.name: text
-                }
-                Controls.Button {
-                    text: copyEngine.paused ? qsTr("Resume") : qsTr("Pause")
-                    enabled: copyEngine.status === "Copying" || copyEngine.paused
-                    onClicked: copyEngine.paused ? resumeTransfer() : pauseDialog.open()
-                    Accessible.name: text
-                }
-                Controls.Button {
-                    text: qsTr("Cancel")
-                    enabled: ["Previewing", "Copying", "Pausing", "Paused", "Resuming", "Moving verified sources to Trash"].indexOf(copyEngine.status) >= 0
-                    onClicked: copyEngine.cancel()
-                    Accessible.name: text
+    header: ColumnLayout {
+        width: parent.width
+        Controls.ToolBar { Layout.fillWidth: true
+            contentItem: RowLayout {
+                Controls.Button { visible: showingSettings; text: qsTr("←"); onClicked: showingSettings = false; Accessible.name: qsTr("Back") }
+                Controls.Label { visible: showingSettings; text: qsTr("Settings"); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
+                Controls.TabBar { id: mainModeTabs; visible: !showingSettings; currentIndex: ["Sync", "Drive", "Photos", "New"].indexOf(currentMode); onCurrentIndexChanged: if (currentIndex >= 0 && !showingSettings) currentMode = ["Sync", "Drive", "Photos", "New"][currentIndex]; Layout.fillWidth: true
+                    Controls.TabButton { text: qsTr("Sync"); Accessible.name: qsTr("Sync tab") }
+                    Controls.TabButton { text: qsTr("Files"); Accessible.name: qsTr("Files tab") }
+                    Controls.TabButton { text: qsTr("Photos"); Accessible.name: qsTr("Photos tab") }
+                    Controls.TabButton { text: qsTr("New +"); Accessible.name: qsTr("New tab") }
                 }
             }
-            RowLayout {
-                Layout.fillWidth: true
-                Controls.ProgressBar {
-                    value: transferProgress
-                    Layout.fillWidth: true
-                    Accessible.name: qsTr("Transfer progress")
-                }
-                Controls.Label {
-                    text: qsTr("%1%").arg(Math.round(transferProgress * 100))
-                    Accessible.name: text
-                }
-            }
-            Controls.Label {
-                visible: transferPath.length > 0
-                text: qsTr("Current file: %1").arg(transferPath)
-                elide: Text.ElideMiddle
-                Layout.fillWidth: true
-                Accessible.name: text
-            }
-        }
-    }
-    footer: Controls.ToolBar {
-        contentItem: RowLayout {
-            Controls.Button { text: qsTr("Sync"); checkable: true; checked: currentMode === "Sync" && !showingSettings; onClicked: { currentMode = "Sync"; showingSettings = false } Accessible.name: qsTr("Sync"); Layout.fillWidth: true }
-            Controls.Button { text: qsTr("Drive"); checkable: true; checked: currentMode === "Drive" && !showingSettings; onClicked: { currentMode = "Drive"; showingSettings = false } Accessible.name: qsTr("Drive"); Layout.fillWidth: true }
-            Controls.Button { text: qsTr("Photos"); checkable: true; checked: currentMode === "Photos" && !showingSettings; onClicked: { currentMode = "Photos"; showingSettings = false } Accessible.name: qsTr("Photos"); Layout.fillWidth: true }
-            Controls.Button { text: qsTr("New +"); checkable: true; checked: currentMode === "New" && !showingSettings; onClicked: { currentMode = "New"; showingSettings = false } Accessible.name: qsTr("New"); Layout.fillWidth: true }
         }
     }
     pageStack.initialPage: Kirigami.ScrollablePage {
-        title: showingSettings ? qsTr("Settings") : currentMode === "Sync" ? qsTr("Sync") : currentMode === "Drive" ? qsTr("Drive") : currentMode === "Photos" ? qsTr("Photos") : qsTr("New")
+        title: ""
         StackLayout { id: modeStack; width: parent.width; currentIndex: modeIndex()
-        ColumnLayout { width: parent.width; spacing: Kirigami.Units.largeSpacing
-            Kirigami.Heading { text: qsTr("Computer and storage"); level: 2 }
-            Kirigami.Card { Layout.fillWidth: true; visible: copyEngine.logEntries.length > 0
-                header: Controls.Label { text: qsTr("Live log"); Accessible.name: text }
-                contentItem: ColumnLayout {
-                    Repeater { model: copyEngine.logEntries.slice(Math.max(0, copyEngine.logEntries.length - 12)); delegate: Controls.Label { text: modelData; elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } }
+        ColumnLayout { Layout.fillWidth: true; spacing: Kirigami.Units.largeSpacing
+            Kirigami.Heading { text: qsTr("Sync"); level: 2 }
+            RowLayout { Layout.fillWidth: true; Layout.fillHeight: true; Layout.alignment: Qt.AlignTop
+                ColumnLayout { Layout.minimumWidth: 180; Layout.maximumWidth: 180; Layout.fillHeight: true; Layout.alignment: Qt.AlignTop
+                    Controls.Button { text: qsTr("Dashboard"); checkable: true; checked: syncSectionIndex === 0; onClicked: syncSectionIndex = 0; Layout.fillWidth: true; Accessible.name: qsTr("Sync dashboard") }
+                    Controls.Button { text: qsTr("Notifications"); checkable: true; checked: syncSectionIndex === 1; onClicked: syncSectionIndex = 1; Layout.fillWidth: true; Accessible.name: qsTr("Sync notifications") }
+                    Controls.Button { text: qsTr("Photos map"); checkable: true; checked: syncSectionIndex === 2; onClicked: syncSectionIndex = 2; Layout.fillWidth: true; Accessible.name: qsTr("Photos map") }
+                    Controls.Button { text: qsTr("Files map"); checkable: true; checked: syncSectionIndex === 3; onClicked: syncSectionIndex = 3; Layout.fillWidth: true; Accessible.name: qsTr("Files map") }
+                    Kirigami.Separator { Layout.fillWidth: true }
+                    Controls.Button { text: qsTr("⚙ Settings"); onClicked: showingSettings = true; Layout.fillWidth: true; Accessible.name: qsTr("Settings") }
                 }
-            }
-            Kirigami.Card { Layout.fillWidth: true
-                header: Controls.Label { text: qsTr("Computer — %1").arg(setupModel.localDeviceName); Accessible.name: text }
-                contentItem: Controls.Label { text: qsTr("Present · catalog %1").arg(setupModel.ready ? qsTr("ready") : qsTr("not ready")); Accessible.name: text }
-            }
-            Controls.Label { text: setupModel.ready ? qsTr("Catalog ready") : qsTr("Catalog not ready: %1").arg(setupModel.errorMessage); color: setupModel.ready ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor; Accessible.name: text }
-            Controls.Label { visible: setupModel.ready && setupModel.errorMessage.length > 0; text: qsTr("Could not save: %1").arg(setupModel.errorMessage); color: Kirigami.Theme.negativeTextColor; Accessible.name: text }
-            Kirigami.Heading { text: qsTr("Connection map"); level: 3 }
-            Repeater { model: setupModel.routes; delegate: routeMapCard }
-            Controls.Label { visible: setupModel.routes.length === 0; text: qsTr("No routes saved yet. The map will fill as Drive and Photos routes are configured."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Kirigami.Card { Layout.fillWidth: true
-                header: Controls.Label { text: qsTr("Devices"); Accessible.name: text }
-                contentItem: ColumnLayout {
-                    Repeater { model: setupModel.deviceList; delegate: RowLayout { Layout.fillWidth: true
-                        Controls.Label { text: modelData.label; font.bold: true; Layout.fillWidth: true; Accessible.name: text }
-                        Controls.Label { text: modelData.status || qsTr("Online"); Accessible.name: text }
-                        Controls.Label { text: (modelData.transports || []).join(" + "); Accessible.name: text }
-                        Controls.Button { visible: modelData.wirelessCandidate === true && setupModel.mtpDevices.length === 1; text: qsTr("Pair with USB phone"); onClicked: setupModel.pairWirelessDevice(modelData.id, setupModel.mtpDevices[0].id); Accessible.name: qsTr("Pair wireless device with USB phone") }
-                    } }
-                    Controls.Label { visible: setupModel.deviceList.length === 0; text: qsTr("No phone or wireless device detected."); Accessible.name: text }
-                }
-            }
-            Controls.Button { text: qsTr("Refresh devices"); enabled: setupModel.ready; Accessible.name: qsTr("Refresh devices"); onClicked: refreshAll() }
-            Controls.Label { text: qsTr("Keyboard: Ctrl+R refresh · Ctrl+S save route · Ctrl+Enter start selected route · Esc stop active transfer"); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Label { text: qsTr("Computer → %1: %2").arg(selectedStorageLabel()).arg(routeDescription()); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Kirigami.Card { Layout.fillWidth: true
-                header: Controls.Label { text: qsTr("Storage — %1").arg(selectedStorageLabel()); Accessible.name: text }
-                contentItem: Controls.Label { text: storage.currentIndex < 0 ? qsTr("No external storage detected") : (!setupModel.storages[storage.currentIndex + 1].present ? qsTr("Missing") : qsTr("Present") + (setupModel.storages[storage.currentIndex + 1].filesystemType ? qsTr(" · %1").arg(setupModel.storages[storage.currentIndex + 1].filesystemType) : "")); Accessible.name: text }
-            }
-            Kirigami.Card { Layout.fillWidth: true; visible: setupModel.connectedDevices.length > 0
-                header: Controls.Label { text: qsTr("Phone — %1").arg(connectedPhone.label || setupModel.mtpDeviceLabel); Accessible.name: text }
-                contentItem: ColumnLayout {
-                    Controls.Label { text: qsTr("%1 · %2. Detection alone never starts a transfer.").arg(connectedPhone.status || qsTr("Online")).arg((connectedPhone.transports || []).join(" + ")); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-                    RowLayout {
-                        Controls.Button { text: qsTr("Drive → Drive"); enabled: !copyEngine.running && connectedPhone.url !== undefined; onClicked: openPhoneActions(); Accessible.name: qsTr("Import phone Drive to Drive") }
-                        Controls.Button { text: qsTr("DCIM → Photos"); enabled: !copyEngine.running && connectedPhone.url !== undefined; onClicked: openPhoneActions(); Accessible.name: qsTr("Import phone DCIM to Photos") }
+                StackLayout { id: syncStack; currentIndex: syncSectionIndex; Layout.fillWidth: true; Layout.fillHeight: true; Layout.alignment: Qt.AlignTop
+                    ColumnLayout {
+                        RowLayout { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                            Kirigami.Card { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                                header: Controls.Label { text: qsTr("Storage across devices"); font.bold: true; Accessible.name: text }
+                                contentItem: ColumnLayout {
+                                    Controls.Label { text: qsTr("Shared catalog view · live values are marked Online now; offline values are Last reported."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                                    Repeater { model: storageCandidates(); delegate: RowLayout { Layout.fillWidth: true; Controls.Label { text: modelData.label; Layout.fillWidth: true; Accessible.name: text } Controls.ProgressBar { visible: storagePercent(modelData) >= 0; value: Math.max(0, storagePercent(modelData)) / 100; Layout.preferredWidth: 110; Accessible.name: qsTr("Storage used") } Controls.Label { text: storagePercent(modelData) >= 0 ? qsTr("%1% full").arg(storagePercent(modelData)) : (modelData.present ? qsTr("Online now") : qsTr("Last reported")); Accessible.name: text } } }
+                                    Controls.Label { visible: storageCandidates().length === 0; text: qsTr("No external storage is currently known."); Accessible.name: text }
+                                }
+                            }
+                            Kirigami.Card { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                                header: Controls.Label { text: qsTr("Notifications"); font.bold: true; Accessible.name: text }
+                                contentItem: ColumnLayout {
+                                    Repeater { model: notificationItems().slice(0, 3); delegate: RowLayout { Layout.fillWidth: true; Controls.Label { text: qsTr("%1\n%2").arg(modelData.title).arg(modelData.detail); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text } Controls.Button { text: modelData.action; onClicked: openDashboardAction(modelData.target); Accessible.name: modelData.action } } }
+                                    Controls.Label { visible: notificationItems().length === 0; text: qsTr("No active notifications."); Accessible.name: text }
+                                }
+                            }
+                        }
+                        RowLayout { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                            Kirigami.Card { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                                header: Controls.Label { text: qsTr("Remaining storage per device"); font.bold: true; Accessible.name: text }
+                                contentItem: ColumnLayout {
+                                    Controls.Label { text: qsTr("Computer · %1").arg(setupModel.localDeviceName); Layout.fillWidth: true; Accessible.name: text }
+                                    Repeater { model: storageCandidates(); delegate: Controls.Label { text: qsTr("%1 · %2 free · %3").arg(modelData.label).arg(bytesText(modelData.bytesFree)).arg(modelData.present ? qsTr("Online now") : qsTr("Last reported")); Layout.fillWidth: true; Accessible.name: text } }
+                                    Repeater { model: setupModel.connectedDevices; delegate: Controls.Label { text: qsTr("%1 · phone status: %2").arg(modelData.label).arg(modelData.status || qsTr("Last reported")); Layout.fillWidth: true; Accessible.name: text } }
+                                }
+                            }
+                            Kirigami.Card { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                                header: Controls.Label { text: qsTr("Devices · last detected"); font.bold: true; Accessible.name: text }
+                                contentItem: ColumnLayout {
+                                    Repeater { model: setupModel.deviceList; delegate: Controls.Label { text: qsTr("%1 · %2").arg(modelData.label).arg(modelData.present ? qsTr("Online now") : qsTr("Last known: %1").arg(modelData.lastSeen || qsTr("unknown"))); Layout.fillWidth: true; Accessible.name: text } }
+                                    Controls.Label { visible: setupModel.deviceList.length === 0; text: qsTr("No remote device has reported yet."); Accessible.name: text }
+                                }
+                            }
+                        }
+                        Kirigami.Card { Layout.fillWidth: true; visible: setupModel.routes.length === 0
+                            header: Controls.Label { text: qsTr("Setup required"); font.bold: true; Accessible.name: text }
+                            contentItem: RowLayout { Controls.Label { text: qsTr("Connect this computer to a backup storage device before the first transfer."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text } Controls.Button { text: qsTr("Open Setup…"); onClicked: openRouteSetup(0, "", true); Accessible.name: qsTr("Open Setup") } }
+                        }
+                        Kirigami.Card { Layout.fillWidth: true; visible: copyEngine.logEntries.length > 0
+                            header: Controls.Label { text: qsTr("Live log"); Accessible.name: text }
+                            contentItem: ColumnLayout { Repeater { model: copyEngine.logEntries.slice(Math.max(0, copyEngine.logEntries.length - 8)); delegate: Controls.Label { text: modelData; elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } } }
+                        }
                     }
-                }
-            }
-            Controls.Label { text: qsTr("Choose folders and the Keep policy. Keep Everything is the safe default; Keep Nothing moves sources to Trash only after verified transfer and confirmation."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Label { text: qsTr("Source folder"); Accessible.name: text }
-            RowLayout { Layout.fillWidth: true
-                Controls.TextField { id: source; placeholderText: "/path/to/source"; Layout.fillWidth: true; Accessible.name: qsTr("Source folder path") }
-                Controls.Button { text: qsTr("Choose…"); Accessible.name: qsTr("Choose source folder"); onClicked: sourceDialog.open() }
-            }
-            Controls.Label { text: qsTr("Content root"); Accessible.name: text }
-            Controls.ComboBox { id: contentType; model: [qsTr("Drive — files"), qsTr("Photos — photos and videos")]; currentIndex: 0; Layout.fillWidth: true; Accessible.name: qsTr("Content root") }
-            Controls.Label { text: qsTr("Destination storage"); Accessible.name: text }
-            Controls.ComboBox { id: storage; model: setupModel.storages.slice(1); textRole: "label"; valueRole: "id"; currentIndex: 0; Layout.fillWidth: true; Accessible.name: qsTr("Destination storage") }
-            Controls.Label { text: qsTr("Destination folder"); Accessible.name: text }
-            RowLayout { Layout.fillWidth: true
-                Controls.TextField { id: destination; placeholderText: "/path/on/storage"; Layout.fillWidth: true; Accessible.name: qsTr("Destination folder path") }
-                Controls.Button { text: qsTr("Choose…"); Accessible.name: qsTr("Choose destination folder"); onClicked: destinationDialog.open() }
-            }
-            Controls.Label { text: qsTr("Optional laptop staging folder"); Accessible.name: text }
-            RowLayout { Layout.fillWidth: true
-                Controls.TextField { id: stagingRoot; placeholderText: qsTr("Leave empty to disable staging"); Layout.fillWidth: true; Accessible.name: qsTr("Optional laptop staging folder path") }
-                Controls.Button { text: qsTr("Choose…"); Accessible.name: qsTr("Choose staging folder"); onClicked: stagingDialog.open() }
-            }
-            Controls.Label { text: qsTr("Keep policy"); Accessible.name: text }
-            Controls.ComboBox { id: keepPolicy; model: [qsTr("Keep Everything"), qsTr("Keep Last month"), qsTr("Keep Last week"), qsTr("Keep Last day"), qsTr("Keep Nothing")]; currentIndex: 0; Layout.fillWidth: true; Accessible.name: qsTr("Keep policy") }
-            Controls.Label { text: qsTr("Minimum free space (MiB)"); Accessible.name: text }
-            Controls.SpinBox { id: minimumFreeSpace; from: 0; to: 1048576; value: 0; editable: true; Layout.fillWidth: true; Accessible.name: qsTr("Minimum free space in MiB") }
-            Controls.Label { text: qsTr("Staging maximum per job (MiB)"); Accessible.name: text }
-            Controls.SpinBox { id: stagingMaximum; from: 0; to: 1048576; value: 0; editable: true; Layout.fillWidth: true; Accessible.name: qsTr("Staging maximum per job in MiB") }
-            Controls.Label { text: qsTr("A non-zero staging maximum rejects a preview whose new bytes exceed this per-job intake bound; zero means unlimited."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.CheckBox { id: organizePhotos; visible: contentType.currentIndex === 1; text: qsTr("Organize unfiled photos by capture year"); Accessible.name: qsTr("Organize unfiled photos by capture year") }
-            Controls.Label { visible: contentType.currentIndex === 1; text: qsTr("Optional: unfiled media goes to Local Drive/Photos/year; meaningful folders and paired sidecars stay together."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Button { id: saveRouteButton; text: qsTr("Save route policy"); enabled: setupModel.ready && storage.currentIndex >= 0 && source.text.length > 0 && destination.text.length > 0; Accessible.name: qsTr("Save route policy"); onClicked: saveCurrentRoute() }
-            Kirigami.Heading { text: qsTr("Saved routes"); level: 2 }
-            Repeater { model: setupModel.routes; delegate: Kirigami.Card { Layout.fillWidth: true
-                contentItem: ColumnLayout {
-                    Controls.Label { text: qsTr("[%1] %2 → %3: %4").arg(modelData.contentType).arg(modelData.source).arg(modelData.destination).arg(keepPolicyDescription(modelData.keepPolicy) + (modelData.stagingRoot.length > 0 ? qsTr(" · staging %1").arg(modelData.stagingRoot) : "") + (modelData.stagingMaxBytes > 0 ? qsTr(" · staging max %1 MiB/job").arg(Math.round(modelData.stagingMaxBytes / 1048576)) : "") + (modelData.minimumFreeBytes > 0 ? qsTr(" · safety margin %1 MiB").arg(Math.round(modelData.minimumFreeBytes / 1048576)) : "") + (modelData.organizePhotos ? qsTr(" · photos by year") : "")); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
-                    Controls.Label { visible: modelData.jobState !== undefined && modelData.jobState.length > 0; text: modelData.jobError.length > 0 ? qsTr("Last job: %1 — %2%3%4").arg(modelData.jobState).arg(modelData.jobErrorCode.length > 0 ? modelData.jobErrorCode + " — " : "").arg(modelData.jobError).arg(modelData.jobErrorCode.length > 0 ? qsTr(" Source remains safe. %1").arg(errorNextAction(modelData.jobErrorCode)) : "") : qsTr("Last job: %1").arg(modelData.jobState); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
-                    Controls.Label { visible: modelData.jobState === "Waiting"; text: qsTr("Waiting for the exact storage to reconnect. No transfer starts and no folders are created while it is offline."); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
-                    RowLayout {
-                        Controls.Button { text: qsTr("Preview"); enabled: !copyEngine.running; onClicked: { previewRouteId = modelData.id; copyEngine.previewRoute(modelData.id) } }
-                        Controls.Button { text: qsTr("Export manifest"); enabled: previewRouteId === modelData.id && selectedPreview.ok === true && !copyEngine.running; onClicked: { manifestStatus = ""; manifestDialog.open() } }
-                        Controls.Button { text: modelData.keepPolicy === "Nothing" ? qsTr("Start verified transfer") : qsTr("Start verified copy"); enabled: previewRouteId === modelData.id && selectedPreview.ok === true && copyEngine.previewSuccessful && !copyEngine.running; onClicked: copyEngine.startCopy() }
-                        Controls.Button { text: modelData.keepPolicy === "Nothing" ? qsTr("Move verified sources to Trash") : qsTr("Move expired sources to Trash"); visible: modelData.keepPolicy !== "Everything"; enabled: previewRouteId === modelData.id && copyEngine.cleanupReady && !copyEngine.running; onClicked: cleanupDialog.open() }
+                    ColumnLayout {
+                        Repeater { model: notificationItems(); delegate: Kirigami.Card { Layout.fillWidth: true
+                            header: Controls.Label { text: modelData.title; font.bold: true; Accessible.name: text }
+                            contentItem: RowLayout { Controls.Label { text: modelData.detail; wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text } Controls.Button { text: modelData.action; onClicked: openDashboardAction(modelData.target); Accessible.name: text } }
+                        } }
+                        Controls.Label { visible: notificationItems().length === 0; text: qsTr("No notifications from the shared catalog."); Accessible.name: text }
                     }
-                    Controls.Label { visible: previewRouteId === modelData.id && (selectedPreview.ok === true || selectedPreview.unreadable > 0); text: qsTr("Preview: %1 files · %2 bytes · to copy %3 · identical %4 · duplicates %5 · organized %6 · conflicts %7 · unsupported %8 · unreadable %9 · free %10 · safety margin %11").arg(selectedPreview.files).arg(selectedPreview.bytes).arg(selectedPreview.toCopy).arg(selectedPreview.identical).arg(selectedPreview.duplicates).arg(selectedPreview.organized).arg(selectedPreview.conflicts).arg(selectedPreview.unsupported).arg(selectedPreview.unreadable).arg(selectedPreview.freeBytes).arg(selectedPreview.minimumFreeBytes); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
-                    Controls.Label { visible: previewRouteId === modelData.id && selectedPreview.ok === true && selectedPreview.conflicts > 0; text: qsTr("Conflict paths: %1").arg(selectedPreview.conflictPaths.slice(0, 5).join(", ") + (selectedPreview.conflicts > 5 ? qsTr(" …") : "")); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
-                    Controls.Label { visible: previewRouteId === modelData.id && copyEngine.cleanupReady; text: selectedCleanup.uncertain === true ? qsTr("Cleanup outcome is uncertain: review system Trash and catalog before retrying.") : (selectedCleanup.files === 0 ? qsTr("Cleanup preview: no eligible source files") : qsTr("Cleanup preview: %1 files · %2 bytes eligible for Trash").arg(selectedCleanup.files).arg(selectedCleanup.bytes)); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
-                    Controls.Label { visible: previewRouteId === modelData.id && selectedPreview.ok === false && selectedPreview.error !== undefined && selectedPreview.error.length > 0; text: qsTr("Preview failed: %1%2 Source unchanged. %3").arg(selectedPreview.errorCode !== undefined && selectedPreview.errorCode.length > 0 ? "[" + selectedPreview.errorCode + "] " : "").arg(selectedPreview.error).arg(selectedPreview.nextAction !== undefined ? selectedPreview.nextAction : qsTr("Fix the reported problem, then preview again.")); color: Kirigami.Theme.negativeTextColor; wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
-                    Controls.Label { visible: previewRouteId === modelData.id && manifestStatus.length > 0; text: manifestStatus; wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
-                    Controls.Label { visible: previewRouteId === modelData.id && selectedHistory.length > 0; text: qsTr("Recent history"); Layout.fillWidth: true; Accessible.name: text }
-                    Repeater { model: previewRouteId === modelData.id ? selectedHistory : []; delegate: Controls.Label { text: qsTr("%1 · %2").arg(modelData.event).arg(modelData.result); elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } }
+                    ColumnLayout { Kirigami.Heading { text: qsTr("Photos connection map"); level: 3 } Loader { Layout.fillWidth: true; sourceComponent: connectionMap; onLoaded: item.mapContentType = "Photos" } }
+                    ColumnLayout { Kirigami.Heading { text: qsTr("Files connection map"); level: 3 } Loader { Layout.fillWidth: true; sourceComponent: connectionMap; onLoaded: item.mapContentType = "Drive" } }
                 }
-            } }
+            }
         }
-        ColumnLayout { width: parent.width; spacing: Kirigami.Units.largeSpacing
+        ColumnLayout { Layout.fillWidth: true; spacing: Kirigami.Units.largeSpacing
             Kirigami.Heading { text: qsTr("Drive"); level: 2 }
             Controls.Label { text: qsTr("Ordinary files in the configured Drive root. The verified route actions remain available from Sync."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Kirigami.Card { Layout.fillWidth: true
                 header: Controls.Label { text: qsTr("Drive files"); Accessible.name: text }
                 contentItem: ColumnLayout {
-                    Repeater { model: setupModel.routes.filter(function(route) { return route.contentType === "Drive" }); delegate: Controls.Label { text: qsTr("%1 → %2 · %3").arg(modelData.source).arg(modelData.destination).arg(modelData.keepPolicy); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text } }
+                    Repeater { model: setupModel.routes.filter(function(route) { return route.contentType === "Drive" }); delegate: routeMapCard }
                     Controls.Label { visible: setupModel.routes.filter(function(route) { return route.contentType === "Drive" }).length === 0; text: qsTr("No Drive route saved yet."); Accessible.name: text }
                 }
             }
         }
-        ColumnLayout { width: parent.width; spacing: Kirigami.Units.largeSpacing
+        ColumnLayout { Layout.fillWidth: true; spacing: Kirigami.Units.largeSpacing
             Kirigami.Heading { text: qsTr("Photos"); level: 2 }
             Controls.Label { text: qsTr("Photos and videos in the configured Photos root. The library stays ordinary files and remains editable by normal applications."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Kirigami.Card { Layout.fillWidth: true
                 header: Controls.Label { text: qsTr("Photos routes"); Accessible.name: text }
                 contentItem: ColumnLayout {
-                    Repeater { model: setupModel.routes.filter(function(route) { return route.contentType === "Photos" }); delegate: Controls.Label { text: qsTr("%1 → %2 · %3").arg(modelData.source).arg(modelData.destination).arg(modelData.keepPolicy); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text } }
-                    Controls.Label { visible: setupModel.routes.filter(function(route) { return route.contentType === "Photos" }).length === 0; text: qsTr("No Photos route saved yet."); Accessible.name: text }
-                }
-            }
-        }
-        ColumnLayout { width: parent.width; spacing: Kirigami.Units.largeSpacing
-            Kirigami.Heading { text: qsTr("New"); level: 2 }
-            Controls.Label { text: qsTr("Start a focused task. These actions keep the same keyboard-first workflow and do not silently start a transfer."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Button { text: qsTr("Sync now"); onClicked: currentMode = "Sync"; Accessible.name: qsTr("Sync now") }
-            Controls.Button { text: qsTr("New folder"); enabled: false; Accessible.name: qsTr("New folder") }
-            Controls.Button { text: qsTr("Scan document"); enabled: false; Accessible.name: qsTr("Scan document") }
-            Controls.Button { text: qsTr("Settings"); onClicked: showingSettings = true; Accessible.name: qsTr("Settings") }
-        }
-        ColumnLayout { width: parent.width; spacing: Kirigami.Units.largeSpacing
-            Kirigami.Heading { text: qsTr("Settings"); level: 2 }
-            Controls.Label { text: qsTr("Settings preserves the same storage identities, routes, and history. Changes here do not delete files."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Kirigami.Heading { text: qsTr("Visual connection map"); level: 3 }
-            Controls.Label { text: qsTr("These are two filters over the same remembered devices and storage. A disk can serve both maps."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.TabBar {
-                id: settingsContentTabs
-                currentIndex: settingsContentIndex
-                onCurrentIndexChanged: settingsContentIndex = currentIndex
-                Layout.fillWidth: true
-                Controls.TabButton { text: qsTr("Drive"); Accessible.name: qsTr("Drive map") }
-                Controls.TabButton { text: qsTr("Photos"); Accessible.name: qsTr("Photos map") }
-            }
-            StackLayout {
-                currentIndex: settingsContentIndex
-                Layout.fillWidth: true
-                ColumnLayout {
-                    Kirigami.Heading { text: qsTr("Drive routes"); level: 4 }
-                    Repeater { model: setupModel.routes.filter(function(route) { return route.contentType === "Drive" }); delegate: routeMapCard }
-                    Controls.Label { visible: setupModel.routes.filter(function(route) { return route.contentType === "Drive" }).length === 0; text: qsTr("No Drive route saved yet."); Accessible.name: text }
-                }
-                ColumnLayout {
-                    Kirigami.Heading { text: qsTr("Photos routes"); level: 4 }
                     Repeater { model: setupModel.routes.filter(function(route) { return route.contentType === "Photos" }); delegate: routeMapCard }
                     Controls.Label { visible: setupModel.routes.filter(function(route) { return route.contentType === "Photos" }).length === 0; text: qsTr("No Photos route saved yet."); Accessible.name: text }
                 }
             }
-            Kirigami.Heading { text: qsTr("Wireless receiver"); level: 3 }
-            Kirigami.Card {
-                Layout.fillWidth: true
-                contentItem: ColumnLayout {
-                    Controls.Label { text: qsTr("The receiver accepts only TLS 1.3 clients whose certificate fingerprint is pinned. A successful Start is remembered locally and starts again with the application; Stop disables that auto-start."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-                    Controls.Label { text: qsTr("Status: %1").arg(wirelessReceiver.status); Layout.fillWidth: true; Accessible.name: text }
-                    RowLayout { Layout.fillWidth: true
-                        Controls.TextField { id: receiverHost; placeholderText: qsTr("Laptop LAN address or hostname"); Layout.fillWidth: true; Accessible.name: qsTr("Laptop LAN address for Android profile") }
-                        Controls.Label { text: qsTr("host"); Accessible.name: text }
+        }
+        ColumnLayout { Layout.fillWidth: true; spacing: Kirigami.Units.largeSpacing
+            Kirigami.Heading { text: qsTr("New"); level: 2 }
+            Controls.Label { text: qsTr("Start a focused task. These actions keep the same keyboard-first workflow and do not silently start a transfer."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            RowLayout { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                Kirigami.Card { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                    header: Controls.Label { text: qsTr("Transfer"); font.bold: true; Accessible.name: text }
+                    contentItem: ColumnLayout {
+                        Controls.Label { text: qsTr("Preview and run a saved Files or Photos route."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                        Controls.Button { text: qsTr("Open Sync"); onClicked: currentMode = "Sync"; Accessible.name: qsTr("Open Sync") }
                     }
-                    RowLayout { Layout.fillWidth: true
-                        Controls.TextField { id: receiverDestination; placeholderText: qsTr("Local Drive root / destination folder"); Layout.fillWidth: true; Accessible.name: qsTr("Wireless destination root") }
-                        Controls.Button { text: qsTr("Choose…"); onClicked: receiverDestinationDialog.open(); Accessible.name: qsTr("Choose wireless destination root") }
+                }
+                Kirigami.Card { Layout.fillWidth: true; Layout.alignment: Qt.AlignTop
+                    header: Controls.Label { text: qsTr("Configure"); font.bold: true; Accessible.name: text }
+                    contentItem: ColumnLayout {
+                        Controls.Label { text: qsTr("Add storage locations, review device maps, and configure connections."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                        Controls.Button { text: qsTr("Open Settings"); onClicked: showingSettings = true; Accessible.name: qsTr("Open Settings") }
                     }
-                    RowLayout { Layout.fillWidth: true
-                        Controls.TextField { id: receiverCertificate; placeholderText: qsTr("Server certificate PEM"); Layout.fillWidth: true; Accessible.name: qsTr("Server certificate") }
-                        Controls.Button { text: qsTr("Choose…"); onClicked: receiverCertificateDialog.open(); Accessible.name: qsTr("Choose server certificate") }
-                    }
-                    RowLayout { Layout.fillWidth: true
-                        Controls.TextField { id: receiverPrivateKey; placeholderText: qsTr("Server private key PEM"); Layout.fillWidth: true; Accessible.name: qsTr("Server private key") }
-                        Controls.Button { text: qsTr("Choose…"); onClicked: receiverPrivateKeyDialog.open(); Accessible.name: qsTr("Choose server private key") }
-                    }
-                    RowLayout { Layout.fillWidth: true
-                        Controls.TextField { id: receiverClientCa; placeholderText: qsTr("Android client certificate PEM"); Layout.fillWidth: true; Accessible.name: qsTr("Android client certificate") }
-                        Controls.Button { text: qsTr("Choose…"); onClicked: receiverClientCaDialog.open(); Accessible.name: qsTr("Choose Android client certificate") }
-                    }
-                    RowLayout { Layout.fillWidth: true
-                        Controls.TextField { id: receiverFingerprint; placeholderText: qsTr("Pinned Android SHA-256 fingerprint"); Layout.fillWidth: true; Accessible.name: qsTr("Pinned Android certificate fingerprint") }
-                        Controls.TextField { id: receiverPort; text: "43171"; inputMethodHints: Qt.ImhDigitsOnly; width: 100; Accessible.name: qsTr("Wireless receiver port") }
-                    }
-                    RowLayout { Layout.fillWidth: true
-                        Controls.Button { text: qsTr("Start receiver"); enabled: !wirelessReceiver.listening; onClicked: wirelessReceiver.start(receiverDestination.text, receiverCertificate.text, receiverPrivateKey.text, receiverClientCa.text, receiverFingerprint.text, Number(receiverPort.text)); Accessible.name: qsTr("Start wireless receiver") }
-                        Controls.Button { text: qsTr("Stop receiver"); enabled: wirelessReceiver.listening; onClicked: wirelessReceiver.stop(); Accessible.name: qsTr("Stop wireless receiver") }
-                    }
-                    RowLayout { Layout.fillWidth: true
-                        Controls.Button { text: qsTr("Export Android profile…"); enabled: receiverHost.text.trim().length > 0 && receiverCertificate.text.trim().length > 0; onClicked: receiverProfileExportDialog.open(); Accessible.name: qsTr("Export Android pairing profile") }
-                        Controls.Button { text: qsTr("Accept Android certificate…"); onClicked: receiverProfileImportDialog.open(); Accessible.name: qsTr("Accept Android public certificate") }
-                    }
-                    Controls.Label { text: qsTr("Export the profile to Android, then accept the Android public certificate here. Private keys never leave this computer."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-                    Controls.Label { text: qsTr("Live receiver log"); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
-                    Repeater { model: wirelessReceiver.logEntries.slice(Math.max(0, wirelessReceiver.logEntries.length - 12)); delegate: Controls.Label { text: modelData; elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } }
                 }
             }
-            Kirigami.Heading { text: qsTr("Hidden devices"); level: 3 }
-            Controls.Label { text: qsTr("Hidden devices stay in the catalog and history. Show one again when you want it back in the map and device list."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Repeater { model: setupModel.hiddenDevices; delegate: RowLayout { Layout.fillWidth: true
-                Controls.Label { text: qsTr("%1 · %2").arg(modelData.label).arg(modelData.stableIdentity); elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text }
-                Controls.Button { text: qsTr("Show again"); onClicked: setupModel.showDevice(modelData.id); Accessible.name: qsTr("Show %1 again").arg(modelData.label) }
-            } }
-            Controls.Label { visible: setupModel.hiddenDevices.length === 0; text: qsTr("No hidden devices."); Accessible.name: text }
-            Controls.Button { text: qsTr("Back to New"); onClicked: { showingSettings = false; currentMode = "New" } Accessible.name: qsTr("Back to New") }
+            Controls.Label { text: qsTr("New folder and document scanning are planned after the transfer workflow is validated on real devices."); wrapMode: Text.WordWrap; color: Kirigami.Theme.disabledTextColor; Layout.fillWidth: true; Accessible.name: text }
+        }
+        ColumnLayout { Layout.fillWidth: true; spacing: 0
+            Controls.SplitView { Layout.fillWidth: true; Layout.preferredHeight: 620; orientation: Qt.Horizontal
+                handle: Rectangle { implicitWidth: 1; color: Kirigami.Theme.disabledTextColor; opacity: 0.3 }
+                Rectangle { Controls.SplitView.minimumWidth: 250; Controls.SplitView.preferredWidth: 250; Controls.SplitView.maximumWidth: 250; color: Kirigami.Theme.backgroundColor
+                    ColumnLayout { anchors.fill: parent; anchors.margins: Kirigami.Units.smallSpacing; spacing: Kirigami.Units.smallSpacing
+                        Controls.TextField { id: settingsSearch; placeholderText: qsTr("Search settings…"); Layout.fillWidth: true; Accessible.name: qsTr("Search settings") }
+                        Controls.Label { visible: settingsMatches(qsTr("Storage & locations")); text: qsTr("STORAGE"); font.bold: true; color: Kirigami.Theme.disabledTextColor; topPadding: Kirigami.Units.smallSpacing; Accessible.name: text }
+                        Controls.ItemDelegate { visible: settingsMatches(qsTr("Storage & locations")); text: qsTr("Storage & locations"); icon.name: "drive-harddisk"; highlighted: settingsCategoryIndex === 0; onClicked: settingsCategoryIndex = 0; Layout.fillWidth: true; Accessible.name: qsTr("Storage and locations settings") }
+                        Kirigami.Separator { visible: settingsSearch.text.length === 0; Layout.fillWidth: true }
+                        Controls.Label { visible: settingsMatches(qsTr("Sync & device maps")); text: qsTr("SYNCHRONIZATION"); font.bold: true; color: Kirigami.Theme.disabledTextColor; topPadding: Kirigami.Units.smallSpacing; Accessible.name: text }
+                        Controls.ItemDelegate { visible: settingsMatches(qsTr("Sync & device maps")); text: qsTr("Sync & device maps"); icon.name: "folder-sync"; highlighted: settingsCategoryIndex === 1; onClicked: settingsCategoryIndex = 1; Layout.fillWidth: true; Accessible.name: qsTr("Sync and device maps") }
+                        Kirigami.Separator { visible: settingsSearch.text.length === 0; Layout.fillWidth: true }
+                        Controls.Label { visible: settingsMatches(qsTr("Wired & wireless")); text: qsTr("CONNECTIONS"); font.bold: true; color: Kirigami.Theme.disabledTextColor; topPadding: Kirigami.Units.smallSpacing; Accessible.name: text }
+                        Controls.ItemDelegate { visible: settingsMatches(qsTr("Wired & wireless")); text: qsTr("Wired & wireless"); icon.name: "network-wired"; highlighted: settingsCategoryIndex === 2; onClicked: settingsCategoryIndex = 2; Layout.fillWidth: true; Accessible.name: qsTr("Wired and wireless settings") }
+                        Item { Layout.fillHeight: true }
+                        Controls.Label { text: qsTr("Changes are applied when you use the action in each page."); wrapMode: Text.WordWrap; color: Kirigami.Theme.disabledTextColor; Layout.fillWidth: true; Accessible.name: text }
+                    }
+                }
+                Item { Controls.SplitView.fillWidth: true
+                    StackLayout { currentIndex: settingsCategoryIndex; anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter; width: Math.min(parent.width - Kirigami.Units.largeSpacing * 4, 920)
+                    ColumnLayout {
+                        Kirigami.Heading { text: qsTr("Storage & locations"); level: 3 }
+                        Kirigami.Separator { Layout.fillWidth: true }
+                        Controls.Label { text: qsTr("The source library stays under Home. Each backup route points to an exact writable disk or server."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                        Repeater { model: storageCandidates(); delegate: Kirigami.Card { Layout.fillWidth: true; contentItem: RowLayout { Controls.Label { text: modelData.present ? "●" : "○"; color: modelData.present ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor; Accessible.name: modelData.present ? qsTr("Online") : qsTr("Offline") } ColumnLayout { Layout.fillWidth: true; Controls.Label { text: modelData.label; font.bold: true; Accessible.name: text } Controls.Label { text: qsTr("%1 free · %2").arg(bytesText(modelData.bytesFree)).arg(modelData.root); elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } } Controls.Button { text: qsTr("👁"); flat: true; onClicked: setupModel.acknowledgeDevice(modelData.id, true); Accessible.name: qsTr("Hide %1").arg(modelData.label) } } } }
+                        Controls.Label { visible: storageCandidates().length === 0; text: qsTr("No external storage is currently known."); Accessible.name: text }
+                        RowLayout { Controls.Button { text: qsTr("Add Files route…"); onClicked: openRouteSetup(0, "", false); Accessible.name: qsTr("Add Files route") } Controls.Button { text: qsTr("Add Photos route…"); onClicked: openRouteSetup(1, "", false); Accessible.name: qsTr("Add Photos route") } }
+                        Repeater { model: setupModel.routes; delegate: routeMapCard }
+                    }
+                    ColumnLayout {
+                        Kirigami.Heading { text: qsTr("Sync & device maps"); level: 3 }
+                        Kirigami.Separator { Layout.fillWidth: true }
+                        Controls.TabBar { currentIndex: settingsContentIndex; onCurrentIndexChanged: settingsContentIndex = currentIndex; Layout.fillWidth: true; Controls.TabButton { text: qsTr("Files"); Accessible.name: qsTr("Files map") } Controls.TabButton { text: qsTr("Photos"); Accessible.name: qsTr("Photos map") } }
+                        Loader { Layout.fillWidth: true; sourceComponent: connectionMap; onLoaded: item.mapContentType = Qt.binding(function() { return settingsContentIndex === 0 ? "Drive" : "Photos" }) }
+                    }
+                    ColumnLayout {
+                        Kirigami.Heading { text: qsTr("Wired & wireless"); level: 3 }
+                        Kirigami.Separator { Layout.fillWidth: true }
+                        Controls.TabBar { currentIndex: settingsConnectionIndex; onCurrentIndexChanged: settingsConnectionIndex = currentIndex; Layout.fillWidth: true; Controls.TabButton { text: qsTr("Devices"); Accessible.name: qsTr("Wired devices") } Controls.TabButton { text: qsTr("Wireless receiver"); Accessible.name: qsTr("Wireless receiver") } }
+                        StackLayout { currentIndex: settingsConnectionIndex; Layout.fillWidth: true
+                            ColumnLayout {
+                                Controls.Label { text: qsTr("This computer — %1").arg(setupModel.localDeviceName); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
+                                Repeater { model: setupModel.deviceList; delegate: Kirigami.Card { Layout.fillWidth: true; contentItem: RowLayout { Controls.Label { text: modelData.present ? "●" : "○"; color: modelData.present ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor; Accessible.name: modelData.present ? qsTr("Online") : qsTr("Offline") } ColumnLayout { Layout.fillWidth: true; Controls.Label { text: modelData.label; font.bold: true; Accessible.name: text } Controls.Label { text: qsTr("%1 · %2").arg(modelData.status).arg((modelData.transports || []).join(" + ") || qsTr("Last known")); Accessible.name: text } } Controls.Button { text: qsTr("👁"); flat: true; onClicked: setupModel.acknowledgeDevice(modelData.id, true); Accessible.name: qsTr("Hide %1").arg(modelData.label) } } } }
+                                Controls.Button { text: qsTr("Refresh devices"); onClicked: refreshAll(); Accessible.name: qsTr("Refresh devices") }
+                                Kirigami.Heading { text: qsTr("Hidden devices"); level: 4 }
+                                Repeater { model: setupModel.hiddenDevices; delegate: RowLayout { Layout.fillWidth: true; Controls.Label { text: qsTr("%1 · %2").arg(modelData.label).arg(modelData.stableIdentity); elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } Controls.Button { text: qsTr("👁"); flat: true; onClicked: setupModel.showDevice(modelData.id); Accessible.name: qsTr("Show %1 again").arg(modelData.label) } } }
+                                Controls.Label { visible: setupModel.hiddenDevices.length === 0; text: qsTr("No hidden devices."); Accessible.name: text }
+                            }
+                            Kirigami.Card { Layout.fillWidth: true; contentItem: ColumnLayout {
+                            Controls.Label { text: qsTr("The receiver uses the saved secure profile. The port is automatic and is not a user setting."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                            Controls.Label { text: qsTr("Status: %1").arg(wirelessReceiver.status); Layout.fillWidth: true; Accessible.name: text }
+                            Kirigami.FormLayout { Layout.fillWidth: true
+                                Controls.TextField { id: receiverHost; Kirigami.FormData.label: qsTr("Host:"); placeholderText: qsTr("Laptop LAN address or hostname"); Layout.fillWidth: true; Accessible.name: qsTr("Laptop LAN address") }
+                                RowLayout { Kirigami.FormData.label: qsTr("Destination:"); Controls.TextField { id: receiverDestination; placeholderText: qsTr("Local Drive destination folder"); Layout.fillWidth: true; Accessible.name: qsTr("Wireless destination") } Controls.Button { text: qsTr("Choose…"); onClicked: receiverDestinationDialog.open(); Accessible.name: qsTr("Choose wireless destination") } }
+                                RowLayout { Kirigami.FormData.label: qsTr("Server certificate:"); Controls.TextField { id: receiverCertificate; placeholderText: qsTr("PEM file"); Layout.fillWidth: true; Accessible.name: qsTr("Server certificate") } Controls.Button { text: qsTr("Choose…"); onClicked: receiverCertificateDialog.open(); Accessible.name: qsTr("Choose server certificate") } }
+                                RowLayout { Kirigami.FormData.label: qsTr("Private key:"); Controls.TextField { id: receiverPrivateKey; placeholderText: qsTr("PEM file"); Layout.fillWidth: true; Accessible.name: qsTr("Server private key") } Controls.Button { text: qsTr("Choose…"); onClicked: receiverPrivateKeyDialog.open(); Accessible.name: qsTr("Choose server key") } }
+                                RowLayout { Kirigami.FormData.label: qsTr("Android certificate:"); Controls.TextField { id: receiverClientCa; placeholderText: qsTr("PEM file"); Layout.fillWidth: true; Accessible.name: qsTr("Android certificate") } Controls.Button { text: qsTr("Choose…"); onClicked: receiverClientCaDialog.open(); Accessible.name: qsTr("Choose Android certificate") } }
+                                Controls.TextField { id: receiverFingerprint; Kirigami.FormData.label: qsTr("Pinned fingerprint:"); placeholderText: qsTr("Android SHA-256 fingerprint"); Layout.fillWidth: true; Accessible.name: qsTr("Pinned Android fingerprint") }
+                            }
+                            Controls.TextField { id: receiverPort; visible: false; text: "43171"; Layout.preferredWidth: 1; Layout.preferredHeight: 1 }
+                            RowLayout { Controls.Button { text: qsTr("Start receiver"); enabled: !wirelessReceiver.listening; onClicked: wirelessReceiver.start(receiverDestination.text, receiverCertificate.text, receiverPrivateKey.text, receiverClientCa.text, receiverFingerprint.text, Number(receiverPort.text)); Accessible.name: qsTr("Start receiver") } Controls.Button { text: qsTr("Stop receiver"); enabled: wirelessReceiver.listening; onClicked: wirelessReceiver.stop(); Accessible.name: qsTr("Stop receiver") } }
+                            RowLayout { Controls.Button { text: qsTr("Export Android profile…"); enabled: receiverHost.text.trim().length > 0 && receiverCertificate.text.trim().length > 0; onClicked: receiverProfileExportDialog.open(); Accessible.name: qsTr("Export Android profile") } Controls.Button { text: qsTr("Accept Android certificate…"); onClicked: receiverProfileImportDialog.open(); Accessible.name: qsTr("Accept Android certificate") } }
+                            Controls.Label { text: qsTr("Private keys never leave this computer."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                            Repeater { model: wirelessReceiver.logEntries.slice(Math.max(0, wirelessReceiver.logEntries.length - 12)); delegate: Controls.Label { text: modelData; elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text } }
+                            } }
+                        }
+                    }
+                }
+                }
+            }
         }
         }
     }
-    Connections { target: copyEngine; function onPreviewChanged() { selectedPreview = copyEngine.previewData; selectedCleanup = copyEngine.cleanupPreview(); selectedHistory = copyEngine.recentHistory(); transferProgress = 0; transferPath = "" } function onProgressChanged(done, total, path) { transferProgress = total > 0 ? done / total : 0; transferPath = path } function onFinished() { resumeTimer.stop(); pauseRemainingMilliseconds = 0; setupModel.refreshRoutes(); selectedCleanup = copyEngine.cleanupPreview(); selectedHistory = copyEngine.recentHistory(); transferProgress = 0; transferPath = "" } }
+    Controls.Dialog { id: setupDialog; modal: true; width: 760; closePolicy: Controls.Popup.CloseOnEscape; standardButtons: Controls.Dialog.NoButton
+        header: RowLayout {
+            Controls.Label { text: qsTr("Setup · step %1 of 3").arg(setupStep); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Button { text: qsTr("✕"); flat: true; onClicked: { configuringRoute = false; setupDialog.close() } Accessible.name: qsTr("Close Setup") }
+        }
+        contentItem: ColumnLayout {
+            Controls.Label { visible: setupStep === 1; text: qsTr("Build the first connection on the device map. Local Drive keeps ordinary files and records verified transfer history."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            ColumnLayout { visible: setupStep === 2; Layout.fillWidth: true
+                Controls.Label { text: qsTr("1. Choose this computer's library under %1").arg(homeRoot()); font.bold: true; Accessible.name: text }
+                RowLayout { Layout.fillWidth: true; Controls.TextField { id: source; readOnly: true; placeholderText: qsTr("Choose a folder in your home"); Layout.fillWidth: true; Accessible.name: qsTr("Computer library folder") } Controls.Button { text: qsTr("Choose…"); onClicked: sourceDialog.open(); Accessible.name: qsTr("Choose computer library folder") } }
+            }
+            ColumnLayout { visible: setupStep === 3; Layout.fillWidth: true
+                Controls.Label { text: qsTr("2. Choose the storage device and its backup folder"); font.bold: true; Accessible.name: text }
+                Controls.Label { text: qsTr("This becomes the second node on the map. A phone is a source device, not this backup destination."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+                Controls.ComboBox { id: storage; model: storageCandidates(); textRole: "label"; valueRole: "id"; currentIndex: 0; Layout.fillWidth: true; Accessible.name: qsTr("Backup destination") }
+                RowLayout { Layout.fillWidth: true; Controls.TextField { id: destination; readOnly: true; placeholderText: qsTr("Choose an existing writable folder"); Layout.fillWidth: true; Accessible.name: qsTr("Backup folder") } Controls.Button { text: qsTr("Choose…"); enabled: storage.currentIndex >= 0; onClicked: destinationDialog.open(); Accessible.name: qsTr("Choose backup folder") } }
+                Controls.Label { text: qsTr("This only saves the device locations. Configure the Files and Photos arrows separately on the visual map."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            }
+            RowLayout { Layout.fillWidth: true; Layout.alignment: Qt.AlignRight
+                Controls.Button { visible: setupStep > 1; text: qsTr("Back"); onClicked: setupStep -= 1; Accessible.name: qsTr("Back one setup step") }
+                Controls.Button { visible: setupStep < 3; text: qsTr("Next"); enabled: setupStep !== 2 || (source.text.length > 0 && isUnderHome(source.text)); onClicked: setupStep += 1; Accessible.name: qsTr("Next setup step") }
+                Controls.Button { id: saveRouteButton; visible: setupStep === 3; text: pendingSetupBoth ? qsTr("Create map") : qsTr("Save locations"); enabled: setupModel.ready && storage.currentIndex >= 0 && source.text.length > 0 && destination.text.length > 0 && isUnderHome(source.text); onClicked: saveCurrentRoute(); Accessible.name: text }
+            }
+        }
+    }
+    Controls.Dialog { id: relationshipDialog; modal: true; width: 520; closePolicy: Controls.Popup.CloseOnEscape; standardButtons: Controls.Dialog.NoButton
+        header: RowLayout { Controls.Label { text: qsTr("Device relationship"); font.bold: true; Layout.fillWidth: true; Accessible.name: text } Controls.Button { text: qsTr("✕"); flat: true; onClicked: relationshipDialog.close(); Accessible.name: qsTr("Close relationship") } }
+        contentItem: ColumnLayout {
+            Controls.Label { text: qsTr("%1  ↔  %2").arg(firstMapNode.label || qsTr("First device")).arg(secondMapNode.label || qsTr("Second device")); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Label { text: qsTr("Choose the behavior of this connection for %1.").arg(selectedMapContentType === "Drive" ? qsTr("Files") : qsTr("Photos")); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Controls.CheckBox { id: relationshipSend; text: qsTr("Send"); Accessible.name: qsTr("Send on this connection") }
+            Controls.CheckBox { id: relationshipReceive; text: qsTr("Receive"); Accessible.name: qsTr("Receive on this connection") }
+            Controls.CheckBox { id: relationshipKeep; text: qsTr("Keep source files"); Accessible.name: qsTr("Keep source files after verified transfer") }
+            Controls.Label { text: relationshipKeep.checked ? qsTr("Keep checked: verified copy; source files remain.") : qsTr("Keep unchecked: verified move; source cleanup still requires explicit Trash confirmation."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Label { id: relationshipStatus; text: ""; visible: text.length > 0; color: Kirigami.Theme.negativeTextColor; wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            RowLayout { Layout.alignment: Qt.AlignRight; Controls.Button { text: qsTr("Cancel"); onClicked: relationshipDialog.close(); Accessible.name: qsTr("Cancel relationship") } Controls.Button { text: qsTr("Apply"); onClicked: applyRelationship(); Accessible.name: qsTr("Apply device relationship") } }
+        }
+        onClosed: { firstMapNode = ({}); secondMapNode = ({}) }
+    }
+    Controls.Dialog { id: moreRelationshipsDialog; modal: true; width: 520; standardButtons: Controls.Dialog.NoButton
+        contentItem: ColumnLayout {
+            Controls.Label { text: qsTr("Add another Files relationship?"); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Label { text: qsTr("Only connections supported by the current transfer engine are offered."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            RowLayout { Layout.alignment: Qt.AlignRight
+                Controls.Button { text: qsTr("Yes, add another"); onClicked: { moreRelationshipsDialog.close(); openRouteSetup(0, "", false, pendingSetupKeepPolicy) }; Accessible.name: text }
+                Controls.Button { text: qsTr("No, finish Files"); onClicked: { moreRelationshipsDialog.close(); pendingMountedStorageFlow = false; clonePhotosMapDialog.open() }; Accessible.name: text }
+            }
+        }
+    }
+    Controls.Dialog { id: storageScopeDialog; modal: true; width: 560; standardButtons: Controls.Dialog.NoButton
+        contentItem: ColumnLayout {
+            Controls.Label { text: qsTr("Connect %1 with this laptop").arg(onboardingDevice.label || qsTr("storage")); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Label { text: qsTr("Only relationships the app can transfer safely today are shown. Choose which map will use this storage."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            RowLayout { Layout.alignment: Qt.AlignRight
+                Controls.Button { text: qsTr("Drive"); onClicked: { storageScopeDialog.close(); pendingMountedStorageFlow = false; openRouteSetup(0, pendingMountedStorageId, false) }; Accessible.name: text }
+                Controls.Button { text: qsTr("Photos"); onClicked: { storageScopeDialog.close(); pendingMountedStorageFlow = false; openRouteSetup(1, pendingMountedStorageId, false) }; Accessible.name: text }
+                Controls.Button { text: qsTr("Drive and Photos"); onClicked: { storageScopeDialog.close(); pendingMountedStorageFlow = true; openRouteSetup(0, pendingMountedStorageId, false) }; Accessible.name: text }
+            }
+        }
+    }
+    Controls.Dialog { id: clonePhotosMapDialog; modal: true; width: 560; standardButtons: Controls.Dialog.NoButton
+        contentItem: ColumnLayout {
+            Controls.Label { text: qsTr("Should files and photos use the same synchronization map?"); font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Label { text: qsTr("Yes makes a one-time copy of devices, directions, and Keep policies. Later changes remain independent."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            RowLayout { Layout.alignment: Qt.AlignRight
+                Controls.Button { text: qsTr("No, configure Photos"); onClicked: { clonePhotosMapDialog.close(); openRouteSetup(1, pendingMountedStorageId, false, pendingSetupKeepPolicy) }; Accessible.name: text }
+                Controls.Button { text: qsTr("Yes, copy the map"); onClicked: { if (setupModel.cloneDriveMapToPhotos()) { clonePhotosMapDialog.close(); syncSectionIndex = 2 } }; Accessible.name: text }
+            }
+        }
+    }
+    Connections { target: copyEngine; function onPreviewChanged() { selectedPreview = copyEngine.previewData; selectedCleanup = copyEngine.cleanupPreview(); selectedHistory = copyEngine.recentHistory(); transferProgress = 0; transferPath = "" } function onProgressChanged(done, total, path) { transferProgress = total > 0 ? done / total : 0; transferPath = path } function onFinished(success, message) { resumeTimer.stop(); pauseRemainingMilliseconds = 0; setupModel.refreshRoutes(); selectedCleanup = copyEngine.cleanupPreview(); selectedHistory = copyEngine.recentHistory(); transferProgress = 0; transferPath = ""; if (pendingPhonePhotos) { pendingPhonePhotos = false; if (success) Qt.callLater(function() { startPhoneImport("Photos", "DCIM") }); else phoneActionStatus = message } } }
     Connections { target: setupModel; function onChanged() { showOnboardingIfNeeded() } }
-    FolderDialog { id: sourceDialog; title: qsTr("Choose source folder"); onAccepted: source.text = setupModel.pathFromUrl(selectedFolder) }
-    FolderDialog { id: destinationDialog; title: qsTr("Choose destination folder"); currentFolder: storage.currentIndex >= 0 ? "file://" + setupModel.storages[storage.currentIndex + 1].root : ""; onAccepted: destination.text = setupModel.pathFromUrl(selectedFolder) }
-    FolderDialog { id: stagingDialog; title: qsTr("Choose laptop staging folder"); onAccepted: stagingRoot.text = setupModel.pathFromUrl(selectedFolder) }
+    FolderDialog { id: sourceDialog; title: qsTr("Choose a computer folder inside Home"); currentFolder: "file://" + homeRoot(); onAccepted: { const path = setupModel.pathFromUrl(selectedFolder); if (isUnderHome(path)) source.text = path } }
+    FolderDialog { id: destinationDialog; title: qsTr("Choose an existing writable backup folder"); currentFolder: storage.currentIndex >= 0 && storageCandidates().length > storage.currentIndex ? "file://" + storageCandidates()[storage.currentIndex].root : "file://" + homeRoot(); onAccepted: destination.text = setupModel.pathFromUrl(selectedFolder) }
     FolderDialog { id: receiverDestinationDialog; title: qsTr("Choose wireless destination root"); onAccepted: receiverDestination.text = setupModel.pathFromUrl(selectedFolder) }
     FileDialog { id: receiverCertificateDialog; title: qsTr("Choose server certificate"); fileMode: FileDialog.OpenFile; onAccepted: receiverCertificate.text = setupModel.pathFromUrl(selectedFile) }
     FileDialog { id: receiverPrivateKeyDialog; title: qsTr("Choose server private key"); fileMode: FileDialog.OpenFile; onAccepted: receiverPrivateKey.text = setupModel.pathFromUrl(selectedFile) }
@@ -483,10 +669,10 @@ Kirigami.ApplicationWindow {
             Controls.Label { text: qsTr("Choose a value from 1 to 99 and a time unit. The application resumes the transfer only while it stays open; closing the application leaves no background service."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             RowLayout {
                 Controls.Label { text: qsTr("Duration"); Accessible.name: text }
-                Controls.Tumbler { id: pauseAmount; model: 99; currentIndex: 2; visibleItemCount: 5; width: 84; height: 150; Accessible.name: qsTr("Pause duration from 1 to 99")
+                Controls.Tumbler { id: pauseAmount; model: 99; currentIndex: 2; visibleItemCount: 5; Layout.preferredWidth: 84; Layout.preferredHeight: 150; Accessible.name: qsTr("Pause duration from 1 to 99")
                     delegate: Controls.Label { text: modelData + 1; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; width: pauseAmount.width; height: pauseAmount.height / pauseAmount.visibleItemCount; Accessible.name: text }
                 }
-                Controls.Tumbler { id: pauseUnit; model: [qsTr("minutes"), qsTr("hours"), qsTr("days")]; currentIndex: 1; visibleItemCount: 3; width: 120; height: 150; Accessible.name: qsTr("Pause time unit")
+                Controls.Tumbler { id: pauseUnit; model: [qsTr("minutes"), qsTr("hours"), qsTr("days")]; currentIndex: 1; visibleItemCount: 3; Layout.preferredWidth: 120; Layout.preferredHeight: 150; Accessible.name: qsTr("Pause time unit")
                     delegate: Controls.Label { text: modelData; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; width: pauseUnit.width; height: pauseUnit.height / pauseUnit.visibleItemCount; Accessible.name: text }
                 }
             }
@@ -504,13 +690,14 @@ Kirigami.ApplicationWindow {
     Controls.Dialog { id: onboardingDialog; modal: true; width: 620; closePolicy: Controls.Popup.CloseOnEscape
         header: RowLayout {
             Controls.Label { text: onboardingDevice.category === "storage" ? qsTr("New storage detected") : qsTr("New device detected"); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Button { text: qsTr("✕"); flat: true; Accessible.name: qsTr("Close"); onClicked: finishOnboarding(false) }
+            Controls.Button { text: qsTr("✕"); flat: true; Accessible.name: qsTr("Close"); onClicked: deferOnboarding() }
         }
         contentItem: ColumnLayout {
             Controls.Label { text: onboardingDevice.label || qsTr("Unknown device"); font.bold: true; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.category === "storage"; text: qsTr("Stable identity: %1").arg(onboardingDevice.stableIdentity || qsTr("not available")); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.category === "storage"; text: qsTr("Filesystem: %1 · selected root: %2").arg(onboardingDevice.filesystemType || qsTr("unknown")).arg(onboardingDevice.root || qsTr("not available")); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.category === "storage"; text: qsTr("Choose its role and the Drive/Photos roots in the connection map. Local Drive will never format this storage automatically."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Label { visible: onboardingDevice.category === "storage"; text: qsTr("Do you want this storage to participate in Local Drive?"); font.bold: true; wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.kind === "Phone"; text: qsTr("Phone setup: unlock Android and select USB mode ‘File transfer / MTP’. Local Drive uses the fixed phone roots Drive/ for files and DCIM/ for photos and videos."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.kind === "Phone"; text: qsTr("Available actions after setup: Drive → Drive and DCIM → Photos. Detection alone never starts a transfer. Wireless pairing uses the Android profile exchange and the Wireless receiver panel in Settings."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { visible: onboardingDevice.wirelessCandidate === true; text: qsTr("Wireless setup — 1) On Android, import the Linux receiver profile and share the Android public certificate back. 2) In Settings, choose the destination and certificate files, then pin the Android SHA-256 fingerprint. 3) Start the receiver. 4) Keep both devices on the same LAN and let the phone connect. Discovery only finds the phone; it never grants file access."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
@@ -519,12 +706,17 @@ Kirigami.ApplicationWindow {
             Controls.ComboBox { id: wirelessMtpTarget; visible: onboardingDevice.wirelessCandidate === true && setupModel.mtpDevices.length > 1; model: setupModel.mtpDevices; textRole: "label"; valueRole: "id"; Layout.fillWidth: true; Accessible.name: qsTr("Choose the USB phone matching this wireless phone") }
             Controls.Button { visible: onboardingDevice.wirelessCandidate === true && setupModel.mtpDevices.length > 0; text: qsTr("Pair with the selected USB phone"); Layout.alignment: Qt.AlignLeft; onClicked: { const targetId = setupModel.mtpDevices.length === 1 ? setupModel.mtpDevices[0].id : wirelessMtpTarget.currentValue; if (targetId && setupModel.pairWirelessDevice(onboardingDevice.id, targetId)) finishOnboarding(false) } Accessible.name: qsTr("Pair wireless candidate with the selected USB phone") }
             Controls.Label { visible: onboardingDevice.category !== "storage" && onboardingDevice.kind !== "Phone"; text: qsTr("Only detected capabilities are shown. Choose the matching pairing or storage step; Local Drive will not guess a server protocol."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.CheckBox { id: hideOnboarding; text: qsTr("Do not show this device again"); Accessible.name: qsTr("Do not show this device again") }
-            Controls.Label { text: qsTr("X closes this guide without deleting the device, routes, or history. Hidden devices remain available in Settings."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Button { text: qsTr("Close"); Layout.alignment: Qt.AlignRight; onClicked: finishOnboarding(hideOnboarding.checked); Accessible.name: text }
+            Controls.CheckBox { id: hideOnboarding; visible: onboardingDevice.category !== "storage"; text: qsTr("Do not show this device again"); Accessible.name: qsTr("Do not show this device again") }
+            Controls.Label { text: qsTr("Not now postpones the choice. Hidden devices remain recoverable in Settings."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            RowLayout { Layout.alignment: Qt.AlignRight
+                Controls.Button { text: qsTr("Not now"); onClicked: deferOnboarding(); Accessible.name: text }
+                Controls.Button { visible: onboardingDevice.category === "storage"; text: qsTr("No, hide it"); onClicked: finishOnboarding(true); Accessible.name: text }
+                Controls.Button { visible: onboardingDevice.category === "storage"; text: qsTr("Yes, add to map"); onClicked: { pendingMountedStorageId = onboardingDevice.id; finishOnboarding(false); Qt.callLater(function() { storageScopeDialog.open() }) } Accessible.name: text }
+                Controls.Button { visible: onboardingDevice.category !== "storage"; text: qsTr("Done"); onClicked: finishOnboarding(hideOnboarding.checked); Accessible.name: text }
+            }
         }
-        onRejected: finishOnboarding(false)
-        onClosed: if (onboardingDeviceId.length > 0) finishOnboarding(false)
+        onRejected: deferOnboarding()
+        onClosed: if (onboardingDeviceId.length > 0) onboardingDeviceId = ""
     }
     Controls.Dialog { id: phoneActionDialog; modal: true; width: 620; closePolicy: Controls.Popup.CloseOnEscape
         header: RowLayout {
@@ -534,13 +726,8 @@ Kirigami.ApplicationWindow {
         contentItem: ColumnLayout {
             Controls.Label { text: qsTr("%1 · %2").arg(phoneActionDevice.label || qsTr("Phone")).arg(phoneActionDevice.stableIdentity || ""); wrapMode: Text.Wrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Label { text: qsTr("Detected storage root: %1").arg(phoneActionDevice.phoneRoot || qsTr("discovering…")); elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Label { text: qsTr("Choose one action. Local Drive scans the fixed phone root, previews within the safety bound, then performs verified copies. Nothing is deleted from the phone."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Label { text: qsTr("Drive source: %1").arg(phoneSourceUrl("Drive")); elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text }
-            Controls.Label { text: qsTr("Photos source: %1").arg(phoneSourceUrl("DCIM")); elide: Text.ElideMiddle; Layout.fillWidth: true; Accessible.name: text }
-            RowLayout {
-                Controls.Button { text: qsTr("Start Drive → Drive"); enabled: !copyEngine.running; onClicked: startPhoneImport("Drive", "Drive"); Accessible.name: qsTr("Start Drive to Drive import") }
-                Controls.Button { text: qsTr("Start DCIM → Photos"); enabled: !copyEngine.running; onClicked: startPhoneImport("Photos", "DCIM"); Accessible.name: qsTr("Start DCIM to Photos import") }
-            }
+            Controls.Label { text: qsTr("Start transfers everything from Drive/ to Files and from DCIM/ to Photos. Local Drive verifies every copy and never deletes files from the phone."); wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
+            Controls.Button { text: qsTr("Start transfer"); enabled: !copyEngine.running; onClicked: startPhoneTransferAll(); Accessible.name: qsTr("Start complete phone transfer") }
             Controls.Label { visible: phoneActionStatus.length > 0; text: phoneActionStatus; color: Kirigami.Theme.negativeTextColor; wrapMode: Text.WordWrap; Layout.fillWidth: true; Accessible.name: text }
             Controls.Button { text: qsTr("Cancel"); Layout.alignment: Qt.AlignRight; onClicked: phoneActionDialog.close(); Accessible.name: text }
         }

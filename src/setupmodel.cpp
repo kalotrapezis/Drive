@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QSysInfo>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -31,6 +32,13 @@ QString cleanPath(const QString &path) { return QFileInfo(path).canonicalFilePat
 bool underOrEqual(const QString &child, const QString &root) {
     const auto c = QDir::cleanPath(child), r = QDir::cleanPath(root);
     return c == r || c.startsWith(r.endsWith('/') ? r : r + '/');
+}
+
+bool isProtectedStorage(const QVariantMap &storage) {
+    const QString root = QDir::cleanPath(storage.value("root").toString().trimmed());
+    const QString label = storage.value("label").toString().trimmed().toLower();
+    return label == QStringLiteral("efi") || label == QStringLiteral("system reserved")
+        || root == QStringLiteral("/boot/efi") || root.startsWith(QStringLiteral("/boot/efi/"));
 }
 
 bool ensureColumn(QSqlDatabase &db, const QString &table, const QString &column, const QString &definition, QString *error) {
@@ -94,19 +102,28 @@ SetupModel::SetupModel(const QString &databasePath, const QVariantList &storageO
     if (!openCatalog()) return;
     m_localDeviceName = QSysInfo::machineHostName();
 
-    QVariantMap local{{"id", "local"}, {"label", "Computer"}, {"root", "/"}, {"present", true}, {"kind", "local"}};
+    const QStorageInfo localStorage(QDir::homePath());
+    QVariantMap local{{"id", "local"}, {"label", "Computer"}, {"root", "/"}, {"present", true}, {"kind", "local"}, {"bytesTotal", localStorage.bytesTotal()}, {"bytesFree", localStorage.bytesFree()}};
     m_storages.append(local);
+    QSqlQuery localCapacity(QSqlDatabase::database(m_connectionName));
+    localCapacity.prepare("UPDATE storage SET bytes_total=?,bytes_free=?,presence='present',last_seen_at=CURRENT_TIMESTAMP WHERE id='local'");
+    localCapacity.addBindValue(localStorage.bytesTotal()); localCapacity.addBindValue(localStorage.bytesFree());
+    if (!localCapacity.exec()) { m_ready = false; fail(localCapacity.lastError().text()); return; }
     if (!storageOverride.isEmpty()) m_storages += storageOverride;
     else {
         QSqlQuery remembered(QSqlDatabase::database(m_connectionName));
-        if (remembered.exec("SELECT id,label,selected_root,kind,presence,COALESCE(filesystem_type,''),hidden FROM storage WHERE kind='removable'"))
-            while (remembered.next()) if (!remembered.value(6).toBool()) m_storages.append(QVariantMap{{"id", remembered.value(0)}, {"label", remembered.value(1)}, {"root", remembered.value(2)}, {"kind", remembered.value(3)}, {"present", false}, {"filesystemType", remembered.value(5)}});
+        if (remembered.exec("SELECT id,label,selected_root,kind,presence,COALESCE(filesystem_type,''),hidden,stable_identity FROM storage WHERE kind='removable'"))
+            while (remembered.next()) {
+                const QVariantMap storage{{"id", remembered.value(0)}, {"identity", remembered.value(7)}, {"label", remembered.value(1)}, {"root", remembered.value(2)}, {"kind", remembered.value(3)}, {"present", false}, {"filesystemType", remembered.value(5)}};
+                if (!remembered.value(6).toBool() && !isProtectedStorage(storage)) m_storages.append(storage);
+            }
         refreshStorages();
     }
     QSqlQuery storageQuery(QSqlDatabase::database(m_connectionName));
     for (int index = 0; index < m_storages.size(); ++index) {
         auto storage = m_storages.at(index).toMap();
         if (storage.value("id") == "local") continue;
+        if (storage.value("root").toString().isEmpty()) continue;
         QString identity = storage.value("identity").toString();
         if (identity.isEmpty()) identity = QStringLiteral("storage:%1").arg(storage.value("id").toString());
         storage.insert("identity", identity);
@@ -127,6 +144,15 @@ SetupModel::SetupModel(const QString &databasePath, const QVariantList &storageO
 SetupModel::~SetupModel() { if (m_mtpJob) m_mtpJob->kill(); stopWirelessDiscovery(); if (!m_connectionName.isEmpty()) QSqlDatabase::removeDatabase(m_connectionName); }
 
 bool SetupModel::fail(const QString &message) { m_error = message; emit changed(); return false; }
+
+bool SetupModel::setHubConfig(bool enabled, int limitPercent) {
+    if (limitPercent < 1 || limitPercent > 95) return fail(QStringLiteral("Hub storage limit must be between 1% and 95%."));
+    QSqlQuery query(QSqlDatabase::database(m_connectionName));
+    query.prepare("UPDATE app_config SET hub_enabled=?,hub_limit_percent=?,config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1");
+    query.addBindValue(enabled); query.addBindValue(limitPercent);
+    if (!query.exec() || query.numRowsAffected() != 1) return fail(query.lastError().text());
+    m_hubEnabled = enabled; m_hubLimitPercent = limitPercent; ++m_revision; m_error.clear(); emit changed(); return true;
+}
 
 QString SetupModel::upsertDiscoveredPhone(const QString &alias, const QString &name, const QString &transport, const QString &preferredDeviceId) {
     const QString cleanAlias = alias.trimmed(), cleanName = name.trimmed();
@@ -183,8 +209,30 @@ QVariantList SetupModel::connectedDevices() const {
         result.append(first);
     };
     for (const auto &value : m_mtpDevices) add(value.toMap());
+    if (m_mtpDevices.isEmpty()) for (const auto &value : m_usbConnections) add(value.toMap());
     for (const auto &value : m_wirelessDevices) add(value.toMap());
     return result;
+}
+
+void SetupModel::refreshUsbConnections() {
+    m_usbConnections.clear();
+    const QDir usb(QStringLiteral("/sys/bus/usb/devices"));
+    for (const QString &entry : usb.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        const QString base = usb.filePath(entry);
+        QFile vendorFile(base + QStringLiteral("/idVendor")), manufacturerFile(base + QStringLiteral("/manufacturer")), productFile(base + QStringLiteral("/product")), serialFile(base + QStringLiteral("/serial"));
+        if (!vendorFile.open(QIODevice::ReadOnly) || !manufacturerFile.open(QIODevice::ReadOnly)) continue;
+        const QString vendor = QString::fromUtf8(vendorFile.readAll()).trimmed().toLower();
+        const QString manufacturer = QString::fromUtf8(manufacturerFile.readAll()).trimmed();
+        const QString marker = (vendor + QLatin1Char(' ') + manufacturer).toLower();
+        if (!marker.contains(QStringLiteral("2717")) && !marker.contains(QStringLiteral("18d1")) && !marker.contains(QStringLiteral("xiaomi")) && !marker.contains(QStringLiteral("google"))) continue;
+        QString product;
+        if (productFile.open(QIODevice::ReadOnly)) product = QString::fromUtf8(productFile.readAll()).trimmed();
+        QString serial;
+        if (serialFile.open(QIODevice::ReadOnly)) serial = QString::fromUtf8(serialFile.readAll()).trimmed();
+        const QString evidence = serial.isEmpty() ? entry : serial;
+        const QString id = QStringLiteral("usb-charge-%1").arg(QString::fromLatin1(QCryptographicHash::hash(evidence.toUtf8(), QCryptographicHash::Sha256).toHex().left(16)));
+        m_usbConnections.append(QVariantMap{{"id", id}, {"stableIdentity", QString()}, {"label", "Phone"}, {"detectedProduct", product}, {"kind", "Phone"}, {"transport", "usb"}, {"present", true}, {"status", "Charging only"}});
+    }
 }
 
 bool SetupModel::openCatalog() {
@@ -258,7 +306,113 @@ bool SetupModel::openCatalog() {
                 || !q.exec("CREATE TABLE IF NOT EXISTS device_aliases (alias TEXT PRIMARY KEY, device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE, transport TEXT NOT NULL CHECK (transport IN ('mtp', 'wireless')), last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
                 || !q.exec("UPDATE schema_version SET version=6,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
                 || !db.commit()) { db.rollback(); return fail(migrationError.isEmpty() ? q.lastError().text() : migrationError); }
-        } else if (version != 6) return fail(QStringLiteral("Unsupported catalog schema version"));
+        }
+        if (version <= 6) {
+            if (!db.transaction()
+                || !q.exec("CREATE TABLE IF NOT EXISTS metadata_events (id TEXT PRIMARY KEY,origin_device_id TEXT NOT NULL REFERENCES devices(id),catalog_generation INTEGER NOT NULL CHECK (catalog_generation > 0),origin_sequence INTEGER NOT NULL CHECK (origin_sequence > 0),item_id TEXT NOT NULL CHECK (item_id <> ''),source_root TEXT NOT NULL CHECK (source_root IN ('Drive','DCIM')),relative_path TEXT NOT NULL,size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),modified_at INTEGER NOT NULL CHECK (modified_at >= 0),captured_at TEXT,type_hint TEXT,media_metadata TEXT NOT NULL DEFAULT '{}',content_sha256 TEXT,received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(origin_device_id,catalog_generation,origin_sequence))")
+                || !q.exec("CREATE TABLE IF NOT EXISTS pending_metadata (origin_device_id TEXT NOT NULL REFERENCES devices(id),item_id TEXT NOT NULL CHECK (item_id <> ''),source_root TEXT NOT NULL CHECK (source_root IN ('Drive','DCIM')),relative_path TEXT NOT NULL,size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),modified_at INTEGER NOT NULL CHECK (modified_at >= 0),captured_at TEXT,type_hint TEXT,media_metadata TEXT NOT NULL DEFAULT '{}',content_sha256 TEXT,origin_sequence INTEGER NOT NULL CHECK (origin_sequence > 0),state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','complete','review')),updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(origin_device_id,item_id))")
+                || !q.exec("CREATE TABLE IF NOT EXISTS metadata_cursors (origin_device_id TEXT NOT NULL REFERENCES devices(id),catalog_generation INTEGER NOT NULL CHECK (catalog_generation > 0),highest_contiguous INTEGER NOT NULL DEFAULT 0 CHECK (highest_contiguous >= 0),updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(origin_device_id,catalog_generation))")
+                || !q.exec("UPDATE schema_version SET version=7,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+        }
+        if (version <= 7) {
+            if (!db.transaction()
+                || !q.exec("CREATE TABLE IF NOT EXISTS review_items (id TEXT PRIMARY KEY,category TEXT NOT NULL CHECK (category IN ('Duplicates','Conflicts','Permissions','Transfers','Storage','External changes','Unsupported')),source_kind TEXT NOT NULL CHECK (source_kind IN ('import','job','metadata','system')),source_id TEXT NOT NULL CHECK (source_id <> ''),title TEXT NOT NULL CHECK (title <> ''),summary TEXT NOT NULL DEFAULT '',details_json TEXT NOT NULL DEFAULT '{}',item_count INTEGER NOT NULL DEFAULT 1 CHECK (item_count > 0),bytes_total INTEGER NOT NULL DEFAULT 0 CHECK (bytes_total >= 0),state TEXT NOT NULL DEFAULT 'needs_decision' CHECK (state IN ('needs_decision','needs_device','can_retry','saved','resolved','dismissed')),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,resolved_at TEXT,UNIQUE(source_kind,source_id,category))")
+                || !q.exec("UPDATE schema_version SET version=8,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+        }
+        if (version <= 8) {
+            if (!db.transaction()
+                || !q.exec("CREATE TABLE IF NOT EXISTS managed_inventory (route_id TEXT NOT NULL REFERENCES routes(id) ON DELETE CASCADE,relative_path TEXT NOT NULL CHECK (relative_path <> '' AND relative_path NOT LIKE '/%' AND relative_path <> '..' AND relative_path NOT LIKE '../%' AND relative_path NOT LIKE '%/../%' AND relative_path NOT LIKE '%/..'),size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),modified_ms INTEGER NOT NULL CHECK (modified_ms >= 0),content_sha256 TEXT NOT NULL CHECK (length(content_sha256)=64 AND content_sha256=lower(content_sha256) AND content_sha256 NOT GLOB '*[^0-9a-f]*'),state TEXT NOT NULL DEFAULT 'present' CHECK (state IN ('present','missing')),first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(route_id,relative_path))")
+                || !q.exec("CREATE TABLE IF NOT EXISTS inventory_events (id TEXT PRIMARY KEY,origin_device_id TEXT NOT NULL REFERENCES devices(id),catalog_generation INTEGER NOT NULL CHECK (catalog_generation > 0),origin_sequence INTEGER NOT NULL CHECK (origin_sequence > 0),route_id TEXT NOT NULL REFERENCES routes(id) ON DELETE CASCADE,event TEXT NOT NULL CHECK (event IN ('added','changed','missing','reappeared')),relative_path TEXT NOT NULL,previous_sha256 TEXT,current_sha256 TEXT,size_bytes INTEGER NOT NULL DEFAULT 0 CHECK (size_bytes >= 0),occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(origin_device_id,catalog_generation,origin_sequence),CHECK (previous_sha256 IS NULL OR (length(previous_sha256)=64 AND previous_sha256=lower(previous_sha256) AND previous_sha256 NOT GLOB '*[^0-9a-f]*')),CHECK (current_sha256 IS NULL OR (length(current_sha256)=64 AND current_sha256=lower(current_sha256) AND current_sha256 NOT GLOB '*[^0-9a-f]*')))")
+                || !q.exec("CREATE TRIGGER IF NOT EXISTS inventory_events_immutable_update BEFORE UPDATE ON inventory_events BEGIN SELECT RAISE(ABORT, 'inventory events are append-only'); END")
+                || !q.exec("CREATE TRIGGER IF NOT EXISTS inventory_events_immutable_delete BEFORE DELETE ON inventory_events BEGIN SELECT RAISE(ABORT, 'inventory events are append-only'); END")
+                || !q.exec("UPDATE schema_version SET version=9,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+        }
+        if (version <= 9) {
+            if (!db.transaction()
+                || !q.exec("CREATE TABLE IF NOT EXISTS review_resolutions (id TEXT PRIMARY KEY,origin_device_id TEXT NOT NULL REFERENCES devices(id),catalog_generation INTEGER NOT NULL CHECK (catalog_generation > 0),origin_sequence INTEGER NOT NULL CHECK (origin_sequence > 0),review_item_id TEXT NOT NULL REFERENCES review_items(id),action TEXT NOT NULL CHECK (action IN ('save','dismiss')),evidence_sha256 TEXT NOT NULL CHECK (length(evidence_sha256)=64 AND evidence_sha256=lower(evidence_sha256) AND evidence_sha256 NOT GLOB '*[^0-9a-f]*'),details_json TEXT NOT NULL DEFAULT '{}',result_state TEXT NOT NULL DEFAULT 'applied_local' CHECK (result_state IN ('applied_local','pending_device','failed')),occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(origin_device_id,catalog_generation,origin_sequence))")
+                || !q.exec("CREATE TRIGGER IF NOT EXISTS review_resolutions_immutable_update BEFORE UPDATE ON review_resolutions BEGIN SELECT RAISE(ABORT, 'review resolutions are append-only'); END")
+                || !q.exec("CREATE TRIGGER IF NOT EXISTS review_resolutions_immutable_delete BEFORE DELETE ON review_resolutions BEGIN SELECT RAISE(ABORT, 'review resolutions are append-only'); END")
+                || !q.exec("UPDATE schema_version SET version=10,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+        }
+        if (version <= 10) {
+            if (!db.transaction()
+                || !q.exec("DROP TRIGGER IF EXISTS review_resolutions_immutable_update")
+                || !q.exec("DROP TRIGGER IF EXISTS review_resolutions_immutable_delete")
+                || !q.exec("ALTER TABLE review_resolutions RENAME TO review_resolutions_v10")
+                || !q.exec("CREATE TABLE review_resolutions (id TEXT PRIMARY KEY,origin_device_id TEXT NOT NULL REFERENCES devices(id),catalog_generation INTEGER NOT NULL CHECK (catalog_generation > 0),origin_sequence INTEGER NOT NULL CHECK (origin_sequence > 0),review_item_id TEXT NOT NULL REFERENCES review_items(id),action TEXT NOT NULL CHECK (action IN ('save','dismiss','accept_existing')),evidence_sha256 TEXT NOT NULL CHECK (length(evidence_sha256)=64 AND evidence_sha256=lower(evidence_sha256) AND evidence_sha256 NOT GLOB '*[^0-9a-f]*'),details_json TEXT NOT NULL DEFAULT '{}',result_state TEXT NOT NULL DEFAULT 'applied_local' CHECK (result_state IN ('applied_local','pending_device','failed')),occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(origin_device_id,catalog_generation,origin_sequence))")
+                || !q.exec("INSERT INTO review_resolutions SELECT * FROM review_resolutions_v10")
+                || !q.exec("DROP TABLE review_resolutions_v10")
+                || !q.exec("CREATE TRIGGER review_resolutions_immutable_update BEFORE UPDATE ON review_resolutions BEGIN SELECT RAISE(ABORT, 'review resolutions are append-only'); END")
+                || !q.exec("CREATE TRIGGER review_resolutions_immutable_delete BEFORE DELETE ON review_resolutions BEGIN SELECT RAISE(ABORT, 'review resolutions are append-only'); END")
+                || !q.exec("UPDATE schema_version SET version=11,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+        }
+        if (version <= 11) {
+            if (!db.transaction()
+                || !q.exec("DROP TRIGGER IF EXISTS review_resolutions_immutable_update")
+                || !q.exec("DROP TRIGGER IF EXISTS review_resolutions_immutable_delete")
+                || !q.exec("ALTER TABLE review_resolutions RENAME TO review_resolutions_v11")
+                || !q.exec("CREATE TABLE review_resolutions (id TEXT PRIMARY KEY,origin_device_id TEXT NOT NULL REFERENCES devices(id),catalog_generation INTEGER NOT NULL CHECK (catalog_generation > 0),origin_sequence INTEGER NOT NULL CHECK (origin_sequence > 0),review_item_id TEXT NOT NULL REFERENCES review_items(id),action TEXT NOT NULL CHECK (action IN ('save','dismiss','accept_existing','keep_both')),evidence_sha256 TEXT NOT NULL CHECK (length(evidence_sha256)=64 AND evidence_sha256=lower(evidence_sha256) AND evidence_sha256 NOT GLOB '*[^0-9a-f]*'),details_json TEXT NOT NULL DEFAULT '{}',result_state TEXT NOT NULL DEFAULT 'applied_local' CHECK (result_state IN ('applied_local','pending_device','failed')),occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(origin_device_id,catalog_generation,origin_sequence))")
+                || !q.exec("INSERT INTO review_resolutions SELECT * FROM review_resolutions_v11")
+                || !q.exec("DROP TABLE review_resolutions_v11")
+                || !q.exec("CREATE TRIGGER review_resolutions_immutable_update BEFORE UPDATE ON review_resolutions BEGIN SELECT RAISE(ABORT, 'review resolutions are append-only'); END")
+                || !q.exec("CREATE TRIGGER review_resolutions_immutable_delete BEFORE DELETE ON review_resolutions BEGIN SELECT RAISE(ABORT, 'review resolutions are append-only'); END")
+                || !q.exec("UPDATE schema_version SET version=12,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+        }
+        if (version <= 12) {
+            if (!db.transaction()
+                || !q.exec("DROP TRIGGER IF EXISTS review_resolutions_immutable_update")
+                || !q.exec("DROP TRIGGER IF EXISTS review_resolutions_immutable_delete")
+                || !q.exec("ALTER TABLE review_resolutions RENAME TO review_resolutions_v12")
+                || !q.exec("CREATE TABLE review_resolutions (id TEXT PRIMARY KEY,origin_device_id TEXT NOT NULL REFERENCES devices(id),catalog_generation INTEGER NOT NULL CHECK (catalog_generation > 0),origin_sequence INTEGER NOT NULL CHECK (origin_sequence > 0),review_item_id TEXT NOT NULL REFERENCES review_items(id),action TEXT NOT NULL CHECK (action IN ('save','dismiss','accept_existing','keep_both','skip_unsupported')),evidence_sha256 TEXT NOT NULL CHECK (length(evidence_sha256)=64 AND evidence_sha256=lower(evidence_sha256) AND evidence_sha256 NOT GLOB '*[^0-9a-f]*'),details_json TEXT NOT NULL DEFAULT '{}',result_state TEXT NOT NULL DEFAULT 'applied_local' CHECK (result_state IN ('applied_local','pending_device','failed')),occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(origin_device_id,catalog_generation,origin_sequence))")
+                || !q.exec("INSERT INTO review_resolutions SELECT * FROM review_resolutions_v12")
+                || !q.exec("DROP TABLE review_resolutions_v12")
+                || !q.exec("CREATE TRIGGER review_resolutions_immutable_update BEFORE UPDATE ON review_resolutions BEGIN SELECT RAISE(ABORT, 'review resolutions are append-only'); END")
+                || !q.exec("CREATE TRIGGER review_resolutions_immutable_delete BEFORE DELETE ON review_resolutions BEGIN SELECT RAISE(ABORT, 'review resolutions are append-only'); END")
+                || !q.exec("UPDATE schema_version SET version=13,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+        }
+        if (version <= 13) {
+            QString migrationError;
+            if (!db.transaction()
+                || !ensureColumn(db, "devices", "last_seen_at", "last_seen_at TEXT", &migrationError)
+                || !ensureColumn(db, "storage", "last_seen_at", "last_seen_at TEXT", &migrationError)
+                || !ensureColumn(db, "storage", "bytes_total", "bytes_total INTEGER CHECK (bytes_total IS NULL OR bytes_total >= 0)", &migrationError)
+                || !ensureColumn(db, "storage", "bytes_free", "bytes_free INTEGER CHECK (bytes_free IS NULL OR bytes_free >= 0)", &migrationError)
+                || !q.exec("UPDATE schema_version SET version=14,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(migrationError.isEmpty() ? q.lastError().text() : migrationError); }
+        }
+        if (version <= 14) {
+            if (!db.transaction()
+                || !q.exec("CREATE TABLE IF NOT EXISTS device_corrections (id TEXT PRIMARY KEY,target_device_id TEXT NOT NULL REFERENCES devices(id),action TEXT NOT NULL CHECK (action='recheck_location'),source_root TEXT NOT NULL CHECK (source_root IN ('Drive','DCIM')),relative_path TEXT NOT NULL CHECK (relative_path<>'' AND relative_path NOT LIKE '/%' AND relative_path<>'..' AND relative_path NOT LIKE '../%' AND relative_path NOT LIKE '%/../%' AND relative_path NOT LIKE '%/..'),expected_size INTEGER NOT NULL CHECK (expected_size>=0),expected_sha256 TEXT NOT NULL CHECK (length(expected_sha256)=64 AND expected_sha256=lower(expected_sha256) AND expected_sha256 NOT GLOB '*[^0-9a-f]*'),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+                || !q.exec("CREATE TABLE IF NOT EXISTS device_correction_results (id TEXT PRIMARY KEY,correction_id TEXT NOT NULL UNIQUE REFERENCES device_corrections(id),origin_device_id TEXT NOT NULL REFERENCES devices(id),status TEXT NOT NULL CHECK (status IN ('verified','changed','missing','failed')),observed_size INTEGER CHECK (observed_size IS NULL OR observed_size>=0),observed_sha256 TEXT CHECK (observed_sha256 IS NULL OR (length(observed_sha256)=64 AND observed_sha256=lower(observed_sha256) AND observed_sha256 NOT GLOB '*[^0-9a-f]*')),error_message TEXT NOT NULL DEFAULT '',completed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")
+                || !q.exec("CREATE TRIGGER IF NOT EXISTS device_corrections_immutable_update BEFORE UPDATE ON device_corrections BEGIN SELECT RAISE(ABORT, 'device corrections are append-only'); END")
+                || !q.exec("CREATE TRIGGER IF NOT EXISTS device_corrections_immutable_delete BEFORE DELETE ON device_corrections BEGIN SELECT RAISE(ABORT, 'device corrections are append-only'); END")
+                || !q.exec("CREATE TRIGGER IF NOT EXISTS device_correction_results_immutable_update BEFORE UPDATE ON device_correction_results BEGIN SELECT RAISE(ABORT, 'device correction results are append-only'); END")
+                || !q.exec("CREATE TRIGGER IF NOT EXISTS device_correction_results_immutable_delete BEFORE DELETE ON device_correction_results BEGIN SELECT RAISE(ABORT, 'device correction results are append-only'); END")
+                || !q.exec("UPDATE schema_version SET version=15,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+        }
+        if (version <= 15) {
+            QString migrationError;
+            if (!db.transaction()
+                || !ensureColumn(db, "device_corrections", "review_item_id", "review_item_id TEXT REFERENCES review_items(id)", &migrationError)
+                || !q.exec("UPDATE schema_version SET version=16,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(migrationError.isEmpty() ? q.lastError().text() : migrationError); }
+        }
+        if (version <= 16) {
+            QString migrationError;
+            if (!db.transaction()
+                || !ensureColumn(db, "app_config", "hub_enabled", "hub_enabled INTEGER NOT NULL DEFAULT 0 CHECK (hub_enabled IN (0, 1))", &migrationError)
+                || !ensureColumn(db, "app_config", "hub_limit_percent", "hub_limit_percent INTEGER NOT NULL DEFAULT 80 CHECK (hub_limit_percent BETWEEN 1 AND 95)", &migrationError)
+                || !q.exec("UPDATE schema_version SET version=17,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+                || !db.commit()) { db.rollback(); return fail(migrationError.isEmpty() ? q.lastError().text() : migrationError); }
+        } else if (version != 17) return fail(QStringLiteral("Unsupported catalog schema version"));
     }
     QFile machineId("/etc/machine-id");
     const QString hostname = QSysInfo::machineHostName();
@@ -270,33 +424,36 @@ bool SetupModel::openCatalog() {
     if (!q.exec("INSERT OR IGNORE INTO storage(id,stable_identity,device_id,kind,label,filesystem_type,selected_root,presence) VALUES('local','local','local','local','Computer','', '/','present')")) return fail(q.lastError().text());
     QString recoveryError;
     if (!recoverInterruptedJobs(db, &recoveryError)) return fail(recoveryError);
-    q.exec("SELECT config_revision FROM app_config WHERE singleton=1"); if (q.next()) m_revision = q.value(0).toInt();
+    q.exec("SELECT config_revision,hub_enabled,hub_limit_percent FROM app_config WHERE singleton=1"); if (q.next()) { m_revision = q.value(0).toInt(); m_hubEnabled = q.value(1).toBool(); m_hubLimitPercent = q.value(2).toInt(); }
     m_ready = true; emit changed(); return true;
 }
 
 void SetupModel::refreshStorages() {
-    for (auto &value : m_storages) if (value.toMap().value("kind") == "removable") { auto storage = value.toMap(); storage.insert("present", false); value = storage; }
+    for (auto &value : m_storages) if (value.toMap().value("kind") == "removable") { auto storage = value.toMap(); storage.insert("present", false); storage.insert("connected", false); value = storage; }
     QSqlQuery mark(QSqlDatabase::database(m_connectionName));
     if (!mark.exec("UPDATE storage SET presence='missing' WHERE kind='removable'")) { fail(mark.lastError().text()); return; }
-    for (const auto &device : Solid::Device::listFromType(Solid::DeviceInterface::StorageAccess)) {
-        const auto access = device.as<Solid::StorageAccess>();
-        if (!access || !access->isAccessible()) continue;
+    for (auto device : Solid::Device::listFromType(Solid::DeviceInterface::StorageVolume)) {
+        auto access = device.as<Solid::StorageAccess>();
+        const bool mountedNow = access && access->isAccessible();
         bool removableDrive = false;
         for (Solid::Device parent = device.parent(); parent.isValid(); parent = parent.parent()) {
             const auto drive = parent.as<Solid::StorageDrive>();
             if (drive) { removableDrive = drive->isRemovable() || drive->isHotpluggable(); break; }
         }
         if (!removableDrive) continue;
-        const QString root = cleanPath(access->filePath());
-        if (root.isEmpty() || root == "/") continue;
         const auto volume = device.as<Solid::StorageVolume>();
         const QString uuid = volume ? volume->uuid() : QString();
         if (uuid.isEmpty()) continue;
+        const QString root = mountedNow ? cleanPath(access->filePath()) : QString();
+        if (mountedNow && (root.isEmpty() || root == "/")) continue;
         const QString identity = QStringLiteral("storage:%1").arg(uuid);
-        QVariantMap item{{"id", "storage:" + uuid}, {"identity", identity}, {"label", volume->label().isEmpty() ? QFileInfo(root).fileName() : volume->label()}, {"filesystemType", volume->fsType()}, {"root", root}, {"present", true}, {"kind", "removable"}};
-        QSqlQuery visibility(QSqlDatabase::database(m_connectionName));
-        visibility.prepare("SELECT hidden FROM storage WHERE id=?"); visibility.addBindValue(item.value("id"));
-        const bool hidden = visibility.exec() && visibility.next() && visibility.value(0).toBool();
+        const QStorageInfo mounted(root);
+        QSqlQuery remembered(QSqlDatabase::database(m_connectionName)); remembered.prepare("SELECT selected_root,hidden FROM storage WHERE id=?"); remembered.addBindValue("storage:" + uuid);
+        const bool known = remembered.exec() && remembered.next();
+        const QString previousRoot = known ? remembered.value(0).toString() : QString();
+        QVariantMap item{{"id", "storage:" + uuid}, {"identity", identity}, {"label", volume->label().isEmpty() ? QStringLiteral("External storage") : volume->label()}, {"filesystemType", volume->fsType()}, {"root", mountedNow ? root : previousRoot}, {"present", mountedNow}, {"connected", true}, {"kind", "removable"}, {"bytesTotal", mountedNow ? mounted.bytesTotal() : 0}, {"bytesFree", mountedNow ? mounted.bytesFree() : 0}};
+        if (isProtectedStorage(item)) continue;
+        const bool hidden = known && remembered.value(1).toBool();
         bool duplicate = false;
         for (int index = m_storages.size() - 1; index >= 0; --index) {
             if (m_storages.at(index).toMap().value("id") != item.value("id")) continue;
@@ -304,19 +461,53 @@ void SetupModel::refreshStorages() {
             duplicate = true;
         }
         if (!hidden && !duplicate) m_storages.append(item);
-        QSqlQuery save(QSqlDatabase::database(m_connectionName));
-        save.prepare("INSERT INTO storage(id,stable_identity,device_id,kind,label,filesystem_type,selected_root,presence) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET stable_identity=excluded.stable_identity,label=excluded.label,filesystem_type=excluded.filesystem_type,selected_root=excluded.selected_root,presence='present'");
-        save.addBindValue(item.value("id")); save.addBindValue(identity); save.addBindValue("local"); save.addBindValue("removable"); save.addBindValue(item.value("label")); save.addBindValue(item.value("filesystemType")); save.addBindValue(root); save.addBindValue("present");
-        if (!save.exec()) { fail(save.lastError().text()); return; }
+        if (!mountedNow) continue;
+        QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+        if (!db.transaction()) { fail(db.lastError().text()); return; }
+        if (known && previousRoot != root) {
+            QSqlQuery routes(db); routes.prepare("SELECT id,destination_root FROM routes WHERE destination_storage_id=?"); routes.addBindValue(item.value("id"));
+            if (!routes.exec()) { db.rollback(); fail(routes.lastError().text()); return; }
+            while (routes.next()) {
+                const QString oldDestination = QDir::cleanPath(routes.value(1).toString());
+                if (!underOrEqual(oldDestination, previousRoot)) { db.rollback(); fail(QStringLiteral("Saved route is outside its storage root.")); return; }
+                const QString newDestination = QDir(root).filePath(QDir(previousRoot).relativeFilePath(oldDestination));
+                QSqlQuery update(db); update.prepare("UPDATE routes SET destination_root=? WHERE id=?"); update.addBindValue(QDir::cleanPath(newDestination)); update.addBindValue(routes.value(0));
+                if (!update.exec()) { db.rollback(); fail(update.lastError().text()); return; }
+            }
+        }
+        QSqlQuery save(db);
+        save.prepare("INSERT INTO storage(id,stable_identity,device_id,kind,label,filesystem_type,selected_root,presence,bytes_total,bytes_free,last_seen_at) VALUES(?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(id) DO UPDATE SET stable_identity=excluded.stable_identity,label=excluded.label,filesystem_type=excluded.filesystem_type,selected_root=excluded.selected_root,presence='present',bytes_total=excluded.bytes_total,bytes_free=excluded.bytes_free,last_seen_at=CURRENT_TIMESTAMP");
+        save.addBindValue(item.value("id")); save.addBindValue(identity); save.addBindValue("local"); save.addBindValue("removable"); save.addBindValue(item.value("label")); save.addBindValue(item.value("filesystemType")); save.addBindValue(root); save.addBindValue("present"); save.addBindValue(item.value("bytesTotal")); save.addBindValue(item.value("bytesFree"));
+        if (!save.exec() || !db.commit()) { db.rollback(); fail(save.lastError().text().isEmpty() ? db.lastError().text() : save.lastError().text()); return; }
     }
     m_error.clear();
     loadDeviceLists();
+    m_routes.clear(); loadRoutes();
     emit changed();
+}
+
+bool SetupModel::mountStorage(const QString &storageId) {
+    const QString uuid = storageId.startsWith(QStringLiteral("storage:")) ? storageId.mid(8) : QString();
+    if (uuid.isEmpty()) return fail(QStringLiteral("Unknown storage device."));
+    for (auto device : Solid::Device::listFromType(Solid::DeviceInterface::StorageVolume)) {
+        const auto volume = device.as<Solid::StorageVolume>();
+        auto access = device.as<Solid::StorageAccess>();
+        if (!volume || volume->uuid().compare(uuid, Qt::CaseInsensitive) != 0 || !access) continue;
+        if (access->isAccessible()) { refreshStorages(); return true; }
+        connect(access, &Solid::StorageAccess::setupDone, this, [this](Solid::ErrorType error, const QVariant &data, const QString &) {
+            if (error == Solid::NoError) refreshStorages();
+            else fail(data.toString().isEmpty() ? QStringLiteral("Storage could not be mounted.") : data.toString());
+        }, Qt::SingleShotConnection);
+        if (access->setup()) { m_error.clear(); emit changed(); return true; }
+        return fail(QStringLiteral("Mounting is not supported for this storage."));
+    }
+    return fail(QStringLiteral("Storage is not connected."));
 }
 
 void SetupModel::refreshMtpDevices() {
     if (m_mtpJob) { m_mtpJob->disconnect(this); m_mtpJob->kill(); m_mtpJob = nullptr; }
     m_mtpDevices.clear();
+    refreshUsbConnections();
     m_mtpJob = KIO::listDir(QUrl(QStringLiteral("mtp:/")), KIO::HideProgressInfo, KIO::ListJob::ListFlag::ExcludeDotAndDotDot);
     connect(m_mtpJob, &KIO::ListJob::entries, this, [this](KIO::Job *, const KIO::UDSEntryList &entries) {
         for (const auto &entry : entries) {
@@ -483,10 +674,10 @@ void SetupModel::loadDeviceLists() {
     m_deviceList.clear();
     QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     QSqlQuery devices(db);
-    if (devices.exec("SELECT id,stable_id,name,kind,onboarding_seen,hidden FROM devices WHERE is_local=0 ORDER BY name")) {
+    if (devices.exec("SELECT id,stable_id,name,kind,onboarding_seen,hidden,last_seen_at FROM devices WHERE is_local=0 ORDER BY name")) {
         while (devices.next()) {
             const QString stable = devices.value(1).toString();
-            QVariantMap item{{"id", devices.value(0)}, {"stableIdentity", stable}, {"label", devices.value(2)}, {"kind", devices.value(3)}, {"category", "device"}, {"present", true}, {"hidden", devices.value(5).toBool()}};
+            QVariantMap item{{"id", devices.value(0)}, {"stableIdentity", stable}, {"label", devices.value(2)}, {"kind", devices.value(3)}, {"category", "device"}, {"hidden", devices.value(5).toBool()}, {"lastSeen", devices.value(6)}};
             if (devices.value(3).toString() == QStringLiteral("Phone") && stable.startsWith(QStringLiteral("mtp:"))) item.insert("url", stable.mid(4));
             QStringList transports;
             QSqlQuery aliases(db); aliases.prepare("SELECT group_concat(transport, ',') FROM device_aliases WHERE device_id=?"); aliases.addBindValue(devices.value(0));
@@ -496,6 +687,7 @@ void SetupModel::loadDeviceLists() {
             QString status = QStringLiteral("Offline");
             for (const auto &current : connectedDevices()) if (current.toMap().value("id") == devices.value(0)) { status = current.toMap().value("status", QStringLiteral("Online")).toString(); break; }
             item.insert("status", status);
+            item.insert("present", status == QStringLiteral("Online"));
             if (devices.value(5).toBool()) m_hiddenDevices.append(item);
             else { m_deviceList.append(item); if (!devices.value(4).toBool()) m_firstSeenDevices.append(item); }
         }
@@ -576,7 +768,7 @@ bool SetupModel::saveRoute(const QString &source, const QString &storageId, cons
     const QString rootInput = selected.value("root").toString().trimmed();
     const QString root = storagePresent ? cleanPath(rootInput) : (QFileInfo(rootInput).isAbsolute() ? QDir::cleanPath(QFileInfo(rootInput).absoluteFilePath()) : QString());
     const QString dst = storagePresent ? cleanPath(requestedDestination) : (QFileInfo(requestedDestination).isAbsolute() ? QDir::cleanPath(QFileInfo(requestedDestination).absoluteFilePath()) : QString());
-    if (selected.isEmpty() || root.isEmpty() || dst.isEmpty() || (storagePresent && !QFileInfo(dst).isDir()) || !underOrEqual(dst, root) || underOrEqual(src, root) || underOrEqual(src, dst) || underOrEqual(dst, src)) return fail("Destination is not a selected storage folder or overlaps the source.");
+    if (selected.isEmpty() || isProtectedStorage(selected) || root.isEmpty() || dst.isEmpty() || (storagePresent && (!QFileInfo(dst).isDir() || !QFileInfo(dst).isWritable())) || !underOrEqual(dst, root) || underOrEqual(src, root) || underOrEqual(src, dst) || underOrEqual(dst, src)) return fail("Choose an existing writable folder on the selected storage. EFI and system partitions are never valid destinations.");
     if (!staging.isEmpty() && (underOrEqual(staging, src) || underOrEqual(src, staging) || underOrEqual(staging, dst) || underOrEqual(dst, staging))) return fail("Staging folder must not overlap the source or destination.");
     const QString routeId = QUuid::createUuid().toString(QUuid::Id128);
     auto db = QSqlDatabase::database(m_connectionName); if (!db.transaction()) return fail(db.lastError().text()); QSqlQuery q(db);
@@ -586,4 +778,117 @@ bool SetupModel::saveRoute(const QString &source, const QString &storageId, cons
     if (!q.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1")) { db.rollback(); return fail(q.lastError().text()); }
     if (!db.commit()) { db.rollback(); return fail(db.lastError().text()); }
     ++m_revision; m_error.clear(); m_routes.append(QVariantMap{{"id", routeId}, {"source", src}, {"destination", dst}, {"behavior", behavior}, {"keepPolicy", policy}, {"contentType", type}, {"storageId", storageId}, {"stagingMaxBytes", stagingMaxBytes}, {"stagingRoot", staging}, {"minimumFreeBytes", minimumFreeBytes}, {"organizePhotos", organizePhotos && type == "Photos"}, {"storageIdentity", selected.value("identity")}, {"filesystemType", selected.value("filesystemType")}, {"storageRoot", root}, {"jobState", storagePresent ? QString() : QStringLiteral("Waiting")}, {"jobErrorCode", QString()}, {"jobError", QString()}, {"storagePresent", storagePresent}}); emit changed(); return true;
+}
+
+bool SetupModel::updateRouteRelationship(const QString &routeId, bool send, bool receive, bool keep) {
+    if (routeId.trimmed().isEmpty() || !send || receive) return fail(QStringLiteral("This alpha supports Send from this computer to backup storage; Receive needs a paired computer or server."));
+    const QString policy = keep ? QStringLiteral("Everything") : QStringLiteral("Nothing");
+    const QString behavior = keep ? QStringLiteral("Copy") : QStringLiteral("Move");
+    auto db = QSqlDatabase::database(m_connectionName);
+    if (!db.transaction()) return fail(db.lastError().text());
+    QSqlQuery update(db); update.prepare(QStringLiteral("UPDATE routes SET behavior=?,keep_policy=? WHERE id=? AND enabled=1"));
+    update.addBindValue(behavior); update.addBindValue(policy); update.addBindValue(routeId);
+    if (!update.exec() || update.numRowsAffected() != 1) { db.rollback(); return fail(QStringLiteral("Unknown connection.")); }
+    if (!update.exec(QStringLiteral("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1"))) { db.rollback(); return fail(update.lastError().text()); }
+    if (!db.commit()) { db.rollback(); return fail(db.lastError().text()); }
+    ++m_revision; m_error.clear(); refreshRoutes(); return true;
+}
+
+bool SetupModel::updateRouteCard(const QString &routeId, const QString &mode, const QString &keepPolicy, bool cache) {
+    const QString operation = mode.trimmed(), policy = keepPolicy.trimmed();
+    if ((operation != "Copy" && operation != "Move") || (policy != "Everything" && policy != "Last month" && policy != "Last week" && policy != "Last day" && policy != "Nothing") || (operation == "Copy" && policy != "Everything") || (operation == "Move" && policy == "Everything")) return fail(QStringLiteral("Choose Copy, or Move with a valid retention period."));
+    QString source, destination; QSqlQuery find(QSqlDatabase::database(m_connectionName)); find.prepare("SELECT source_root,destination_root FROM routes WHERE id=? AND enabled=1"); find.addBindValue(routeId);
+    if (!find.exec() || !find.next()) return fail(QStringLiteral("The selected connection no longer exists."));
+    source = find.value(0).toString(); destination = find.value(1).toString();
+    const QString staging = cache ? hubRoot() : QString();
+    if (cache && (underOrEqual(staging, source) || underOrEqual(source, staging) || underOrEqual(staging, destination) || underOrEqual(destination, staging))) return fail(QStringLiteral("The hub cache cannot overlap this connection."));
+    const QStorageInfo laptop(m_homeRoot); const qint64 stagingMax = cache ? laptop.bytesTotal() / 100 * m_hubLimitPercent : 0;
+    QSqlDatabase database = QSqlDatabase::database(m_connectionName);
+    if (!database.transaction()) return fail(database.lastError().text());
+    QSqlQuery update(database); update.prepare("UPDATE routes SET behavior=?,keep_policy=?,staging_root=?,staging_max_bytes=? WHERE id=? AND enabled=1"); update.addBindValue(operation); update.addBindValue(policy); update.addBindValue(staging.isEmpty() ? QVariant() : QVariant(staging)); update.addBindValue(stagingMax); update.addBindValue(routeId);
+    if (!update.exec() || update.numRowsAffected() != 1) { database.rollback(); return fail(update.lastError().text()); }
+    QSqlQuery revision(database); if (!revision.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1")) { database.rollback(); return fail(revision.lastError().text()); }
+    if (!database.commit()) { database.rollback(); return fail(database.lastError().text()); }
+    ++m_revision; m_error.clear(); refreshRoutes(); return true;
+}
+
+bool SetupModel::cloneDriveMapToPhotos() {
+    struct Clone { QString storageId, source, destination, behavior, keepPolicy, stagingRoot; qint64 stagingMax = 0, minimumFree = 0; bool present = false; };
+    auto db = QSqlDatabase::database(m_connectionName); QSqlQuery q(db);
+    if (!q.exec("SELECT COUNT(*) FROM routes WHERE enabled=1 AND content_type='Photos'") || !q.next()) return fail(q.lastError().text());
+    if (q.value(0).toInt() > 0) return fail(QStringLiteral("Photos already has relationships; edit its map independently."));
+    QList<Clone> clones;
+    if (!q.exec("SELECT r.destination_storage_id,r.source_root,r.destination_root,r.behavior,r.keep_policy,COALESCE(r.staging_root,''),COALESCE(r.staging_max_bytes,0),COALESCE(r.minimum_free_bytes,0),s.presence,s.selected_root FROM routes r JOIN storage s ON s.id=r.destination_storage_id WHERE r.enabled=1 AND r.content_type='Drive' ORDER BY r.rowid")) return fail(q.lastError().text());
+    while (q.next()) {
+        Clone clone{q.value(0).toString(), QFileInfo(q.value(1).toString()).dir().filePath(QStringLiteral("Photos")), QFileInfo(q.value(2).toString()).dir().filePath(QStringLiteral("Photos")), q.value(3).toString(), q.value(4).toString(), q.value(5).toString(), q.value(6).toLongLong(), q.value(7).toLongLong(), q.value(8).toString() == QStringLiteral("present")};
+        if (!underOrEqual(clone.source, m_homeRoot) || !underOrEqual(clone.destination, q.value(9).toString()) || underOrEqual(clone.source, clone.destination) || underOrEqual(clone.destination, clone.source)) return fail(QStringLiteral("A Files relationship cannot be cloned safely to Photos."));
+        clones.append(clone);
+    }
+    if (clones.isEmpty()) return fail(QStringLiteral("Create at least one Files relationship first."));
+    QStringList made;
+    const auto ensure = [&made](const QString &path) { if (QFileInfo::exists(path)) return QFileInfo(path).isDir(); if (!QDir().mkpath(path)) return false; made.append(path); return true; };
+    if (!ensure(clones.first().source)) return fail(QStringLiteral("The proposed Photos folder could not be created on this computer."));
+    for (const Clone &clone : std::as_const(clones)) if (clone.present && !ensure(clone.destination)) { for (auto it = made.crbegin(); it != made.crend(); ++it) QDir().rmdir(*it); return fail(QStringLiteral("A proposed Photos folder could not be created on storage.")); }
+    if (!db.transaction()) { for (auto it = made.crbegin(); it != made.crend(); ++it) QDir().rmdir(*it); return fail(db.lastError().text()); }
+    for (const Clone &clone : std::as_const(clones)) {
+        q.prepare("INSERT INTO routes(id,source_storage_id,destination_storage_id,source_root,destination_root,behavior,keep_policy,content_type,staging_max_bytes,staging_root,minimum_free_bytes,organize_photos) VALUES(?,'local',?,?,?,?,?,'Photos',?,?,?,1)");
+        q.addBindValue(QUuid::createUuid().toString(QUuid::Id128)); q.addBindValue(clone.storageId); q.addBindValue(QDir::cleanPath(clone.source)); q.addBindValue(QDir::cleanPath(clone.destination)); q.addBindValue(clone.behavior); q.addBindValue(clone.keepPolicy); q.addBindValue(clone.stagingMax); q.addBindValue(clone.stagingRoot.isEmpty() ? QVariant() : QVariant(clone.stagingRoot)); q.addBindValue(clone.minimumFree);
+        if (!q.exec()) { db.rollback(); for (auto it = made.crbegin(); it != made.crend(); ++it) QDir().rmdir(*it); return fail(q.lastError().text()); }
+    }
+    if (!q.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1") || !db.commit()) { db.rollback(); for (auto it = made.crbegin(); it != made.crend(); ++it) QDir().rmdir(*it); return fail(q.lastError().text()); }
+    ++m_revision; m_error.clear(); refreshRoutes(); return true;
+}
+
+bool SetupModel::saveInitialRoutes(const QString &source, const QString &storageId, const QString &destinationParent, const QString &keepPolicy, qint64 minimumFreeBytes, bool organizePhotos, qint64 stagingMaxBytes, const QString &stagingRoot) {
+    const QString src = cleanPath(source), parent = cleanPath(destinationParent);
+    const QString staging = stagingRoot.trimmed().isEmpty() ? QString() : cleanPath(stagingRoot);
+    const QString policy = keepPolicy == "Copy" ? QStringLiteral("Everything") : keepPolicy == "Move" ? QStringLiteral("Nothing") : keepPolicy;
+    QVariantMap selected; for (const auto &v : m_storages) if (v.toMap().value("id") == storageId) selected = v.toMap();
+    const bool present = selected.value("present").toBool();
+    const QString root = present ? cleanPath(selected.value("root").toString()) : QString();
+    if (src.isEmpty() || !QFileInfo(src).isDir() || !underOrEqual(src, m_homeRoot)
+        || parent.isEmpty() || !QFileInfo(parent).isDir() || !QFileInfo(parent).isWritable()
+        || selected.isEmpty() || !present || isProtectedStorage(selected) || root.isEmpty() || !underOrEqual(parent, root)
+        || (policy != "Everything" && policy != "Last month" && policy != "Last week" && policy != "Last day" && policy != "Nothing")
+        || minimumFreeBytes < 0 || stagingMaxBytes < 0 || (!stagingRoot.trimmed().isEmpty() && (staging.isEmpty() || !QFileInfo(staging).isDir()))
+        || underOrEqual(src, parent) || underOrEqual(parent, src)
+        || (!staging.isEmpty() && (underOrEqual(staging, src) || underOrEqual(src, staging) || underOrEqual(staging, parent) || underOrEqual(parent, staging))))
+        return fail(QStringLiteral("Choose a Home source and an existing writable storage folder that does not overlap it."));
+    const QString sourceDrive = QDir::cleanPath(src + "/Drive"), sourcePhotos = QDir::cleanPath(src + "/Photos");
+    const QString destinationDrive = QDir::cleanPath(parent + "/Drive"), destinationPhotos = QDir::cleanPath(parent + "/Photos");
+    const QStringList children{sourceDrive, sourcePhotos, destinationDrive, destinationPhotos};
+    for (const QString &child : children) if (QFileInfo::exists(child) && !QFileInfo(child).isDir()) return fail(QStringLiteral("Drive and Photos must be folders under the selected library parents."));
+    QDir sourceParent(src), destinationParentDir(parent);
+    const bool madeSourceDrive = !QFileInfo::exists(sourceDrive), madeSourcePhotos = !QFileInfo::exists(sourcePhotos);
+    const bool madeDestinationDrive = !QFileInfo::exists(destinationDrive), madeDestinationPhotos = !QFileInfo::exists(destinationPhotos);
+    const auto rollbackFolders = [&] {
+        if (madeDestinationPhotos) destinationParentDir.rmdir(QStringLiteral("Photos"));
+        if (madeDestinationDrive) destinationParentDir.rmdir(QStringLiteral("Drive"));
+        if (madeSourcePhotos) sourceParent.rmdir(QStringLiteral("Photos"));
+        if (madeSourceDrive) sourceParent.rmdir(QStringLiteral("Drive"));
+    };
+    if ((madeSourceDrive && !sourceParent.mkdir(QStringLiteral("Drive")))
+        || (madeSourcePhotos && !sourceParent.mkdir(QStringLiteral("Photos")))
+        || (madeDestinationDrive && !destinationParentDir.mkdir(QStringLiteral("Drive")))
+        || (madeDestinationPhotos && !destinationParentDir.mkdir(QStringLiteral("Photos")))) {
+        rollbackFolders();
+        return fail(QStringLiteral("Could not create the Drive and Photos library folders."));
+    }
+    const QString behavior = policy == "Nothing" ? QStringLiteral("Move") : QStringLiteral("Copy");
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    if (!db.transaction()) { rollbackFolders(); return fail(db.lastError().text()); }
+    QSqlQuery q(db);
+    const auto insert = [&](const QString &sourceRoot, const QString &destinationRoot, const QString &type) {
+        q.prepare("INSERT INTO routes(id,source_storage_id,destination_storage_id,source_root,destination_root,behavior,keep_policy,content_type,staging_max_bytes,staging_root,minimum_free_bytes,organize_photos) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)");
+        q.addBindValue(QUuid::createUuid().toString(QUuid::Id128)); q.addBindValue("local"); q.addBindValue(storageId); q.addBindValue(sourceRoot); q.addBindValue(destinationRoot); q.addBindValue(behavior); q.addBindValue(policy); q.addBindValue(type); q.addBindValue(stagingMaxBytes); q.addBindValue(staging.isEmpty() ? QVariant() : QVariant(staging)); q.addBindValue(minimumFreeBytes); q.addBindValue(organizePhotos && type == "Photos");
+        return q.exec();
+    };
+    if (!insert(sourceDrive, destinationDrive, QStringLiteral("Drive"))
+        || !insert(sourcePhotos, destinationPhotos, QStringLiteral("Photos"))
+        || !q.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1")
+        || !db.commit()) {
+        const QString error = q.lastError().text().isEmpty() ? db.lastError().text() : q.lastError().text();
+        db.rollback(); rollbackFolders(); return fail(error);
+    }
+    ++m_revision; m_error.clear(); refreshRoutes(); return true;
 }

@@ -10,6 +10,18 @@
 class SetupModelTest : public QObject {
     Q_OBJECT
 private slots:
+    void routeCardPropertiesPersist() {
+        QTemporaryDir d; QVERIFY(d.isValid()); QDir source(d.filePath("Drive")), disk(d.filePath("disk")), destination(d.filePath("disk/Drive")); QVERIFY(source.mkpath(".")); QVERIFY(destination.mkpath("."));
+        const QString db = d.filePath("catalog.sqlite"); SetupModel model(db, {QVariantMap{{"id", "disk"}, {"label", "Disk"}, {"root", disk.path()}, {"present", true}, {"kind", "removable"}}}); model.setHomeRootForTest(d.path()); QVERIFY(model.ready()); QVERIFY(model.setHubConfig(true, 80)); QVERIFY(model.saveRoute(source.path(), "disk", destination.path()));
+        const QString id = model.routes().first().toMap().value("id").toString(); QVERIFY(model.updateRouteCard(id, "Move", "Last week", true)); const QVariantMap route = model.routes().first().toMap(); QCOMPARE(route.value("behavior").toString(), QStringLiteral("Move")); QCOMPARE(route.value("keepPolicy").toString(), QStringLiteral("Last week")); QVERIFY(route.value("stagingMaxBytes").toLongLong() > 0); QCOMPARE(route.value("stagingRoot").toString(), model.hubRoot()); QVERIFY(!model.updateRouteCard(id, "Copy", "Last week", false));
+    }
+
+    void hubConfigPersistsAndRejectsUnsafeLimits() {
+        QTemporaryDir d; QVERIFY(d.isValid()); const QString db = d.filePath("catalog.sqlite");
+        { SetupModel model(db, {}); QVERIFY(model.ready()); QVERIFY(!model.hubEnabled()); QCOMPARE(model.hubLimitPercent(), 80); QVERIFY(model.setHubConfig(true, 75)); QVERIFY(model.hubEnabled()); QCOMPARE(model.hubLimitPercent(), 75); QVERIFY(!model.setHubConfig(true, 96)); QCOMPARE(model.hubLimitPercent(), 75); }
+        { SetupModel model(db, {}); QVERIFY(model.ready()); QVERIFY(model.hubEnabled()); QCOMPARE(model.hubLimitPercent(), 75); }
+    }
+
     void initAndRoutes() {
         QTemporaryDir d; QVERIFY(d.isValid());
         QDir source(d.path()+"/source"), selectedRoot(d.path()+"/selected"), destination(d.path()+"/selected/target"), staging(d.path()+"/staging"), outside(d.path()+"/outside"), insideSource(d.path()+"/selected/source"); QVERIFY(source.mkpath(".")); QVERIFY(selectedRoot.mkpath(".")); QVERIFY(destination.mkpath(".")); QVERIFY(staging.mkpath(".")); QVERIFY(outside.mkpath(".")); QVERIFY(insideSource.mkpath("."));
@@ -17,9 +29,10 @@ private slots:
         const QString db = d.path()+"/catalog.sqlite";
         { SetupModel model(db, disks); QVERIFY(model.ready()); QVERIFY(!model.localDeviceName().isEmpty()); QVERIFY2(model.storages().size() == 2, qPrintable(model.errorMessage())); QCOMPARE(model.storages().at(1).toMap().value("filesystemType").toString(), QStringLiteral("testfs")); QVERIFY2(model.saveRoute(source.path(), "disk", destination.path(), "Everything"), qPrintable(model.errorMessage())); QVERIFY2(model.saveRoute(source.path(), "disk", destination.path(), "Last week", 4 * 1024 * 1024, true, 8 * 1024 * 1024, staging.path(), "Photos"), qPrintable(model.errorMessage())); QCOMPARE(model.configRevision(), 2); }
         QSqlDatabase filesystem = QSqlDatabase::addDatabase("QSQLITE", "filesystem-check"); filesystem.setDatabaseName(db); QVERIFY(filesystem.open()); QSqlQuery filesystemQuery(filesystem); QVERIFY(filesystemQuery.exec("SELECT filesystem_type FROM storage WHERE id='disk'")); QVERIFY(filesystemQuery.next()); QCOMPARE(filesystemQuery.value(0).toString(), QStringLiteral("testfs")); filesystem.close(); filesystem = QSqlDatabase(); QSqlDatabase::removeDatabase("filesystem-check");
-        { SetupModel model(db, disks); QVERIFY(model.ready()); QCOMPARE(model.storages().size(), 2); QCOMPARE(model.routes().size(), 2); QCOMPARE(model.routes().at(0).toMap().value("contentType").toString(), QStringLiteral("Drive")); QCOMPARE(model.routes().at(1).toMap().value("contentType").toString(), QStringLiteral("Photos")); QCOMPARE(model.routes().at(1).toMap().value("keepPolicy").toString(), QStringLiteral("Last week")); QCOMPARE(model.routes().at(1).toMap().value("behavior").toString(), QStringLiteral("Copy")); QCOMPARE(model.routes().at(1).toMap().value("minimumFreeBytes").toLongLong(), 4 * 1024 * 1024); QCOMPARE(model.routes().at(1).toMap().value("stagingMaxBytes").toLongLong(), 8 * 1024 * 1024); QCOMPARE(model.routes().at(1).toMap().value("stagingRoot").toString(), staging.canonicalPath()); QVERIFY(model.routes().at(1).toMap().value("organizePhotos").toBool()); { QSqlDatabase count = QSqlDatabase::addDatabase("QSQLITE", "count-check"); count.setDatabaseName(db); QVERIFY(count.open()); QSqlQuery q(count); QVERIFY(q.exec("SELECT COUNT(*) FROM devices WHERE is_local=1")); QVERIFY(q.next()); QCOMPARE(q.value(0).toInt(), 1); count.close(); } QSqlDatabase::removeDatabase("count-check"); const int revision = model.configRevision(); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Everything", 0, false, 0, {}, "Archive")); QCOMPARE(model.configRevision(), revision); QVERIFY(!model.saveRoute(source.path(), "missing", destination.path(), "Everything")); QVERIFY(!model.saveRoute(source.path(), "disk", outside.path(), "Everything")); QVERIFY(!model.saveRoute(insideSource.path(), "disk", destination.path(), "Everything")); QVERIFY(!model.saveRoute(source.path(), "disk", source.path(), "Everything")); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Bad")); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Everything", -1)); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Everything", 0, false, -1)); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Everything", 0, false, 0, source.path())); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Everything", 0, false, 0, destination.path())); }
+        { SetupModel model(db, disks); QVERIFY(model.ready()); QCOMPARE(model.storages().size(), 2); QCOMPARE(model.routes().size(), 2); QCOMPARE(model.routes().at(0).toMap().value("contentType").toString(), QStringLiteral("Drive")); QCOMPARE(model.routes().at(1).toMap().value("contentType").toString(), QStringLiteral("Photos")); QCOMPARE(model.routes().at(1).toMap().value("keepPolicy").toString(), QStringLiteral("Last week")); QCOMPARE(model.routes().at(1).toMap().value("behavior").toString(), QStringLiteral("Copy")); QCOMPARE(model.routes().at(1).toMap().value("minimumFreeBytes").toLongLong(), 4 * 1024 * 1024); QCOMPARE(model.routes().at(1).toMap().value("stagingMaxBytes").toLongLong(), 8 * 1024 * 1024); QCOMPARE(model.routes().at(1).toMap().value("stagingRoot").toString(), staging.canonicalPath()); QVERIFY(model.routes().at(1).toMap().value("organizePhotos").toBool()); const QString routeId = model.routes().at(0).toMap().value("id").toString(); QVERIFY(model.updateRouteRelationship(routeId, true, false, false)); QCOMPARE(model.routes().at(0).toMap().value("keepPolicy").toString(), QStringLiteral("Nothing")); QCOMPARE(model.routes().at(0).toMap().value("behavior").toString(), QStringLiteral("Move")); QVERIFY(!model.updateRouteRelationship(routeId, true, true, true)); { QSqlDatabase count = QSqlDatabase::addDatabase("QSQLITE", "count-check"); count.setDatabaseName(db); QVERIFY(count.open()); QSqlQuery q(count); QVERIFY(q.exec("SELECT COUNT(*) FROM devices WHERE is_local=1")); QVERIFY(q.next()); QCOMPARE(q.value(0).toInt(), 1); count.close(); } QSqlDatabase::removeDatabase("count-check"); const int revision = model.configRevision(); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Everything", 0, false, 0, {}, "Archive")); QCOMPARE(model.configRevision(), revision); QVERIFY(!model.saveRoute(source.path(), "missing", destination.path(), "Everything")); QVERIFY(!model.saveRoute(source.path(), "disk", outside.path(), "Everything")); QVERIFY(!model.saveRoute(insideSource.path(), "disk", destination.path(), "Everything")); QVERIFY(!model.saveRoute(source.path(), "disk", source.path(), "Everything")); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Bad")); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Everything", -1)); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Everything", 0, false, -1)); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Everything", 0, false, 0, source.path())); QVERIFY(!model.saveRoute(source.path(), "disk", destination.path(), "Everything", 0, false, 0, destination.path())); }
         { QSqlDatabase check = QSqlDatabase::addDatabase("QSQLITE", "trigger-check"); check.setDatabaseName(db); QVERIFY(check.open()); { QSqlQuery q(check); QVERIFY(q.exec("INSERT INTO history(id,origin_device_id,catalog_generation,origin_sequence,event) VALUES('h','local',1,1,'queued')")); QVERIFY(!q.exec("UPDATE history SET event='failed'")); QVERIFY(!q.exec("DELETE FROM history")); } check.close(); }
         QSqlDatabase::removeDatabase("trigger-check");
+        { SetupModel remembered(db); QVariantMap disk; for (const auto &value : remembered.storages()) if (value.toMap().value("id") == "disk") disk = value.toMap(); QCOMPARE(disk.value("identity").toString(), QStringLiteral("storage:disk")); }
     }
 
     void deviceVisibilityPersistsWithoutTouchingRoutes() {
@@ -31,6 +44,14 @@ private slots:
         { SetupModel model(db, disks); QVERIFY(model.ready()); QCOMPARE(model.storages().size(), 1); QCOMPARE(model.hiddenDevices().size(), 1); QVERIFY(model.showDevice("disk")); QCOMPARE(model.storages().size(), 2); QVERIFY(model.hiddenDevices().isEmpty()); QVERIFY(model.firstSeenDevices().isEmpty()); }
     }
 
+    void filesMapClonesOnceToIndependentPhotosMap() {
+        QTemporaryDir d; QVERIFY(d.isValid()); QDir source(d.path() + "/Local Drive/Drive"), disk(d.path() + "/disk"), destination(d.path() + "/disk/Local Drive/Drive"); QVERIFY(source.mkpath(".")); QVERIFY(disk.mkpath(".")); QVERIFY(destination.mkpath("."));
+        SetupModel model(d.path() + "/catalog.sqlite", {QVariantMap{{"id", "disk"}, {"label", "Disk"}, {"root", disk.path()}, {"present", true}, {"kind", "removable"}}}); model.setHomeRootForTest(d.path()); QVERIFY(model.ready());
+        QVERIFY(model.saveRoute(source.path(), "disk", destination.path(), "Last week", 123, false, 456, {}, "Drive"));
+        QVERIFY2(model.cloneDriveMapToPhotos(), qPrintable(model.errorMessage())); QCOMPARE(model.routes().size(), 2); const QVariantMap photos = model.routes().last().toMap(); QCOMPARE(photos.value("contentType").toString(), QStringLiteral("Photos")); QCOMPARE(photos.value("storageId").toString(), QStringLiteral("disk")); QCOMPARE(photos.value("keepPolicy").toString(), QStringLiteral("Last week")); QCOMPARE(photos.value("minimumFreeBytes").toLongLong(), 123); QCOMPARE(photos.value("stagingMaxBytes").toLongLong(), 456); QVERIFY(photos.value("organizePhotos").toBool()); QVERIFY(QFileInfo::exists(d.path() + "/Local Drive/Photos")); QVERIFY(QFileInfo::exists(d.path() + "/disk/Local Drive/Photos"));
+        QVERIFY(!model.cloneDriveMapToPhotos());
+    }
+
     void offlineStorageRouteIsSavedWaitingWithoutCreatingFolders() {
         QTemporaryDir d; QVERIFY(d.isValid());
         QDir source(d.path() + "/source"); QVERIFY(source.mkpath("."));
@@ -39,6 +60,47 @@ private slots:
         const QString db = d.path() + "/catalog.sqlite";
         { SetupModel model(db, disks); QVERIFY(model.ready()); QVERIFY(model.saveRoute(source.path(), "disk", destination, "Everything")); QCOMPARE(model.routes().first().toMap().value("jobState").toString(), QStringLiteral("Waiting")); QCOMPARE(model.routes().first().toMap().value("destination").toString(), QDir::cleanPath(destination)); QCOMPARE(model.routes().first().toMap().value("storageIdentity").toString(), QStringLiteral("storage:offline-uuid")); QVERIFY(!QFileInfo::exists(destination)); }
         { SetupModel model(db, disks); QVERIFY(model.ready()); QCOMPARE(model.routes().size(), 1); QCOMPARE(model.routes().first().toMap().value("jobState").toString(), QStringLiteral("Waiting")); QVERIFY(!QFileInfo::exists(destination)); }
+    }
+
+    void rejectsProtectedEfiStorage() {
+        QTemporaryDir d; QVERIFY(d.isValid());
+        QDir source(d.path() + "/source"); QVERIFY(source.mkpath("."));
+        const QVariantList disks{QVariantMap{{"id", "efi"}, {"label", "efi"}, {"root", "/boot/efi"}, {"present", false}, {"kind", "removable"}}};
+        SetupModel model(d.path() + "/catalog.sqlite", disks); QVERIFY(model.ready());
+        QVERIFY(!model.saveRoute(source.path(), "efi", "/boot/efi/Local Drive", "Everything"));
+        QVERIFY(model.errorMessage().contains(QStringLiteral("EFI")));
+    }
+
+    void savesInitialRoutesAtomicallyWithDistinctRoots() {
+        QTemporaryDir d; QVERIFY(d.isValid());
+        QDir source(d.path() + "/source"), disk(d.path() + "/disk"), parent(d.path() + "/disk/Local Drive");
+        QVERIFY(source.mkpath(".")); QVERIFY(parent.mkpath("."));
+        const QVariantList disks{QVariantMap{{"id", "disk"}, {"label", "Test disk"}, {"root", disk.path()}, {"present", true}, {"kind", "removable"}}};
+        SetupModel model(d.path() + "/catalog.sqlite", disks); model.setHomeRootForTest(d.path()); QVERIFY(model.ready());
+        QVERIFY2(model.saveInitialRoutes(source.path(), "disk", parent.path(), "Last week", 1024, true, 2048), qPrintable(model.errorMessage()));
+        QCOMPARE(model.routes().size(), 2); QCOMPARE(model.configRevision(), 1);
+        QCOMPARE(model.routes().at(0).toMap().value("source").toString(), source.path() + "/Drive");
+        QCOMPARE(model.routes().at(1).toMap().value("source").toString(), source.path() + "/Photos");
+        QCOMPARE(model.routes().at(0).toMap().value("destination").toString(), parent.path() + "/Drive");
+        QCOMPARE(model.routes().at(1).toMap().value("destination").toString(), parent.path() + "/Photos");
+        QVERIFY(QFileInfo::exists(source.path() + "/Drive")); QVERIFY(QFileInfo::exists(source.path() + "/Photos"));
+        QVERIFY(QFileInfo::exists(parent.path() + "/Drive")); QVERIFY(QFileInfo::exists(parent.path() + "/Photos"));
+        QCOMPARE(model.routes().at(1).toMap().value("keepPolicy").toString(), QStringLiteral("Last week"));
+        QVERIFY(model.routes().at(1).toMap().value("organizePhotos").toBool());
+    }
+
+    void initialRoutesRollBackFoldersWhenCatalogInsertFails() {
+        QTemporaryDir d; QVERIFY(d.isValid());
+        QDir source(d.path() + "/source"), disk(d.path() + "/disk"), parent(d.path() + "/disk/Local Drive");
+        QVERIFY(source.mkpath(".")); QVERIFY(parent.mkpath("."));
+        const QString dbPath = d.path() + "/catalog.sqlite";
+        const QVariantList disks{QVariantMap{{"id", "disk"}, {"label", "Test disk"}, {"root", disk.path()}, {"present", true}, {"kind", "removable"}}};
+        SetupModel model(dbPath, disks); model.setHomeRootForTest(d.path()); QVERIFY(model.ready());
+        QSqlDatabase lock = QSqlDatabase::addDatabase("QSQLITE", "initial-routes-lock"); lock.setDatabaseName(dbPath); QVERIFY(lock.open()); QSqlQuery q(lock); QVERIFY(q.exec("BEGIN EXCLUSIVE"));
+        QVERIFY(!model.saveInitialRoutes(source.path(), "disk", parent.path()));
+        QVERIFY(q.exec("ROLLBACK")); lock.close(); lock = QSqlDatabase(); QSqlDatabase::removeDatabase("initial-routes-lock");
+        QVERIFY(!QFileInfo::exists(source.path() + "/Drive")); QVERIFY(!QFileInfo::exists(source.path() + "/Photos"));
+        QVERIFY(!QFileInfo::exists(parent.path() + "/Drive")); QVERIFY(!QFileInfo::exists(parent.path() + "/Photos")); QCOMPARE(model.routes().size(), 0);
     }
 
     void unsupportedVersion() {
@@ -100,7 +162,7 @@ private slots:
         old.close(); old = QSqlDatabase(); QSqlDatabase::removeDatabase("old-schema");
         SetupModel model(dbPath); QVERIFY(model.ready());
         QSqlDatabase check = QSqlDatabase::addDatabase("QSQLITE", "migrated-schema"); check.setDatabaseName(dbPath); QVERIFY(check.open()); QSqlQuery checkQuery(check);
-        QVERIFY(checkQuery.exec("SELECT version FROM schema_version")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 6);
+        QVERIFY(checkQuery.exec("SELECT version FROM schema_version")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 17); QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM review_items")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 0); QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM managed_inventory")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 0); QVERIFY(checkQuery.exec("SELECT COUNT(*) FROM review_resolutions")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toInt(), 0);
         QVERIFY(checkQuery.exec("SELECT keep_policy FROM routes WHERE id='legacy-route'")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toString(), QStringLiteral("Nothing"));
         QVERIFY(checkQuery.exec("SELECT staging_max_bytes,staging_root,minimum_free_bytes,organize_photos,content_type FROM routes WHERE id='legacy-route'")); QVERIFY(checkQuery.next()); QCOMPARE(checkQuery.value(0).toLongLong(), 0); QVERIFY(checkQuery.value(1).isNull()); QCOMPARE(checkQuery.value(2).toLongLong(), 0); QCOMPARE(checkQuery.value(3).toInt(), 0); QCOMPARE(checkQuery.value(4).toString(), QStringLiteral("Drive"));
         QVERIFY(checkQuery.exec("PRAGMA table_info(storage)")); bool hasFilesystemType = false; while (checkQuery.next()) hasFilesystemType = hasFilesystemType || checkQuery.value(1).toString() == QStringLiteral("filesystem_type"); QVERIFY(hasFilesystemType);
@@ -156,9 +218,23 @@ private slots:
         check.close(); check = QSqlDatabase(); QSqlDatabase::removeDatabase("wireless-identity-check");
     }
 
+    void chargingOnlyUsbIsTemporaryAndMtpWins() {
+        QTemporaryDir d; QVERIFY(d.isValid());
+        SetupModel model(d.path() + "/catalog.sqlite"); QVERIFY(model.ready());
+        model.setMtpDevicesForTest({});
+        model.setUsbConnectionsForTest({QVariantMap{{"id", "usb-charge-test"}, {"label", "Phone"}, {"kind", "Phone"}, {"transport", "usb"}, {"present", true}, {"status", "Charging only"}}});
+        QCOMPARE(model.connectedDevices().size(), 1);
+        QCOMPARE(model.connectedDevices().first().toMap().value("status").toString(), QStringLiteral("Charging only"));
+        QVERIFY(model.deviceList().isEmpty());
+        model.setMtpDevicesForTest({QVariantMap{{"id", "mtp-test"}, {"stableIdentity", "mtp:Xiaomi 15"}, {"label", "Xiaomi 15"}, {"kind", "Phone"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}}});
+        QCOMPARE(model.connectedDevices().size(), 1);
+        QCOMPARE(model.connectedDevices().first().toMap().value("label").toString(), QStringLiteral("Xiaomi 15"));
+    }
+
     void wirelessCandidateCanPairAfterMtpAppears() {
         QTemporaryDir d; QVERIFY(d.isValid());
         SetupModel model(d.path() + "/catalog.sqlite"); QVERIFY(model.ready());
+        model.setUsbConnectionsForTest({});
         QVERIFY(model.ingestWirelessBeacon(QVariantMap{{"stableIdentity", "wireless:late-usb"}, {"label", "Late USB phone"}}));
         const QString candidateId = model.wirelessDevices().first().toMap().value("id").toString();
         QVERIFY(!candidateId.isEmpty());

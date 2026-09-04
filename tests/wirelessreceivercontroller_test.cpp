@@ -65,11 +65,14 @@ int main(int argc, char **argv) {
             finishing = true;
             QTimer::singleShot(500, &app, [&app, &model, &controller, databasePath] {
                 const auto devices = model.connectedDevices();
-                bool oneMerged = devices.size() == 1;
-                if (oneMerged) {
-                    const QVariantMap device = devices.first().toMap();
+                bool oneMerged = false;
+                for (const auto &value : devices) {
+                    const QVariantMap device = value.toMap();
                     const QStringList transports = device.value("transports").toStringList();
-                    oneMerged = device.value("id").toString() == QStringLiteral("mtp-phone") && transports.contains("mtp") && transports.contains("wireless");
+                    if (device.value("id").toString() == QStringLiteral("mtp-phone") && transports.contains("mtp") && transports.contains("wireless")) {
+                        oneMerged = true;
+                        break;
+                    }
                 }
                 WirelessReceiverController restored(databasePath);
                 const bool remembered = restored.savedEnabled() && restored.savedPort() == 43273 && restored.savedDestination() == controller.savedDestination();

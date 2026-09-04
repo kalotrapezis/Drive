@@ -4,7 +4,6 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
-#include <QDirIterator>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
@@ -160,19 +159,6 @@ int runCopy(QCoreApplication &app, Output &output, const QUrl &source, const QUr
     return app.exec();
 }
 
-bool stagingUsage(const QString &root, qint64 *bytes, QString *error) {
-    qint64 total = 0;
-    QDirIterator iterator(root, QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-    while (iterator.hasNext()) {
-        iterator.next();
-        const QFileInfo info = iterator.fileInfo();
-        if (info.isSymLink()) { if (error) *error = "staging root contains a symlink"; return false; }
-        if (info.isFile()) total += info.size();
-    }
-    if (bytes) *bytes = total;
-    return true;
-}
-
 VerifiedCopy::Request localRequest(const QString &source, const QString &destination, const QString &catalog, qint64 stagingMaxBytes) {
     VerifiedCopy::Request request;
     request.sourceRoot = source;
@@ -219,12 +205,19 @@ int runVerifiedLocal(QCoreApplication &, Output &output, const QString &command,
     return 0;
 }
 
-VerifiedCopy::RemoteRequest remoteRequest(const QUrl &source, const QString &sourceRelative, const QString &destination, const QString &destinationRelative, const QString &catalog, const QString &transport = QStringLiteral("mtp")) {
-    const QString sourceKey = source.toString(QUrl::FullyEncoded);
+VerifiedCopy::RemoteRequest remoteRequest(const QUrl &source, const QString &sourceRelative, const QString &destination, const QString &destinationRelative, const QString &catalog, const QString &transport = QStringLiteral("mtp"), const QUrl &identityRoot = {}) {
+    const QUrl identityUrl = identityRoot.isValid() ? identityRoot : source;
+    const QString sourceKey = identityUrl.toString(QUrl::FullyEncoded);
     const QString sourceDigest = QString::fromLatin1(QCryptographicHash::hash(sourceKey.toUtf8(), QCryptographicHash::Sha256).toHex());
     const QString destinationDigest = QString::fromLatin1(QCryptographicHash::hash(destination.toUtf8(), QCryptographicHash::Sha256).toHex());
+    const QStringList parts = identityUrl.path(QUrl::FullyDecoded).split('/', Qt::SkipEmptyParts);
+    const QString deviceStableId = transport == QStringLiteral("mtp") && identityUrl.scheme() == QStringLiteral("mtp") && !parts.isEmpty()
+        ? QStringLiteral("mtp:%1").arg(parts.first()) : QStringLiteral("%1-device:%2").arg(transport, sourceDigest);
+    const QString storageKey = parts.size() > 1 ? deviceStableId + QLatin1Char('\n') + parts.at(1) : sourceKey;
+    const QString storageDigest = QString::fromLatin1(QCryptographicHash::hash(storageKey.toUtf8(), QCryptographicHash::Sha256).toHex());
     VerifiedCopy::RemoteRequest request;
     request.sourceUrl = source;
+    request.sourceRootUrl = identityUrl;
     request.sourceRelative = sourceRelative;
     request.destinationRoot = destination;
     request.destinationRelative = destinationRelative;
@@ -234,12 +227,12 @@ VerifiedCopy::RemoteRequest remoteRequest(const QUrl &source, const QString &sou
     request.databasePath = catalog;
     request.routeId = QStringLiteral("%1-route-%2").arg(transport, sourceDigest.left(16) + QStringLiteral("-") + destinationDigest.left(16));
     request.destinationStorageId = QStringLiteral("cli-%1").arg(destinationDigest.left(16));
-    request.sourceStorageIdentity = QStringLiteral("%1:%2").arg(transport, sourceDigest);
-    request.sourceStorageId = QStringLiteral("%1-%2").arg(transport, sourceDigest.left(16));
-    request.sourceDeviceStableId = QStringLiteral("%1-device:%2").arg(transport, sourceDigest);
-    request.sourceDeviceId = QStringLiteral("%1-device-%2").arg(transport, sourceDigest.left(16));
-    request.sourceDeviceName = transport == QStringLiteral("wireless") ? QStringLiteral("Wireless simulation") : QStringLiteral("MTP source");
-    request.sourceStorageLabel = request.sourceDeviceName;
+    request.sourceStorageIdentity = QStringLiteral("%1:%2").arg(transport, storageDigest);
+    request.sourceStorageId = QStringLiteral("%1-storage-%2").arg(transport, storageDigest.left(16));
+    request.sourceDeviceStableId = deviceStableId;
+    request.sourceDeviceId = QStringLiteral("%1-device-%2").arg(transport, QString::fromLatin1(QCryptographicHash::hash(deviceStableId.toUtf8(), QCryptographicHash::Sha256).toHex().left(16)));
+    request.sourceDeviceName = transport == QStringLiteral("wireless") ? QStringLiteral("Wireless simulation") : parts.value(0, QStringLiteral("MTP source"));
+    request.sourceStorageLabel = parts.value(1, request.sourceDeviceName);
     request.resumable = transport == QStringLiteral("wireless");
     return request;
 }
@@ -265,6 +258,29 @@ int runVerifiedRemote(Output &output, const QUrl &source, const QString &destina
     QString error;
     if (!executeRemoteRequest(engine, output, request, &error)) return fail(output, error);
     output.write(QStringLiteral("INFO verified %1 import completed").arg(transport == QStringLiteral("wireless") ? QStringLiteral("wireless simulation") : QStringLiteral("MTP")));
+    return 0;
+}
+
+int runVerifiedExport(Output &output, const QString &source, const QUrl &destination, const QString &catalog) {
+    const QStringList parts = destination.path(QUrl::FullyDecoded).split('/', Qt::SkipEmptyParts);
+    if (!QFileInfo(source).isFile() || !destination.isValid() || (destination.scheme() != QStringLiteral("mtp") && destination.scheme() != QStringLiteral("file"))) return fail(output, QStringLiteral("verified-export requires a local source file and MTP destination file URL"));
+    const QString deviceName = destination.scheme() == QStringLiteral("mtp") ? parts.value(0) : QStringLiteral("Test phone");
+    const QString deviceStable = destination.scheme() == QStringLiteral("mtp") ? QStringLiteral("mtp:%1").arg(deviceName) : QStringLiteral("mtp:file-test-phone");
+    const QString storageLabel = destination.scheme() == QStringLiteral("mtp") ? parts.value(1, QStringLiteral("Phone storage")) : QStringLiteral("Test phone storage");
+    const QString storageDigest = QString::fromLatin1(QCryptographicHash::hash((deviceStable + QLatin1Char('\n') + storageLabel).toUtf8(), QCryptographicHash::Sha256).toHex());
+    const QString relative = destination.scheme() == QStringLiteral("mtp") ? parts.mid(2).join('/') : QFileInfo(destination.toLocalFile()).fileName();
+    if (relative.isEmpty()) return fail(output, QStringLiteral("MTP destination must include a filename inside phone storage"));
+    VerifiedCopy::ExportRequest request;
+    request.sourcePath = source; request.destinationUrl = destination; request.destinationRelative = relative; request.databasePath = catalog;
+    if (destination.scheme() == QStringLiteral("mtp")) { request.destinationRootUrl = destination; request.destinationRootUrl.setPath(QStringLiteral("/%1/%2/").arg(parts.value(0), parts.value(1))); }
+    else request.destinationRootUrl = destination.adjusted(QUrl::RemoveFilename);
+    request.destinationDeviceStableId = deviceStable; request.destinationDeviceId = QStringLiteral("mtp-device-%1").arg(QString::fromLatin1(QCryptographicHash::hash(deviceStable.toUtf8(), QCryptographicHash::Sha256).toHex().left(16))); request.destinationDeviceName = deviceName;
+    request.destinationStorageIdentity = QStringLiteral("mtp:%1").arg(storageDigest); request.destinationStorageId = QStringLiteral("mtp-storage-%1").arg(storageDigest.left(16)); request.destinationStorageLabel = storageLabel;
+    request.routeId = QStringLiteral("mtp-export-%1").arg(QString::fromLatin1(QCryptographicHash::hash((QFileInfo(source).absolutePath() + QLatin1Char('\n') + request.destinationStorageIdentity).toUtf8(), QCryptographicHash::Sha256).toHex().left(16)));
+    VerifiedCopy engine(catalog); QString error;
+    QObject::connect(&engine, &VerifiedCopy::progressChanged, [&output](qint64 done, qint64 total, const QString &path) { output.write(QStringLiteral("PROGRESS bytes=%1 total=%2 path=%3").arg(done).arg(total).arg(path)); });
+    if (!engine.executeExportBlocking(request, &error)) return fail(output, error);
+    output.write(QStringLiteral("RECEIPT verified MTP export path=%1").arg(relative));
     return 0;
 }
 
@@ -374,6 +390,7 @@ int runWirelessReceive(QCoreApplication &app, Output &output, const QString &des
     configuration.port = port;
     configuration.destinationRoot = destination;
     configuration.stagingRoot = QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("wireless-staging"));
+    configuration.catalogPath = catalog;
     configuration.certificatePath = certificatePath;
     configuration.privateKeyPath = privateKeyPath;
     configuration.clientCaPath = clientCaPath;
@@ -510,7 +527,7 @@ int runVerifiedRemoteDirectory(Output &output, const QUrl &source, const QString
     if (stagingCapBytes < 0) return fail(output, QStringLiteral("staging maximum cannot be negative"));
     if (stagingCapBytes > 0) {
         qint64 used = 0; QString usageError;
-        if (!stagingUsage(destination, &used, &usageError)) return fail(output, usageError);
+        if (!VerifiedCopy::stagingUsage(destination, &used, &usageError)) return fail(output, usageError);
         qint64 incoming = 0;
         for (const RemoteInventoryItem &item : items) {
             const QFileInfo target(QDir(destination).filePath(item.relative));
@@ -524,7 +541,7 @@ int runVerifiedRemoteDirectory(Output &output, const QUrl &source, const QString
         output.write(QStringLiteral("PROGRESS bytes=%1 total=%2 path=%3").arg(done).arg(total).arg(path));
     });
     for (const RemoteInventoryItem &item : items) {
-        const VerifiedCopy::RemoteRequest request = remoteRequest(item.url, item.relative, destination, item.relative, catalog);
+        const VerifiedCopy::RemoteRequest request = remoteRequest(item.url, item.relative, destination, item.relative, catalog, QStringLiteral("mtp"), source);
         if (request.storageIdentity.isEmpty()) return fail(output, QStringLiteral("could not identify destination storage"));
         if (!executeRemoteRequest(engine, output, request, &error)) return fail(output, QStringLiteral("batch stopped at %1: %2").arg(item.relative, error));
     }
@@ -554,7 +571,7 @@ int main(int argc, char **argv) {
     const QCommandLineOption scanBytesOption(QStringLiteral("scan-max-bytes"), QStringLiteral("Maximum bytes for mtp-scan (0 means unlimited)."), QStringLiteral("BYTES"), QStringLiteral("68719476736"));
     parser.addOption(scanItemsOption);
     parser.addOption(scanBytesOption);
-    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("mtp-inventory, mtp-scan, wireless-beacon, wireless-discover, wireless-profile-export, wireless-profile-accept, wireless-receive, wireless-send, copy, verified-import, wireless-simulate, verified-import-dir, verified-stage-dir, verified-preview, or verified-copy"));
+    parser.addPositionalArgument(QStringLiteral("command"), QStringLiteral("mtp-inventory, mtp-scan, wireless-beacon, wireless-discover, wireless-profile-export, wireless-profile-accept, wireless-receive, wireless-send, copy, verified-import, verified-export, wireless-simulate, verified-import-dir, verified-stage-dir, verified-preview, or verified-copy"));
     parser.addPositionalArgument(QStringLiteral("arguments"), QStringLiteral("Command arguments."));
     if (!parser.parse(app.arguments())) {
         Output output;
@@ -644,6 +661,12 @@ int main(int argc, char **argv) {
             ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("catalog.sqlite"))
             : parser.value(catalogOption);
         return runVerifiedRemote(output, source, destination, catalog);
+    }
+    if (command == QStringLiteral("verified-export")) {
+        if (args.size() != 3) return fail(output, QStringLiteral("usage: verified-export SOURCE_FILE MTP_DESTINATION_FILE_URL"));
+        const QString source = localPathFromArgument(args.at(1)); const QUrl destination = urlFromArgument(args.at(2));
+        const QString catalog = parser.value(catalogOption).isEmpty() ? QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("catalog.sqlite")) : parser.value(catalogOption);
+        return runVerifiedExport(output, source, destination, catalog);
     }
     if (command == QStringLiteral("wireless-simulate")) {
         if (args.size() != 3) return fail(output, QStringLiteral("usage: wireless-simulate SOURCE_FILE_URL DESTINATION_DIRECTORY"));

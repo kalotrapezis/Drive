@@ -1,4 +1,5 @@
 #include "wirelesssession.h"
+#include "metadatasync.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -238,10 +239,25 @@ bool WirelessReceiver::handlePacket(Connection &connection, const LocalDrive::Wi
         emit deviceObserved(connection.deviceId, packet.header.value("name").toString().trimmed());
         return send(connection.socket, QJsonObject{{"type", "hello-ok"}, {"protocol", LocalDrive::WirelessProtocol::Version}});
     }
+    if (type == QStringLiteral("metadata")) {
+        if (!packet.payload.isEmpty()) { if (error) *error = QStringLiteral("Metadata frame must not contain file bytes"); return false; }
+        return handleMetadata(connection, packet.header, error);
+    }
     if (type == QStringLiteral("file")) return startFile(connection, packet.header, error);
     if (type == QStringLiteral("chunk")) return handleChunk(connection, packet.header, packet.payload, error);
     if (error) *error = QStringLiteral("Unknown wireless packet type");
     return false;
+}
+
+bool WirelessReceiver::handleMetadata(Connection &connection, const QJsonObject &header, QString *error) {
+    if (m_configuration.catalogPath.isEmpty()) { if (error) *error = QStringLiteral("Wireless receiver has no metadata catalog"); return false; }
+    LocalDrive::Metadata::Delta delta;
+    if (!LocalDrive::Metadata::fromJson(header, &delta, error)) return false;
+    const qint64 resolutionGeneration = header.value("resolutionGeneration").toVariant().toLongLong();
+    const qint64 resolutionCursor = header.value("resolutionCursor").toVariant().toLongLong();
+    const qint64 locationCursor = header.value("locationCursor").toVariant().toLongLong();
+    const QJsonObject acknowledgement = LocalDrive::Metadata::mergeAcknowledgement(m_configuration.catalogPath, delta, resolutionGeneration, resolutionCursor, header.value("reviewActions").toArray(), locationCursor, header.value("correctionResults").toArray(), error);
+    return !acknowledgement.isEmpty() && send(connection.socket, acknowledgement);
 }
 
 bool WirelessReceiver::startFile(Connection &connection, const QJsonObject &header, QString *error) {

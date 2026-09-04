@@ -14,6 +14,29 @@ grep -q 'INFO verified MTP import completed' <<<"$first"
 grep -q 'PROGRESS bytes=' <<<"$first"
 cmp "$root/source/Ελληνικά.txt" "$root/destination/Ελληνικά.txt"
 
+mkdir -p "$root/export-phone"
+exported=$($cli --catalog-file "$root/export.sqlite" verified-export "$root/source/Ελληνικά.txt" "file://$root/export-phone/from-laptop.txt" 2>&1)
+grep -q 'RECEIPT verified MTP export path=from-laptop.txt' <<<"$exported"
+cmp "$root/source/Ελληνικά.txt" "$root/export-phone/from-laptop.txt"
+reexported=$($cli --catalog-file "$root/export.sqlite" verified-export "$root/source/Ελληνικά.txt" "file://$root/export-phone/from-laptop.txt" 2>&1)
+grep -q 'RECEIPT verified MTP export path=from-laptop.txt' <<<"$reexported"
+python3 - "$root/export.sqlite" <<'PY'
+import sqlite3
+import sys
+db = sqlite3.connect(sys.argv[1])
+assert db.execute("select count(*) from storage where kind='mtp'").fetchone()[0] == 1
+assert db.execute("select count(*) from locations where state='verified'").fetchone()[0] == 1
+assert db.execute("select count(*) from history where event='verified'").fetchone()[0] == 1
+PY
+printf 'different\n' > "$root/source/different.txt"
+set +e
+export_conflict=$($cli --catalog-file "$root/export-conflict.sqlite" verified-export "$root/source/different.txt" "file://$root/export-phone/from-laptop.txt" 2>&1)
+status=$?
+set -e
+[[ $status -eq 2 ]]
+grep -q 'ERROR Destination differs' <<<"$export_conflict"
+cmp "$root/source/Ελληνικά.txt" "$root/export-phone/from-laptop.txt"
+
 mkdir -p "$root/wireless-destination"
 beacon=$($cli wireless-beacon "wireless:sim-phone" "Simulated phone" "127.0.0.1:43171" 2>&1)
 grep -q 'INFO wireless beacon sent' <<<"$beacon"
@@ -76,6 +99,8 @@ db = sqlite3.connect(sys.argv[1])
 assert db.execute("select count(*) from jobs").fetchone()[0] == 2
 assert db.execute("select count(*) from job_items where state='Complete'").fetchone()[0] == 2
 assert db.execute("select count(*) from locations where state='verified'").fetchone()[0] == 2
+assert db.execute("select count(*) from devices where is_local=0").fetchone()[0] == 1
+assert db.execute("select count(*) from storage where kind='mtp'").fetchone()[0] == 1
 PY
 
 mkdir -p "$root/bounded-destination"

@@ -17,9 +17,6 @@ class QSslSocket;
 
 namespace LocalDrive::WirelessProtocol {
 
-inline constexpr int MaxHeaderBytes = 64 * 1024;
-inline constexpr int MaxPayloadBytes = 8 * 1024 * 1024;
-
 struct Packet {
     QJsonObject header;
     QByteArray payload;
@@ -40,6 +37,7 @@ public:
         quint16 port = 0;
         QString destinationRoot;
         QString stagingRoot;
+        QString catalogPath;
         QString certificatePath;
         QString privateKeyPath;
         QString clientCaPath;
@@ -73,6 +71,7 @@ private:
     bool expectedPeer(QSslSocket *socket) const;
     bool send(QSslSocket *socket, const QJsonObject &header, const QByteArray &payload = {});
     bool handlePacket(Connection &connection, const LocalDrive::WirelessProtocol::Packet &packet, QString *error);
+    bool handleMetadata(Connection &connection, const QJsonObject &header, QString *error);
     bool startFile(Connection &connection, const QJsonObject &header, QString *error);
     bool handleChunk(Connection &connection, const QJsonObject &header, const QByteArray &payload, QString *error);
     bool finishFile(Connection &connection, QString *error);

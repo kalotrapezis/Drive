@@ -5,11 +5,13 @@ CREATE TABLE schema_version (
     version         INTEGER NOT NULL CHECK (version >= 1),
     installed_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-INSERT INTO schema_version(singleton, version) VALUES (1, 6);
+INSERT INTO schema_version(singleton, version) VALUES (1, 17);
 
 CREATE TABLE app_config (
     singleton       INTEGER PRIMARY KEY CHECK (singleton = 1),
     config_revision INTEGER NOT NULL DEFAULT 0 CHECK (config_revision >= 0),
+    hub_enabled     INTEGER NOT NULL DEFAULT 0 CHECK (hub_enabled IN (0, 1)),
+    hub_limit_percent INTEGER NOT NULL DEFAULT 80 CHECK (hub_limit_percent BETWEEN 1 AND 95),
     updated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 INSERT INTO app_config(singleton) VALUES (1);
@@ -49,6 +51,8 @@ CREATE TABLE storage (
                     CHECK (presence IN ('present', 'missing', 'offline', 'unknown')),
     last_seen_at    TEXT,
     last_verified_at TEXT,
+    bytes_total     INTEGER CHECK (bytes_total IS NULL OR bytes_total >= 0),
+    bytes_free      INTEGER CHECK (bytes_free IS NULL OR bytes_free >= 0),
     onboarding_seen INTEGER NOT NULL DEFAULT 0 CHECK (onboarding_seen IN (0, 1)),
     hidden          INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1))
 );
@@ -162,6 +166,135 @@ CREATE TABLE history (
     CHECK (event <> 'verified' OR (source_sha256 IS NOT NULL AND destination_sha256 = source_sha256))
 );
 
+CREATE TABLE metadata_events (
+    id                  TEXT PRIMARY KEY,
+    origin_device_id    TEXT NOT NULL REFERENCES devices(id),
+    catalog_generation  INTEGER NOT NULL CHECK (catalog_generation > 0),
+    origin_sequence     INTEGER NOT NULL CHECK (origin_sequence > 0),
+    item_id             TEXT NOT NULL CHECK (item_id <> ''),
+    source_root         TEXT NOT NULL CHECK (source_root IN ('Drive', 'DCIM')),
+    relative_path       TEXT NOT NULL CHECK (relative_path <> '' AND relative_path NOT LIKE '/%' AND relative_path <> '..' AND relative_path NOT LIKE '../%' AND relative_path NOT LIKE '%/../%' AND relative_path NOT LIKE '%/..'),
+    size_bytes          INTEGER NOT NULL CHECK (size_bytes >= 0),
+    modified_at         INTEGER NOT NULL CHECK (modified_at >= 0),
+    captured_at         TEXT,
+    type_hint           TEXT,
+    media_metadata      TEXT NOT NULL DEFAULT '{}',
+    content_sha256      TEXT,
+    received_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (origin_device_id, catalog_generation, origin_sequence),
+    CHECK (content_sha256 IS NULL OR (length(content_sha256) = 64 AND content_sha256 = lower(content_sha256) AND content_sha256 NOT GLOB '*[^0-9a-f]*'))
+);
+
+CREATE TABLE pending_metadata (
+    origin_device_id    TEXT NOT NULL REFERENCES devices(id),
+    item_id             TEXT NOT NULL CHECK (item_id <> ''),
+    source_root         TEXT NOT NULL CHECK (source_root IN ('Drive', 'DCIM')),
+    relative_path       TEXT NOT NULL,
+    size_bytes          INTEGER NOT NULL CHECK (size_bytes >= 0),
+    modified_at         INTEGER NOT NULL CHECK (modified_at >= 0),
+    captured_at         TEXT,
+    type_hint           TEXT,
+    media_metadata      TEXT NOT NULL DEFAULT '{}',
+    content_sha256      TEXT,
+    origin_sequence     INTEGER NOT NULL CHECK (origin_sequence > 0),
+    state               TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'complete', 'review')),
+    updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (origin_device_id, item_id),
+    CHECK (content_sha256 IS NULL OR (length(content_sha256) = 64 AND content_sha256 = lower(content_sha256) AND content_sha256 NOT GLOB '*[^0-9a-f]*'))
+);
+
+CREATE TABLE metadata_cursors (
+    origin_device_id    TEXT NOT NULL REFERENCES devices(id),
+    catalog_generation  INTEGER NOT NULL CHECK (catalog_generation > 0),
+    highest_contiguous  INTEGER NOT NULL DEFAULT 0 CHECK (highest_contiguous >= 0),
+    updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (origin_device_id, catalog_generation)
+);
+
+CREATE TABLE review_items (
+    id              TEXT PRIMARY KEY,
+    category        TEXT NOT NULL CHECK (category IN ('Duplicates', 'Conflicts', 'Permissions', 'Transfers', 'Storage', 'External changes', 'Unsupported')),
+    source_kind     TEXT NOT NULL CHECK (source_kind IN ('import', 'job', 'metadata', 'system')),
+    source_id       TEXT NOT NULL CHECK (source_id <> ''),
+    title           TEXT NOT NULL CHECK (title <> ''),
+    summary         TEXT NOT NULL DEFAULT '',
+    details_json    TEXT NOT NULL DEFAULT '{}',
+    item_count      INTEGER NOT NULL DEFAULT 1 CHECK (item_count > 0),
+    bytes_total     INTEGER NOT NULL DEFAULT 0 CHECK (bytes_total >= 0),
+    state           TEXT NOT NULL DEFAULT 'needs_decision'
+                    CHECK (state IN ('needs_decision', 'needs_device', 'can_retry', 'saved', 'resolved', 'dismissed')),
+    created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at     TEXT,
+    UNIQUE (source_kind, source_id, category)
+);
+
+CREATE TABLE managed_inventory (
+    route_id         TEXT NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
+    relative_path    TEXT NOT NULL CHECK (relative_path <> '' AND relative_path NOT LIKE '/%' AND relative_path <> '..' AND relative_path NOT LIKE '../%' AND relative_path NOT LIKE '%/../%' AND relative_path NOT LIKE '%/..'),
+    size_bytes       INTEGER NOT NULL CHECK (size_bytes >= 0),
+    modified_ms      INTEGER NOT NULL CHECK (modified_ms >= 0),
+    content_sha256   TEXT NOT NULL CHECK (length(content_sha256) = 64 AND content_sha256 = lower(content_sha256) AND content_sha256 NOT GLOB '*[^0-9a-f]*'),
+    state            TEXT NOT NULL DEFAULT 'present' CHECK (state IN ('present', 'missing')),
+    first_seen_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (route_id, relative_path)
+);
+
+CREATE TABLE inventory_events (
+    id                  TEXT PRIMARY KEY,
+    origin_device_id    TEXT NOT NULL REFERENCES devices(id),
+    catalog_generation  INTEGER NOT NULL CHECK (catalog_generation > 0),
+    origin_sequence     INTEGER NOT NULL CHECK (origin_sequence > 0),
+    route_id            TEXT NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
+    event               TEXT NOT NULL CHECK (event IN ('added', 'changed', 'missing', 'reappeared')),
+    relative_path       TEXT NOT NULL,
+    previous_sha256     TEXT,
+    current_sha256      TEXT,
+    size_bytes          INTEGER NOT NULL DEFAULT 0 CHECK (size_bytes >= 0),
+    occurred_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (origin_device_id, catalog_generation, origin_sequence),
+    CHECK (previous_sha256 IS NULL OR (length(previous_sha256) = 64 AND previous_sha256 = lower(previous_sha256) AND previous_sha256 NOT GLOB '*[^0-9a-f]*')),
+    CHECK (current_sha256 IS NULL OR (length(current_sha256) = 64 AND current_sha256 = lower(current_sha256) AND current_sha256 NOT GLOB '*[^0-9a-f]*'))
+);
+
+CREATE TABLE review_resolutions (
+    id                  TEXT PRIMARY KEY,
+    origin_device_id    TEXT NOT NULL REFERENCES devices(id),
+    catalog_generation  INTEGER NOT NULL CHECK (catalog_generation > 0),
+    origin_sequence     INTEGER NOT NULL CHECK (origin_sequence > 0),
+    review_item_id      TEXT NOT NULL REFERENCES review_items(id),
+    action              TEXT NOT NULL CHECK (action IN ('save', 'dismiss', 'accept_existing', 'keep_both', 'skip_unsupported')),
+    evidence_sha256     TEXT NOT NULL CHECK (length(evidence_sha256) = 64 AND evidence_sha256 = lower(evidence_sha256) AND evidence_sha256 NOT GLOB '*[^0-9a-f]*'),
+    details_json        TEXT NOT NULL DEFAULT '{}',
+    result_state        TEXT NOT NULL DEFAULT 'applied_local' CHECK (result_state IN ('applied_local', 'pending_device', 'failed')),
+    occurred_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (origin_device_id, catalog_generation, origin_sequence)
+);
+
+CREATE TABLE device_corrections (
+    id                  TEXT PRIMARY KEY,
+    target_device_id    TEXT NOT NULL REFERENCES devices(id),
+    review_item_id      TEXT REFERENCES review_items(id),
+    action              TEXT NOT NULL CHECK (action = 'recheck_location'),
+    source_root         TEXT NOT NULL CHECK (source_root IN ('Drive', 'DCIM')),
+    relative_path       TEXT NOT NULL CHECK (relative_path <> '' AND relative_path NOT LIKE '/%' AND relative_path <> '..' AND relative_path NOT LIKE '../%' AND relative_path NOT LIKE '%/../%' AND relative_path NOT LIKE '%/..'),
+    expected_size       INTEGER NOT NULL CHECK (expected_size >= 0),
+    expected_sha256     TEXT NOT NULL CHECK (length(expected_sha256) = 64 AND expected_sha256 = lower(expected_sha256) AND expected_sha256 NOT GLOB '*[^0-9a-f]*'),
+    created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE device_correction_results (
+    id                  TEXT PRIMARY KEY,
+    correction_id       TEXT NOT NULL UNIQUE REFERENCES device_corrections(id),
+    origin_device_id    TEXT NOT NULL REFERENCES devices(id),
+    status              TEXT NOT NULL CHECK (status IN ('verified', 'changed', 'missing', 'failed')),
+    observed_size       INTEGER CHECK (observed_size IS NULL OR observed_size >= 0),
+    observed_sha256     TEXT CHECK (observed_sha256 IS NULL OR (length(observed_sha256) = 64 AND observed_sha256 = lower(observed_sha256) AND observed_sha256 NOT GLOB '*[^0-9a-f]*')),
+    error_message       TEXT NOT NULL DEFAULT '',
+    completed_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TRIGGER history_immutable_update
 BEFORE UPDATE ON history
 BEGIN
@@ -171,4 +304,48 @@ CREATE TRIGGER history_immutable_delete
 BEFORE DELETE ON history
 BEGIN
     SELECT RAISE(ABORT, 'history is append-only');
+END;
+CREATE TRIGGER inventory_events_immutable_update
+BEFORE UPDATE ON inventory_events
+BEGIN
+    SELECT RAISE(ABORT, 'inventory events are append-only');
+END;
+CREATE TRIGGER inventory_events_immutable_delete
+BEFORE DELETE ON inventory_events
+BEGIN
+    SELECT RAISE(ABORT, 'inventory events are append-only');
+END;
+CREATE TRIGGER review_resolutions_immutable_update
+BEFORE UPDATE ON review_resolutions
+BEGIN
+    SELECT RAISE(ABORT, 'review resolutions are append-only');
+END;
+CREATE TRIGGER review_resolutions_immutable_delete
+BEFORE DELETE ON review_resolutions
+BEGIN
+    SELECT RAISE(ABORT, 'review resolutions are append-only');
+END;
+
+CREATE TRIGGER device_corrections_immutable_update
+BEFORE UPDATE ON device_corrections
+BEGIN
+    SELECT RAISE(ABORT, 'device corrections are append-only');
+END;
+
+CREATE TRIGGER device_corrections_immutable_delete
+BEFORE DELETE ON device_corrections
+BEGIN
+    SELECT RAISE(ABORT, 'device corrections are append-only');
+END;
+
+CREATE TRIGGER device_correction_results_immutable_update
+BEFORE UPDATE ON device_correction_results
+BEGIN
+    SELECT RAISE(ABORT, 'device correction results are append-only');
+END;
+
+CREATE TRIGGER device_correction_results_immutable_delete
+BEFORE DELETE ON device_correction_results
+BEGIN
+    SELECT RAISE(ABORT, 'device correction results are append-only');
 END;
