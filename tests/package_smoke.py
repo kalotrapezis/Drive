@@ -19,7 +19,7 @@ with socket.socket() as check:
 
 with tempfile.TemporaryDirectory(prefix="local-drive-package-test-") as folder:
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen", XDG_DATA_HOME=folder + "/data", XDG_CONFIG_HOME=folder + "/config")
-    assert "0.1.0-alpha.2" in subprocess.check_output([binary, "--version"], env=env, text=True)
+    assert "0.1.0-alpha.3" in subprocess.check_output([binary, "--version"], env=env, text=True)
     process = subprocess.Popen([binary, "--web-only"], cwd=folder, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     def get(path, headers=None):
         with urlopen(Request("http://127.0.0.1:43172" + path, headers=headers or {}), timeout=3) as response:
@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix="local-drive-package-test-") as folder:
                 time.sleep(.1)
         else:
             raise AssertionError("Backend did not start")
-        assert health["application"] == "local-drive" and health["appVersion"] == "0.1.0-alpha.2" and health["userId"] == os.geteuid()
+        assert health["application"] == "local-drive" and health["appVersion"] == "0.1.0-alpha.3" and health["userId"] == os.geteuid()
         html, mime = get("/")
         assert "text/html" in mime and b'@vite/client' not in html
         assets = re.findall(rb'(?:src|href)="(/assets/[^\"]+)"', html)

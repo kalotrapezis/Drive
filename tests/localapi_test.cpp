@@ -1,4 +1,5 @@
 #include "../src/localapi.h"
+#include "../src/syncschedule.h"
 #include "../src/setupmodel.h"
 
 #include <QDir>
@@ -20,6 +21,7 @@
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStorageInfo>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QScopeGuard>
@@ -29,7 +31,10 @@
 class LocalApiTest final : public QObject {
     Q_OBJECT
 private slots:
+    void exposesIncomingAndWirelessState();
     void packagedStaticFiles();
+    void schedulingAndPendingTransfers();
+    void recurrenceCalendarRules();
     void rejectsUnsafeHttpRequests();
     void requestDeadline();
     void servesStateOnlyOnLoopback();
@@ -39,9 +44,13 @@ private slots:
     void exportsPhotosAndSharesTags();
     void savesOnlyMissingValidatedRoute();
     void previewsConfiguredRoute();
+    void reviewsVerifiedCleanup();
     void controlsActiveRouteSafely();
-    void stagingCapRejectsPhoneImportBeforeCopy();
+    void restoresVerifiedBackupWithoutOverwrite();
+    void legacyStagingRequiresReviewBeforeImport();
     void deviceOnboardingPersistsParticipationChoice();
+    void visibilityRemovalAndCapabilities();
+    void reportsRealLibraryUsage();
 };
 
 namespace {
@@ -66,6 +75,136 @@ QByteArray rawRequest(quint16 port, const QByteArray &request, int timeout = 300
 }
 
 QByteArray responseBody(const QByteArray &response) { return response.mid(response.indexOf("\r\n\r\n") + 4); }
+}
+
+void LocalApiTest::reportsRealLibraryUsage() {
+    QTemporaryDir temp; QVERIFY(temp.isValid());
+    const QString drive = temp.filePath("Drive"), photos = temp.filePath("Photos"), disk = temp.filePath("disk");
+    QVERIFY(QDir().mkpath(drive + "/.templates")); QVERIFY(QDir().mkpath(photos)); QVERIFY(QDir().mkpath(disk + "/Drive")); QVERIFY(QDir().mkpath(disk + "/Photos"));
+    auto write = [](const QString &path, const QByteArray &data) { QFile file(path); return file.open(QIODevice::WriteOnly) && file.write(data) == data.size(); };
+    QVERIFY(write(drive + "/report.txt", "abc")); QVERIFY(write(drive + "/picture.jpg", "1234")); QVERIFY(write(drive + "/.templates/ignored.txt", "ignore"));
+    QVERIFY(write(photos + "/photo.jpg", "12345")); QVERIFY(write(photos + "/clip.mp4", "1234567"));
+    SetupModel model(temp.filePath("catalog.sqlite"), {QVariantMap{{"id", "disk"}, {"label", "Disk"}, {"root", disk}, {"identity", VerifiedCopy::liveStorageIdentity(disk)}, {"present", true}, {"kind", "removable"}}});
+    QVERIFY(model.saveRoute(drive, "disk", disk + "/Drive"));
+    QVERIFY(model.saveRoute(photos, "disk", disk + "/Photos", "Everything", 0, false, 0, {}, "Photos"));
+    LocalApi api(&model); QVERIFY(api.start(0));
+    const QByteArray host = "Host: 127.0.0.1:" + QByteArray::number(api.port()) + "\r\n\r\n";
+    const QJsonObject usage = QJsonDocument::fromJson(responseBody(rawRequest(api.port(), "GET /api/v1/library-usage HTTP/1.1\r\n" + host))).object();
+    const QJsonObject driveUsage = usage.value("drive").toObject(), photoUsage = usage.value("photos").toObject();
+    QCOMPARE(driveUsage.value("files").toInteger(), 2); QCOMPARE(driveUsage.value("bytes").toInteger(), 7);
+    QCOMPARE(driveUsage.value("categories").toObject().value("Documents").toObject().value("bytes").toInteger(), 3);
+    QCOMPARE(photoUsage.value("files").toInteger(), 2); QCOMPARE(photoUsage.value("bytes").toInteger(), 12);
+    QCOMPARE(photoUsage.value("categories").toObject().value("Photos").toObject().value("files").toInteger(), 1);
+    QCOMPARE(photoUsage.value("categories").toObject().value("Videos").toObject().value("files").toInteger(), 1);
+}
+
+void LocalApiTest::recurrenceCalendarRules() {
+    QJsonObject schedule{{"start", "2026-01-31T09:00"}, {"repeat", "monthly"}, {"timeZone", "Europe/Athens"}};
+    auto feb = nextScheduledTime(schedule, QDateTime::fromString("2026-02-01T12:00:00Z", Qt::ISODate));
+    QCOMPARE(feb.date(), QDate(2026, 2, 28)); QCOMPARE(feb.time(), QTime(9, 0));
+    QCOMPARE(nextScheduledTime(schedule, feb).date(), QDate(2026, 3, 31));
+    schedule["repeat"] = "weekly"; schedule["start"] = "2026-03-22T09:00";
+    auto dst = nextScheduledTime(schedule, QDateTime::fromString("2026-03-22T10:00:00Z", Qt::ISODate));
+    QCOMPARE(dst.date(), QDate(2026, 3, 29)); QCOMPARE(dst.time(), QTime(9, 0)); QCOMPARE(dst.offsetFromUtc(), 10800);
+    schedule["repeat"] = "daily"; QCOMPARE(nextScheduledTime(schedule, dst).date(), QDate(2026, 3, 30));
+    schedule["repeat"] = "once"; QVERIFY(!nextScheduledTime(schedule, dst).isValid());
+    schedule["timeZone"] = "Bad/Zone"; QVERIFY(!nextScheduledTime(schedule, dst).isValid());
+}
+
+void LocalApiTest::schedulingAndPendingTransfers() {
+    QTemporaryDir temp; QVERIFY(temp.isValid()); const QString source = temp.filePath("Drive"), destination = temp.filePath("disk/Drive"), phoneRoot = temp.filePath("phone");
+    QVERIFY(QDir().mkpath(source)); QVERIFY(QDir().mkpath(destination)); QVERIFY(QDir().mkpath(phoneRoot + "/Drive"));
+    QFile file(source + "/scheduled.txt"); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("scheduled copy"); file.close();
+    SetupModel model(temp.filePath("catalog.sqlite"), {QVariantMap{{"id", "disk"}, {"label", "Disk"}, {"root", temp.filePath("disk")}, {"identity", VerifiedCopy::liveStorageIdentity(destination)}, {"present", true}, {"kind", "removable"}}});
+    QVERIFY(model.saveRoute(source, "disk", destination)); const QString route = model.routes().first().toMap().value("id").toString();
+    LocalApi api(&model); QVERIFY(api.start(0)); QSignalSpy notices(&api, &LocalApi::scheduleNotice);
+    const QByteArray host = "Host: 127.0.0.1:" + QByteArray::number(api.port()) + "\r\n";
+    auto get = [&](const QByteArray &path) { return QJsonDocument::fromJson(responseBody(rawRequest(api.port(), "GET /api/v1/" + path + " HTTP/1.1\r\n" + host + "\r\n"))).object(); };
+    const QByteArray token = get("session").value("token").toString().toUtf8();
+    auto post = [&](const QJsonObject &body, bool authorized = true) {
+        const QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
+        return rawRequest(api.port(), "POST /api/v1/schedule HTTP/1.1\r\n" + host + "Content-Type: application/json\r\nX-Local-Drive-Token: " + (authorized ? token : QByteArray("wrong")) + "\r\nContent-Length: " + QByteArray::number(payload.size()) + "\r\n\r\n" + payload);
+    };
+    auto due = QDateTime::currentDateTimeUtc().addDays(1); due.setTime(QTime(12, 0));
+    QJsonObject options{{"action", "save"}, {"routeId", route}, {"phoneId", ""}, {"start", due.toString("yyyy-MM-dd'T'HH:mm")}, {"timeZone", "UTC"}, {"repeat", "once"}};
+    QVERIFY(post(options, false).startsWith("HTTP/1.1 403"));
+    auto invalid = options; invalid["timeZone"] = "Unknown/Place"; QVERIFY(post(invalid).startsWith("HTTP/1.1 400"));
+    QVERIFY(post(options).startsWith("HTTP/1.1 200"));
+    auto item = [&] { return get("state").value("schedules").toArray().first().toObject(); };
+    const QString id = item().value("id").toString(); QVERIFY(!id.isEmpty());
+    auto poll = [&] { api.checkSchedulesForTest(due); return item().value("state").toString(); };
+    QTRY_COMPARE_WITH_TIMEOUT(poll(), QStringLiteral("done"), 5000);
+    QVERIFY(QFileInfo::exists(destination + "/scheduled.txt")); QVERIFY(QFileInfo::exists(file.fileName())); QVERIFY(notices.count() > 0);
+    QVERIFY(post({{"action", "start"}, {"id", id}}).startsWith("HTTP/1.1 409"));
+    // A missed occurrence is manual even when the disk is online.
+    options["id"] = id; QVERIFY(post(options).startsWith("HTTP/1.1 200")); api.checkSchedulesForTest(due.addSecs(120)); QCOMPARE(item().value("state").toString(), QStringLiteral("pending"));
+    LocalApi restored(&model); QVERIFY(restored.start(0));
+    const QByteArray restoredResponse = rawRequest(restored.port(), "GET /api/v1/state HTTP/1.1\r\nHost: 127.0.0.1:" + QByteArray::number(restored.port()) + "\r\n\r\n");
+    QCOMPARE(QJsonDocument::fromJson(responseBody(restoredResponse)).object().value("schedules").toArray().first().toObject().value("state").toString(), QStringLiteral("pending"));
+    // Phone intake continues without the final disk, then waits for an explicit Start.
+    auto db = QSqlDatabase::addDatabase("QSQLITE", "scheduled-phone"); db.setDatabaseName(model.databasePath()); QVERIFY(db.open()); QSqlQuery q(db);
+    QVERIFY(q.exec("INSERT INTO devices(id,stable_id,name,kind,onboarding_seen) VALUES('test-phone','mtp:Test phone','Test phone','Phone',1)"));
+    QVERIFY(q.exec("INSERT INTO device_aliases(alias,device_id,transport) VALUES('mtp:Test phone','test-phone','mtp')"));
+    QVERIFY(q.exec("UPDATE storage SET presence='missing' WHERE id='disk'")); model.refreshRoutes();
+    model.setMtpDevicesForTest({QVariantMap{{"id", "test-phone"}, {"stableIdentity", "mtp:Test phone"}, {"label", "Test phone"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}, {"phoneRoot", QUrl::fromLocalFile(phoneRoot).toString()}}});
+    QFile photo(phoneRoot + "/Drive/from-phone.txt"); QVERIFY(photo.open(QIODevice::WriteOnly)); photo.write("phone content"); photo.close();
+    QVERIFY(post(options).startsWith("HTTP/1.1 200")); api.checkSchedulesForTest(due);
+    QCOMPARE(item().value("state").toString(), QStringLiteral("pending"));
+    QVERIFY(item().value("message").toString().contains("destination disk"));
+    options["phoneId"] = "test-phone"; QVERIFY(post(options).startsWith("HTTP/1.1 200"));
+    QTRY_COMPARE_WITH_TIMEOUT(poll(), QStringLiteral("pending"), 10000);
+    QVERIFY(item().value("message").toString().contains("Enable Cache"));
+    QVERIFY(!QFileInfo::exists(source + "/from-phone.txt"));
+    QVERIFY(model.updateRouteCard(route, "Copy", "Everything", true, 1));
+    QVERIFY(QDir().rename(source, source + "-offline"));
+    api.checkCachesForTest(); const int noticeCount = notices.count(); api.checkCachesForTest(); QCOMPARE(notices.count(), noticeCount);
+    QVERIFY(get("state").value("cacheStatus").toArray().first().toObject().value("blocked").toBool());
+    QVERIFY(post(options).startsWith("HTTP/1.1 200"));
+    QTRY_COMPARE_WITH_TIMEOUT(poll(), QStringLiteral("pending"), 10000);
+    QVERIFY(!QFileInfo::exists(source + "/from-phone.txt")); QVERIFY(QFileInfo::exists(photo.fileName()));
+    QVERIFY(QDir().rename(source + "-offline", source));
+    QVERIFY(model.updateRouteCard(route, "Copy", "Everything", true, 95));
+    QVERIFY(post(options).startsWith("HTTP/1.1 200"));
+    QTRY_COMPARE_WITH_TIMEOUT(poll(), QStringLiteral("pending"), 10000);
+    QVERIFY2(QFileInfo::exists(source + "/from-phone.txt"), qPrintable(item().value("message").toString()));
+    QVERIFY(QFileInfo::exists(photo.fileName())); QVERIFY(!QFileInfo::exists(destination + "/from-phone.txt")); QCOMPARE(item().value("phase").toString(), QStringLiteral("route"));
+    QVERIFY(q.exec("UPDATE storage SET presence='present' WHERE id='disk'")); model.refreshRoutes(); model.setMtpDevicesForTest({});
+    api.checkSchedulesForTest(due); QCOMPARE(item().value("state").toString(), QStringLiteral("pending"));
+    QVERIFY(post({{"action", "start"}, {"id", id}}).startsWith("HTTP/1.1 200"));
+    QTRY_COMPARE_WITH_TIMEOUT(poll(), QStringLiteral("done"), 10000);
+    QVERIFY(QFileInfo::exists(destination + "/from-phone.txt")); QVERIFY(QFileInfo::exists(photo.fileName()));
+    model.refreshRoutes(); QVERIFY(model.routes().first().toMap().value("stagingMaxBytes").toLongLong() > 0); QCOMPARE(model.routes().first().toMap().value("cacheLimitPercent").toInt(), 95);
+    QVERIFY(post({{"action", "remove"}, {"id", id}}).startsWith("HTTP/1.1 200")); QVERIFY(get("state").value("schedules").toArray().isEmpty());
+    q.finish(); db.close(); db = {}; QSqlDatabase::removeDatabase("scheduled-phone");
+}
+
+void LocalApiTest::exposesIncomingAndWirelessState() {
+    QTemporaryDir temp; QVERIFY(temp.isValid());
+    QVERIFY(QDir().mkpath(temp.filePath("Drive"))); QVERIFY(QDir().mkpath(temp.filePath("disk/Drive")));
+    SetupModel model(temp.filePath("catalog.sqlite"), {QVariantMap{{"id", "disk"}, {"label", "Disk"}, {"root", temp.filePath("disk")}, {"present", true}, {"kind", "removable"}}});
+    QVERIFY(model.saveRoute(temp.filePath("Drive"), "disk", temp.filePath("disk/Drive")));
+    LocalApi api(&model); QVERIFY(api.start(0));
+    const QByteArray host = "Host: 127.0.0.1:" + QByteArray::number(api.port()) + "\r\n";
+    auto get = [&](const QByteArray &path) { return QJsonDocument::fromJson(responseBody(rawRequest(api.port(), "GET /api/v1/" + path + " HTTP/1.1\r\n" + host + "\r\n"))).object(); };
+    const QByteArray token = get("session").value("token").toString().toUtf8();
+    auto post = [&](const QString &action, bool authorized = true) {
+        const QByteArray payload = QJsonDocument(QJsonObject{{"action", action}}).toJson(QJsonDocument::Compact);
+        return rawRequest(api.port(), "POST /api/v1/wireless-control HTTP/1.1\r\n" + host + "Content-Type: application/json\r\nX-Local-Drive-Token: " + (authorized ? token : QByteArray("wrong")) + "\r\nContent-Length: " + QByteArray::number(payload.size()) + "\r\n\r\n" + payload);
+    };
+    const auto incoming = get("state").value("incomingConnections").toArray(); QCOMPARE(incoming.size(), 1);
+    QCOMPARE(incoming.first().toObject().value("receiverKind").toString(), QStringLiteral("computer"));
+    QVERIFY(incoming.first().toObject().value("cacheSupported").toBool());
+    QCOMPARE(incoming.first().toObject().value("limitPercent").toInt(), 80);
+    QVERIFY(get("state").value("operations").toArray().isEmpty());
+    QVERIFY(post("start").startsWith("HTTP/1.1 503"));
+    QJsonObject wireless{{"available", true}, {"configured", true}, {"listening", false}, {"status", "Stopped"}}; api.setWirelessState(wireless);
+    QSignalSpy actions(&api, &LocalApi::wirelessControlRequested);
+    connect(&api, &LocalApi::wirelessControlRequested, &api, [&](bool start) { wireless["listening"] = start; wireless["status"] = start ? "Listening" : "Stopped"; api.setWirelessState(wireless); });
+    QVERIFY(post("start", false).startsWith("HTTP/1.1 403")); QCOMPARE(actions.size(), 0);
+    QVERIFY(post("wrong").startsWith("HTTP/1.1 400")); QCOMPARE(actions.size(), 0);
+    QVERIFY(post("start").startsWith("HTTP/1.1 200")); QVERIFY(get("state").value("wireless").toObject().value("listening").toBool());
+    QVERIFY(post("stop").startsWith("HTTP/1.1 200")); QVERIFY(!get("state").value("wireless").toObject().value("listening").toBool());
+    QVERIFY(post("start").startsWith("HTTP/1.1 200")); QCOMPARE(actions.size(), 3);
 }
 
 void LocalApiTest::packagedStaticFiles() {
@@ -169,17 +308,26 @@ void LocalApiTest::requestDeadline() {
 
 void LocalApiTest::exportsPhotosAndSharesTags() {
     QTemporaryDir temp; QVERIFY(temp.isValid());
-    const QString photos = temp.filePath("Photos"), disk = temp.filePath("disk"); QVERIFY(QDir().mkpath(photos)); QVERIFY(QDir().mkpath(disk + "/Photos"));
+    const QString drive = temp.filePath("Drive"), photos = temp.filePath("Photos"), disk = temp.filePath("disk"); QVERIFY(QDir().mkpath(drive)); QVERIFY(QDir().mkpath(photos)); QVERIFY(QDir().mkpath(disk + "/Drive")); QVERIFY(QDir().mkpath(disk + "/Photos"));
+    QFile driveFile(drive + "/notes.txt"); QVERIFY(driveFile.open(QIODevice::WriteOnly)); driveFile.write("archive notes"); driveFile.close();
     QFile file(photos + "/photo.jpg"); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("test photo"); file.close();
     SetupModel model(temp.filePath("catalog.sqlite"), {QVariantMap{{"id", "disk"}, {"root", disk}, {"label", "Disk"}, {"present", true}, {"kind", "removable"}}});
+    QVERIFY(model.saveRoute(drive, "disk", disk + "/Drive", "Everything", 0, false, 0, {}, "Drive"));
     QVERIFY(model.saveRoute(photos, "disk", disk + "/Photos", "Everything", 0, false, 0, {}, "Photos"));
     LocalApi api(&model); QVERIFY(api.start(0)); QNetworkAccessManager network;
     const QString base = QString("http://127.0.0.1:%1/api/v1/").arg(api.port());
     const auto get = [&](const QString &path) { auto *reply = network.get(QNetworkRequest(QUrl(base + path))); QSignalSpy done(reply, &QNetworkReply::finished); done.wait(3000); const auto result = QJsonDocument::fromJson(reply->readAll()).object(); reply->deleteLater(); return result; };
     const auto token = get("session").value("token").toString().toUtf8();
     const auto post = [&](const QJsonObject &options) { QNetworkRequest request(QUrl(base + "file-action")); request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); request.setRawHeader("X-Local-Drive-Token", token); auto *reply = network.post(request, QJsonDocument(options).toJson()); QSignalSpy done(reply, &QNetworkReply::finished); done.wait(3000); auto result = QJsonDocument::fromJson(reply->readAll()).object(); result.insert("httpStatus", reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()); reply->deleteLater(); return result; };
-    QCOMPARE(post({{"action", "create-tag"}, {"tag", "Διακοπές"}}).value("httpStatus").toInt(), 200);
-    QVERIFY(get("file-labels").value("tags").toArray().contains("Διακοπές"));
+    QCOMPARE(post({{"action", "create-tag"}, {"tag", "Διακοπές"}, {"color", "#b65470"}}).value("httpStatus").toInt(), 200);
+    QNetworkRequest collectionRequest(QUrl(base + "create-folder")); collectionRequest.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); collectionRequest.setRawHeader("X-Local-Drive-Token", token);
+    auto *collectionReply = network.post(collectionRequest, QJsonDocument(QJsonObject{{"root", "Photos"}, {"parent", ""}, {"name", "Trips"}}).toJson()); QSignalSpy collectionFinished(collectionReply, &QNetworkReply::finished); QVERIFY(collectionFinished.wait(3000)); QCOMPARE(collectionReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200); collectionReply->deleteLater();
+    QVERIFY(QFileInfo::exists(photos + "/Trips")); QVERIFY(get("photos").value("collections").toArray().contains("Trips"));
+    const auto savedLabels = get("file-labels");
+    QVERIFY(savedLabels.value("tags").toArray().contains("Διακοπές"));
+    QCOMPARE(savedLabels.value("tagColors").toObject().value("Διακοπές").toString(), QString("#b65470"));
+    QCOMPARE(post({{"action", "create-tag"}, {"tag", "Διακοπές"}, {"color", "#438260"}}).value("httpStatus").toInt(), 409);
+    QCOMPARE(post({{"action", "create-tag"}, {"tag", "Άκυρο"}, {"color", "#ffffff"}}).value("httpStatus").toInt(), 400);
     // A present backup disk alone cannot certify the individual source photos.
     QCOMPARE(get("photos").value("verifiedOn").toString(), QString());
     QCOMPARE(post({{"action", "labels"}, {"root", "Photos"}, {"path", "photo.jpg"}, {"modified", QFileInfo(file).lastModified().toString(Qt::ISODate)}, {"size", QFileInfo(file).size()}, {"favorite", true}, {"tags", QJsonArray{"Διακοπές"}}}).value("httpStatus").toInt(), 200);
@@ -193,6 +341,17 @@ void LocalApiTest::exportsPhotosAndSharesTags() {
     QVERIFY2(progress.value("state") == "transferred", qPrintable(progress.value("result").toString()));
     QCOMPARE(get("state").value("photoExports").toArray().first().toObject().value("id").toString(), id);
     QVERIFY(QFileInfo::exists(disk + "/test.ldrive")); QVERIFY(file.open(QIODevice::ReadOnly)); QCOMPARE(file.readAll(), QByteArray("test photo"));
+    QCOMPARE(get("archives").value("items").toArray().size(), 1);
+    const auto archive = get("archive?storageId=disk&name=test.ldrive");
+    QVERIFY(archive.value("readOnly").toBool()); QCOMPARE(archive.value("items").toArray().first().toObject().value("path").toString(), QString("photo.jpg"));
+    auto *media = network.get(QNetworkRequest(QUrl(base + "archive-media?storageId=disk&name=test.ldrive&path=photo.jpg&raw=1"))); QSignalSpy mediaDone(media, &QNetworkReply::finished); QVERIFY(mediaDone.wait(3000)); QCOMPARE(media->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200); QCOMPARE(media->readAll(), QByteArray("test photo")); media->deleteLater();
+    QNetworkRequest cleanup(QUrl(base + "archive-cleanup")); cleanup.setHeader(QNetworkRequest::ContentTypeHeader, "application/json"); cleanup.setRawHeader("X-Local-Drive-Token", token);
+    auto *cleanupReply = network.post(cleanup, QJsonDocument(QJsonObject{{"storageId", "disk"}, {"name", "test.ldrive"}}).toJson()); QSignalSpy cleanupDone(cleanupReply, &QNetworkReply::finished); QVERIFY(cleanupDone.wait(3000)); QCOMPARE(cleanupReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200); QCOMPARE(QJsonDocument::fromJson(cleanupReply->readAll()).object().value("moved").toInt(), 1); cleanupReply->deleteLater(); QVERIFY(!QFileInfo::exists(photos + "/photo.jpg"));
+    QTest::qWait(100);
+    const auto driveStart = post({{"action", "export-archive"}, {"root", "Drive"}, {"storageId", "disk"}, {"name", "files.ldrive"}}); QCOMPARE(driveStart.value("httpStatus").toInt(), 202);
+    const auto driveId = driveStart.value("id").toString(); QVERIFY(!driveId.isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(([&] { progress = get("route-preview?id=" + driveId); return progress.value("state") == "transferred" || progress.value("state") == "failed"; })(), 10000); QVERIFY2(progress.value("state") == "transferred", qPrintable(progress.value("result").toString()));
+    QCOMPARE(get("archives?root=Drive").value("items").toArray().size(), 1); QCOMPARE(get("archive?storageId=disk&name=files.ldrive").value("library").toString(), QString("Drive"));
 }
 
 void LocalApiTest::localizedScreenshotsAreReadOnly() {
@@ -334,11 +493,6 @@ void LocalApiTest::servesStateOnlyOnLoopback() {
     QVERIFY(state.contains("storages"));
     reply->deleteLater();
 
-    auto *refreshReply = network.get(QNetworkRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/refresh-connections").arg(api.port()))));
-    QSignalSpy refreshFinished(refreshReply, &QNetworkReply::finished); QVERIFY(refreshFinished.wait(3000));
-    QCOMPARE(refreshReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 202);
-    QVERIFY(refreshReply->readAll().contains("checking")); refreshReply->deleteLater();
-
     auto *photosReply = network.get(QNetworkRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/photos").arg(api.port()))));
     QSignalSpy photosFinished(photosReply, &QNetworkReply::finished);
     QVERIFY(photosFinished.wait(3000));
@@ -401,7 +555,7 @@ void LocalApiTest::servesStateOnlyOnLoopback() {
     sessionReply->deleteLater();
 
     QDir phone(temp.filePath("phone")); QVERIFY(phone.mkpath("Drive"));
-    model.setMtpDevicesForTest({QVariantMap{{"id", "test-phone"}, {"stableIdentity", "mtp:Test phone"}, {"label", "Test phone"}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}, {"phoneRoot", QUrl::fromLocalFile(phone.path()).toString()}}});
+    model.setMtpDevicesForTest({QVariantMap{{"id", "test-phone"}, {"stableIdentity", "mtp:Test phone"}, {"label", "Test phone"}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}, {"phoneRoot", QUrl::fromLocalFile(phone.path()).toString()}}, QVariantMap{{"id", "other-phone"}, {"stableIdentity", "mtp:Other phone"}, {"label", "Other phone"}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}, {"phoneRoot", QUrl::fromLocalFile(temp.filePath("other-phone")).toString()}}});
     QNetworkRequest exportRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/export-to-phone").arg(api.port()))); exportRequest.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json")); exportRequest.setRawHeader("X-Local-Drive-Token", token.toUtf8());
     auto *exportReply = network.post(exportRequest, QJsonDocument(QJsonObject{{"root", "Drive"}, {"path", "Medical/report.txt"}}).toJson(QJsonDocument::Compact)); QSignalSpy exportFinished(exportReply, &QNetworkReply::finished); QVERIFY(exportFinished.wait(3000)); QCOMPARE(exportReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 202); exportReply->deleteLater();
     for (int attempt = 0; attempt < 100 && !QFileInfo::exists(phone.filePath("Drive/Medical/report.txt")); ++attempt) QTest::qWait(20);
@@ -410,7 +564,8 @@ void LocalApiTest::servesStateOnlyOnLoopback() {
         QSqlDatabase catalog = QSqlDatabase::addDatabase("QSQLITE", "localapi-export-check"); catalog.setDatabaseName(model.databasePath()); QVERIFY(catalog.open()); QSqlQuery check(catalog);
         int receipts = 0; for (int attempt = 0; attempt < 100 && receipts == 0; ++attempt) { QVERIFY(check.exec("SELECT COUNT(*) FROM history WHERE event='verified'")); QVERIFY(check.next()); receipts = check.value(0).toInt(); check.finish(); if (!receipts) QTest::qWait(20); }
         QCOMPARE(receipts, 1); QVERIFY(check.exec("SELECT relative_path FROM locations WHERE storage_id LIKE 'mtp-storage-%'")); QVERIFY(check.next()); QCOMPARE(check.value(0).toString(), QStringLiteral("Drive/Medical/report.txt")); check.finish();
-        QVERIFY(check.exec("SELECT selected_root FROM storage WHERE stable_identity LIKE 'mtp:%'")); QVERIFY(check.next()); QCOMPARE(check.value(0).toString(), phone.path());
+        QVERIFY(check.exec("SELECT selected_root,onboarding_seen FROM storage WHERE stable_identity LIKE 'mtp:%'")); QVERIFY(check.next()); QCOMPARE(check.value(0).toString(), phone.path()); QCOMPARE(check.value(1).toInt(), 1);
+        QVERIFY(check.exec("SELECT enabled FROM routes WHERE id LIKE 'mtp-export-%'")); QVERIFY(check.next()); QCOMPARE(check.value(0).toInt(), 0);
         check.finish(); catalog.close(); catalog = QSqlDatabase(); QSqlDatabase::removeDatabase("localapi-export-check");
     }
     {
@@ -419,12 +574,33 @@ void LocalApiTest::servesStateOnlyOnLoopback() {
     }
     QNetworkRequest phoneImportRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/import-from-phone").arg(api.port()))); phoneImportRequest.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json")); phoneImportRequest.setRawHeader("X-Local-Drive-Token", token.toUtf8());
     QNetworkRequest unauthorizedPhoneImport(phoneImportRequest.url()); unauthorizedPhoneImport.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json")); auto *deniedPhoneImport = network.post(unauthorizedPhoneImport, QJsonDocument(QJsonObject{{"root", "Drive"}}).toJson(QJsonDocument::Compact)); QSignalSpy deniedPhoneImportFinished(deniedPhoneImport, &QNetworkReply::finished); QVERIFY(deniedPhoneImportFinished.wait(3000)); QCOMPARE(deniedPhoneImport->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 403); deniedPhoneImport->deleteLater();
-    auto *phoneImport = network.post(phoneImportRequest, QJsonDocument(QJsonObject{{"root", "Drive"}}).toJson(QJsonDocument::Compact)); QSignalSpy phoneImportStarted(phoneImport, &QNetworkReply::finished); QVERIFY(phoneImportStarted.wait(3000)); QCOMPARE(phoneImport->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 202); const QJsonObject phoneImportStart = QJsonDocument::fromJson(phoneImport->readAll()).object(); const QString phoneImportId = phoneImportStart.value("id").toString(); QCOMPARE(phoneImportStart.value("destination").toString(), QStringLiteral("Test disk")); phoneImport->deleteLater(); QVERIFY(!phoneImportId.isEmpty());
+    QString driveRouteId; for (const auto &value : model.routes()) if (value.toMap().value("contentType") == "Drive") driveRouteId = value.toMap().value("id").toString(); QVERIFY(!driveRouteId.isEmpty());
+    const QJsonObject phonePreviewOptions{{"root", "Drive"}, {"previewOnly", true}, {"phoneId", "test-phone"}, {"routeId", driveRouteId}, {"toLaptop", false}};
+    auto *phonePreview = network.post(phoneImportRequest, QJsonDocument(phonePreviewOptions).toJson(QJsonDocument::Compact)); QSignalSpy phonePreviewStarted(phonePreview, &QNetworkReply::finished); QVERIFY(phonePreviewStarted.wait(3000)); const QString phonePreviewId = QJsonDocument::fromJson(phonePreview->readAll()).object().value("id").toString(); phonePreview->deleteLater(); QVERIFY(!phonePreviewId.isEmpty());
+    QJsonObject phonePreviewResult; for (int attempt = 0; attempt < 200 && phonePreviewResult.value("state") != "complete" && phonePreviewResult.value("state") != "failed"; ++attempt) { QTest::qWait(20); QUrl resultUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/route-preview").arg(api.port())); QUrlQuery resultQuery; resultQuery.addQueryItem("id", phonePreviewId); resultUrl.setQuery(resultQuery); auto *resultReply = network.get(QNetworkRequest(resultUrl)); QSignalSpy resultFinished(resultReply, &QNetworkReply::finished); QVERIFY(resultFinished.wait(3000)); phonePreviewResult = QJsonDocument::fromJson(resultReply->readAll()).object(); resultReply->deleteLater(); }
+    QCOMPARE(phonePreviewResult.value("state").toString(), QStringLiteral("complete")); QCOMPARE(phonePreviewResult.value("phoneId").toString(), QStringLiteral("test-phone")); QCOMPARE(phonePreviewResult.value("routeId").toString(), driveRouteId); QCOMPARE(phonePreviewResult.value("storageId").toString(), QStringLiteral("disk")); QCOMPARE(phonePreviewResult.value("destinationRoot").toString(), driveDestination.path()); QVERIFY(!phonePreviewResult.contains("expectedSourceHashes"));
+    const QJsonObject phonePreviewDetails = phonePreviewResult.value("preview").toObject(); QVERIFY(phonePreviewDetails.value("ok").toBool()); QCOMPARE(phonePreviewDetails.value("files").toInt(), 1); QCOMPARE(phonePreviewDetails.value("toCopy").toInt(), 6); QCOMPARE(phonePreviewDetails.value("identical").toInt(), 0); QCOMPARE(phonePreviewDetails.value("conflicts").toInt(), 0); QVERIFY(!QFileInfo::exists(driveDestination.filePath("Medical/report.txt")));
+    auto *unboundImport = network.post(phoneImportRequest, QJsonDocument(QJsonObject{{"root", "Drive"}}).toJson(QJsonDocument::Compact)); QSignalSpy unboundImportFinished(unboundImport, &QNetworkReply::finished); QVERIFY(unboundImportFinished.wait(3000)); QCOMPARE(unboundImport->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 409); QVERIFY(QJsonDocument::fromJson(unboundImport->readAll()).object().value("error").toString().contains("Preview")); unboundImport->deleteLater();
+    QVERIFY(model.updateRouteCard(driveRouteId, "Copy", "Everything", false));
+    auto *staleImport = network.post(phoneImportRequest, QJsonDocument(QJsonObject{{"previewId", phonePreviewId}}).toJson(QJsonDocument::Compact)); QSignalSpy staleImportFinished(staleImport, &QNetworkReply::finished); QVERIFY(staleImportFinished.wait(3000)); QCOMPARE(staleImport->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 409); QVERIFY(QJsonDocument::fromJson(staleImport->readAll()).object().value("error").toString().contains("preview again")); staleImport->deleteLater();
+    QVERIFY(QDir().mkpath(driveDestination.filePath("Medical"))); QFile unsafeDestination(driveDestination.filePath("Medical/report.txt")); QVERIFY(unsafeDestination.open(QIODevice::WriteOnly)); QCOMPARE(unsafeDestination.write("unsafe"), 6); unsafeDestination.close();
+    auto *freshPreview = network.post(phoneImportRequest, QJsonDocument(phonePreviewOptions).toJson(QJsonDocument::Compact)); QSignalSpy freshPreviewStarted(freshPreview, &QNetworkReply::finished); QVERIFY(freshPreviewStarted.wait(3000)); const QString freshPreviewId = QJsonDocument::fromJson(freshPreview->readAll()).object().value("id").toString(); freshPreview->deleteLater(); QVERIFY(!freshPreviewId.isEmpty());
+    QJsonObject freshPreviewResult; for (int attempt = 0; attempt < 200 && freshPreviewResult.value("state") != "complete" && freshPreviewResult.value("state") != "failed"; ++attempt) { QTest::qWait(20); QUrl resultUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/route-preview").arg(api.port())); QUrlQuery resultQuery; resultQuery.addQueryItem("id", freshPreviewId); resultUrl.setQuery(resultQuery); auto *resultReply = network.get(QNetworkRequest(resultUrl)); QSignalSpy resultFinished(resultReply, &QNetworkReply::finished); QVERIFY(resultFinished.wait(3000)); freshPreviewResult = QJsonDocument::fromJson(resultReply->readAll()).object(); resultReply->deleteLater(); }
+    QCOMPARE(freshPreviewResult.value("state").toString(), QStringLiteral("complete")); QVERIFY(!freshPreviewResult.value("preview").toObject().value("ok").toBool()); QCOMPARE(freshPreviewResult.value("preview").toObject().value("conflicts").toInt(), 1);
+    auto *unsafeImport = network.post(phoneImportRequest, QJsonDocument(QJsonObject{{"previewId", freshPreviewId}}).toJson(QJsonDocument::Compact)); QSignalSpy unsafeImportFinished(unsafeImport, &QNetworkReply::finished); QVERIFY(unsafeImportFinished.wait(3000)); QCOMPARE(unsafeImport->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 409); unsafeImport->deleteLater(); QVERIFY(QFile::remove(driveDestination.filePath("Medical/report.txt")));
+    auto *safePreview = network.post(phoneImportRequest, QJsonDocument(phonePreviewOptions).toJson(QJsonDocument::Compact)); QSignalSpy safePreviewStarted(safePreview, &QNetworkReply::finished); QVERIFY(safePreviewStarted.wait(3000)); const QString safePreviewId = QJsonDocument::fromJson(safePreview->readAll()).object().value("id").toString(); safePreview->deleteLater(); QVERIFY(!safePreviewId.isEmpty());
+    QJsonObject safePreviewResult; for (int attempt = 0; attempt < 200 && safePreviewResult.value("state") != "complete" && safePreviewResult.value("state") != "failed"; ++attempt) { QTest::qWait(20); QUrl resultUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/route-preview").arg(api.port())); QUrlQuery resultQuery; resultQuery.addQueryItem("id", safePreviewId); resultUrl.setQuery(resultQuery); auto *resultReply = network.get(QNetworkRequest(resultUrl)); QSignalSpy resultFinished(resultReply, &QNetworkReply::finished); QVERIFY(resultFinished.wait(3000)); safePreviewResult = QJsonDocument::fromJson(resultReply->readAll()).object(); resultReply->deleteLater(); }
+    QCOMPARE(safePreviewResult.value("state").toString(), QStringLiteral("complete")); QVERIFY(safePreviewResult.value("preview").toObject().value("ok").toBool());
+    model.setMtpDevicesForTest({QVariantMap{{"id", "test-phone"}, {"stableIdentity", "mtp:Different phone"}, {"label", "Test phone"}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}, {"phoneRoot", QUrl::fromLocalFile(phone.path()).toString()}}});
+    auto *changedPhoneImport = network.post(phoneImportRequest, QJsonDocument(QJsonObject{{"previewId", safePreviewId}}).toJson(QJsonDocument::Compact)); QSignalSpy changedPhoneImportFinished(changedPhoneImport, &QNetworkReply::finished); QVERIFY(changedPhoneImportFinished.wait(3000)); QCOMPARE(changedPhoneImport->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 409); changedPhoneImport->deleteLater();
+    model.setMtpDevicesForTest({QVariantMap{{"id", "test-phone"}, {"stableIdentity", "mtp:Test phone"}, {"label", "Test phone"}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}, {"phoneRoot", QUrl::fromLocalFile(phone.path()).toString()}}, QVariantMap{{"id", "other-phone"}, {"stableIdentity", "mtp:Other phone"}, {"label", "Other phone"}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}, {"phoneRoot", QUrl::fromLocalFile(temp.filePath("other-phone")).toString()}}});
+    QFile changedSource(phone.filePath("Drive/Medical/report.txt")); QVERIFY(changedSource.open(QIODevice::WriteOnly | QIODevice::Truncate)); QCOMPARE(changedSource.write("mutate"), qint64(6)); changedSource.close();
+    auto *phoneImport = network.post(phoneImportRequest, QJsonDocument(QJsonObject{{"previewId", safePreviewId}}).toJson(QJsonDocument::Compact)); QSignalSpy phoneImportStarted(phoneImport, &QNetworkReply::finished); QVERIFY(phoneImportStarted.wait(3000)); QCOMPARE(phoneImport->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 202); const QJsonObject phoneImportStart = QJsonDocument::fromJson(phoneImport->readAll()).object(); const QString phoneImportId = phoneImportStart.value("id").toString(); QCOMPARE(phoneImportStart.value("destination").toString(), QStringLiteral("Test disk")); QCOMPARE(phoneImportStart.value("phoneId").toString(), QStringLiteral("test-phone")); QCOMPARE(phoneImportStart.value("routeId").toString(), driveRouteId); phoneImport->deleteLater(); QVERIFY(!phoneImportId.isEmpty());
     QJsonObject phoneImportResult; for (int attempt = 0; attempt < 200 && phoneImportResult.value("state") != "transferred" && phoneImportResult.value("state") != "failed"; ++attempt) { QTest::qWait(20); QUrl resultUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/route-preview").arg(api.port())); QUrlQuery resultQuery; resultQuery.addQueryItem("id", phoneImportId); resultUrl.setQuery(resultQuery); auto *resultReply = network.get(QNetworkRequest(resultUrl)); QSignalSpy resultFinished(resultReply, &QNetworkReply::finished); QVERIFY(resultFinished.wait(3000)); phoneImportResult = QJsonDocument::fromJson(resultReply->readAll()).object(); resultReply->deleteLater(); }
-    QVERIFY2(phoneImportResult.value("state") == "transferred", QJsonDocument(phoneImportResult).toJson(QJsonDocument::Compact).constData()); QFile importedFromPhone(driveDestination.filePath("Medical/report.txt")); QVERIFY(importedFromPhone.open(QIODevice::ReadOnly)); QCOMPARE(importedFromPhone.readAll(), QByteArrayLiteral("nested"));
+    QCOMPARE(phoneImportResult.value("state").toString(), QStringLiteral("failed")); QVERIFY(phoneImportResult.value("result").toString().contains("changed after preview")); QVERIFY(!QFileInfo::exists(driveDestination.filePath("Medical/report.txt")));
     {
         QSqlDatabase catalog = QSqlDatabase::addDatabase("QSQLITE", "localapi-phone-import-check"); catalog.setDatabaseName(model.databasePath()); QVERIFY(catalog.open()); QSqlQuery check(catalog);
-        QVERIFY(check.exec("SELECT s.stable_identity,r.source_root FROM routes r JOIN storage s ON s.id=r.source_storage_id WHERE r.id LIKE 'mtp-import-%'")); QVERIFY(check.next()); QVERIFY(check.value(0).toString().startsWith("mtp:")); QCOMPARE(QUrl(check.value(1).toString()).path(QUrl::FullyDecoded), QDir(phone.path()).filePath("Drive/")); QVERIFY(!check.next());
+        QVERIFY(check.exec("SELECT COUNT(*) FROM history h JOIN jobs j ON j.id=h.job_id WHERE j.route_id LIKE 'mtp-import-%' AND h.event='verified'")); QVERIFY(check.next()); QCOMPARE(check.value(0).toInt(), 0);
         check.finish(); catalog.close(); catalog = QSqlDatabase(); QSqlDatabase::removeDatabase("localapi-phone-import-check");
     }
 
@@ -520,10 +696,14 @@ void LocalApiTest::servesStateOnlyOnLoopback() {
     QVERIFY(problemsFinished.wait(3000));
     QCOMPARE(problemsReply->error(), QNetworkReply::NoError);
     const QJsonObject problems = QJsonDocument::fromJson(problemsReply->readAll()).object();
-    QCOMPARE(problems.value("total").toInt(), 1);
     QCOMPARE(problems.value("counts").toObject().value("Duplicates").toInt(), 1);
-    const QString duplicateId = problems.value("items").toArray().first().toObject().value("id").toString();
-    QCOMPARE(problems.value("items").toArray().first().toObject().value("source").toString(), QStringLiteral("import"));
+    QJsonObject duplicateProblem;
+    for (const QJsonValue &value : problems.value("items").toArray()) {
+        const QJsonObject item = value.toObject();
+        if (item.value("category").toString() == "Duplicates" && item.value("source").toString() == "import") duplicateProblem = item;
+    }
+    const QString duplicateId = duplicateProblem.value("id").toString();
+    QVERIFY(!duplicateId.isEmpty());
     problemsReply->deleteLater();
 
     const QUrl actionUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/problem-action").arg(api.port()));
@@ -538,7 +718,9 @@ void LocalApiTest::servesStateOnlyOnLoopback() {
 
     auto *savedProblemsReply = network.get(QNetworkRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/problems").arg(api.port())))); QSignalSpy savedProblemsFinished(savedProblemsReply, &QNetworkReply::finished); QVERIFY(savedProblemsFinished.wait(3000));
     const QJsonObject savedProblems = QJsonDocument::fromJson(savedProblemsReply->readAll()).object();
-    QCOMPARE(savedProblems.value("items").toArray().first().toObject().value("state").toString(), QStringLiteral("saved"));
+    QJsonObject savedDuplicate;
+    for (const QJsonValue &value : savedProblems.value("items").toArray()) if (value.toObject().value("id").toString() == duplicateId) savedDuplicate = value.toObject();
+    QCOMPARE(savedDuplicate.value("state").toString(), QStringLiteral("saved"));
     QCOMPARE(savedProblems.value("history").toArray().first().toObject().value("action").toString(), QStringLiteral("save")); savedProblemsReply->deleteLater();
 
     const QByteArray unsafeDismissBody = QJsonDocument(QJsonObject{{"id", duplicateId}, {"action", "dismiss"}}).toJson(QJsonDocument::Compact);
@@ -731,9 +913,19 @@ void LocalApiTest::servesStateOnlyOnLoopback() {
     QVERIFY(postFinished.wait(3000));
     QCOMPARE(post->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 405);
     post->deleteLater();
+    // Hardware discovery invalidates the synthetic disk; run after transfer checks.
+    auto *refreshReply = network.get(QNetworkRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/refresh-connections").arg(api.port()))));
+    QSignalSpy refreshFinished(refreshReply, &QNetworkReply::finished); QVERIFY(refreshFinished.wait(3000));
+    QCOMPARE(refreshReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 202);
+    QVERIFY(refreshReply->readAll().contains("checking")); refreshReply->deleteLater();
+    int diskRoutes = 0;
+    for (const auto &route : model.routes()) if (route.toMap().value("storageId") == "disk") {
+        ++diskRoutes; QVERIFY(!route.toMap().value("storagePresent").toBool());
+    }
+    QVERIFY(diskRoutes > 0);
 }
 
-void LocalApiTest::stagingCapRejectsPhoneImportBeforeCopy() {
+void LocalApiTest::legacyStagingRequiresReviewBeforeImport() {
     QTemporaryDir temp; QVERIFY(temp.isValid());
     QDir drive(temp.filePath("Drive")), offline(temp.filePath("offline")), staging(temp.filePath("staging")), phone(temp.filePath("phone")); QVERIFY(drive.mkpath(".")); QVERIFY(offline.mkpath("Drive")); QVERIFY(staging.mkpath(".")); QVERIFY(phone.mkpath("Drive"));
     QFile source(phone.filePath("Drive/five.bin")); QVERIFY(source.open(QIODevice::WriteOnly)); QCOMPARE(source.write("12345"), 5); source.close();
@@ -743,9 +935,12 @@ void LocalApiTest::stagingCapRejectsPhoneImportBeforeCopy() {
     LocalApi api(&model); QVERIFY(api.start(0)); QNetworkAccessManager network;
     auto *session = network.get(QNetworkRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/session").arg(api.port())))); QSignalSpy sessionFinished(session, &QNetworkReply::finished); QVERIFY(sessionFinished.wait(3000)); const QString token = QJsonDocument::fromJson(session->readAll()).object().value("token").toString(); session->deleteLater();
     QNetworkRequest request(QUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/import-from-phone").arg(api.port()))); request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json")); request.setRawHeader("X-Local-Drive-Token", token.toUtf8());
-    auto *started = network.post(request, QJsonDocument(QJsonObject{{"root", "Drive"}}).toJson(QJsonDocument::Compact)); QSignalSpy startedFinished(started, &QNetworkReply::finished); QVERIFY(startedFinished.wait(3000)); QCOMPARE(started->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 202); const QJsonObject start = QJsonDocument::fromJson(started->readAll()).object(); const QString id = start.value("id").toString(); QCOMPARE(start.value("destination").toString(), QStringLiteral("Laptop staging")); started->deleteLater();
-    QJsonObject operation; for (int attempt = 0; attempt < 200 && operation.value("state") != "failed"; ++attempt) { QTest::qWait(20); QUrl url(QStringLiteral("http://127.0.0.1:%1/api/v1/route-preview").arg(api.port())); QUrlQuery query; query.addQueryItem("id", id); url.setQuery(query); auto *reply = network.get(QNetworkRequest(url)); QSignalSpy finished(reply, &QNetworkReply::finished); QVERIFY(finished.wait(3000)); operation = QJsonDocument::fromJson(reply->readAll()).object(); reply->deleteLater(); }
-    QCOMPARE(operation.value("state").toString(), QStringLiteral("failed")); QVERIFY(operation.value("result").toString().contains("Staging capacity")); QVERIFY(QFileInfo::exists(phone.filePath("Drive/five.bin"))); QVERIFY(!QFileInfo::exists(staging.filePath("Drive/five.bin")));
+    const QString routeId = model.routes().first().toMap().value("id").toString();
+    auto *started = network.post(request, QJsonDocument(QJsonObject{{"root", "Drive"}, {"previewOnly", true}, {"phoneId", "test-phone"}, {"routeId", routeId}, {"toLaptop", true}}).toJson(QJsonDocument::Compact)); QSignalSpy startedFinished(started, &QNetworkReply::finished); QVERIFY(startedFinished.wait(3000));
+    QCOMPARE(started->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 409);
+    QVERIFY(QJsonDocument::fromJson(started->readAll()).object().value("error").toString().contains("Re-save")); started->deleteLater();
+    QVERIFY(QFileInfo::exists(phone.filePath("Drive/five.bin"))); QVERIFY(!QFileInfo::exists(staging.filePath("Drive/five.bin"))); QVERIFY(!QFileInfo::exists(drive.filePath("five.bin")));
+
 }
 
 void LocalApiTest::deviceOnboardingPersistsParticipationChoice() {
@@ -761,19 +956,71 @@ void LocalApiTest::deviceOnboardingPersistsParticipationChoice() {
     QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", "onboarding-check"); db.setDatabaseName(model.databasePath()); QVERIFY(db.open()); QSqlQuery query(db); QVERIFY(query.exec("SELECT onboarding_seen,hidden FROM storage WHERE id='new-disk'")); QVERIFY(query.next()); QCOMPARE(query.value(0).toInt(), 1); QCOMPARE(query.value(1).toInt(), 1); query.finish(); db.close(); db = {}; QSqlDatabase::removeDatabase("onboarding-check");
 }
 
+void LocalApiTest::visibilityRemovalAndCapabilities() {
+    QTemporaryDir temp; QVERIFY(temp.isValid());
+    const QString source = temp.filePath("Drive"), destination = temp.filePath("disk/Drive");
+    QVERIFY(QDir().mkpath(source)); QVERIFY(QDir().mkpath(destination));
+    QFile file(source + "/kept.txt"); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("keep me"); file.close();
+    SetupModel model(temp.filePath("catalog.sqlite"), {QVariantMap{{"id", "disk"}, {"label", "Disk"}, {"root", temp.filePath("disk")}, {"identity", VerifiedCopy::liveStorageIdentity(destination)}, {"present", true}, {"kind", "removable"}}});
+    QVERIFY(model.saveRoute(source, "disk", destination)); const QString id = model.routes().first().toMap().value("id").toString();
+    LocalApi api(&model); QVERIFY(api.start(0));
+    const QByteArray host = "Host: 127.0.0.1:" + QByteArray::number(api.port()) + "\r\n";
+    auto get = [&](const QByteArray &path) { return QJsonDocument::fromJson(responseBody(rawRequest(api.port(), "GET /api/v1/" + path + " HTTP/1.1\r\n" + host + "\r\n"))).object(); };
+    const QByteArray token = get("session").value("token").toString().toUtf8();
+    auto post = [&](const QByteArray &path, const QJsonObject &body, bool authorized = true) {
+        const QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
+        return rawRequest(api.port(), "POST /api/v1/" + path + " HTTP/1.1\r\n" + host + "Content-Type: application/json\r\nX-Local-Drive-Token: " + (authorized ? token : QByteArray("wrong")) + "\r\nContent-Length: " + QByteArray::number(payload.size()) + "\r\n\r\n" + payload);
+    };
+    const auto capabilities = get("state").value("capabilities").toObject();
+    QVERIFY(capabilities.value("scanner").isBool()); QVERIFY(capabilities.value("imageEditor").isBool());
+    QCOMPARE(capabilities.value("scanner").toBool(), !QStandardPaths::findExecutable("skanpage").isEmpty() || !QStandardPaths::findExecutable("simple-scan").isEmpty() || !QStandardPaths::findExecutable("skanlite").isEmpty());
+    QCOMPARE(capabilities.value("imageEditor").toBool(), !QStandardPaths::findExecutable("kolourpaint").isEmpty() || !QStandardPaths::findExecutable("krita").isEmpty() || !QStandardPaths::findExecutable("gimp").isEmpty());
+    QVERIFY(post("remove-route", {{"id", id}}, false).startsWith("HTTP/1.1 403"));
+    QVERIFY(post("remove-route", {}).startsWith("HTTP/1.1 400"));
+    QVERIFY(post("remove-route", {{"id", "missing"}}).startsWith("HTTP/1.1 404"));
+    QVERIFY(post("device-visibility", {{"id", "disk"}, {"hidden", "true"}}).startsWith("HTTP/1.1 400"));
+    QVERIFY(post("device-visibility", {{"id", "local"}, {"hidden", true}}).startsWith("HTTP/1.1 409"));
+    QVERIFY(post("device-icon", {{"id", "disk"}, {"icon", "SSD"}}).startsWith("HTTP/1.1 200"));
+    QCOMPARE(get("state").value("storages").toArray().last().toObject().value("icon").toString(), QStringLiteral("SSD"));
+    QVERIFY(post("device-icon", {{"id", "disk"}, {"icon", "not-an-icon"}}).startsWith("HTTP/1.1 409"));
+    QVERIFY(post("device-visibility", {{"id", "disk"}, {"hidden", true}}).startsWith("HTTP/1.1 409"));
+    const auto previewResponse = post("route-preview", {{"routeId", id}}); QVERIFY(previewResponse.startsWith("HTTP/1.1 202"));
+    const QString previewId = QJsonDocument::fromJson(responseBody(previewResponse)).object().value("id").toString();
+    QTRY_COMPARE_WITH_TIMEOUT(get("route-preview?id=" + previewId.toUtf8()).value("state").toString(), QStringLiteral("complete"), 10000);
+    QVERIFY(get("route-preview?id=" + previewId.toUtf8()).value("preview").toObject().value("ok").toBool());
+    QVERIFY(post("remove-route", {{"id", id}}).startsWith("HTTP/1.1 200"));
+    QVERIFY(post("remove-route", {{"id", id}}).startsWith("HTTP/1.1 200"));
+    QVERIFY(post("route-execute", {{"id", previewId}}).startsWith("HTTP/1.1 404"));
+    QVERIFY(model.routes().isEmpty()); QVERIFY(model.routeExists(id)); QVERIFY(QFileInfo::exists(file.fileName()));
+    QVERIFY(get("route-history?routeId=" + id.toUtf8()).contains("items"));
+    QVERIFY(post("device-visibility", {{"id", "disk"}, {"hidden", true}}).startsWith("HTTP/1.1 200")); QCOMPARE(model.hiddenDevices().size(), 1);
+    QVERIFY(post("device-visibility", {{"id", "disk"}, {"hidden", false}}).startsWith("HTTP/1.1 200")); QVERIFY(model.hiddenDevices().isEmpty()); QCOMPARE(model.storages().size(), 2);
+    QVERIFY(post("remove-device", {{"id", "disk"}}, false).startsWith("HTTP/1.1 403"));
+    QVERIFY(post("remove-device", {}).startsWith("HTTP/1.1 400"));
+    QVERIFY(post("remove-device", {{"id", "local"}}).startsWith("HTTP/1.1 409"));
+    QVERIFY(post("remove-device", {{"id", "disk"}}).startsWith("HTTP/1.1 200"));
+    QVERIFY(model.hiddenDevices().isEmpty()); QCOMPARE(model.storages().size(), 1);
+    QVERIFY(post("device-visibility", {{"id", "disk"}, {"hidden", false}}).startsWith("HTTP/1.1 409"));
+    QVERIFY(QFileInfo::exists(file.fileName())); QVERIFY(get("route-history?routeId=" + id.toUtf8()).contains("items"));
+}
+
 void LocalApiTest::savesOnlyMissingValidatedRoute() {
     QTemporaryDir temp; QVERIFY(temp.isValid());
-    QDir drive(temp.filePath("Drive")), photos(temp.filePath("Photos")), disk(temp.filePath("disk")), driveDestination(temp.filePath("disk/Drive")), photosDestination(temp.filePath("disk/Photos"));
-    QVERIFY(drive.mkpath(".")); QVERIFY(photos.mkpath(".")); QVERIFY(driveDestination.mkpath(".")); QVERIFY(photosDestination.mkpath("."));
-    SetupModel model(temp.filePath("catalog.sqlite"), QVariantList{QVariantMap{{"id", "disk"}, {"label", "Test disk"}, {"root", disk.path()}, {"present", true}, {"kind", "removable"}}});
+    QDir home(temp.filePath("home")), drive(temp.filePath("home/Drive")), photos(temp.filePath("home/Photos")), disk(temp.filePath("disk")), bothDisk(temp.filePath("both-disk")), driveDestination(temp.filePath("disk/Drive")), photosDestination(temp.filePath("disk/Photos"));
+    QVERIFY(home.mkpath(".")); QVERIFY(drive.mkpath(".")); QVERIFY(photos.mkpath(".")); QVERIFY(driveDestination.mkpath(".")); QVERIFY(photosDestination.mkpath(".")); QVERIFY(bothDisk.mkpath("."));
+    SetupModel model(temp.filePath("catalog.sqlite"), QVariantList{QVariantMap{{"id", "disk"}, {"label", "Test disk"}, {"root", disk.path()}, {"present", true}, {"kind", "removable"}}, QVariantMap{{"id", "both-disk"}, {"label", "Both disk"}, {"root", bothDisk.path()}, {"present", true}, {"kind", "removable"}}});
+    model.setHomeRootForTest(home.path());
     QVERIFY(model.ready()); QVERIFY(model.saveRoute(drive.path(), "disk", driveDestination.path(), "Everything", 0, false, 0, {}, "Drive"));
     LocalApi api(&model); QVERIFY(api.start(0)); QNetworkAccessManager network;
     auto *session = network.get(QNetworkRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/session").arg(api.port())))); QSignalSpy sessionFinished(session, &QNetworkReply::finished); QVERIFY(sessionFinished.wait(3000)); const QString token = QJsonDocument::fromJson(session->readAll()).object().value("token").toString(); session->deleteLater(); QVERIFY(!token.isEmpty());
     const QUrl url(QStringLiteral("http://127.0.0.1:%1/api/v1/save-route").arg(api.port())); QNetworkRequest request(url); request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json")); request.setRawHeader("X-Local-Drive-Token", token.toUtf8());
-    QJsonObject options{{"contentType", "Photos"}, {"source", photos.path()}, {"storageId", "disk"}, {"destination", temp.filePath("outside")}, {"keepPolicy", "Everything"}, {"organizePhotos", true}};
-    auto *invalid = network.post(request, QJsonDocument(options).toJson(QJsonDocument::Compact)); QSignalSpy invalidFinished(invalid, &QNetworkReply::finished); QVERIFY(invalidFinished.wait(3000)); QCOMPARE(invalid->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 400); invalid->deleteLater(); QCOMPARE(model.routes().size(), 1);
-    options["destination"] = photosDestination.path(); auto *saved = network.post(request, QJsonDocument(options).toJson(QJsonDocument::Compact)); QSignalSpy savedFinished(saved, &QNetworkReply::finished); QVERIFY(savedFinished.wait(3000)); QCOMPARE(saved->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200); QCOMPARE(QJsonDocument::fromJson(saved->readAll()).object().value("configRevision").toInt(), 2); saved->deleteLater(); QCOMPARE(model.routes().size(), 2); QVERIFY(model.routes().last().toMap().value("organizePhotos").toBool());
+    QJsonObject options{{"contentType", "Photos"}, {"source", temp.filePath("untrusted-source")}, {"storageId", "disk"}, {"destination", temp.filePath("outside")}, {"keepPolicy", "Everything"}, {"organizePhotos", true}};
+    auto *untrusted = network.post(request, QJsonDocument(options).toJson(QJsonDocument::Compact)); QSignalSpy untrustedFinished(untrusted, &QNetworkReply::finished); QVERIFY(untrustedFinished.wait(3000)); QCOMPARE(untrusted->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 409); untrusted->deleteLater(); QCOMPARE(model.routes().size(), 1);
+    options.remove("source"); options.remove("destination");
+    auto *saved = network.post(request, QJsonDocument(options).toJson(QJsonDocument::Compact)); QSignalSpy savedFinished(saved, &QNetworkReply::finished); QVERIFY(savedFinished.wait(3000)); QCOMPARE(saved->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200); const auto savedBody = QJsonDocument::fromJson(saved->readAll()).object(); QCOMPARE(savedBody.value("configRevision").toInt(), 2); QCOMPARE(savedBody.value("source").toString(), photos.path()); QCOMPARE(savedBody.value("destination").toString(), photosDestination.path()); saved->deleteLater(); QCOMPARE(model.routes().size(), 2); QVERIFY(model.routes().last().toMap().value("organizePhotos").toBool());
     auto *duplicate = network.post(request, QJsonDocument(options).toJson(QJsonDocument::Compact)); QSignalSpy duplicateFinished(duplicate, &QNetworkReply::finished); QVERIFY(duplicateFinished.wait(3000)); QCOMPARE(duplicate->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 409); duplicate->deleteLater(); QCOMPARE(model.routes().size(), 2);
+    const QJsonObject both{{"contentTypes", QJsonArray{"Drive", "Photos"}}, {"storageId", "both-disk"}, {"keepPolicy", "Everything"}, {"organizePhotos", true}};
+    auto *bothSaved = network.post(request, QJsonDocument(both).toJson(QJsonDocument::Compact)); QSignalSpy bothFinished(bothSaved, &QNetworkReply::finished); QVERIFY(bothFinished.wait(3000)); const QByteArray bothBody = bothSaved->readAll(); QVERIFY2(bothSaved->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt() == 200, bothBody.constData()); QCOMPARE(QJsonDocument::fromJson(bothBody).object().value("configRevision").toInt(), 3); bothSaved->deleteLater(); QCOMPARE(model.routes().size(), 4); QVERIFY(QFileInfo(bothDisk.filePath("Drive")).isDir()); QVERIFY(QFileInfo(bothDisk.filePath("Photos")).isDir());
 }
 
 void LocalApiTest::previewsConfiguredRoute() {
@@ -810,6 +1057,67 @@ void LocalApiTest::previewsConfiguredRoute() {
     QCOMPARE(operation.value("state").toString(), QStringLiteral("transferred")); QVERIFY(operation.value("result").toString().startsWith("Cleanup pending")); QVERIFY(QFileInfo::exists(destination.filePath("new.txt"))); QVERIFY(QFileInfo::exists(source.filePath("new.txt"))); QFile copied(destination.filePath("new.txt")); QVERIFY(copied.open(QIODevice::ReadOnly)); QCOMPARE(copied.readAll(), QByteArrayLiteral("preview"));
     QUrl historyUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/route-history").arg(api.port())); QUrlQuery historyQuery; historyQuery.addQueryItem("routeId", routeId); historyUrl.setQuery(historyQuery); auto *historyReply = network.get(QNetworkRequest(historyUrl)); QSignalSpy historyFinished(historyReply, &QNetworkReply::finished); QVERIFY(historyFinished.wait(3000)); QCOMPARE(historyReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200); const QJsonArray history = QJsonDocument::fromJson(historyReply->readAll()).object().value("items").toArray(); historyReply->deleteLater(); QVERIFY(!history.isEmpty()); QCOMPARE(history.first().toObject().value("event").toString(), QStringLiteral("verified")); QCOMPARE(history.first().toObject().value("result").toString(), QStringLiteral("verified copy"));
     auto *replay = network.post(executeRequest, executeBody); QSignalSpy replayFinished(replay, &QNetworkReply::finished); QVERIFY(replayFinished.wait(3000)); QCOMPARE(replay->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 409); replay->deleteLater();
+    QNetworkRequest removalRequest(QUrl(QStringLiteral("http://127.0.0.1:%1/api/v1/remove-route").arg(api.port()))); removalRequest.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json")); removalRequest.setRawHeader("X-Local-Drive-Token", token.toUtf8());
+    auto *removed = network.post(removalRequest, QJsonDocument(QJsonObject{{"id", routeId}}).toJson(QJsonDocument::Compact)); QSignalSpy removedDone(removed, &QNetworkReply::finished); QVERIFY(removedDone.wait(3000)); QCOMPARE(removed->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200); removed->deleteLater();
+    auto *retained = network.get(QNetworkRequest(historyUrl)); QSignalSpy retainedDone(retained, &QNetworkReply::finished); QVERIFY(retainedDone.wait(3000)); QCOMPARE(retained->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200); QCOMPARE(QJsonDocument::fromJson(retained->readAll()).object().value("items").toArray(), history); retained->deleteLater();
+    QVERIFY(QFileInfo::exists(destination.filePath("new.txt"))); QVERIFY(QFileInfo::exists(source.filePath("new.txt")));
+}
+
+void LocalApiTest::reviewsVerifiedCleanup() {
+    QTemporaryDir temp(QDir::homePath() + "/.localdrive-api-test-XXXXXX"); QVERIFY(temp.isValid());
+    const auto previousDataHome = qgetenv("XDG_DATA_HOME");
+    const auto restoreEnvironment = qScopeGuard([&] { if (previousDataHome.isNull()) qunsetenv("XDG_DATA_HOME"); else qputenv("XDG_DATA_HOME", previousDataHome); });
+    qputenv("XDG_DATA_HOME", temp.filePath("xdg").toUtf8());
+    QVERIFY(QDir().mkpath(temp.filePath("xdg/Trash/files"))); QVERIFY(QDir().mkpath(temp.filePath("xdg/Trash/info")));
+    const QString source = temp.filePath("source"), destination = temp.filePath("disk/Drive");
+    QVERIFY(QDir().mkpath(source)); QVERIFY(QDir().mkpath(destination));
+    QFile file(source + "/move.txt"); QVERIFY(file.open(QIODevice::WriteOnly)); file.write("verified move"); file.close();
+    SetupModel model(temp.filePath("catalog.sqlite"), {QVariantMap{{"id", "disk"}, {"label", "Disk"}, {"root", temp.filePath("disk")}, {"identity", VerifiedCopy::liveStorageIdentity(destination)}, {"present", true}, {"kind", "removable"}}});
+    QVERIFY(model.saveRoute(source, "disk", destination, "Nothing")); const QString route = model.routes().first().toMap().value("id").toString();
+    LocalApi api(&model); QVERIFY(api.start(0));
+    const QByteArray host = "Host: 127.0.0.1:" + QByteArray::number(api.port()) + "\r\n";
+    auto get = [&](const QByteArray &path) { return QJsonDocument::fromJson(responseBody(rawRequest(api.port(), "GET /api/v1/" + path + " HTTP/1.1\r\n" + host + "\r\n"))).object(); };
+    const QByteArray token = get("session").value("token").toString().toUtf8();
+    auto post = [&](const QByteArray &path, const QJsonObject &body, bool authorized = true) {
+        const QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
+        return rawRequest(api.port(), "POST /api/v1/" + path + " HTTP/1.1\r\n" + host + "Content-Type: application/json\r\nX-Local-Drive-Token: " + (authorized ? token : QByteArray("wrong")) + "\r\nContent-Length: " + QByteArray::number(payload.size()) + "\r\n\r\n" + payload);
+    };
+    auto preview = [&] { return QJsonDocument::fromJson(responseBody(post("route-preview", {{"routeId", route}}))).object().value("id").toString(); };
+    QString id = preview(); QVERIFY(!id.isEmpty());
+    QTRY_COMPARE_WITH_TIMEOUT(get("route-preview?id=" + id.toUtf8()).value("state").toString(), QStringLiteral("complete"), 10000);
+    QVERIFY(post("route-cleanup", {{"id", id}}, false).startsWith("HTTP/1.1 403"));
+    QVERIFY(post("route-cleanup", {{"id", id}}).startsWith("HTTP/1.1 409"));
+    QVERIFY(post("route-execute", {{"id", id}}).startsWith("HTTP/1.1 202"));
+    QTRY_COMPARE_WITH_TIMEOUT(get("route-preview?id=" + id.toUtf8()).value("state").toString(), QStringLiteral("transferred"), 10000);
+    QCOMPARE(get("route-preview?id=" + id.toUtf8()).value("cleanup").toObject().value("files").toInt(), 1);
+    QVERIFY(QFileInfo::exists(file.fileName())); QVERIFY(QFileInfo::exists(destination + "/move.txt"));
+    // Reopening the preview recovers a verified job without copying again.
+    const QString oldId = id; id = preview();
+    QTRY_COMPARE_WITH_TIMEOUT(get("route-preview?id=" + id.toUtf8()).value("state").toString(), QStringLiteral("complete"), 10000);
+    QVERIFY(post("route-cleanup", {{"id", oldId}}).startsWith("HTTP/1.1 404"));
+    QVERIFY(model.updateRouteCard(route, "Copy", "Everything", false));
+    QVERIFY(post("route-cleanup", {{"id", id}}).startsWith("HTTP/1.1 409"));
+    QVERIFY(model.updateRouteCard(route, "Move", "Nothing", false));
+    id = preview();
+    QTRY_COMPARE_WITH_TIMEOUT(get("route-preview?id=" + id.toUtf8()).value("state").toString(), QStringLiteral("complete"), 10000);
+    // Changing to Copy settles the old cleanup job permanently; changing back must not revive it.
+    QVERIFY(post("route-cleanup", {{"id", id}}).startsWith("HTTP/1.1 409"));
+    QVERIFY(QFileInfo::exists(file.fileName()));
+    // A fresh source and route exercise the complete, successful Trash workflow.
+    QVERIFY(QDir().mkpath(temp.filePath("photos"))); QVERIFY(QDir().mkpath(temp.filePath("disk/Photos")));
+    QFile photo(temp.filePath("photos/test.jpg")); QVERIFY(photo.open(QIODevice::WriteOnly)); photo.write("photo test"); photo.close();
+    QVERIFY(model.saveRoute(temp.filePath("photos"), "disk", temp.filePath("disk/Photos"), "Nothing", 0, false, 0, {}, "Photos"));
+    const QString photoRoute = model.routes().last().toMap().value("id").toString();
+    id = QJsonDocument::fromJson(responseBody(post("route-preview", {{"routeId", photoRoute}}))).object().value("id").toString();
+    QTRY_COMPARE_WITH_TIMEOUT(get("route-preview?id=" + id.toUtf8()).value("state").toString(), QStringLiteral("complete"), 10000);
+    QVERIFY(post("route-execute", {{"id", id}}).startsWith("HTTP/1.1 202"));
+    QTRY_COMPARE_WITH_TIMEOUT(get("route-preview?id=" + id.toUtf8()).value("state").toString(), QStringLiteral("transferred"), 10000);
+    QVERIFY(post("route-cleanup", {{"id", id}}).startsWith("HTTP/1.1 202"));
+    QTRY_COMPARE_WITH_TIMEOUT(get("route-preview?id=" + id.toUtf8()).value("state").toString(), QStringLiteral("cleaned"), 10000);
+    QVERIFY(!QFileInfo::exists(photo.fileName())); QVERIFY(QFileInfo::exists(temp.filePath("disk/Photos/test.jpg")));
+    QVERIFY(post("route-cleanup", {{"id", id}}).startsWith("HTTP/1.1 409"));
+    const auto history = get("route-history?routeId=" + photoRoute.toUtf8()).value("items").toArray();
+    QCOMPARE(history.first().toObject().value("event").toString(), QStringLiteral("trashed"));
 }
 
 void LocalApiTest::controlsActiveRouteSafely() {
@@ -825,10 +1133,38 @@ void LocalApiTest::controlsActiveRouteSafely() {
     QVERIFY(operation.value("preview").toObject().value("ok").toBool()); const QByteArray idBody = QJsonDocument(QJsonObject{{"id", id}}).toJson(QJsonDocument::Compact); auto *execute = network.post(authorized("route-execute"), idBody); QSignalSpy executeFinished(execute, &QNetworkReply::finished); QVERIFY(executeFinished.wait(3000)); QCOMPARE(execute->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 202); execute->deleteLater(); const bool entered = copyEntered.tryAcquire(1, 3000); if (!entered) continueCopy.release(); QVERIFY(entered);
     auto control = [&](const QString &action, int *httpStatus) { auto *reply = network.post(authorized("route-control"), QJsonDocument(QJsonObject{{"id", id}, {"action", action}}).toJson(QJsonDocument::Compact)); QSignalSpy done(reply, &QNetworkReply::finished); if (!done.wait(3000)) { *httpStatus = 0; reply->deleteLater(); return QJsonObject{}; } *httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(); const QJsonObject result = QJsonDocument::fromJson(reply->readAll()).object(); reply->deleteLater(); return result; };
     int controlStatus = 0; const QJsonObject paused = control("pause", &controlStatus); continueCopy.release(); QCOMPARE(controlStatus, 200); QVERIFY(paused.value("paused").toBool());
+    auto *remove = network.post(authorized("remove-route"), QJsonDocument(QJsonObject{{"id", routeId}}).toJson(QJsonDocument::Compact));
+    QSignalSpy removeDone(remove, &QNetworkReply::finished); QVERIFY(removeDone.wait(3000)); QCOMPARE(remove->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 409); remove->deleteLater(); QCOMPARE(model.routes().size(), 1);
     for (int attempt = 0; attempt < 100 && operation.value("status") != "Paused"; ++attempt) { QTest::qWait(25); auto *poll = network.get(QNetworkRequest(pollUrl)); QSignalSpy done(poll, &QNetworkReply::finished); QVERIFY(done.wait(3000)); operation = QJsonDocument::fromJson(poll->readAll()).object(); poll->deleteLater(); } QCOMPARE(operation.value("status").toString(), QStringLiteral("Paused"));
+    const QJsonObject liveState = QJsonDocument::fromJson(responseBody(rawRequest(api.port(), "GET /api/v1/state HTTP/1.1\r\nHost: 127.0.0.1:" + QByteArray::number(api.port()) + "\r\n\r\n"))).object();
+    const auto liveOperations = liveState.value("operations").toArray();
+    QCOMPARE(liveOperations.size(), 1); QCOMPARE(liveOperations.first().toObject().value("id").toString(), id); QVERIFY(liveOperations.first().toObject().value("paused").toBool());
     const QJsonObject resumed = control("resume", &controlStatus); const int resumeStatus = controlStatus; const bool resumedHook = resumedEntered.tryAcquire(1, 3000); QJsonObject cancelled; int cancelStatus = 0; if (resumedHook) cancelled = control("cancel", &cancelStatus); continueResume.release(); QCOMPARE(resumeStatus, 200); QVERIFY(!resumed.value("paused").toBool()); QVERIFY(resumedHook); QCOMPARE(cancelStatus, 200); QCOMPARE(cancelled.value("action").toString(), QStringLiteral("cancel"));
     operation = {}; for (int attempt = 0; attempt < 200 && operation.value("state") != "failed"; ++attempt) { QTest::qWait(25); auto *poll = network.get(QNetworkRequest(pollUrl)); QSignalSpy done(poll, &QNetworkReply::finished); QVERIFY(done.wait(3000)); operation = QJsonDocument::fromJson(poll->readAll()).object(); poll->deleteLater(); }
     QCOMPARE(operation.value("state").toString(), QStringLiteral("failed")); QVERIFY(operation.value("result").toString().contains("source retained")); QVERIFY(QFileInfo::exists(source.filePath("controlled.bin"))); QVERIFY(!QFileInfo::exists(destination.filePath("controlled.bin")));
+}
+
+void LocalApiTest::restoresVerifiedBackupWithoutOverwrite() {
+    QTemporaryDir temp; QVERIFY(temp.isValid()); QDir source(temp.filePath("Drive")), disk(temp.filePath("disk")), destination(temp.filePath("disk/Drive")); QVERIFY(source.mkpath(".")); QVERIFY(destination.mkpath("."));
+    QFile original(source.filePath("lost.txt")); QVERIFY(original.open(QIODevice::WriteOnly)); QCOMPARE(original.write("verified backup"), 15); original.close();
+    const QString identity = VerifiedCopy::liveStorageIdentity(destination.path());
+    SetupModel model(temp.filePath("catalog.sqlite"), {QVariantMap{{"id", "disk"}, {"label", "Disk"}, {"root", disk.path()}, {"identity", identity}, {"present", true}, {"kind", "removable"}}}); QVERIFY(model.saveRoute(source.path(), "disk", destination.path()));
+    const QString routeId = model.routes().first().toMap().value("id").toString();
+    VerifiedCopy::Request request; request.sourceRoot = source.path(); request.destinationRoot = destination.path(); request.selectedStorageRoot = disk.path(); request.storageIdentity = identity; request.databasePath = model.databasePath(); request.routeId = routeId; request.destinationStorageId = "disk"; request.contentType = "Drive";
+    VerifiedCopy copy(model.databasePath()); QString error; QVERIFY2(copy.executeBlocking(request, &error), qPrintable(error));
+    const QVariantList history = VerifiedCopy::recentHistoryForRoute(model.databasePath(), routeId); QVERIFY(!history.isEmpty()); const QString historyId = history.first().toMap().value("id").toString(); QVERIFY(!historyId.isEmpty()); QVERIFY(QFile::remove(source.filePath("lost.txt")));
+
+    LocalApi api(&model); QVERIFY(api.start(0));
+    const QByteArray host = "Host: 127.0.0.1:" + QByteArray::number(api.port()) + "\r\n";
+    const auto get = [&](const QByteArray &path) { return QJsonDocument::fromJson(responseBody(rawRequest(api.port(), "GET /api/v1/" + path + " HTTP/1.1\r\n" + host + "\r\n"))).object(); };
+    const QByteArray token = get("session").value("token").toString().toUtf8();
+    const auto post = [&](const QByteArray &path, const QJsonObject &body) { const QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact); return rawRequest(api.port(), "POST /api/v1/" + path + " HTTP/1.1\r\n" + host + "Content-Type: application/json\r\nX-Local-Drive-Token: " + token + "\r\nContent-Length: " + QByteArray::number(payload.size()) + "\r\n\r\n" + payload); };
+    const auto previewRestore = [&] { const QJsonObject started = QJsonDocument::fromJson(responseBody(post("restore-preview", {{"routeId", routeId}, {"historyId", historyId}}))).object(); const QString id = started.value("id").toString(); if (id.isEmpty()) return QPair<QString, QJsonObject>{}; QJsonObject result; for (int attempt = 0; attempt < 100 && result.value("state") != "complete"; ++attempt) { QTest::qWait(20); result = get("import-preview?id=" + QUrl::toPercentEncoding(id)); } return qMakePair(id, result); };
+    auto restore = previewRestore(); QVERIFY(!restore.first.isEmpty()); QVERIFY(restore.second.value("preview").toObject().value("ok").toBool()); QCOMPARE(restore.second.value("preview").toObject().value("toCopy").toInt(), 15);
+    QVERIFY(post("import-execute", {{"id", restore.first}}).startsWith("HTTP/1.1 202")); QJsonObject result; for (int attempt = 0; attempt < 200 && result.value("state") != "imported" && result.value("state") != "failed"; ++attempt) { QTest::qWait(20); result = get("import-preview?id=" + QUrl::toPercentEncoding(restore.first)); } QCOMPARE(result.value("state").toString(), QStringLiteral("imported"));
+    QFile restored(source.filePath("lost.txt")); QVERIFY(restored.open(QIODevice::ReadOnly)); QCOMPARE(restored.readAll(), QByteArrayLiteral("verified backup")); restored.close();
+    QVERIFY(restored.open(QIODevice::WriteOnly | QIODevice::Truncate)); QCOMPARE(restored.write("local changed!!"), 15); restored.close();
+    restore = previewRestore(); QVERIFY(!restore.first.isEmpty()); QCOMPARE(restore.second.value("preview").toObject().value("conflicts").toInt(), 1); QVERIFY(post("import-execute", {{"id", restore.first}}).startsWith("HTTP/1.1 409")); QVERIFY(restored.open(QIODevice::ReadOnly)); QCOMPARE(restored.readAll(), QByteArrayLiteral("local changed!!"));
 }
 
 QTEST_MAIN(LocalApiTest)

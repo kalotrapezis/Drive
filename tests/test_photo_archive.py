@@ -17,9 +17,22 @@ with tempfile.TemporaryDirectory() as temporary:
     assert result["state"] == "transferred"
     with zipfile.ZipFile(destination / "test.ldrive") as archive:
         manifest = json.loads(archive.read("manifest.json"))
-        assert manifest["readOnly"] is True
+        assert manifest["readOnly"] is True and manifest["library"] == "Photos"
         assert archive.read("Photos/εικόνα.jpg") == (source / "εικόνα.jpg").read_bytes()
         assert archive.getinfo("Photos/εικόνα.jpg").compress_type == zipfile.ZIP_ZSTANDARD
+    listing = module.index(destination / "test.ldrive")
+    assert listing["readOnly"] is True
+    item = listing["items"][0]
+    assert {key: item[key] for key in ("path", "name", "collection", "type", "size", "dateSource")} == {"path": "εικόνα.jpg", "name": "εικόνα.jpg", "collection": "Unsorted", "type": "Photo", "size": (source / "εικόνα.jpg").stat().st_size, "dateSource": "Archive snapshot"}
+    assert len(item["sha256"]) == 64 and item["modified"]
+    cache = root / "cache"
+    extracted = module.extract(destination / "test.ldrive", "εικόνα.jpg", cache)
+    assert Path(extracted["path"]).read_bytes() == (source / "εικόνα.jpg").read_bytes()
+    assert module.extract(destination / "test.ldrive", "εικόνα.jpg", cache)["state"] == "cached"
+    drive = root / "Drive"; drive.mkdir(); (drive / "notes.txt").write_text("same words " * 100, encoding="utf-8")
+    drive_result = module.export(drive, destination, "files.ldrive", "Drive")
+    assert drive_result["state"] == "transferred" and module.index(destination / "files.ldrive")["library"] == "Drive"
+    assert Path(module.extract(destination / "files.ldrive", "notes.txt", cache)["path"]).read_text(encoding="utf-8") == "same words " * 100
     original = (destination / "test.ldrive").read_bytes()
     try:
         module.export(source, destination, "test.ldrive")

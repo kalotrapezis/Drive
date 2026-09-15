@@ -9,6 +9,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
 
+import org.json.JSONObject;
+import org.json.JSONArray;
+
 import java.io.File;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -16,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Copy-only background scan; an item is remembered only after a Linux receipt. */
 public final class AutoSyncService extends Service {
+    public static final String ACTION_SYNC_NOW = "org.localdrive.android.SYNC_NOW";
     private static final int NOTIFICATION_ID = 1003;
     private static final String CHANNEL = "local-drive-auto-sync";
     private ScheduledExecutorService scheduler;
@@ -39,7 +43,7 @@ public final class AutoSyncService extends Service {
         if (scheduler != null && !scheduled) {
             scheduled = true;
             scheduler.scheduleWithFixedDelay(this::scanAndSend, 0, 60, TimeUnit.SECONDS);
-        }
+        } else if (scheduler != null && intent != null && ACTION_SYNC_NOW.equals(intent.getAction())) scheduler.execute(this::scanAndSend);
         return START_STICKY;
     }
 
@@ -47,6 +51,10 @@ public final class AutoSyncService extends Service {
         if (scanning) return;
         scanning = true;
         try {
+            final WirelessSender.Profile profile = WirelessProfileStore.senderProfile(this);
+            final JSONObject metadataCheck = WirelessSender.checkMetadata(RootStore.resolutionGeneration(this, profile.serverFingerprint),
+                    RootStore.resolutionCursor(this, profile.serverFingerprint), RootStore.locationCursor(this, profile.serverFingerprint), RootStore.pendingReviewActions(this, profile.serverFingerprint), RootStore.pendingCorrectionResults(this, profile.serverFingerprint), profile);
+            applyMetadataResponse(profile, metadataCheck);
             update("Σάρωση Drive...");
             final boolean driveCompleted = RootScanner.scan(this, Uri.parse(RootStore.drive(this)), entry -> sendIfNeeded("Drive", entry));
             if (driveCompleted) {
@@ -67,6 +75,14 @@ public final class AutoSyncService extends Service {
         File temporary = null;
         try {
             update("Αποστολή " + root + "/" + entry.relative);
+            final String metadataRoot = "Photos".equals(root) ? "DCIM" : "Drive";
+            final long sequence = RootStore.nextMetadataSequence(this);
+            final WirelessSender.Profile profile = WirelessProfileStore.senderProfile(this);
+            final JSONObject metadataResponse = WirelessSender.sendMetadata(metadataRoot, entry.relative, RootStore.metadataItemId(metadataRoot, entry.relative),
+                    entry.size, entry.modified, sequence, RootStore.resolutionGeneration(this, profile.serverFingerprint),
+                    RootStore.resolutionCursor(this, profile.serverFingerprint), RootStore.locationCursor(this, profile.serverFingerprint), RootStore.pendingReviewActions(this, profile.serverFingerprint), RootStore.pendingCorrectionResults(this, profile.serverFingerprint), profile);
+            applyMetadataResponse(profile, metadataResponse);
+            RootStore.commitMetadataSequence(this, sequence);
             temporary = TransferService.copyToCache(this, entry.uri);
             WirelessSender.send(temporary, root + "/" + entry.relative, WirelessProfileStore.senderProfile(this));
             RootStore.markSent(this, key);
@@ -77,6 +93,15 @@ public final class AutoSyncService extends Service {
         } finally {
             if (temporary != null) temporary.delete();
         }
+    }
+
+    private void applyMetadataResponse(WirelessSender.Profile profile, JSONObject response) throws Exception {
+        RootStore.applyResolutions(this, profile.serverFingerprint, response.optJSONArray("resolutions"));
+        RootStore.acknowledgeReviewActions(this, profile.serverFingerprint, response.optJSONArray("acceptedReviewActions"));
+        RootStore.applyActiveReviews(this, profile.serverFingerprint, response.optJSONArray("activeReviews"));
+        RootStore.applyCatalogSnapshot(this, profile.serverFingerprint, response.optJSONObject("catalogSnapshot"));
+        RootStore.acknowledgeCorrectionResults(this, profile.serverFingerprint, response.optJSONArray("acceptedCorrectionResults"));
+        RootStore.applyCorrections(this, profile.serverFingerprint, response.optJSONArray("corrections"));
     }
 
     private void update(String message) {

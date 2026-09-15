@@ -1,3 +1,4 @@
+#include "catalog/yearretention.h"
 #include "setupmodel.h"
 #include <QFile>
 #include <QFileInfo>
@@ -23,6 +24,7 @@
 
 #include <solid/device.h>
 #include <solid/deviceinterface.h>
+#include <solid/block.h>
 #include <solid/storageaccess.h>
 #include <solid/storagevolume.h>
 #include <solid/storagedrive.h>
@@ -39,6 +41,20 @@ bool isProtectedStorage(const QVariantMap &storage) {
     const QString label = storage.value("label").toString().trimmed().toLower();
     return label == QStringLiteral("efi") || label == QStringLiteral("system reserved")
         || root == QStringLiteral("/boot/efi") || root.startsWith(QStringLiteral("/boot/efi/"));
+}
+
+QString storageMediaType(const Solid::Device &device) {
+    const auto block = device.as<Solid::Block>();
+    if (!block) return QStringLiteral("Storage");
+    const QString name = QFileInfo(block->device()).fileName();
+    const QString sysPath = QFileInfo(QStringLiteral("/sys/class/block/%1").arg(name)).canonicalFilePath();
+    if (sysPath.isEmpty()) return QStringLiteral("Storage");
+    QFile rotational(QFileInfo(QStringLiteral("/sys/class/block/%1/partition").arg(name)).exists()
+                         ? QFileInfo(sysPath).dir().filePath(QStringLiteral("queue/rotational"))
+                         : QDir(sysPath).filePath(QStringLiteral("queue/rotational")));
+    if (!rotational.open(QIODevice::ReadOnly)) return QStringLiteral("Storage");
+    const QByteArray value = rotational.readAll().trimmed();
+    return value == "0" ? QStringLiteral("SSD") : value == "1" ? QStringLiteral("HDD") : QStringLiteral("Storage");
 }
 
 bool ensureColumn(QSqlDatabase &db, const QString &table, const QString &column, const QString &definition, QString *error) {
@@ -93,6 +109,18 @@ bool recoverInterruptedJobs(QSqlDatabase &db, QString *error) {
     if (!db.commit()) { db.rollback(); if (error) *error = db.lastError().text(); return false; }
     return true;
 }
+
+QString settleSupersededCleanup(QSqlDatabase &db, const QString &routeId, const QString &behavior, const QString &keepPolicy) {
+    QSqlQuery uncertain(db);
+    uncertain.prepare("SELECT 1 FROM jobs j JOIN job_items i ON i.job_id=j.id WHERE j.route_id=? AND j.state='Cleanup pending' AND (j.behavior<>? OR j.keep_policy<>?) AND i.cleanup_state='pending' LIMIT 1");
+    uncertain.addBindValue(routeId); uncertain.addBindValue(behavior); uncertain.addBindValue(keepPolicy);
+    if (!uncertain.exec()) return uncertain.lastError().text();
+    if (uncertain.next()) return QStringLiteral("Finish reviewing the previous cleanup before changing this connection.");
+    QSqlQuery settle(db);
+    settle.prepare("UPDATE jobs SET state='Complete',error_code=NULL,error_message=NULL,completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP WHERE route_id=? AND state='Cleanup pending' AND (behavior<>? OR keep_policy<>?)");
+    settle.addBindValue(routeId); settle.addBindValue(behavior); settle.addBindValue(keepPolicy);
+    return settle.exec() ? QString() : settle.lastError().text();
+}
 }
 
 SetupModel::SetupModel(const QString &databasePath, const QVariantList &storageOverride, QObject *parent) : QObject(parent) {
@@ -103,11 +131,11 @@ SetupModel::SetupModel(const QString &databasePath, const QVariantList &storageO
     m_localDeviceName = QSysInfo::machineHostName();
 
     const QStorageInfo localStorage(QDir::homePath());
-    QVariantMap local{{"id", "local"}, {"label", "Computer"}, {"root", "/"}, {"present", true}, {"kind", "local"}, {"bytesTotal", localStorage.bytesTotal()}, {"bytesFree", localStorage.bytesFree()}};
+    QVariantMap local{{"id", "local"}, {"label", "Computer"}, {"root", "/"}, {"present", true}, {"kind", "local"}, {"bytesTotal", localStorage.bytesTotal()}, {"bytesFree", localStorage.bytesAvailable()}};
     m_storages.append(local);
     QSqlQuery localCapacity(QSqlDatabase::database(m_connectionName));
     localCapacity.prepare("UPDATE storage SET bytes_total=?,bytes_free=?,presence='present',last_seen_at=CURRENT_TIMESTAMP WHERE id='local'");
-    localCapacity.addBindValue(localStorage.bytesTotal()); localCapacity.addBindValue(localStorage.bytesFree());
+    localCapacity.addBindValue(localStorage.bytesTotal()); localCapacity.addBindValue(localStorage.bytesAvailable());
     if (!localCapacity.exec()) { m_ready = false; fail(localCapacity.lastError().text()); return; }
     if (!storageOverride.isEmpty()) m_storages += storageOverride;
     else {
@@ -186,8 +214,17 @@ QString SetupModel::upsertDiscoveredPhone(const QString &alias, const QString &n
 
 QVariantList SetupModel::connectedDevices() const {
     QVariantList result;
-    const auto add = [&result](const QVariantMap &incoming) {
+    const auto add = [this, &result](const QVariantMap &incoming) {
         const QString id = incoming.value("id").toString();
+        if (incoming.value("transport") == "usb" && !incoming.value("detectedProduct").toString().isEmpty()) {
+            QSqlQuery known(QSqlDatabase::database(m_connectionName));
+            known.prepare("SELECT COUNT(*),COALESCE(MAX(hidden),0) FROM devices WHERE kind='Phone' AND name=?");
+            known.addBindValue(incoming.value("detectedProduct"));
+            if (known.exec() && known.next() && known.value(0).toInt() == 1 && known.value(1).toBool()) return;
+        }
+        QSqlQuery visibility(QSqlDatabase::database(m_connectionName));
+        visibility.prepare("SELECT hidden FROM devices WHERE id=?"); visibility.addBindValue(id);
+        if (visibility.exec() && visibility.next() && visibility.value(0).toBool()) return;
         for (auto &value : result) {
             auto current = value.toMap();
             if (current.value("id").toString() != id) continue;
@@ -231,7 +268,8 @@ void SetupModel::refreshUsbConnections() {
         if (serialFile.open(QIODevice::ReadOnly)) serial = QString::fromUtf8(serialFile.readAll()).trimmed();
         const QString evidence = serial.isEmpty() ? entry : serial;
         const QString id = QStringLiteral("usb-charge-%1").arg(QString::fromLatin1(QCryptographicHash::hash(evidence.toUtf8(), QCryptographicHash::Sha256).toHex().left(16)));
-        m_usbConnections.append(QVariantMap{{"id", id}, {"stableIdentity", QString()}, {"label", "Phone"}, {"detectedProduct", product}, {"kind", "Phone"}, {"transport", "usb"}, {"present", true}, {"status", "Charging only"}});
+        const QString serialIdentity = serial.isEmpty() ? QString() : QStringLiteral("usb:%1").arg(QString::fromLatin1(QCryptographicHash::hash(serial.toUtf8(), QCryptographicHash::Sha256).toHex()));
+        m_usbConnections.append(QVariantMap{{"id", id}, {"stableIdentity", QString()}, {"serialIdentity", serialIdentity}, {"label", "Phone"}, {"detectedProduct", product}, {"kind", "Phone"}, {"transport", "usb"}, {"present", true}, {"status", "Charging only"}});
     }
 }
 
@@ -412,8 +450,21 @@ bool SetupModel::openCatalog() {
                 || !ensureColumn(db, "app_config", "hub_limit_percent", "hub_limit_percent INTEGER NOT NULL DEFAULT 80 CHECK (hub_limit_percent BETWEEN 1 AND 95)", &migrationError)
                 || !q.exec("UPDATE schema_version SET version=17,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
                 || !db.commit()) { db.rollback(); return fail(migrationError.isEmpty() ? q.lastError().text() : migrationError); }
-        } else if (version != 17) return fail(QStringLiteral("Unsupported catalog schema version"));
+        } else if (version != 17 && version != 18 && version != 19) return fail(QStringLiteral("Unsupported catalog schema version"));
     }
+    if (!q.exec("CREATE TABLE IF NOT EXISTS device_removals(id TEXT PRIMARY KEY, removed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)")) return fail(q.lastError().text());
+    QString retentionError;
+    if (!upgradeYearRetention(db, &retentionError)) return fail(retentionError);
+    if (!q.exec("SELECT version FROM schema_version WHERE singleton=1") || !q.next()) return fail(QStringLiteral("Unsupported catalog schema version"));
+    if (q.value(0).toInt() == 18) {
+        QString migrationError;
+        if (!db.transaction()
+            || !ensureColumn(db, "devices", "icon", "icon TEXT NOT NULL DEFAULT '' CHECK (icon IN ('', 'Laptop', 'PC', 'Server', 'Phone', 'HD', 'SSD'))", &migrationError)
+            || !ensureColumn(db, "storage", "icon", "icon TEXT NOT NULL DEFAULT '' CHECK (icon IN ('', 'Laptop', 'PC', 'Server', 'Phone', 'HD', 'SSD'))", &migrationError)
+            || !q.exec("UPDATE schema_version SET version=19,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+            || !db.commit()) { db.rollback(); return fail(migrationError.isEmpty() ? q.lastError().text() : migrationError); }
+    }
+    if (!q.exec("CREATE TABLE IF NOT EXISTS route_cache_limits(route_id TEXT PRIMARY KEY REFERENCES routes(id), limit_percent INTEGER NOT NULL DEFAULT 80 CHECK(limit_percent BETWEEN 1 AND 95))")) return fail(q.lastError().text());
     QFile machineId("/etc/machine-id");
     const QString hostname = QSysInfo::machineHostName();
     const QByteArray stable = machineId.open(QIODevice::ReadOnly) ? machineId.readAll().trimmed() : hostname.toUtf8();
@@ -448,10 +499,11 @@ void SetupModel::refreshStorages() {
         if (mountedNow && (root.isEmpty() || root == "/")) continue;
         const QString identity = QStringLiteral("storage:%1").arg(uuid);
         const QStorageInfo mounted(root);
-        QSqlQuery remembered(QSqlDatabase::database(m_connectionName)); remembered.prepare("SELECT selected_root,hidden FROM storage WHERE id=?"); remembered.addBindValue("storage:" + uuid);
+        QSqlQuery remembered(QSqlDatabase::database(m_connectionName)); remembered.prepare("SELECT selected_root,hidden,icon FROM storage WHERE id=?"); remembered.addBindValue("storage:" + uuid);
         const bool known = remembered.exec() && remembered.next();
         const QString previousRoot = known ? remembered.value(0).toString() : QString();
-        QVariantMap item{{"id", "storage:" + uuid}, {"identity", identity}, {"label", volume->label().isEmpty() ? QStringLiteral("External storage") : volume->label()}, {"filesystemType", volume->fsType()}, {"root", mountedNow ? root : previousRoot}, {"present", mountedNow}, {"connected", true}, {"kind", "removable"}, {"bytesTotal", mountedNow ? mounted.bytesTotal() : 0}, {"bytesFree", mountedNow ? mounted.bytesFree() : 0}};
+        QVariantMap item{{"id", "storage:" + uuid}, {"identity", identity}, {"label", volume->label().isEmpty() ? QStringLiteral("External storage") : volume->label()}, {"filesystemType", volume->fsType()}, {"root", mountedNow ? root : previousRoot}, {"present", mountedNow}, {"connected", true}, {"kind", "removable"}, {"mediaType", storageMediaType(device)}, {"bytesTotal", mountedNow ? mounted.bytesTotal() : 0}, {"bytesFree", mountedNow ? mounted.bytesAvailable() : 0}};
+        if (known && !remembered.value(2).toString().isEmpty()) item.insert("icon", remembered.value(2));
         if (isProtectedStorage(item)) continue;
         const bool hidden = known && remembered.value(1).toBool();
         bool duplicate = false;
@@ -482,7 +534,7 @@ void SetupModel::refreshStorages() {
     }
     m_error.clear();
     loadDeviceLists();
-    m_routes.clear(); loadRoutes();
+    loadRoutes();
     emit changed();
 }
 
@@ -504,6 +556,30 @@ bool SetupModel::mountStorage(const QString &storageId) {
     return fail(QStringLiteral("Storage is not connected."));
 }
 
+QUrl SetupModel::mtpEntryUrl(const QUrl &parent, const QString &name, const QString &reportedUrl) {
+    const QUrl reported(reportedUrl.trimmed());
+    if (reported.isValid() && reported.scheme() == QStringLiteral("mtp")) return reported;
+    if (name.isEmpty() || parent.scheme() != QStringLiteral("mtp")) return {};
+    QUrl fallback(parent);
+    QString path = fallback.path(QUrl::FullyDecoded);
+    if (!path.endsWith('/')) path += '/';
+    fallback.setPath(path + name);
+    return fallback;
+}
+
+QString SetupModel::mtpStableIdentity(const QString &name, const QString &reportedUrl, const QVariantList &usbConnections) {
+    const QUrl reported(reportedUrl.trimmed());
+    if (reported.isValid() && reported.scheme() == QStringLiteral("mtp")) return reported.toString();
+    QStringList matches;
+    for (const auto &value : usbConnections) {
+        const auto usb = value.toMap();
+        if (usb.value("detectedProduct").toString().trimmed().compare(name.trimmed(), Qt::CaseInsensitive) != 0) continue;
+        const QString serial = usb.value("serialIdentity").toString();
+        if (!serial.isEmpty()) matches.append(serial);
+    }
+    return matches.size() == 1 ? QStringLiteral("mtp:%1").arg(matches.first()) : QString();
+}
+
 void SetupModel::refreshMtpDevices() {
     if (m_mtpJob) { m_mtpJob->disconnect(this); m_mtpJob->kill(); m_mtpJob = nullptr; }
     m_mtpDevices.clear();
@@ -513,23 +589,33 @@ void SetupModel::refreshMtpDevices() {
         for (const auto &entry : entries) {
             const QString name = entry.stringValue(KIO::UDSEntry::UDS_NAME);
             if (name.isEmpty()) continue;
-            const QString url = entry.stringValue(KIO::UDSEntry::UDS_URL);
-            const QString stable = (url.isEmpty() ? QStringLiteral("mtp:%1").arg(name) : (url.startsWith(QStringLiteral("mtp:")) ? url : QStringLiteral("mtp:%1").arg(url)));
-            const QString deviceId = upsertDiscoveredPhone(stable, name, QStringLiteral("mtp"));
+            const QString reportedUrl = entry.stringValue(KIO::UDSEntry::UDS_URL);
+            const QUrl deviceUrl = mtpEntryUrl(QUrl(QStringLiteral("mtp:/")), name, reportedUrl);
+            const QString url = deviceUrl.toString();
+            const QString stable = mtpStableIdentity(name, reportedUrl, m_usbConnections);
+            QString preferredDeviceId;
+            if (stable.startsWith(QStringLiteral("mtp:usb:"))) {
+                QSqlQuery legacy(QSqlDatabase::database(m_connectionName));
+                legacy.prepare("SELECT id FROM devices WHERE kind='Phone' AND name=? AND stable_id=?"); legacy.addBindValue(name); legacy.addBindValue(QStringLiteral("mtp:%1").arg(name));
+                if (legacy.exec() && legacy.next()) { preferredDeviceId = legacy.value(0).toString(); if (legacy.next()) preferredDeviceId.clear(); }
+            }
+            const QString deviceId = stable.isEmpty()
+                ? QStringLiteral("mtp-unidentified-%1").arg(QString::fromLatin1(QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Sha256).toHex().left(16)))
+                : upsertDiscoveredPhone(stable, name, QStringLiteral("mtp"), preferredDeviceId);
             if (deviceId.isEmpty()) continue;
             QSqlQuery hidden(QSqlDatabase::database(m_connectionName)); hidden.prepare("SELECT hidden FROM devices WHERE id=?"); hidden.addBindValue(deviceId);
             if (!hidden.exec() || !hidden.next() || !hidden.value(0).toBool()) {
-                const QVariantMap phone{{"id", deviceId}, {"stableIdentity", stable}, {"label", name}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", "Online"}, {"url", url}, {"phoneRoot", url}};
+                const QVariantMap phone{{"id", deviceId}, {"stableIdentity", stable}, {"label", name}, {"kind", "mtp"}, {"transport", "mtp"}, {"present", true}, {"status", stable.isEmpty() ? QStringLiteral("Identity unavailable") : QStringLiteral("Online")}, {"url", url}, {"phoneRoot", url}};
                 m_mtpDevices.append(phone);
                 if (!url.isEmpty()) {
-                    QUrl storageUrl(url);
+                    QUrl storageUrl(deviceUrl);
                     QString path = storageUrl.path(QUrl::FullyDecoded);
                     if (!path.endsWith('/')) { path += '/'; storageUrl.setPath(path); }
                     auto *storageJob = KIO::listDir(storageUrl, KIO::HideProgressInfo, KIO::ListJob::ListFlag::ExcludeDotAndDotDot);
-                    connect(storageJob, &KIO::ListJob::entries, this, [this, deviceId](KIO::Job *, const KIO::UDSEntryList &storageEntries) {
+                    connect(storageJob, &KIO::ListJob::entries, this, [this, deviceId, storageUrl](KIO::Job *, const KIO::UDSEntryList &storageEntries) {
                         for (const auto &storageEntry : storageEntries) {
                             if (storageEntry.numberValue(KIO::UDSEntry::UDS_FILE_TYPE, 0) != 0040000) continue;
-                            const QString detected = storageEntry.stringValue(KIO::UDSEntry::UDS_URL);
+                            const QString detected = mtpEntryUrl(storageUrl, storageEntry.stringValue(KIO::UDSEntry::UDS_NAME), storageEntry.stringValue(KIO::UDSEntry::UDS_URL)).toString();
                             if (detected.isEmpty()) continue;
                             for (auto &value : m_mtpDevices) if (value.toMap().value("id") == deviceId) { auto phone = value.toMap(); phone.insert("phoneRoot", detected); value = phone; }
                             emit changed();
@@ -674,10 +760,12 @@ void SetupModel::loadDeviceLists() {
     m_deviceList.clear();
     QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     QSqlQuery devices(db);
-    if (devices.exec("SELECT id,stable_id,name,kind,onboarding_seen,hidden,last_seen_at FROM devices WHERE is_local=0 ORDER BY name")) {
+    if (devices.exec("SELECT id,stable_id,name,kind,onboarding_seen,hidden,last_seen_at,icon FROM devices WHERE is_local=0 ORDER BY name")) {
         while (devices.next()) {
+            if (deviceRemoved(devices.value(0).toString())) continue;
             const QString stable = devices.value(1).toString();
             QVariantMap item{{"id", devices.value(0)}, {"stableIdentity", stable}, {"label", devices.value(2)}, {"kind", devices.value(3)}, {"category", "device"}, {"hidden", devices.value(5).toBool()}, {"lastSeen", devices.value(6)}};
+            if (!devices.value(7).toString().isEmpty()) item.insert("icon", devices.value(7));
             if (devices.value(3).toString() == QStringLiteral("Phone") && stable.startsWith(QStringLiteral("mtp:"))) item.insert("url", stable.mid(4));
             QStringList transports;
             QSqlQuery aliases(db); aliases.prepare("SELECT group_concat(transport, ',') FROM device_aliases WHERE device_id=?"); aliases.addBindValue(devices.value(0));
@@ -693,23 +781,53 @@ void SetupModel::loadDeviceLists() {
         }
     }
     QSqlQuery storage(db);
-    if (storage.exec("SELECT id,stable_identity,label,kind,filesystem_type,selected_root,presence,onboarding_seen,hidden FROM storage WHERE kind<>'local' ORDER BY label")) {
+    if (storage.exec("SELECT id,stable_identity,label,kind,filesystem_type,selected_root,presence,onboarding_seen,hidden,icon FROM storage WHERE kind<>'local' ORDER BY label")) {
         while (storage.next()) {
+            if (deviceRemoved(storage.value(0).toString())) continue;
             QVariantMap item{{"id", storage.value(0)}, {"stableIdentity", storage.value(1)}, {"label", storage.value(2)}, {"kind", storage.value(3)}, {"category", "storage"}, {"filesystemType", storage.value(4)}, {"root", storage.value(5)}, {"present", storage.value(6).toString() == "present"}, {"hidden", storage.value(8).toBool()}};
+            if (!storage.value(9).toString().isEmpty()) item.insert("icon", storage.value(9));
             if (storage.value(8).toBool()) m_hiddenDevices.append(item);
             else if (!storage.value(7).toBool()) m_firstSeenDevices.append(item);
         }
     }
 }
 
-bool SetupModel::acknowledgeDevice(const QString &deviceId, bool hide) {
-    if (deviceId.trimmed().isEmpty()) return fail(QStringLiteral("Device identity is empty."));
+QString SetupModel::localDeviceIcon() const {
+    QSqlQuery q(QSqlDatabase::database(m_connectionName));
+    return q.exec("SELECT icon FROM devices WHERE id='local'") && q.next() ? q.value(0).toString() : QString();
+}
+
+bool SetupModel::setDeviceIcon(const QString &deviceId, const QString &icon) {
+    static const QStringList allowed{"", "Laptop", "PC", "Server", "Phone", "HD", "SSD"};
+    if (deviceId.trimmed().isEmpty() || !allowed.contains(icon)) return fail(QStringLiteral("Choose a supported device icon."));
     QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.transaction()) return fail(db.lastError().text());
-    QSqlQuery exists(db); exists.prepare("SELECT 1 FROM storage WHERE id=?"); exists.addBindValue(deviceId);
+    QSqlQuery q(db); q.prepare("UPDATE devices SET icon=? WHERE id=?"); q.addBindValue(icon); q.addBindValue(deviceId);
+    if (!q.exec()) { db.rollback(); return fail(q.lastError().text()); }
+    if (q.numRowsAffected() == 0) { q.prepare("UPDATE storage SET icon=? WHERE id=?"); q.addBindValue(icon); q.addBindValue(deviceId); if (!q.exec() || q.numRowsAffected() == 0) { db.rollback(); return fail(QStringLiteral("Unknown device.")); } }
+    if (!q.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1") || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+    ++m_revision;
+    for (auto *list : {&m_storages, &m_mtpDevices, &m_wirelessDevices}) for (auto &value : *list) if (value.toMap().value("id") == deviceId) { auto item = value.toMap(); item.insert("icon", icon); value = item; }
+    loadDeviceLists(); m_error.clear(); emit changed(); return true;
+}
+
+bool SetupModel::acknowledgeDevice(const QString &deviceId, bool hide) {
+    if (deviceRemoved(deviceId)) return fail(QStringLiteral("This device has been removed from the application."));
+    if (deviceId.trimmed().isEmpty()) return fail(QStringLiteral("Device identity is empty."));
+    if (deviceId == "local") return fail(QStringLiteral("The local computer cannot be hidden."));
+    QSqlDatabase db = QSqlDatabase::database(m_connectionName);
+    if (!db.transaction()) return fail(db.lastError().text());
+    QSqlQuery exists(db); exists.prepare("SELECT 1 FROM storage WHERE id=? AND kind<>'local'"); exists.addBindValue(deviceId);
     const bool isStorage = exists.exec() && exists.next();
     if (!isStorage) { exists.finish(); exists.prepare("SELECT 1 FROM devices WHERE id=? AND is_local=0"); exists.addBindValue(deviceId); }
     if ((!isStorage && (!exists.exec() || !exists.next())) || (isStorage && !exists.isActive())) { db.rollback(); return fail(QStringLiteral("Unknown device.")); }
+    if (hide) {
+        QSqlQuery routes(db);
+        routes.prepare("SELECT 1 FROM routes r JOIN storage s ON s.id=r.source_storage_id JOIN storage d ON d.id=r.destination_storage_id WHERE r.enabled=1 AND (s.id=? OR d.id=? OR s.device_id=? OR d.device_id=?) LIMIT 1");
+        for (int i = 0; i < 4; ++i) routes.addBindValue(deviceId);
+        if (!routes.exec()) { db.rollback(); return fail(routes.lastError().text()); }
+        if (routes.next()) { db.rollback(); return fail(QStringLiteral("Remove this device's connections before hiding it.")); }
+    }
     QSqlQuery update(db);
     update.prepare(isStorage ? "UPDATE storage SET onboarding_seen=1,hidden=? WHERE id=?" : "UPDATE devices SET onboarding_seen=1,hidden=? WHERE id=?");
     update.addBindValue(hide ? 1 : 0); update.addBindValue(deviceId);
@@ -726,6 +844,7 @@ bool SetupModel::acknowledgeDevice(const QString &deviceId, bool hide) {
 }
 
 bool SetupModel::showDevice(const QString &deviceId) {
+    if (deviceRemoved(deviceId)) return fail(QStringLiteral("This device has been removed from the application."));
     if (deviceId.trimmed().isEmpty()) return fail(QStringLiteral("Device identity is empty."));
     QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     QSqlQuery storage(db); storage.prepare("SELECT label,kind,filesystem_type,selected_root,presence,stable_identity FROM storage WHERE id=? AND kind<>'local'"); storage.addBindValue(deviceId);
@@ -745,23 +864,112 @@ bool SetupModel::showDevice(const QString &deviceId) {
     return true;
 }
 
+bool SetupModel::removeDevice(const QString &id) {
+    if (id.trimmed().isEmpty() || id == "local") return fail(QStringLiteral("Choose a non-local device to remove."));
+    auto db = QSqlDatabase::database(m_connectionName);
+    if (!db.transaction()) return fail(db.lastError().text());
+    QSqlQuery q(db);
+    q.prepare("SELECT id FROM storage WHERE id=? AND kind<>'local' UNION SELECT id FROM devices WHERE id=? AND is_local=0"); q.addBindValue(id); q.addBindValue(id);
+    if (!q.exec() || !q.next()) { db.rollback(); return fail(QStringLiteral("Device not found.")); }
+    q.prepare("SELECT r.id FROM routes r JOIN storage s ON s.id=r.source_storage_id JOIN storage d ON d.id=r.destination_storage_id WHERE s.id=? OR d.id=? OR s.device_id=? OR d.device_id=?");
+    for (int i = 0; i < 4; ++i) q.addBindValue(id);
+    if (!q.exec()) { db.rollback(); return fail(q.lastError().text()); }
+    QStringList routes; while (q.next()) routes.append(q.value(0).toString());
+    for (const auto &route : routes) {
+        q.prepare("SELECT 1 FROM jobs WHERE route_id=? AND state IN ('Queued','Copying','Verifying','Paused') LIMIT 1"); q.addBindValue(route);
+        if (!q.exec()) { db.rollback(); return fail(q.lastError().text()); }
+        if (q.next()) { db.rollback(); return fail(QStringLiteral("Wait for active work to finish before removing this device.")); }
+        q.prepare("UPDATE routes SET enabled=0 WHERE id=?"); q.addBindValue(route);
+        if (!q.exec()) { db.rollback(); return fail(q.lastError().text()); }
+    }
+    // Keep catalog identities and receipts; removal must never invalidate verified history.
+    q.prepare("INSERT OR IGNORE INTO device_removals(id) VALUES(?)"); q.addBindValue(id);
+    if (!q.exec()) { db.rollback(); return fail(q.lastError().text()); }
+    q.prepare("INSERT OR IGNORE INTO device_removals(id) SELECT id FROM storage WHERE device_id=? AND kind<>'local'"); q.addBindValue(id);
+    if (!q.exec() || !q.exec("UPDATE storage SET hidden=1,onboarding_seen=1 WHERE id IN (SELECT id FROM device_removals)")
+        || !q.exec("UPDATE devices SET hidden=1,onboarding_seen=1 WHERE id IN (SELECT id FROM device_removals)")
+        || !q.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1")
+        || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+    for (auto *list : {&m_storages, &m_mtpDevices, &m_wirelessDevices}) {
+        for (int i = list->size() - 1; i >= 0; --i) if (deviceRemoved(list->at(i).toMap().value("id").toString())) list->removeAt(i);
+    }
+    ++m_revision; refreshRoutes(); loadDeviceLists(); m_error.clear(); emit changed(); return true;
+}
+
+bool SetupModel::deviceRemoved(const QString &id) const {
+    QSqlQuery q(QSqlDatabase::database(m_connectionName));
+    q.prepare("SELECT 1 FROM device_removals WHERE id=?"); q.addBindValue(id);
+    return q.exec() && q.next();
+}
+
+bool SetupModel::routeExists(const QString &id) const {
+    QSqlQuery q(QSqlDatabase::database(m_connectionName));
+    q.prepare("SELECT 1 FROM routes WHERE id=?"); q.addBindValue(id);
+    return q.exec() && q.next();
+}
+
+QString SetupModel::contentRoot(const QString &contentType) const {
+    if (contentType != "Drive" && contentType != "Photos") return {};
+    const auto remembered = [&](const QString &type) {
+        QSqlQuery q(QSqlDatabase::database(m_connectionName));
+        q.prepare("SELECT r.source_root FROM routes r JOIN storage s ON s.id=r.source_storage_id JOIN devices d ON d.id=s.device_id WHERE d.is_local=1 AND r.content_type=? ORDER BY r.enabled DESC,r.created_at DESC,r.rowid DESC LIMIT 1");
+        q.addBindValue(type);
+        if (!q.exec() || !q.next()) return QString();
+        const QString path = q.value(0).toString();
+        return QFileInfo(path).isAbsolute() ? QDir::cleanPath(path) : QString();
+    };
+    const QString exact = remembered(contentType);
+    if (!exact.isEmpty()) return exact;
+    const QString sibling = remembered(contentType == "Drive" ? QStringLiteral("Photos") : QStringLiteral("Drive"));
+    if (!sibling.isEmpty()) return QDir(QFileInfo(sibling).absolutePath()).filePath(contentType);
+    return QDir(m_homeRoot).filePath(QStringLiteral("Local Drive/%1").arg(contentType));
+}
+
+bool SetupModel::removeRoute(const QString &id, int *status) {
+    *status = 409;
+    auto db = QSqlDatabase::database(m_connectionName);
+    if (!db.transaction()) return fail(db.lastError().text());
+    QSqlQuery q(db); q.prepare("SELECT enabled FROM routes WHERE id=?"); q.addBindValue(id);
+    if (!q.exec()) { db.rollback(); return fail(q.lastError().text()); }
+    if (!q.next()) { db.rollback(); *status = 404; return fail(QStringLiteral("Route not found")); }
+    if (!q.value(0).toBool()) { db.rollback(); m_error.clear(); *status = 200; return true; }
+    q.prepare("SELECT 1 FROM jobs WHERE route_id=? AND state IN ('Queued','Copying','Verifying','Paused') LIMIT 1"); q.addBindValue(id);
+    if (!q.exec()) { db.rollback(); return fail(q.lastError().text()); }
+    if (q.next()) { db.rollback(); return fail(QStringLiteral("Wait for active work to finish before removing this connection.")); }
+    q.prepare("UPDATE routes SET enabled=0 WHERE id=?"); q.addBindValue(id);
+    if (!q.exec() || !q.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1") || !db.commit()) { db.rollback(); return fail(q.lastError().text()); }
+    ++m_revision; m_error.clear(); refreshRoutes(); *status = 200; return true;
+}
+
+bool SetupModel::validateNewRoute(const QString &source, const QString &storageId, const QString &contentType) {
+    QSqlQuery q(QSqlDatabase::database(m_connectionName));
+    q.prepare("SELECT r.source_root,r.destination_storage_id FROM routes r JOIN storage s ON s.id=r.source_storage_id JOIN devices d ON d.id=s.device_id WHERE r.enabled=1 AND d.is_local=1 AND r.content_type=?"); q.addBindValue(contentType);
+    if (!q.exec()) return fail(q.lastError().text());
+    while (q.next()) {
+        if (q.value(1).toString() == storageId) return fail(QStringLiteral("This relationship already exists."));
+        if (QDir::cleanPath(q.value(0).toString()) != QDir::cleanPath(source)) return fail(QStringLiteral("Relationships must share the same computer root."));
+    }
+    return true;
+}
+
 void SetupModel::loadRoutes() {
     QSqlQuery q(QSqlDatabase::database(m_connectionName));
-    if (!q.exec("SELECT routes.id,source_root,destination_root,behavior,keep_policy,content_type,destination_storage_id,COALESCE(staging_max_bytes,0),COALESCE(staging_root,''),COALESCE(minimum_free_bytes,0),COALESCE(organize_photos,0),COALESCE((SELECT state FROM jobs j WHERE j.route_id=routes.id ORDER BY j.created_at DESC,j.rowid DESC LIMIT 1),''),COALESCE((SELECT error_code FROM jobs j WHERE j.route_id=routes.id ORDER BY j.created_at DESC,j.rowid DESC LIMIT 1),''),COALESCE((SELECT error_message FROM jobs j WHERE j.route_id=routes.id ORDER BY j.created_at DESC,j.rowid DESC LIMIT 1),''),s.stable_identity,COALESCE(s.filesystem_type,''),s.selected_root,s.presence FROM routes JOIN storage s ON s.id=routes.destination_storage_id WHERE routes.enabled=1 ORDER BY routes.created_at")) return;
+    if (!q.exec("SELECT routes.id,source_root,destination_root,behavior,keep_policy,content_type,destination_storage_id,COALESCE(staging_max_bytes,0),COALESCE(staging_root,''),COALESCE(minimum_free_bytes,0),COALESCE(organize_photos,0),COALESCE((SELECT state FROM jobs j WHERE j.route_id=routes.id ORDER BY j.created_at DESC,j.rowid DESC LIMIT 1),''),COALESCE((SELECT error_code FROM jobs j WHERE j.route_id=routes.id ORDER BY j.created_at DESC,j.rowid DESC LIMIT 1),''),COALESCE((SELECT error_message FROM jobs j WHERE j.route_id=routes.id ORDER BY j.created_at DESC,j.rowid DESC LIMIT 1),''),s.stable_identity,COALESCE(s.filesystem_type,''),s.selected_root,s.presence,COALESCE(c.limit_percent,80) FROM routes LEFT JOIN route_cache_limits c ON c.route_id=routes.id JOIN storage s ON s.id=routes.destination_storage_id WHERE routes.enabled=1 ORDER BY routes.created_at")) return;
+    m_routes.clear();
     while (q.next()) {
         const bool present = q.value(17).toString() == QStringLiteral("present");
         const QString state = q.value(11).toString();
-        m_routes.append(QVariantMap{{"id", q.value(0)}, {"source", q.value(1)}, {"destination", q.value(2)}, {"behavior", q.value(3)}, {"keepPolicy", q.value(4)}, {"contentType", q.value(5)}, {"storageId", q.value(6)}, {"stagingMaxBytes", q.value(7)}, {"stagingRoot", q.value(8)}, {"minimumFreeBytes", q.value(9)}, {"organizePhotos", q.value(10).toBool()}, {"jobState", state.isEmpty() && !present ? QStringLiteral("Waiting") : state}, {"jobErrorCode", q.value(12)}, {"jobError", q.value(13)}, {"storageIdentity", q.value(14)}, {"filesystemType", q.value(15)}, {"storageRoot", q.value(16)}, {"storagePresent", present}});
+        m_routes.append(QVariantMap{{"id", q.value(0)}, {"source", q.value(1)}, {"destination", q.value(2)}, {"behavior", q.value(3)}, {"keepPolicy", q.value(4)}, {"contentType", q.value(5)}, {"storageId", q.value(6)}, {"stagingMaxBytes", q.value(7)}, {"cacheLimitPercent", q.value(18)}, {"stagingRoot", q.value(8)}, {"minimumFreeBytes", q.value(9)}, {"organizePhotos", q.value(10).toBool()}, {"jobState", state.isEmpty() && !present ? QStringLiteral("Waiting") : state}, {"jobErrorCode", q.value(12)}, {"jobError", q.value(13)}, {"storageIdentity", q.value(14)}, {"filesystemType", q.value(15)}, {"storageRoot", q.value(16)}, {"storagePresent", present}});
     }
 }
 
-void SetupModel::refreshRoutes() { m_routes.clear(); loadRoutes(); emit changed(); }
+void SetupModel::refreshRoutes() { loadRoutes(); emit changed(); }
 
 bool SetupModel::saveRoute(const QString &source, const QString &storageId, const QString &destination, const QString &keepPolicy, qint64 minimumFreeBytes, bool organizePhotos, qint64 stagingMaxBytes, const QString &stagingRoot, const QString &contentType) {
     const QString src = cleanPath(source), requestedDestination = destination.trimmed(), staging = stagingRoot.trimmed().isEmpty() ? QString() : cleanPath(stagingRoot);
     const QString policy = keepPolicy == "Copy" ? QStringLiteral("Everything") : keepPolicy == "Move" ? QStringLiteral("Nothing") : keepPolicy;
     const QString type = contentType.trimmed();
-    if ((policy != "Everything" && policy != "Last month" && policy != "Last week" && policy != "Last day" && policy != "Nothing") || (type != "Drive" && type != "Photos") || minimumFreeBytes < 0 || stagingMaxBytes < 0 || src.isEmpty() || !QFileInfo(src).isDir() || (!stagingRoot.trimmed().isEmpty() && (staging.isEmpty() || !QFileInfo(staging).isDir()))) return fail("Choose an existing source folder and valid content, Keep, staging, and safety policies.");
+    if ((policy != "Everything" && policy != "Last year" && policy != "Last month" && policy != "Last week" && policy != "Last day" && policy != "Nothing") || (type != "Drive" && type != "Photos") || minimumFreeBytes < 0 || stagingMaxBytes < 0 || src.isEmpty() || !QFileInfo(src).isDir() || (!stagingRoot.trimmed().isEmpty() && (staging.isEmpty() || !QFileInfo(staging).isDir()))) return fail("Choose an existing source folder and valid content, Keep, staging, and safety policies.");
     const QString behavior = policy == "Nothing" ? QStringLiteral("Move") : QStringLiteral("Copy");
     QVariantMap selected; for (const auto &v : m_storages) if (v.toMap().value("id") == storageId) selected = v.toMap();
     const bool storagePresent = selected.value("present").toBool();
@@ -772,6 +980,7 @@ bool SetupModel::saveRoute(const QString &source, const QString &storageId, cons
     if (!staging.isEmpty() && (underOrEqual(staging, src) || underOrEqual(src, staging) || underOrEqual(staging, dst) || underOrEqual(dst, staging))) return fail("Staging folder must not overlap the source or destination.");
     const QString routeId = QUuid::createUuid().toString(QUuid::Id128);
     auto db = QSqlDatabase::database(m_connectionName); if (!db.transaction()) return fail(db.lastError().text()); QSqlQuery q(db);
+    if (!validateNewRoute(src, storageId, type)) { db.rollback(); return false; }
     q.prepare("INSERT INTO routes(id,source_storage_id,destination_storage_id,source_root,destination_root,behavior,keep_policy,content_type,staging_max_bytes,staging_root,minimum_free_bytes,organize_photos) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)");
     q.addBindValue(routeId); q.addBindValue("local"); q.addBindValue(storageId); q.addBindValue(src); q.addBindValue(dst); q.addBindValue(behavior); q.addBindValue(policy); q.addBindValue(type); q.addBindValue(stagingMaxBytes); q.addBindValue(staging.isEmpty() ? QVariant() : QVariant(staging)); q.addBindValue(minimumFreeBytes); q.addBindValue(organizePhotos && type == "Photos");
     if (!q.exec()) { db.rollback(); return fail(q.lastError().text()); }
@@ -789,38 +998,52 @@ bool SetupModel::updateRouteRelationship(const QString &routeId, bool send, bool
     QSqlQuery update(db); update.prepare(QStringLiteral("UPDATE routes SET behavior=?,keep_policy=? WHERE id=? AND enabled=1"));
     update.addBindValue(behavior); update.addBindValue(policy); update.addBindValue(routeId);
     if (!update.exec() || update.numRowsAffected() != 1) { db.rollback(); return fail(QStringLiteral("Unknown connection.")); }
+    const QString cleanupError = settleSupersededCleanup(db, routeId, behavior, policy);
+    if (!cleanupError.isEmpty()) { db.rollback(); return fail(cleanupError); }
     if (!update.exec(QStringLiteral("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1"))) { db.rollback(); return fail(update.lastError().text()); }
     if (!db.commit()) { db.rollback(); return fail(db.lastError().text()); }
     ++m_revision; m_error.clear(); refreshRoutes(); return true;
 }
 
-bool SetupModel::updateRouteCard(const QString &routeId, const QString &mode, const QString &keepPolicy, bool cache) {
+bool SetupModel::updateRouteCard(const QString &routeId, const QString &mode, const QString &keepPolicy, bool cache, int cacheLimitPercent) {
     const QString operation = mode.trimmed(), policy = keepPolicy.trimmed();
-    if ((operation != "Copy" && operation != "Move") || (policy != "Everything" && policy != "Last month" && policy != "Last week" && policy != "Last day" && policy != "Nothing") || (operation == "Copy" && policy != "Everything") || (operation == "Move" && policy == "Everything")) return fail(QStringLiteral("Choose Copy, or Move with a valid retention period."));
-    QString source, destination; QSqlQuery find(QSqlDatabase::database(m_connectionName)); find.prepare("SELECT source_root,destination_root FROM routes WHERE id=? AND enabled=1"); find.addBindValue(routeId);
+    if ((operation != "Copy" && operation != "Move") || (policy != "Everything" && policy != "Last year" && policy != "Last month" && policy != "Last week" && policy != "Last day" && policy != "Nothing") || (operation == "Copy" && policy != "Everything") || (operation == "Move" && policy == "Everything")) return fail(QStringLiteral("Choose Copy, or Move with a valid retention period."));
+    QString source, destination; QSqlQuery find(QSqlDatabase::database(m_connectionName)); find.prepare("SELECT source_root,destination_root,COALESCE(staging_max_bytes,0) FROM routes WHERE id=? AND enabled=1"); find.addBindValue(routeId);
     if (!find.exec() || !find.next()) return fail(QStringLiteral("The selected connection no longer exists."));
     source = find.value(0).toString(); destination = find.value(1).toString();
-    const QString staging = cache ? hubRoot() : QString();
-    if (cache && (underOrEqual(staging, source) || underOrEqual(source, staging) || underOrEqual(staging, destination) || underOrEqual(destination, staging))) return fail(QStringLiteral("The hub cache cannot overlap this connection."));
-    const QStorageInfo laptop(m_homeRoot); const qint64 stagingMax = cache ? laptop.bytesTotal() / 100 * m_hubLimitPercent : 0;
+    // Cache intake uses the normal source library so the verified route can forward it.
+    QSqlQuery limits(QSqlDatabase::database(m_connectionName)); limits.prepare("SELECT limit_percent FROM route_cache_limits WHERE route_id=?"); limits.addBindValue(routeId);
+    const bool savedLimits = limits.exec() && limits.next();
+    if (cacheLimitPercent < 0) cacheLimitPercent = savedLimits ? limits.value(0).toInt() : 80;
+    if (cacheLimitPercent < 1 || cacheLimitPercent > 95) return fail(QStringLiteral("Choose a disk limit from 1% to 95%."));
+    const QString staging = cache ? source : QString();
+    const qint64 stagingMax = cache ? QStorageInfo(source).bytesTotal() / 100 * cacheLimitPercent : 0;
+    if (cache && stagingMax <= 0) return fail(QStringLiteral("The cache disk capacity is unavailable."));
     QSqlDatabase database = QSqlDatabase::database(m_connectionName);
     if (!database.transaction()) return fail(database.lastError().text());
     QSqlQuery update(database); update.prepare("UPDATE routes SET behavior=?,keep_policy=?,staging_root=?,staging_max_bytes=? WHERE id=? AND enabled=1"); update.addBindValue(operation); update.addBindValue(policy); update.addBindValue(staging.isEmpty() ? QVariant() : QVariant(staging)); update.addBindValue(stagingMax); update.addBindValue(routeId);
     if (!update.exec() || update.numRowsAffected() != 1) { database.rollback(); return fail(update.lastError().text()); }
+    const QString cleanupError = settleSupersededCleanup(database, routeId, operation, policy);
+    if (!cleanupError.isEmpty()) { database.rollback(); return fail(cleanupError); }
+    QSqlQuery saveLimits(database); saveLimits.prepare("INSERT INTO route_cache_limits(route_id,limit_percent) VALUES(?,?) ON CONFLICT(route_id) DO UPDATE SET limit_percent=excluded.limit_percent");
+    saveLimits.addBindValue(routeId); saveLimits.addBindValue(cacheLimitPercent);
+    if (!saveLimits.exec()) { database.rollback(); return fail(saveLimits.lastError().text()); }
     QSqlQuery revision(database); if (!revision.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1")) { database.rollback(); return fail(revision.lastError().text()); }
     if (!database.commit()) { database.rollback(); return fail(database.lastError().text()); }
     ++m_revision; m_error.clear(); refreshRoutes(); return true;
 }
 
 bool SetupModel::cloneDriveMapToPhotos() {
-    struct Clone { QString storageId, source, destination, behavior, keepPolicy, stagingRoot; qint64 stagingMax = 0, minimumFree = 0; bool present = false; };
+    struct Clone { QString storageId, source, destination, behavior, keepPolicy, stagingRoot; qint64 stagingMax = 0, minimumFree = 0; bool present = false; int cachePercent = 80; };
     auto db = QSqlDatabase::database(m_connectionName); QSqlQuery q(db);
     if (!q.exec("SELECT COUNT(*) FROM routes WHERE enabled=1 AND content_type='Photos'") || !q.next()) return fail(q.lastError().text());
     if (q.value(0).toInt() > 0) return fail(QStringLiteral("Photos already has relationships; edit its map independently."));
     QList<Clone> clones;
-    if (!q.exec("SELECT r.destination_storage_id,r.source_root,r.destination_root,r.behavior,r.keep_policy,COALESCE(r.staging_root,''),COALESCE(r.staging_max_bytes,0),COALESCE(r.minimum_free_bytes,0),s.presence,s.selected_root FROM routes r JOIN storage s ON s.id=r.destination_storage_id WHERE r.enabled=1 AND r.content_type='Drive' ORDER BY r.rowid")) return fail(q.lastError().text());
+    if (!q.exec("SELECT r.destination_storage_id,r.source_root,r.destination_root,r.behavior,r.keep_policy,COALESCE(r.staging_root,''),COALESCE(r.staging_max_bytes,0),COALESCE(r.minimum_free_bytes,0),s.presence,s.selected_root,COALESCE(c.limit_percent,80) FROM routes r LEFT JOIN route_cache_limits c ON c.route_id=r.id JOIN storage s ON s.id=r.destination_storage_id WHERE r.enabled=1 AND r.content_type='Drive' ORDER BY r.rowid")) return fail(q.lastError().text());
     while (q.next()) {
         Clone clone{q.value(0).toString(), QFileInfo(q.value(1).toString()).dir().filePath(QStringLiteral("Photos")), QFileInfo(q.value(2).toString()).dir().filePath(QStringLiteral("Photos")), q.value(3).toString(), q.value(4).toString(), q.value(5).toString(), q.value(6).toLongLong(), q.value(7).toLongLong(), q.value(8).toString() == QStringLiteral("present")};
+        clone.cachePercent = q.value(10).toInt();
+        if (clone.stagingRoot == q.value(1).toString()) clone.stagingRoot = clone.source;
         if (!underOrEqual(clone.source, m_homeRoot) || !underOrEqual(clone.destination, q.value(9).toString()) || underOrEqual(clone.source, clone.destination) || underOrEqual(clone.destination, clone.source)) return fail(QStringLiteral("A Files relationship cannot be cloned safely to Photos."));
         clones.append(clone);
     }
@@ -831,8 +1054,12 @@ bool SetupModel::cloneDriveMapToPhotos() {
     for (const Clone &clone : std::as_const(clones)) if (clone.present && !ensure(clone.destination)) { for (auto it = made.crbegin(); it != made.crend(); ++it) QDir().rmdir(*it); return fail(QStringLiteral("A proposed Photos folder could not be created on storage.")); }
     if (!db.transaction()) { for (auto it = made.crbegin(); it != made.crend(); ++it) QDir().rmdir(*it); return fail(db.lastError().text()); }
     for (const Clone &clone : std::as_const(clones)) {
+        if (!validateNewRoute(clone.source, clone.storageId, QStringLiteral("Photos"))) { db.rollback(); for (auto it = made.crbegin(); it != made.crend(); ++it) QDir().rmdir(*it); return false; }
         q.prepare("INSERT INTO routes(id,source_storage_id,destination_storage_id,source_root,destination_root,behavior,keep_policy,content_type,staging_max_bytes,staging_root,minimum_free_bytes,organize_photos) VALUES(?,'local',?,?,?,?,?,'Photos',?,?,?,1)");
-        q.addBindValue(QUuid::createUuid().toString(QUuid::Id128)); q.addBindValue(clone.storageId); q.addBindValue(QDir::cleanPath(clone.source)); q.addBindValue(QDir::cleanPath(clone.destination)); q.addBindValue(clone.behavior); q.addBindValue(clone.keepPolicy); q.addBindValue(clone.stagingMax); q.addBindValue(clone.stagingRoot.isEmpty() ? QVariant() : QVariant(clone.stagingRoot)); q.addBindValue(clone.minimumFree);
+        const QString cloneId = QUuid::createUuid().toString(QUuid::Id128);
+        q.addBindValue(cloneId); q.addBindValue(clone.storageId); q.addBindValue(QDir::cleanPath(clone.source)); q.addBindValue(QDir::cleanPath(clone.destination)); q.addBindValue(clone.behavior); q.addBindValue(clone.keepPolicy); q.addBindValue(clone.stagingMax); q.addBindValue(clone.stagingRoot.isEmpty() ? QVariant() : QVariant(clone.stagingRoot)); q.addBindValue(clone.minimumFree);
+        if (!q.exec()) { db.rollback(); for (auto it = made.crbegin(); it != made.crend(); ++it) QDir().rmdir(*it); return fail(q.lastError().text()); }
+        q.prepare("INSERT INTO route_cache_limits(route_id,limit_percent) VALUES(?,?)"); q.addBindValue(cloneId); q.addBindValue(clone.cachePercent);
         if (!q.exec()) { db.rollback(); for (auto it = made.crbegin(); it != made.crend(); ++it) QDir().rmdir(*it); return fail(q.lastError().text()); }
     }
     if (!q.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1") || !db.commit()) { db.rollback(); for (auto it = made.crbegin(); it != made.crend(); ++it) QDir().rmdir(*it); return fail(q.lastError().text()); }
@@ -849,7 +1076,7 @@ bool SetupModel::saveInitialRoutes(const QString &source, const QString &storage
     if (src.isEmpty() || !QFileInfo(src).isDir() || !underOrEqual(src, m_homeRoot)
         || parent.isEmpty() || !QFileInfo(parent).isDir() || !QFileInfo(parent).isWritable()
         || selected.isEmpty() || !present || isProtectedStorage(selected) || root.isEmpty() || !underOrEqual(parent, root)
-        || (policy != "Everything" && policy != "Last month" && policy != "Last week" && policy != "Last day" && policy != "Nothing")
+        || (policy != "Everything" && policy != "Last year" && policy != "Last month" && policy != "Last week" && policy != "Last day" && policy != "Nothing")
         || minimumFreeBytes < 0 || stagingMaxBytes < 0 || (!stagingRoot.trimmed().isEmpty() && (staging.isEmpty() || !QFileInfo(staging).isDir()))
         || underOrEqual(src, parent) || underOrEqual(parent, src)
         || (!staging.isEmpty() && (underOrEqual(staging, src) || underOrEqual(src, staging) || underOrEqual(staging, parent) || underOrEqual(parent, staging))))
@@ -878,7 +1105,9 @@ bool SetupModel::saveInitialRoutes(const QString &source, const QString &storage
     QSqlDatabase db = QSqlDatabase::database(m_connectionName);
     if (!db.transaction()) { rollbackFolders(); return fail(db.lastError().text()); }
     QSqlQuery q(db);
+    QString validationError;
     const auto insert = [&](const QString &sourceRoot, const QString &destinationRoot, const QString &type) {
+        if (!validateNewRoute(sourceRoot, storageId, type)) { validationError = m_error; return false; }
         q.prepare("INSERT INTO routes(id,source_storage_id,destination_storage_id,source_root,destination_root,behavior,keep_policy,content_type,staging_max_bytes,staging_root,minimum_free_bytes,organize_photos) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)");
         q.addBindValue(QUuid::createUuid().toString(QUuid::Id128)); q.addBindValue("local"); q.addBindValue(storageId); q.addBindValue(sourceRoot); q.addBindValue(destinationRoot); q.addBindValue(behavior); q.addBindValue(policy); q.addBindValue(type); q.addBindValue(stagingMaxBytes); q.addBindValue(staging.isEmpty() ? QVariant() : QVariant(staging)); q.addBindValue(minimumFreeBytes); q.addBindValue(organizePhotos && type == "Photos");
         return q.exec();
@@ -887,7 +1116,7 @@ bool SetupModel::saveInitialRoutes(const QString &source, const QString &storage
         || !insert(sourcePhotos, destinationPhotos, QStringLiteral("Photos"))
         || !q.exec("UPDATE app_config SET config_revision=config_revision+1,updated_at=CURRENT_TIMESTAMP WHERE singleton=1")
         || !db.commit()) {
-        const QString error = q.lastError().text().isEmpty() ? db.lastError().text() : q.lastError().text();
+        const QString error = !validationError.isEmpty() ? validationError : q.lastError().text().isEmpty() ? db.lastError().text() : q.lastError().text();
         db.rollback(); rollbackFolders(); return fail(error);
     }
     ++m_revision; m_error.clear(); refreshRoutes(); return true;

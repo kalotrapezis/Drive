@@ -1,6 +1,7 @@
 package org.localdrive.android;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -116,6 +117,39 @@ public final class WirelessSender {
                     throw error;
                 }
             }
+        }
+    }
+
+    /** Sends metadata only; the response contains the receiver's pending summary. */
+    public static JSONObject sendMetadata(String root, String relative, String itemId, long size, long modified,
+                                          long originSequence, long resolutionGeneration, long resolutionCursor, long locationCursor, JSONArray reviewActions, JSONArray correctionResults, Profile profile) throws Exception {
+        if (root == null || relative == null || itemId == null || itemId.trim().isEmpty() || originSequence < 1) throw new IOException("Metadata item is invalid");
+        final JSONObject item = new JSONObject().put("itemId", itemId).put("root", root).put("relativePath", relative)
+                .put("sizeBytes", size).put("modifiedAt", modified).put("originSequence", originSequence);
+        return exchangeMetadata(new JSONArray().put(item), resolutionGeneration, resolutionCursor, locationCursor, reviewActions, correctionResults, profile);
+    }
+
+    public static JSONObject checkMetadata(long resolutionGeneration, long resolutionCursor, long locationCursor, JSONArray reviewActions, JSONArray correctionResults, Profile profile) throws Exception {
+        return exchangeMetadata(new JSONArray(), resolutionGeneration, resolutionCursor, locationCursor, reviewActions, correctionResults, profile);
+    }
+
+    private static JSONObject exchangeMetadata(JSONArray items, long resolutionGeneration, long resolutionCursor, long locationCursor, JSONArray reviewActions, JSONArray correctionResults, Profile profile) throws Exception {
+        if (resolutionGeneration < 0 || resolutionCursor < 0 || locationCursor < 0) throw new IOException("Metadata cursor is invalid");
+        if (reviewActions == null || reviewActions.length() > 16) throw new IOException("Review action batch is invalid");
+        if (correctionResults == null || correctionResults.length() > 16) throw new IOException("Correction result batch is invalid");
+        try (SSLSocket socket = open(profile);
+             DataInputStream input = new DataInputStream(socket.getInputStream());
+             DataOutputStream output = new DataOutputStream(socket.getOutputStream())) {
+            writeFrame(output, new JSONObject().put("type", "hello").put("protocol", PROTOCOL)
+                    .put("deviceId", profile.deviceId).put("name", profile.deviceName), null, 0);
+            requireType(readFrame(input), "hello-ok");
+            writeFrame(output, new JSONObject().put("type", "metadata").put("protocol", PROTOCOL)
+                    .put("deviceId", profile.deviceId).put("name", profile.deviceName).put("catalogGeneration", 1)
+                    .put("resolutionGeneration", resolutionGeneration).put("resolutionCursor", resolutionCursor)
+                    .put("locationCursor", locationCursor).put("reviewActions", reviewActions).put("correctionResults", correctionResults).put("items", items), null, 0);
+            final JSONObject response = readFrame(input);
+            requireType(response, "metadata-ok");
+            return response;
         }
     }
 

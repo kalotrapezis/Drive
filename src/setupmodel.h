@@ -45,7 +45,9 @@ public:
     bool ready() const { return m_ready; }
     QString errorMessage() const { return m_error; }
     QString localDeviceName() const { return m_localDeviceName; }
+    QString localDeviceIcon() const;
     QString homeRoot() const { return m_homeRoot; }
+    QString contentRoot(const QString &contentType) const;
     bool hubEnabled() const { return m_hubEnabled; }
     int hubLimitPercent() const { return m_hubLimitPercent; }
     QString hubRoot() const { return QDir(m_homeRoot).filePath(QStringLiteral("Local Drive/.incoming")); }
@@ -53,8 +55,10 @@ public:
     Q_INVOKABLE bool saveRoute(const QString &source, const QString &storageId, const QString &destination, const QString &keepPolicy = QStringLiteral("Everything"), qint64 minimumFreeBytes = 0, bool organizePhotos = false, qint64 stagingMaxBytes = 0, const QString &stagingRoot = {}, const QString &contentType = QStringLiteral("Drive"));
     Q_INVOKABLE bool saveInitialRoutes(const QString &source, const QString &storageId, const QString &destinationParent, const QString &keepPolicy = QStringLiteral("Everything"), qint64 minimumFreeBytes = 0, bool organizePhotos = false, qint64 stagingMaxBytes = 0, const QString &stagingRoot = {});
     Q_INVOKABLE bool updateRouteRelationship(const QString &routeId, bool send, bool receive, bool keep);
-    Q_INVOKABLE bool updateRouteCard(const QString &routeId, const QString &mode, const QString &keepPolicy, bool cache);
+    Q_INVOKABLE bool updateRouteCard(const QString &routeId, const QString &mode, const QString &keepPolicy, bool cache, int cacheLimitPercent = -1);
     Q_INVOKABLE bool cloneDriveMapToPhotos();
+    bool removeRoute(const QString &id, int *status);
+    bool routeExists(const QString &id) const;
     Q_INVOKABLE void refreshRoutes();
     Q_INVOKABLE void refreshStorages();
     Q_INVOKABLE bool mountStorage(const QString &storageId);
@@ -66,6 +70,9 @@ public:
     Q_INVOKABLE bool pairWirelessDevice(const QString &wirelessDeviceId, const QString &targetDeviceId);
     Q_INVOKABLE bool acknowledgeDevice(const QString &deviceId, bool hide);
     Q_INVOKABLE bool showDevice(const QString &deviceId);
+    bool setDeviceIcon(const QString &deviceId, const QString &icon);
+    bool removeDevice(const QString &id);
+    bool deviceRemoved(const QString &id) const;
     Q_INVOKABLE bool setHubConfig(bool enabled, int limitPercent);
     Q_INVOKABLE QString pathFromUrl(const QUrl &url) const { return url.toLocalFile(); }
 #ifdef LOCAL_DRIVE_TESTING
@@ -79,9 +86,13 @@ signals:
     void changed();
 
 private:
+    friend class SetupModelTest;
+    static QUrl mtpEntryUrl(const QUrl &parent, const QString &name, const QString &reportedUrl);
+    static QString mtpStableIdentity(const QString &name, const QString &reportedUrl, const QVariantList &usbConnections);
     bool openCatalog();
     bool fail(const QString &message);
     void loadRoutes();
+    bool validateNewRoute(const QString &source, const QString &storageId, const QString &contentType);
     void loadDeviceLists();
     void expireWirelessDevices();
     QString upsertDiscoveredPhone(const QString &alias, const QString &name, const QString &transport, const QString &preferredDeviceId = {});

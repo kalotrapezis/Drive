@@ -1,5 +1,7 @@
 # Local Drive 0.1 — Implementation Specification
 
+> Behavior and safety reference. Release scope and execution order are maintained in [Plan-V2.md](Plan-V2.md); start sessions with [CONTINUE.md](CONTINUE.md). This specification is not a current completion report.
+
 Status: Approved alpha design baseline; M0 implementation subset
 Date: 2026-08-22
 Source: `Plan.md`

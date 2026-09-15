@@ -29,6 +29,14 @@ public final class RootScanner {
         return scanDirectory(context, tree, DocumentsContract.getTreeDocumentId(tree), "", visitor);
     }
 
+    public static Entry find(Context context, Uri tree, String relative) throws Exception {
+        if (relative == null || relative.isEmpty() || relative.startsWith("/") || relative.equals("..") || relative.startsWith("../") || relative.contains("/../") || relative.endsWith("/..")) throw new IllegalArgumentException("Unsafe root-relative path");
+        final Entry[] found = new Entry[1];
+        // ponytail: reuse the existing recursive SAF scan; component lookup can replace it if large-root latency becomes measurable.
+        scan(context, tree, entry -> { if (relative.equals(entry.relative)) { found[0] = entry; return false; } return true; });
+        return found[0];
+    }
+
     private static boolean scanDirectory(Context context, Uri tree, String documentId, String parent, Visitor visitor) throws Exception {
         final Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, documentId);
         final String[] columns = {DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME,

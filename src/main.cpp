@@ -27,11 +27,14 @@
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("local-drive"));
-    app.setApplicationVersion(QStringLiteral("0.1.0-alpha.2"));
+    app.setApplicationVersion(QStringLiteral("0.1.0-alpha.3"));
     if (app.arguments().contains("--version")) { QTextStream(stdout) << "Local Drive " << app.applicationVersion() << '\n'; return 0; }
     const bool webOnly = !app.arguments().contains("--legacy-ui");
     const bool openBrowser = webOnly && !app.arguments().contains("--web-only");
-    const QUrl desktopUrl(QStringLiteral("http://127.0.0.1:43172/"));
+    bool portValid = false;
+    const uint port = qEnvironmentVariable("LOCAL_DRIVE_API_PORT", "43172").toUInt(&portValid);
+    if (!portValid || port < 1024 || port > 65535) { qWarning() << "LOCAL_DRIVE_API_PORT must be from 1024 to 65535"; return 1; }
+    const QUrl desktopUrl(QStringLiteral("http://127.0.0.1:%1/").arg(port));
     const QString webRoot = QDir(app.applicationDirPath()).absoluteFilePath(QStringLiteral("../share/local-drive/web"));
     if (openBrowser && !QFileInfo::exists(webRoot + "/index.html")) {
         QMessageBox::critical(nullptr, "Local Drive", "Installed web UI is missing. Reinstall the package. Developers can use --web-only with the preview server."); return 1;
@@ -43,9 +46,12 @@ int main(int argc, char **argv) {
     app.setWindowIcon(QIcon(QStringLiteral(":/Assets/Icons/Drive.png")));
     QQmlApplicationEngine engine;
     SetupModel model;
+    QTimer storageRefresh;
+    QObject::connect(&storageRefresh, &QTimer::timeout, &model, [&model] { model.refreshStorages(); model.refreshMtpDevices(); });
+    storageRefresh.start(5000);
     LocalApi localApi(&model);
     localApi.setWebRoot(webRoot);
-    if (!localApi.start()) {
+    if (!localApi.start(static_cast<quint16>(port))) {
         if (openBrowser) {
             QNetworkAccessManager network; QEventLoop loop;
             auto *reply = network.get(QNetworkRequest(desktopUrl.resolved(QUrl("api/v1/health"))));
@@ -55,12 +61,18 @@ int main(int argc, char **argv) {
             const bool sameApp = health.value("application") == "local-drive" && health.value("appVersion").toString() == app.applicationVersion() && health.value("userId").toInteger(-1) == static_cast<qint64>(::geteuid());
             reply->abort();
             if (sameApp && QDesktopServices::openUrl(desktopUrl)) return 0;
-            QMessageBox::warning(nullptr, "Local Drive", "Another service or older Local Drive version is using port 43172. Quit it before starting this version.");
+            QMessageBox::warning(nullptr, "Local Drive", QStringLiteral("Another service or older Local Drive version is using port %1. Quit it before starting this version.").arg(port));
         }
-        qWarning() << "Local Drive could not bind to 127.0.0.1:43172"; return 1;
+        qWarning() << "Local Drive could not bind to" << desktopUrl; return 1;
     }
     VerifiedCopy copy(model.databasePath());
     WirelessReceiverController wirelessReceiver(model.databasePath(), &model);
+    const auto publishWireless = [&] {
+        localApi.setWirelessState({{"available", true}, {"listening", wirelessReceiver.listening()}, {"configured", !wirelessReceiver.savedCertificate().isEmpty() && !wirelessReceiver.savedPrivateKey().isEmpty() && !wirelessReceiver.savedFingerprint().isEmpty() && !wirelessReceiver.savedClientCa().isEmpty() && !wirelessReceiver.savedDestination().isEmpty() && wirelessReceiver.savedPort() > 0}, {"status", wirelessReceiver.status()}, {"port", wirelessReceiver.port()}});
+    };
+    QObject::connect(&wirelessReceiver, &WirelessReceiverController::changed, &localApi, publishWireless);
+    QObject::connect(&localApi, &LocalApi::wirelessControlRequested, &wirelessReceiver, [&](bool start) { if (start) wirelessReceiver.start(wirelessReceiver.savedDestination(), wirelessReceiver.savedCertificate(), wirelessReceiver.savedPrivateKey(), wirelessReceiver.savedClientCa(), wirelessReceiver.savedFingerprint(), wirelessReceiver.savedPort()); else wirelessReceiver.stop(); publishWireless(); });
+    publishWireless();
     ManagedRootWatcher inventoryWatcher(model.databasePath());
     QObject::connect(&model, &SetupModel::changed, &inventoryWatcher, &ManagedRootWatcher::refresh);
     inventoryWatcher.refresh();
@@ -72,6 +84,7 @@ int main(int argc, char **argv) {
         const auto quit = [&] { if (QMessageBox::question(nullptr, "Quit Local Drive?", "Make sure transfers have finished. Closing Local Drive stops background work.", QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) == QMessageBox::Yes) app.quit(); };
         QObject::connect(webMenu.addAction("Open Local Drive"), &QAction::triggered, &app, show);
         QObject::connect(webMenu.addAction("Quit Local Drive"), &QAction::triggered, &app, quit);
+        QObject::connect(&localApi, &LocalApi::scheduleNotice, &webTray, [&webTray](const QString &message) { webTray.showMessage("Local Drive", message, QSystemTrayIcon::Information, 10000); });
         webTray.setContextMenu(&webMenu); webTray.setToolTip("Local Drive " + app.applicationVersion());
         if (trayAvailable) webTray.show();
         QMessageBox controls;

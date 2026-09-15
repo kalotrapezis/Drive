@@ -130,7 +130,7 @@ install(FILES RELEASE_NOTES.md DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/local-dr
 
 set(CPACK_GENERATOR "DEB")
 set(CPACK_PACKAGE_NAME "local-drive")
-set(CPACK_PACKAGE_VERSION "0.1.0~alpha2")
+set(CPACK_PACKAGE_VERSION "0.1.0~alpha3")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Local-first verified file and photo transfer")
 set(CPACK_PACKAGE_CONTACT "Local Drive Project")
 set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Local Drive Project")

@@ -1,5 +1,194 @@
 # Local Drive & Photos — Product and Build Plan
 
+> Historical product plan and session record. For current priorities use [Plan-V2.md](Plan-V2.md) and [CONTINUE.md](CONTINUE.md). Dated build, installation and runtime claims below are historical.
+
+## Session progress — 2026-09-05–06 — desktop functional-gap pass
+
+- [x] First beta scope locked: wired Laptop ↔ storage and Phone → Laptop/T7; Android/Wi-Fi and Syncthing parity remain later work.
+- [x] Alpha 3 package built locally with the physical Xiaomi MTP fix and bundled current UI. All 12 native test targets and the extracted-package smoke test pass. Installation was not possible from the restricted Codex process (`sudo` is blocked by no-new-privileges); Alpha 2 remains the installed version until the user installs the new package.
+- [x] Tag creation now persists one of six basic colours, rejects empty/duplicate/
+  invalid values, closes only after a successful save, and shows a dismissible
+  success notification. Drive filters and file/photo assignment dialogs read the
+  persisted colour after refresh. The live flow was browser-tested against the
+  isolated catalog; the dialog closed and the notification appeared.
+- [x] New storage setup no longer asks for editable computer source or destination
+  paths. The user chooses Drive, Photos, or both and configures the supported
+  Copy/Move retention rule on the same two-device cards used by Settings. New
+  destinations default to `Drive/` and `Photos/` directly under the selected
+  mounted storage root. The preview map is limited to the selected device.
+- [x] `Drive + Photos` is one backend transaction: both routes and the configuration
+  revision commit together or newly-created empty folders are rolled back. Legacy
+  attempts to submit different source/destination paths are rejected. Duplicate
+  device/content relationships remain blocked by the shared route validator.
+- [x] The backend-owned computer library root now remembers the most recent saved
+  Drive/Photos root even after its last connection is removed; it no longer jumps
+  silently to a different default folder. The Settings library summary uses that
+  same source of truth.
+- [x] Settings exposes persistent device hide/show/removal, connection cards and
+  removal, storage/mount information, receiving-cache controls, wireless control
+  and schedules. Device removal now has an explicit confirmation; files and
+  verified history are preserved. Backend tests cover hide/show, removal,
+  duplicate rejection and active-work restrictions. Real unplug/replug and user
+  acceptance remain open.
+- [x] Removed the fixed 900px page width that caused horizontal breakage in narrow
+  desktop windows; Sync becomes two columns below 1100px. The new connection cards
+  were visually checked at the in-app browser width with no horizontal scrollbar.
+- [x] Current checks: TypeScript, production build, 10 web tests, targeted tag/
+  connection/cache tests, and 11 non-discovery native suites passed. The UDP
+  discovery suite remains intentionally excluded while a real listener is active.
+- [x] Real T7 core acceptance used three owned synthetic files only. Initial copy,
+  relative-path SHA-256 comparison and repeat/no-copy passed on UUID
+  `f0544ced-baf2-47b4-9932-7f9b493e29f5`. A deliberately different-size
+  destination exposed a preview bug; the shared engine now reports it as a
+  conflict and preserves both versions. A regression test covers that case.
+- [x] Isolated installed desktop UI detected the real T7, created one Drive
+  relationship, retained it across a process restart, previewed and transferred
+  three files from Dashboard, matched all destination SHA-256 hashes, and repeated
+  as `3 already identical` with `Nothing to transfer`. Empty previews now disable
+  the transfer button instead of presenting a fake action.
+- [x] Settings hide/show gave immediate confirmation and restored the simulated
+  phone. Changing the T7 route to Move + Keep last week persisted across restart;
+  the route was restored to Copy + Keep all originals after the check.
+- [x] A real `Move + Keep last week` T7 transfer copied and hash-verified a new
+  owned file, retained the laptop source, and stopped at `Cleanup pending`; no
+  Trash cleanup was approved or run. Cache on/off persisted, enforced its 80%
+  laptop threshold, produced a Dashboard notification, and was restored to off.
+- [x] Storage capacity now reports bytes actually available to the user instead
+  of including ext4 reserved blocks. The live Dashboard changed from misleading
+  137.5/941.5 GB free to 86.3/841.5 GB available for laptop/T7. A cache-limit
+  notification now says to run Sync when the destination is already connected,
+  instead of asking the user to reconnect it.
+- [x] Changing a route from Move/finite retention back to Copy/Keep Everything
+  now completes only untouched cleanup jobs instead of leaving an unusable
+  `Cleanup pending` warning. A cleanup with an uncertain in-progress Trash item
+  blocks the policy change. The isolated T7 catalog was corrected through the
+  normal Settings API; no source cleanup ran and all test hashes stayed intact.
+- [x] T7 unmount/remount acceptance: after a clean software unmount, the API kept
+  the same filesystem UUID and route, reported `connected=true` with
+  `present=false`, and the application's Mount action restored `/mnt/T7`.
+  A post-remount preview found 4/4 files identical, zero conflicts and
+  `toCopy=0`; no transfer or cleanup ran.
+- [x] Confirmed removal acceptance ran against a cloned QA catalog. Removing the
+  route disabled it; removing the T7 hid it from the application; both states
+  survived a backend restart. The route record, 2 jobs, 7 items and 7 history
+  events remained, and laptop/T7 files still matched. The live catalog was not
+  altered.
+- [ ] Next: repeat the wired acceptance with the phone in file-transfer mode.
+
+The T7 was absent at 15:12 but mounted later at `/mnt/T7` from `/dev/sda1` with
+the expected ext4 UUID. Test output remains at
+`/mnt/T7/Drive/Alpha-Hardware-check-20260905`; `hello.txt` intentionally differs
+from the laptop source as the retained conflict specimen. No pre-existing T7
+file was modified.
+
+The isolated UI transfer output is under
+`/mnt/T7/Drive/Alpha-UI-transfer-20260905`; its three files match the source under
+`/home/teo/Local Drive/Drive/Alpha-UI-transfer-20260905`. These owned test folders
+were deliberately left in place for repeat/restart checks.
+
+The installed Alpha on port 43172 and GitHub remain unchanged. Development UI
+checks use Vite on 5174 and the isolated backend/catalog on 43173.
+
+## Session handoff — 2026-09-04 — PAUSED, functional desktop not accepted
+
+**This checkpoint supersedes older completion/readiness claims below.** The user
+reports that settings, device management and connection management are not usable.
+A visible panel, disabled control, mock flow, or passing unit test does not make
+that feature complete. Do not describe this app as ready to replace Syncthing or
+as a complete beta/1.0. Resume from this plan, reproduce the user's flows, and
+close the functional gaps rather than adding more presentation-only UI.
+
+User requested a pause to conserve credits. **No GitHub, push, release or upload.**
+This session's implementation remains saved locally, uncommitted. Preserve all
+existing edits, including unrelated Android work. No implementation was started
+for the final tag-dialog/color and simplified-connection requests before pausing.
+
+### First work next session
+
+1. **New tag creation — bug, not complete.** Reproduce creating a tag from the
+   actual menu/dialog. On successful persistence, close the dialog/menu and show
+   a visible success notification. On failure, keep the form and show the error.
+   Add a small basic-color selector; persist the selected color and use it
+   consistently in tag filters, assignment dialogs and labels after restarting.
+   Current colored circles are decorative, index-based colors, NOT saved tag
+   colors. Check duplicate/empty names and assigning the new tag to a file.
+   Start with `web/src/NewTag.tsx`, `FileActions.tsx`, `App.tsx`, and the backend
+   file-action/tag storage path.
+2. **Connection setup — replace the confusing folder form.** The computer is
+   already known. Its configured app Drive/Photos roots are fixed inputs to this
+   flow, not editable source-folder questions. Resolve screenshots through the
+   existing OS Pictures integration; do not silently change library ownership or
+   automatically back up external screenshots without a configured rule.
+   The user chooses Files, Photos, or both, then the new destination device.
+   Default its library location inside the disk root; optionally offer a real
+   destination folder picker. Create the required library folders safely.
+   Do not expose source/destination text fields full of internal or test paths.
+   Configure direction and copy/move/retention/cache rules using the agreed
+   two-device connection cards, not the old dropdown form. The readable map may
+   remain as an overview. Unsupported rules must stay explicitly disabled until
+   their behavior works end-to-end; never silently convert a user's policy.
+3. **Settings — open functional acceptance blocker.** A fifth Settings tab was
+   added in development, but the user cannot effectively change the settings.
+   Reproduce from their current screen. Provide real persistent device,
+   connection and storage management there; dashboard stays information and
+   immediate actions. Compare remaining Qt capabilities and restore callable
+   settings rather than claiming parity. Saving must visibly confirm success,
+   survive navigation/restart, and affect the running engine.
+4. **Device/connection management — open functional acceptance blocker.** Verify
+   edit/save connections, reversible hide/show, safe removal and actionable
+   reasons for restrictions. Permanent device removal/unpairing is not complete.
+   Connection removal must preserve files/history. One enabled relationship per
+   device pair and content type; no duplicate cards on restart. Physical device
+   identity must survive mount-path changes. Do not equate backend endpoints or
+   isolated tests with a usable management workflow.
+5. **Real file tests still pending.** User authorized synthetic files in the
+   laptop app Drive and corresponding T7 app Drive. Three tiny files exist under
+   `/home/teo/Drive/Drive/Alpha-UI-check-20260904`; no real laptop-to-T7 transfer was
+   completed in this audit. Verify current UUID/mount and exact folders first.
+   Test copy, hashes, repeat/no-op, conflicts, receipts, and UI status using only
+   owned test files. Do not run destructive cleanup or change existing Move
+   routes silently. Finish UI checks for Drive, Photos, Sync, New and Settings.
+
+### What is implemented locally — not a release or blanket acceptance
+
+- Connected devices: top-right Refresh button, disk + MTP refresh endpoint,
+  backend five-second discovery timer and frontend state polling. Manual UI
+  check detected mounted T7; physical unplug/replug still untested here.
+- Duplicate startup cards: route loading now replaces rather than appends the
+  in-memory list. Backend duplicate-route guards, soft route removal, hide/show
+  endpoint and native capability flags added. These still need full live UX QA.
+- Settings tab and read-only dashboard connection summaries added. Unsupported
+  move cleanup, retention/cache forwarding and permanent unpairing are disabled;
+  this is unfinished functionality, not completion.
+- Drive Tags now has real tag filters and All (all tagged files), combined with
+  filename search, sorting and list/grid. Isolated UI checks covered Work and
+  Personal, shared tags, an empty tag, and exclusion of untagged files. Preserve
+  this layout while fixing tag creation and persistent colors.
+- Approved photo viewer layout must remain unchanged.
+
+### Environment and evidence to resume safely
+
+- Repo: `/home/teo/Έγγραφα/Claude/Coding/Drive`.
+- Installed Alpha 2 used `http://127.0.0.1:43172/`; it was NOT updated.
+- Development QA uses `http://127.0.0.1:43173/`, a separate catalog under
+  `/tmp/local-drive-ui-check.3LRS49/data`, config under its `config/`, and installed
+  development tree under its `usr/`. Temporary paths may disappear; verify first.
+  Launch override: `LOCAL_DRIVE_API_PORT=43173`, with those isolated XDG paths and
+  `QT_QPA_PLATFORM=offscreen`, executable `usr/bin/local-drive --web-only`.
+  QA phone/disk and test tags/files belong to that isolated catalog, not real
+  user devices. Do not confuse its UI or paths with production configuration.
+- Latest completed checks: TypeScript check, production web build, nine web
+  tests, sixteen LocalApi tests. Earlier verified-copy and selected setup/photo
+  suites passed. Qt/KIO warnings remain. Do not rerun UDP discovery tests against
+  the running user's listener: they can pollute its catalog.
+- `inspections.md` and `design-qa.md` contain narrower evidence, not proof that
+  the entire application works. Screenshots under `/tmp` may be ephemeral.
+- Last connection-form reference:
+  `/tmp/codex-clipboard-78680de8-7a9f-485e-bc00-7bc3ef851d98.png`.
+- Next session starts with reproduction and implementation of the blockers
+  above. Package/install only after requested behavior has been verified; do not
+  publish to GitHub without renewed user direction.
+
 ## Purpose
 
 Build a simple local-first file and photo transfer app for Linux and Android.
@@ -1889,3 +2078,29 @@ No cloud AI upload is assumed.
 7. App name, package IDs, licence, and relationship between the two repos.
 
 No later-phase decision blocks Phase 0.
+
+## 2026-09-06 physical USB phone gate
+
+- [x] Detected the attached Xiaomi 15 as MTP + ADB while File transfer mode was enabled.
+- [x] Fixed KDE MTP discovery when KIO supplies entry names but leaves `UDS_URL` blank; Local Drive now derives the device and internal-storage URLs and reports a usable `phoneRoot`.
+- [x] Scanned the phone's Drive folder within a 1 GB / 1,000-file safety bound before transfer: 5 files, 5 MiB.
+- [x] Ran a real copy-only phone → T7 import. All 5 jobs completed (5 MiB total), the source remained on the phone, and independent SHA-256 comparison of each phone/T7 pair passed.
+- [x] Ran a real laptop → phone export of one controlled 91-byte test file and independently verified the phone copy by SHA-256.
+- [x] Prevented MTP import/export bookkeeping routes from appearing as extra user connections; operational routes remain in history but are disabled, so the configured Laptop → T7 Drive card stays unique.
+- [x] Marked internal MTP/wireless storage records as already onboarded so the UI does not ask separately about both the phone and its memory.
+- [ ] Replace the current name-based KIO fallback identity with the USB serial when it can be matched safely. The attached phone exposes a serial through udev, but a same-model multi-phone match still needs a deterministic rule.
+- [ ] Perform physical disconnect/reconnect and charging-only transitions while the app is open, then verify the same device card changes state without duplication and pending work resumes only after File transfer mode returns.
+- [ ] Fix the separate `LocalApiTest::reviewsVerifiedCleanup` regression before the next package; the physical MTP tests and the focused Local API phone test pass.
+- [x] Device cards now use the existing SVG icon set for Laptop, PC/Desktop, Server, Phone, HDD and SSD. Linux rotational-media data labels mounted disks as HDD/SSD; unknown media remains Storage instead of being guessed.
+- [x] Added a real Local Drive usage card. It scans the configured local Drive and Photos folders, reports bytes/files and percentages by library and file type, excludes app-owned `.templates`/partial files, and marks unavailable or truncated results honestly.
+- [x] Photos Collections now always exposes separate Photos and Videos collection shortcuts alongside Screenshots and folder-derived collections.
+- [x] Live check with Xiaomi 15 and T7-TEO: phone is online over MTP with a usable internal-storage root; T7-TEO reports SSD and live capacity. The isolated QA profile reports 5 Drive files / 423 bytes and no configured Photos folder.
+
+## 2026-09-07 phone preview safety
+
+- [x] Restored the saved Xiaomi 15 device after an old hidden flag masked the real MTP connection; generic charging-only USB fallback is now suppressed when it matches one known hidden phone.
+- [x] Split phone preview from transfer. Preview performs a read-only bounded scan; copying starts only after the user presses **Copy and verify**.
+- [x] Added engine and Local API regression checks proving preview leaves the destination and catalog unchanged.
+- [x] Physical read-only preview: Xiaomi 15 `Drive` reports 6 files / 5,242,971 bytes and completed without copying.
+- [x] Focused checks pass: TypeScript, 10 web tests, SetupModel, VerifiedCopy, and all 21 Local API tests.
+- [ ] Perform the next physical copy with one deliberately created phone test file through the new confirmation UI; do not use the full DCIM library for this acceptance check.

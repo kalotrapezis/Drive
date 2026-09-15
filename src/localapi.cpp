@@ -1,4 +1,5 @@
 #include "localapi.h"
+#include "syncschedule.h"
 
 #include "setupmodel.h"
 #include "verifiedcopy.h"
@@ -42,9 +43,15 @@
 #include <QUrlQuery>
 #include <QUuid>
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace {
+const QStringList scannerPrograms{"skanpage", "simple-scan", "skanlite"};
+const QStringList imageEditorPrograms{"kolourpaint", "krita", "gimp"};
+bool availableProgram(const QStringList &names) {
+    return std::any_of(names.cbegin(), names.cend(), [](const QString &name) { return !QStandardPaths::findExecutable(name).isEmpty(); });
+}
 QJsonArray json(const QVariantList &items) { return QJsonArray::fromVariantList(items); }
 
 void sendResponse(QTcpSocket *socket, const QByteArray &status, const QByteArray &payload, const QByteArray &contentType = "application/json") {
@@ -57,6 +64,36 @@ void sendResponse(QTcpSocket *socket, const QByteArray &status, const QByteArray
 
 void sendJson(QTcpSocket *socket, const QByteArray &status, const QJsonObject &body) {
     sendResponse(socket, status, QJsonDocument(body).toJson(QJsonDocument::Compact));
+}
+
+void sendFile(QTcpSocket *socket, const QString &path, const QByteArray &contentType) {
+    auto *file = new QFile(path, socket);
+    if (!file->open(QIODevice::ReadOnly)) { file->deleteLater(); sendJson(socket, "404 Not Found", {{"error", "Archive item is unavailable"}}); return; }
+    socket->setProperty("handled", true);
+    socket->write("HTTP/1.1 200 OK\r\nContent-Type: " + contentType + "\r\nContent-Length: " + QByteArray::number(file->size()) + "\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n");
+    auto next = std::make_shared<std::function<void()>>();
+    *next = [socket, file, next] {
+        if (socket->state() == QAbstractSocket::UnconnectedState) { file->deleteLater(); return; }
+        const QByteArray chunk = file->read(256 * 1024);
+        if (chunk.isEmpty()) { file->deleteLater(); socket->disconnectFromHost(); return; }
+        socket->write(chunk);
+    };
+    QObject::connect(socket, &QTcpSocket::bytesWritten, file, [next](qint64) { (*next)(); });
+    (*next)();
+}
+
+QJsonObject runArchiveTool(const QStringList &arguments) {
+    QFile script(":/src/photo_archive.py");
+    if (!script.open(QIODevice::ReadOnly)) return {{"error", "Archive reader is unavailable"}};
+    QProcess process;
+    QStringList args{"-c", QString::fromUtf8(script.readAll())}; args += arguments;
+    process.start("python3", args);
+    if (!process.waitForFinished(30000)) { process.kill(); process.waitForFinished(); return {{"error", "Archive reader timed out"}}; }
+    QByteArray output = process.readAllStandardOutput().trimmed();
+    const int line = output.lastIndexOf('\n'); if (line >= 0) output = output.mid(line + 1);
+    const QJsonObject result = QJsonDocument::fromJson(output).object();
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0 || result.isEmpty()) return {{"error", result.value("result").toString("Archive reader failed")}};
+    return result;
 }
 
 QByteArray statusText(int status) {
@@ -92,6 +129,40 @@ bool isPhoto(const QFileInfo &file) {
 bool isVideo(const QFileInfo &file) {
     static const QSet<QString> extensions{"mp4", "mov", "m4v", "avi", "mkv", "webm", "3gp"};
     return extensions.contains(file.suffix().toLower());
+}
+
+QJsonObject scanLibraryUsage(const QString &root, bool mediaLibrary) {
+    static const QSet<QString> audio{"mp3", "m4a", "wav", "flac", "ogg", "aac"};
+    static const QSet<QString> documents{"pdf", "txt", "md", "doc", "docx", "odt", "ods", "xls", "xlsx", "ppt", "pptx", "rtf"};
+    static const QSet<QString> archives{"zip", "7z", "rar", "tar", "gz", "bz2", "xz"};
+    QJsonObject categories;
+    qint64 files = 0, bytes = 0;
+    if (root.isEmpty() || !QFileInfo(root).isDir()) return {{"available", false}, {"files", 0}, {"bytes", 0}, {"complete", true}, {"categories", categories}};
+    QDirIterator iterator(root, QDir::Files | QDir::NoSymLinks, QDirIterator::Subdirectories);
+    bool complete = true;
+    while (iterator.hasNext()) {
+        const QFileInfo file(iterator.next());
+        const QString top = QDir(root).relativeFilePath(file.filePath()).section('/', 0, 0);
+        if (top == ".templates" || top == ".local-drive-partials") continue;
+        if (++files > 100000) { complete = false; --files; break; }
+        const qint64 size = file.size(); bytes += size;
+        QString category;
+        if (mediaLibrary) category = isVideo(file) ? QStringLiteral("Videos") : isPhoto(file) ? QStringLiteral("Photos") : QStringLiteral("Other");
+        else {
+            const QString suffix = file.suffix().toLower();
+            if (isPhoto(file)) category = QStringLiteral("Images");
+            else if (isVideo(file)) category = QStringLiteral("Videos");
+            else if (audio.contains(suffix)) category = QStringLiteral("Audio");
+            else if (documents.contains(suffix)) category = QStringLiteral("Documents");
+            else if (archives.contains(suffix)) category = QStringLiteral("Archives");
+            else category = QStringLiteral("Other");
+        }
+        QJsonObject value = categories.value(category).toObject();
+        value.insert("files", value.value("files").toInteger() + 1);
+        value.insert("bytes", value.value("bytes").toInteger() + size);
+        categories.insert(category, value);
+    }
+    return {{"available", true}, {"files", files}, {"bytes", bytes}, {"complete", complete}, {"categories", categories}};
 }
 
 bool safeRelative(const QString &relative) {
@@ -204,6 +275,16 @@ QString importedName(const QString &destinationRoot, const QString &relative, QS
 LocalApi::LocalApi(SetupModel *model, QObject *parent)
     : QObject(parent), m_model(model), m_token(QUuid::createUuid().toString(QUuid::Id128).toUtf8()) {
     connect(&m_tcp, &QTcpServer::newConnection, this, &LocalApi::acceptConnections);
+    QFile schedules(m_model->databasePath() + ".schedules.json");
+    if (schedules.exists()) {
+        if (!schedules.open(QIODevice::ReadOnly) || schedules.size() > 1024 * 1024) m_scheduleError = "Schedule file could not be read; automatic execution stopped.";
+        else {
+            const auto doc = QJsonDocument::fromJson(schedules.readAll());
+            if (!doc.isArray()) m_scheduleError = "Schedule file is invalid; automatic execution stopped.";
+            else { m_schedules = doc.array(); for (int i = 0; i < m_schedules.size(); ++i) { auto item = m_schedules[i].toObject(); if (QStringList{"starting", "requested", "previewing", "copying", "importing"}.contains(item.value("state").toString())) { item.insert("state", "pending"); item.insert("message", "Transfer interrupted. Connect devices and press Start to retry safely."); m_schedules[i] = item; } } }
+        }
+    }
+
 }
 
 LocalApi::~LocalApi() {
@@ -212,7 +293,14 @@ LocalApi::~LocalApi() {
 }
 
 bool LocalApi::start(quint16 port) {
-    return m_model && m_tcp.listen(QHostAddress::LocalHost, port);
+    if (!m_model || !m_tcp.listen(QHostAddress::LocalHost, port)) return false;
+    auto *timer = new QTimer(this); timer->setInterval(1000);
+    connect(timer, &QTimer::timeout, this, [this] { checkSchedules(QDateTime::currentDateTimeUtc()); if (++m_cacheTicks >= 30) { m_cacheTicks = 0; checkCaches(); } });
+#ifndef LOCAL_DRIVE_TESTING
+    timer->start();
+    checkCaches();
+#endif
+    return true;
 }
 
 void LocalApi::setWebRoot(QString root) {
@@ -298,11 +386,25 @@ void LocalApi::acceptConnections() {
                 else if (path == "/api/v1/templates") { status = "200 OK"; body = templates(); }
                 else if (path == "/api/v1/file-labels") { body = fileLabels(); body.insert("root", QFileInfo(routeFor(m_model, "Drive").value("source").toString()).canonicalFilePath()); status = body.contains("error") ? "500 Internal Server Error" : "200 OK"; }
                 else if (path == "/api/v1/labelled-files") { body = labelledFiles(QUrlQuery(url).queryItemValue("root"), QUrlQuery(url).queryItemValue("filter") == "favorites"); status = body.contains("error") ? "400 Bad Request" : "200 OK"; }
-                else if (path == "/api/v1/refresh-connections") { m_model->refreshMtpDevices(); status = "202 Accepted"; body = {{"state", "checking"}}; }
+                else if (path == "/api/v1/refresh-connections") { m_model->refreshStorages(); m_model->refreshMtpDevices(); status = "202 Accepted"; body = {{"state", "checking"}}; }
                 else if (path == "/api/v1/state") { status = "200 OK"; body = state(); }
                 else if (path == "/api/v1/files") { int fileStatus = 200; body = files(QUrlQuery(url).queryItemValue("path", QUrl::FullyDecoded), &fileStatus); status = statusText(fileStatus); }
                 else if (path == "/api/v1/recent-files") { status = "200 OK"; body = recentFiles(); }
+                else if (path == "/api/v1/library-usage") { status = "200 OK"; body = libraryUsage(); }
                 else if (path == "/api/v1/photos") { status = "200 OK"; body = photos(QUrlQuery(url).queryItemValue("after", QUrl::FullyDecoded)); }
+                else if (path == "/api/v1/archives") { int archiveStatus = 200; body = archives(QUrlQuery(url).queryItemValue("root"), &archiveStatus); status = statusText(archiveStatus); }
+                else if (path == "/api/v1/archive") { const QUrlQuery query(url); int archiveStatus = 200; body = archiveIndex(query.queryItemValue("storageId"), query.queryItemValue("name", QUrl::FullyDecoded), &archiveStatus); status = statusText(archiveStatus); }
+                else if (path == "/api/v1/archive-media") {
+                    const QUrlQuery query(url); QString error;
+                    const QString cached = archiveCacheEntry(query.queryItemValue("storageId"), query.queryItemValue("name", QUrl::FullyDecoded), query.queryItemValue("path", QUrl::FullyDecoded), &error);
+                    if (cached.isEmpty()) { status = "404 Not Found"; body = {{"error", error}}; }
+                    else if (query.queryItemValue("raw") == "1") { sendFile(socket, cached, QMimeDatabase().mimeTypeForFile(cached, QMimeDatabase::MatchExtension).name().toUtf8()); return; }
+                    else {
+                        QImageReader reader(cached); reader.setAutoTransform(true); const QSize original = reader.size();
+                        if (!original.isValid() || static_cast<qint64>(original.width()) * original.height() > 60'000'000) { status = "404 Not Found"; body = {{"error", "Archive image is unavailable or too large to preview"}}; }
+                        else { reader.setScaledSize(original.scaled(query.queryItemValue("preview") == "1" ? QSize(2560, 1920) : QSize(640, 480), Qt::KeepAspectRatio)); const QImage image = reader.read(); QBuffer buffer(&payload); buffer.open(QIODevice::WriteOnly); if (image.isNull() || !image.save(&buffer, "JPEG", query.queryItemValue("preview") == "1" ? 92 : 78)) { status = "404 Not Found"; body = {{"error", "Archive image preview is unavailable"}}; } else { status = "200 OK"; contentType = "image/jpeg"; } }
+                    }
+                }
                 else if (path == "/api/v1/screenshots") { status = "200 OK"; body = photos(QUrlQuery(url).queryItemValue("after", QUrl::FullyDecoded), true); }
                 else if (path == "/api/v1/file-activity") { const QUrlQuery query(url); int activityStatus = 200; body = fileActivity(query.queryItemValue("root"), query.queryItemValue("path", QUrl::FullyDecoded), &activityStatus); status = statusText(activityStatus); }
                 else if (path == "/api/v1/problems") { status = "200 OK"; body = problems(); }
@@ -354,7 +456,7 @@ void LocalApi::acceptConnections() {
                 }
             } else if (parts[0] == "POST") {
                 const QUrl url = QUrl::fromEncoded(parts[1]);
-                if (url.path() != "/api/v1/file-action" && url.path() != "/api/v1/create-from-template" && url.path() != "/api/v1/import-preview" && url.path() != "/api/v1/import-execute" && url.path() != "/api/v1/problem-action" && url.path() != "/api/v1/open-file" && url.path() != "/api/v1/create-folder" && url.path() != "/api/v1/save-route" && url.path() != "/api/v1/update-route-card" && url.path() != "/api/v1/clone-files-map" && url.path() != "/api/v1/route-preview" && url.path() != "/api/v1/route-execute" && url.path() != "/api/v1/route-manifest" && url.path() != "/api/v1/route-control" && url.path() != "/api/v1/mount-storage" && url.path() != "/api/v1/device-onboarding" && url.path() != "/api/v1/hub-config" && url.path() != "/api/v1/export-to-phone" && url.path() != "/api/v1/import-from-phone") { status = "405 Method Not Allowed"; body = {{"error", "This endpoint is read-only"}}; }
+                if (url.path() != "/api/v1/wireless-control" && url.path() != "/api/v1/device-visibility" && url.path() != "/api/v1/device-icon" && url.path() != "/api/v1/remove-route" && url.path() != "/api/v1/remove-device" && url.path() != "/api/v1/schedule" && url.path() != "/api/v1/file-action" && url.path() != "/api/v1/create-from-template" && url.path() != "/api/v1/import-preview" && url.path() != "/api/v1/import-execute" && url.path() != "/api/v1/restore-preview" && url.path() != "/api/v1/problem-action" && url.path() != "/api/v1/open-file" && url.path() != "/api/v1/create-folder" && url.path() != "/api/v1/save-route" && url.path() != "/api/v1/update-route-card" && url.path() != "/api/v1/clone-files-map" && url.path() != "/api/v1/route-preview" && url.path() != "/api/v1/route-execute" && url.path() != "/api/v1/route-cleanup" && url.path() != "/api/v1/route-manifest" && url.path() != "/api/v1/route-control" && url.path() != "/api/v1/mount-storage" && url.path() != "/api/v1/device-onboarding" && url.path() != "/api/v1/hub-config" && url.path() != "/api/v1/export-to-phone" && url.path() != "/api/v1/import-from-phone" && url.path() != "/api/v1/archive-cleanup") { status = "405 Method Not Allowed"; body = {{"error", "This endpoint is read-only"}}; }
                 else if (headers.value("x-local-drive-token") != m_token) { status = "403 Forbidden"; body = {{"error", "Invalid local session"}}; }
                 else if (!headers.value("content-type").startsWith("application/json")) { status = "415 Unsupported Media Type"; body = {{"error", "JSON required"}}; }
                 else {
@@ -362,19 +464,89 @@ void LocalApi::acceptConnections() {
                     const QJsonDocument document = QJsonDocument::fromJson(request.mid(headerEnd + 4, contentLength), &parseError);
                     const QJsonObject options = document.object();
                     if (parseError.error != QJsonParseError::NoError || !document.isObject()) { status = "400 Bad Request"; body = {{"error", "Invalid JSON request"}}; }
+                    else if (url.path() == "/api/v1/wireless-control") {
+                        const QString action = options.value("action").toString();
+                        if (action != "start" && action != "stop") { status = "400 Bad Request"; body = {{"error", "Choose start or stop"}}; }
+                        else if (!m_wirelessState.value("available").toBool()) { status = "503 Service Unavailable"; body = {{"error", "Wireless receiver is unavailable"}}; }
+                        else if (action == "stop" && !catalogState(m_model->databasePath()).value("activeTransfer").isNull()) { status = "409 Conflict"; body = {{"error", "Wait for active transfers before stopping the receiver"}}; }
+                        else {
+                            emit wirelessControlRequested(action == "start");
+                            const bool ok = m_wirelessState.value("listening").toBool() == (action == "start");
+                            status = ok ? "200 OK" : "409 Conflict"; body = ok ? m_wirelessState : QJsonObject{{"error", m_wirelessState.value("status").toString("Receiver could not start")}};
+                        }
+                    }
                     else if (url.path() == "/api/v1/hub-config") {
                         const int limit = options.value("limitPercent").toInt(-1);
                         if (!options.value("enabled").isBool() || limit < 1 || limit > 95) { status = "400 Bad Request"; body = {{"error", "Choose Use as hub and a storage limit from 1% to 95%"}}; }
                         else if (!m_model->setHubConfig(options.value("enabled").toBool(), limit)) { status = "409 Conflict"; body = {{"error", m_model->errorMessage()}}; }
                         else { status = "200 OK"; body = {{"ok", true}, {"enabled", m_model->hubEnabled()}, {"limitPercent", m_model->hubLimitPercent()}}; }
+                    } else if (url.path() == "/api/v1/archive-cleanup") {
+                        int cleanupStatus = 500; body = archiveCleanup(options.value("storageId").toString(), options.value("name").toString(), &cleanupStatus); status = statusText(cleanupStatus);
                     } else if (url.path() == "/api/v1/update-route-card") {
                         const QString id = options.value("id").toString(), mode = options.value("mode").toString(), keep = options.value("keepPolicy").toString();
-                        if (id.isEmpty() || !options.value("cache").isBool()) { status = "400 Bad Request"; body = {{"error", "Choose a connection and its properties"}}; }
-                        else if (!m_model->updateRouteCard(id, mode, keep, options.value("cache").toBool())) { status = "409 Conflict"; body = {{"error", m_model->errorMessage()}}; }
-                        else { status = "200 OK"; body = {{"ok", true}, {"configRevision", m_model->configRevision()}}; }
+                        bool busy = false;
+                        {
+                            QMutexLocker lock(&m_previewMutex);
+                            for (const auto &operation : m_routePreviews) {
+                                const QString state = operation.value("state").toString();
+                                if (operation.value("routeId") == id && (state == "scanning" || state == "copying" || state == "cleaning")) busy = true;
+                            }
+                        }
+                        if (busy) { status = "409 Conflict"; body = {{"error", "Wait for active work to finish before editing this connection"}}; }
+                        else if (options.contains("cacheLimitPercent") && (!options.value("cacheLimitPercent").isDouble() || options.value("cacheLimitPercent").toInt(-1) < 1 || options.value("cacheLimitPercent").toInt(-1) > 95)) { status = "400 Bad Request"; body = {{"error", "Choose a disk limit from 1% to 95%"}}; }
+                        else if (id.isEmpty() || !options.value("cache").isBool()) { status = "400 Bad Request"; body = {{"error", "Choose a connection and its properties"}}; }
+                        else if (!m_model->updateRouteCard(id, mode, keep, options.value("cache").toBool(), options.value("cacheLimitPercent").toInt(-1))) { status = "409 Conflict"; body = {{"error", m_model->errorMessage()}}; }
+                        else { status = "200 OK"; body = {{"ok", true}, {"configRevision", m_model->configRevision()}}; checkCaches(); }
                     } else if (url.path() == "/api/v1/clone-files-map") {
                         if (!m_model->cloneDriveMapToPhotos()) { status = "409 Conflict"; body = {{"error", m_model->errorMessage()}}; }
                         else { status = "200 OK"; body = {{"ok", true}, {"configRevision", m_model->configRevision()}}; }
+                    } else if (url.path() == "/api/v1/device-visibility") {
+                        const QString id = options.value("id").toString().trimmed();
+                        const bool hidden = options.value("hidden").toBool();
+                        if (id.isEmpty() || !options.value("hidden").isBool()) { status = "400 Bad Request"; body = {{"error", "Choose a device and hidden true or false"}}; }
+                        else if (hidden && std::any_of(m_schedules.cbegin(), m_schedules.cend(), [&](const QJsonValue &value) { const auto schedule = value.toObject(); return schedule.value("phoneId").toString() == id && schedule.value("state") != "paused" && schedule.value("state") != "done"; })) { status = "409 Conflict"; body = {{"error", "Pause or remove this phone's schedules before hiding it"}}; }
+                        else if (!(hidden ? m_model->acknowledgeDevice(id, true) : m_model->showDevice(id))) { status = "409 Conflict"; body = {{"error", m_model->errorMessage()}}; }
+                        else { status = "200 OK"; body = {{"ok", true}, {"id", id}, {"hidden", hidden}}; }
+                    } else if (url.path() == "/api/v1/device-icon") {
+                        const QString id = options.value("id").toString().trimmed(), icon = options.value("icon").toString();
+                        if (id.isEmpty() || !options.value("icon").isString()) { status = "400 Bad Request"; body = {{"error", "Choose a device and icon"}}; }
+                        else if (!m_model->setDeviceIcon(id, icon)) { status = "409 Conflict"; body = {{"error", m_model->errorMessage()}}; }
+                        else { status = "200 OK"; body = {{"ok", true}, {"id", id}, {"icon", icon}}; }
+                    } else if (url.path() == "/api/v1/schedule") {
+                        int result = 400; body = scheduleAction(options, &result); status = statusText(result);
+                    } else if (url.path() == "/api/v1/remove-device") {
+                        const QString id = options.value("id").toString().trimmed();
+                        // ponytail: removal waits for all route work; narrow to affected routes if concurrency matters.
+                        bool busy = false;
+                        { QMutexLocker lock(&m_previewMutex); for (auto *engine : m_routeEngines) if (engine->running()) busy = true; }
+                        if (id.isEmpty()) { status = "400 Bad Request"; body = {{"error", "Choose a device"}}; }
+                        else if (busy) { status = "409 Conflict"; body = {{"error", "Finish active transfers before removing a device"}}; }
+                        else if (!m_model->removeDevice(id)) { status = "409 Conflict"; body = {{"error", m_model->errorMessage()}}; }
+                        else { status = "200 OK"; body = {{"ok", true}, {"id", id}, {"message", "Device removed from this application. Connections stopped; files and verified history kept."}}; }
+                    } else if (url.path() == "/api/v1/remove-route") {
+                        const QString id = options.value("id").toString().trimmed();
+                        int removalStatus = 400;
+                        bool busy = false;
+                        {
+                            QMutexLocker lock(&m_previewMutex);
+                            for (const auto &operation : m_routePreviews) {
+                                const QString state = operation.value("state").toString();
+                                if (operation.value("routeId") == id && (state == "scanning" || state == "copying" || state == "cleaning")) busy = true;
+                            }
+                        }
+                        if (id.isEmpty()) body = {{"error", "Choose a connection"}};
+                        else if (busy) { removalStatus = 409; body = {{"error", "Wait for active work to finish before removing this connection"}}; }
+                        else if (!m_model->removeRoute(id, &removalStatus)) body = {{"error", m_model->errorMessage()}};
+                        else {
+                            QMutexLocker lock(&m_previewMutex);
+                            for (auto it = m_routePreviews.begin(); it != m_routePreviews.end();) {
+                                if (it.value().value("routeId") != id) { ++it; continue; }
+                                if (auto *engine = m_routeEngines.take(it.key())) engine->deleteLater();
+                                m_routeManifests.remove(it.key()); it = m_routePreviews.erase(it);
+                            }
+                            body = {{"ok", true}, {"id", id}};
+                        }
+                        status = statusText(removalStatus);
                     } else if (url.path() == "/api/v1/device-onboarding") {
                         const QString id = options.value("id").toString();
                         if (id.isEmpty() || !options.value("participate").isBool()) { status = "400 Bad Request"; body = {{"error", "Choose a device and whether it participates in Drive"}}; }
@@ -382,6 +554,8 @@ void LocalApi::acceptConnections() {
                         else { status = "200 OK"; body = {{"ok", true}, {"id", id}, {"participate", options.value("participate").toBool()}}; }
                     } else if (url.path() == "/api/v1/import-from-phone") {
                         int importStatus = 500; body = startPhoneImport(options, &importStatus); status = importStatus == 202 ? QByteArray("202 Accepted") : statusText(importStatus);
+                    } else if (url.path() == "/api/v1/restore-preview") {
+                        int restoreStatus = 500; body = startRestorePreview(options, &restoreStatus); status = restoreStatus == 202 ? QByteArray("202 Accepted") : statusText(restoreStatus);
                     } else if (url.path() == "/api/v1/export-to-phone") {
                         int exportStatus = 500; body = startPhoneExport(options, &exportStatus); status = exportStatus == 202 ? QByteArray("202 Accepted") : statusText(exportStatus);
                     } else if (url.path() == "/api/v1/mount-storage") {
@@ -397,9 +571,9 @@ void LocalApi::acceptConnections() {
                         int manifestStatus = 500;
                         body = routeManifest(options.value("id").toString(), &manifestStatus);
                         status = statusText(manifestStatus);
-                    } else if (url.path() == "/api/v1/route-execute") {
+                    } else if (url.path() == "/api/v1/route-execute" || url.path() == "/api/v1/route-cleanup") {
                         int executionStatus = 500;
-                        body = startRouteExecution(options.value("id").toString(), &executionStatus);
+                        body = startRouteExecution(options.value("id").toString(), &executionStatus, url.path() == "/api/v1/route-cleanup");
                         status = executionStatus == 202 ? QByteArray("202 Accepted") : statusText(executionStatus);
                     } else if (url.path() == "/api/v1/route-preview") {
                         int previewStatus = 500;
@@ -413,7 +587,7 @@ void LocalApi::acceptConnections() {
                         int actionStatus = 500; body = fileAction(options, &actionStatus); status = statusText(actionStatus);
                     } else if (url.path() == "/api/v1/create-folder") {
                         int folderStatus = 500;
-                        body = createFolder(options.value("parent").toString(), options.value("name").toString(), &folderStatus);
+                        body = createFolder(options.value("root").toString("Drive"), options.value("parent").toString(), options.value("name").toString(), &folderStatus);
                         status = statusText(folderStatus);
                     } else if (url.path() == "/api/v1/create-from-template") {
                         int templateStatus = 500; body = createFromTemplate(options, &templateStatus); status = statusText(templateStatus);
@@ -448,20 +622,179 @@ void LocalApi::acceptConnections() {
     }
 }
 
+bool LocalApi::persistSchedules() {
+    QSaveFile file(m_model->databasePath() + ".schedules.json");
+    const auto bytes = QJsonDocument(m_schedules).toJson();
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() || !file.commit()) {
+        m_scheduleError = "Schedules could not be saved. Automatic execution stopped: " + file.errorString();
+        emit scheduleNotice(m_scheduleError); return false;
+    }
+    return true;
+}
+
+QJsonObject LocalApi::scheduleAction(const QJsonObject &options, int *status) {
+    *status = 400;
+    if (!m_scheduleError.isEmpty()) { *status = 409; return {{"error", m_scheduleError}}; }
+    const QString action = options.value("action").toString(), id = options.value("id").toString();
+    int index = -1; for (int i = 0; i < m_schedules.size(); ++i) if (m_schedules[i].toObject().value("id") == id) index = i;
+    QJsonObject item = index < 0 ? QJsonObject{} : m_schedules[index].toObject();
+    const QString current = item.value("state").toString();
+    if (current == "previewing" || current == "copying" || current == "importing" || current == "starting") { *status = 409; return {{"error", "Wait for this scheduled transfer to finish"}}; }
+    if (action == "save") {
+        const QString routeId = options.value("routeId").toString(), phoneId = options.value("phoneId").toString();
+        QVariantMap route; for (const auto &value : m_model->routes()) if (value.toMap().value("id") == routeId) route = value.toMap();
+        if (route.isEmpty()) return {{"error", "Choose an existing connection"}};
+        if (!phoneId.isEmpty()) {
+            bool found = false; for (const auto &value : m_model->deviceList()) if (value.toMap().value("id") == phoneId && value.toMap().value("transports").toStringList().contains("mtp")) found = true;
+            if (!found) return {{"error", "Choose a known USB file-transfer phone"}};
+        }
+        if (!QStringList{"once", "daily", "weekly", "monthly"}.contains(options.value("repeat").toString())) return {{"error", "Choose a valid repeat interval"}};
+        QJsonObject saved{{"id", index < 0 ? QUuid::createUuid().toString(QUuid::Id128) : id}, {"routeId", routeId}, {"phoneId", phoneId}, {"start", options.value("start")}, {"timeZone", options.value("timeZone")}, {"repeat", options.value("repeat")}, {"state", "scheduled"}, {"phase", phoneId.isEmpty() ? "route" : "phone"}, {"message", "Waiting for scheduled time"}};
+        const auto now = QDateTime::currentDateTimeUtc();
+        const auto first = nextScheduledTime(saved, now);
+        if (!first.isValid()) return {{"error", "Choose a valid future date/time and time zone"}};
+        saved.insert("nextRun", first.toUTC().toString(Qt::ISODate));
+        if (index < 0) { if (m_schedules.size() >= 100) return {{"error", "At most 100 schedules are supported"}}; m_schedules.append(saved); }
+        else m_schedules[index] = saved;
+    } else {
+        if (index < 0) { *status = 404; return {{"error", "Schedule not found"}}; }
+        if (action == "remove") m_schedules.removeAt(index);
+        else if (action == "start") {
+            if (current != "pending") { *status = 409; return {{"error", "Only a pending transfer can be started here"}}; }
+            item.insert("state", "requested"); m_schedules[index] = item;
+        } else if (action == "pause") { item.insert("state", "paused"); item.insert("message", "Schedule paused; files retained"); m_schedules[index] = item; }
+        else if (action == "resume") {
+            if (current != "paused") return {{"error", "This schedule is not paused"}};
+            const auto next = nextScheduledTime(item, QDateTime::currentDateTimeUtc());
+            item.insert("nextRun", next.toUTC().toString(Qt::ISODate)); item.insert("state", next.isValid() ? "scheduled" : "pending"); item.insert("message", next.isValid() ? "Schedule resumed" : "Scheduled date passed. Connect devices and press Start."); m_schedules[index] = item;
+        } else return {{"error", "Unknown schedule action"}};
+    }
+    if (!persistSchedules()) { *status = 500; return {{"error", m_scheduleError}}; }
+    *status = 200; return {{"ok", true}};
+}
+
+void LocalApi::checkSchedules(const QDateTime &now) {
+    if (!m_scheduleError.isEmpty() || !m_model->ready()) return;
+    for (int i = 0; i < m_schedules.size(); ++i) {
+        auto item = m_schedules[i].toObject(); const auto original = item;
+        QString state = item.value("state").toString();
+        auto pending = [&](const QString &message) { item.insert("state", "pending"); item.insert("message", message); };
+        QVariantMap route; for (const auto &value : m_model->routes()) if (value.toMap().value("id") == item.value("routeId").toString()) route = value.toMap();
+        if (state == "paused" || state == "done") continue;
+        if (state == "scheduled") {
+            const auto due = QDateTime::fromString(item.value("nextRun").toString(), Qt::ISODate);
+            if (!due.isValid() || due > now) continue;
+            if (due.secsTo(now) > 90) pending("Scheduled time passed while unavailable. Connect the devices and press Start.");
+            else item.insert("state", "requested");
+        }
+        state = item.value("state").toString();
+        if (state == "requested") {
+            bool busy = false;
+            { QMutexLocker lock(&m_previewMutex); for (auto *engine : m_routeEngines) if (engine->running()) busy = true; }
+            if (route.isEmpty()) pending("Connection removed. Edit or remove this schedule.");
+            else if (busy) pending("Another transfer is active. Press Start when it finishes.");
+            else {
+                const bool phone = item.value("phase") == "phone";
+                if (!phone && !route.value("storagePresent").toBool()) pending("Connect and mount the destination disk, then press Start.");
+                else {
+                    // Persist intent before starting; after a crash it becomes manual pending work.
+                    item.insert("state", "starting"); m_schedules[i] = item; if (!persistSchedules()) return;
+                    int status = 0;
+                    const auto operation = phone
+                        ? startPhoneImport({{"root", route.value("contentType") == "Photos" ? "DCIM" : "Drive"}, {"phoneId", item.value("phoneId")}, {"routeId", item.value("routeId")}, {"toLaptop", true}}, &status, true)
+                        : startRoutePreview(item.value("routeId").toString(), &status);
+                    if (status != 202) pending(operation.value("error").toString() + ". Connect devices and press Start.");
+                    else { item.insert("operationId", operation.value("id")); item.insert("revision", m_model->configRevision()); item.insert("state", phone ? "importing" : "previewing"); item.insert("message", phone ? "Copying and verifying phone files on the laptop. Phone originals are kept." : "Inspecting the scheduled connection"); }
+                }
+            }
+        } else if (state == "previewing" || state == "copying" || state == "importing") {
+            const auto operation = routePreview(item.value("operationId").toString()); const auto phase = operation.value("state").toString();
+            if (operation.isEmpty() || phase == "failed") pending(operation.value("result").toString("Operation interrupted. Review files and press Start to retry."));
+            else if (state == "previewing" && phase == "complete") {
+                const auto preview = operation.value("preview").toObject();
+                if (!preview.value("ok").toBool() || preview.value("conflicts").toInt() || preview.value("unsupported").toInt()) pending("Preview needs attention. Review this connection in Settings before retrying.");
+                else {
+                    int status = 0; const auto started = startRouteExecution(item.value("operationId").toString(), &status);
+                    if (status != 202) pending(started.value("error").toString());
+                    else { item.insert("state", "copying"); item.insert("message", "Copying and verifying files on the destination"); }
+                }
+            } else if (phase == "transferred") {
+                if (operation.value("result").toString().contains("conflict", Qt::CaseInsensitive)) pending("Transfer completed with conflicts. Review the connection before retrying.");
+                else if (state == "importing") {
+                    item.insert("phase", "route");
+                    // Require explicit continuation if the final device is missing or settings changed.
+                    if (route.isEmpty() || !route.value("storagePresent").toBool() || item.value("revision").toInt() != m_model->configRevision()) pending("Phone files verified on laptop; originals kept. Connect the destination disk and press Start to finish.");
+                    else item.insert("state", "requested");
+                } else {
+                    const bool cleanup = operation.value("cleanup").toObject().value("ok").toBool();
+                    const auto next = nextScheduledTime(item, now);
+                    item.insert("nextRun", next.toUTC().toString(Qt::ISODate)); item.insert("state", next.isValid() ? "scheduled" : "done"); item.insert("phase", item.value("phoneId").toString().isEmpty() ? "route" : "phone"); item.insert("lastRun", now.toUTC().toString(Qt::ISODate));
+                    item.insert("message", cleanup ? "Copy verified. Review source cleanup in the connection card to complete Move." : "Scheduled copy completed and verified.");
+                    emit scheduleNotice(item.value("message").toString());
+                }
+            }
+        }
+        if (item != original) {
+            m_schedules[i] = item; if (!persistSchedules()) return;
+            if (item.value("state") == "pending" && original.value("state") != "pending") emit scheduleNotice(item.value("message").toString());
+        }
+    }
+}
+
+void LocalApi::checkCaches() {
+    QJsonArray next;
+    for (const auto &value : m_model->routes()) {
+        const auto route = value.toMap();
+        if (route.value("stagingMaxBytes").toLongLong() <= 0) continue;
+        const QStorageInfo disk(route.value("source").toString());
+        const bool available = disk.isValid() && disk.isReady() && disk.bytesTotal() > 0;
+        const int limit = route.value("cacheLimitPercent", 80).toInt();
+        const double used = available ? 100.0 * (disk.bytesTotal() - disk.bytesAvailable()) / disk.bytesTotal() : 0;
+        QString message;
+        if (!available) message = "Cache disk unavailable. New intake is paused.";
+        else if (used >= limit) message = route.value("storagePresent").toBool()
+            ? QString("Cache disk reached its %1% limit. The destination is connected; use Sync now to forward cached files, or free disk space. New intake is paused.").arg(limit)
+            : QString("Cache disk reached its %1% limit. Reconnect the destination, or free disk space. New intake is paused.").arg(limit);
+        else if (!route.value("storagePresent").toBool()) message = "Destination disconnected. Cached files stay on this computer; reconnect and use Preview route to transfer them.";
+        const QString id = route.value("id").toString();
+        QString previous;
+        for (const auto &entry : m_cacheStatus) if (entry.toObject().value("routeId") == id) previous = entry.toObject().value("message").toString();
+        if (!message.isEmpty() && message != previous) emit scheduleNotice(route.value("contentType").toString() + ": " + message);
+        next.append(QJsonObject{{"routeId", id}, {"usedPercent", used}, {"limitPercent", limit}, {"message", message}, {"blocked", !available || used >= limit}});
+    }
+    m_cacheStatus = next;
+}
+
 QJsonObject LocalApi::state() const {
     QJsonArray exports;
-    { QMutexLocker lock(&m_previewMutex); for (auto it = m_routePreviews.cbegin(); it != m_routePreviews.cend(); ++it) if (it.key().startsWith("photo-export-")) { auto item = it.value(); item.insert("id", it.key()); exports.append(item); } }
+    { QMutexLocker lock(&m_previewMutex); for (auto it = m_routePreviews.cbegin(); it != m_routePreviews.cend(); ++it) if (it.key().startsWith("archive-export-")) { auto item = it.value(); item.insert("id", it.key()); exports.append(item); } }
+    QJsonArray operations;
+    {
+        QMutexLocker lock(&m_previewMutex);
+        for (auto it = m_routePreviews.cbegin(); it != m_routePreviews.cend(); ++it) {
+            auto operation = it.value(); const QString phase = operation.value("state").toString();
+            if (phase != "copying" && phase != "cleaning" && phase != "scanning") continue;
+            operation.insert("id", it.key());
+            if (auto *engine = m_routeEngines.value(it.key())) { operation.insert("paused", engine->paused()); operation.insert("status", engine->status()); }
+            operations.append(operation);
+        }
+    }
+    QJsonArray incomingConnections;
+    for (const auto &value : m_model->routes()) { const auto route = value.toMap(); incomingConnections.append(QJsonObject{{"receiverKind", "computer"}, {"transport", "mtp"}, {"cacheSupported", true}, {"routeId", route.value("id").toString()}, {"contentType", route.value("contentType").toString()}, {"intermediateDeviceId", "local"}, {"destinationStorageId", route.value("storageId").toString()}, {"cacheEnabled", route.value("stagingMaxBytes").toLongLong() > 0}, {"limitPercent", route.value("cacheLimitPercent", 80).toInt()}}); }
     const int problemCount = problems().value("total").toInt();
     qint64 hubPendingBytes = 0; QString hubTarget;
     if (QFileInfo(m_model->hubRoot()).isDir()) VerifiedCopy::stagingUsage(m_model->hubRoot(), &hubPendingBytes);
     for (const auto &value : m_model->routes()) { const auto route = value.toMap(); if (!route.value("storagePresent").toBool()) { for (const auto &storageValue : m_model->storages()) { const auto storage = storageValue.toMap(); if (storage.value("id") == route.value("storageId")) { hubTarget = storage.value("label").toString(); break; } } if (!hubTarget.isEmpty()) break; } }
     return {{"ready", m_model->ready()},
             {"deviceName", m_model->localDeviceName()},
-            {"libraryRoot", QDir(m_model->homeRoot()).filePath(QStringLiteral("Local Drive"))},
+            {"localDeviceIcon", m_model->localDeviceIcon()},
+            {"libraryRoot", QFileInfo(m_model->contentRoot("Drive")).absolutePath()},
             {"configRevision", m_model->configRevision()},
+            {"capabilities", QJsonObject{{"scanner", availableProgram(scannerPrograms)}, {"imageEditor", availableProgram(imageEditorPrograms)}}},
             {"error", m_model->errorMessage()},
             {"problems", problemCount},
-            {"photoExports", exports},
+            {"photoExports", exports}, {"archiveExports", exports}, {"operations", operations}, {"wireless", m_wirelessState}, {"incomingConnections", incomingConnections},
+            {"schedules", m_schedules}, {"scheduleError", m_scheduleError}, {"cacheStatus", m_cacheStatus},
             {"hub", QJsonObject{{"enabled", m_model->hubEnabled()}, {"limitPercent", m_model->hubLimitPercent()}, {"pendingBytes", hubPendingBytes}, {"waitingFor", hubTarget}}},
             {"catalog", catalogState(m_model->databasePath())},
             {"routes", json(m_model->routes())},
@@ -472,60 +805,100 @@ QJsonObject LocalApi::state() const {
             {"connectedDevices", json(m_model->connectedDevices())}};
 }
 
-QJsonObject LocalApi::startPhoneImport(const QJsonObject &options, int *status) {
+QJsonObject LocalApi::startPhoneImport(const QJsonObject &options, int *status, bool scheduled) {
     if (status) *status = 400;
-    const QString phoneRootName = options.value("root").toString();
+    const bool previewOnly = options.value("previewOnly").toBool();
+    QJsonObject boundPreview;
+    if (!previewOnly && !scheduled) {
+        const QString previewId = options.value("previewId").toString();
+        QMutexLocker lock(&m_previewMutex);
+        boundPreview = m_routePreviews.value(previewId);
+        if (previewId.isEmpty() || boundPreview.value("phase") != "phone-preview" || boundPreview.value("state") != "complete" || boundPreview.value("consumed").toBool()) {
+            if (status) *status = 409;
+            return {{"error", "Preview this phone transfer before copying"}};
+        }
+    }
+    const bool explicitSelection = previewOnly || scheduled;
+    const QString phoneRootName = explicitSelection ? options.value("root").toString() : boundPreview.value("root").toString();
+    const QString phoneId = explicitSelection ? options.value("phoneId").toString() : boundPreview.value("phoneId").toString();
+    const QString routeId = explicitSelection ? options.value("routeId").toString() : boundPreview.value("routeId").toString();
+    if (explicitSelection && (phoneId.isEmpty() || routeId.isEmpty() || !options.value("toLaptop").isBool())) return {{"error", "Choose the phone, connection, and exact destination"}};
+    const bool toLaptop = explicitSelection ? options.value("toLaptop").toBool() : boundPreview.value("toLaptop").toBool();
     const QString target = phoneRootName == "Drive" ? QStringLiteral("Drive") : phoneRootName == "DCIM" ? QStringLiteral("Photos") : QString();
     if (target.isEmpty()) return {{"error", "Choose Drive or DCIM"}};
     QVariantMap phone;
-    for (const auto &value : m_model->connectedDevices()) { const auto candidate = value.toMap(); if (candidate.value("present").toBool() && candidate.value("stableIdentity").toString().startsWith("mtp:") && !candidate.value("phoneRoot").toString().isEmpty()) { phone = candidate; break; } }
+    for (const auto &value : m_model->connectedDevices()) { const auto candidate = value.toMap(); if (candidate.value("id").toString() == phoneId && candidate.value("present").toBool() && candidate.value("stableIdentity").toString().startsWith("mtp:") && !candidate.value("phoneRoot").toString().isEmpty()) { phone = candidate; break; } }
     if (phone.isEmpty()) { if (status) *status = 409; return {{"error", "Connect and unlock the phone in File transfer mode"}}; }
-    const QVariantMap route = routeFor(m_model, target);
+    QVariantMap route;
+    for (const auto &value : m_model->routes()) if (value.toMap().value("id").toString() == routeId && value.toMap().value("contentType") == target) { route = value.toMap(); break; }
     if (route.isEmpty()) { if (status) *status = 409; return {{"error", QStringLiteral("Configure the %1 route first").arg(target)}}; }
 
     QString destination = route.value("destination").toString(), selectedRoot = route.value("storageRoot").toString(), storageIdentity = route.value("storageIdentity").toString();
     QString storageId = route.value("storageId").toString(), filesystemType = route.value("filesystemType").toString();
     QString destinationStorageLabel = QStringLiteral("Backup storage"), destinationStorageKind = QStringLiteral("removable");
     for (const auto &value : m_model->storages()) { const auto storage = value.toMap(); if (storage.value("id") == storageId) { destinationStorageLabel = storage.value("label").toString(); destinationStorageKind = storage.value("kind", QStringLiteral("removable")).toString(); break; } }
-    qint64 stagingMaxBytes = route.value("storagePresent").toBool() ? 0 : route.value("stagingMaxBytes").toLongLong();
+    if (!toLaptop && !route.value("storagePresent").toBool()) { if (status) *status = 409; return {{"error", "The previewed destination is unavailable; preview again or choose Computer cache"}}; }
+    qint64 stagingMaxBytes = 0;
     qint64 minimumFreeBytes = route.value("minimumFreeBytes").toLongLong();
-    if (!route.value("storagePresent").toBool()) {
-        QString configuredStaging = route.value("stagingRoot").toString();
-        if ((configuredStaging.isEmpty() || stagingMaxBytes <= 0) && m_model->hubEnabled()) {
-            configuredStaging = m_model->hubRoot();
-            if (!QDir().mkpath(configuredStaging)) { if (status) *status = 409; return {{"error", "Laptop hub folder could not be prepared"}}; }
-            const QStorageInfo laptop(configuredStaging); const qint64 total = laptop.bytesTotal();
-            stagingMaxBytes = total / 100 * m_model->hubLimitPercent();
-            minimumFreeBytes = std::max(minimumFreeBytes, total - stagingMaxBytes);
-        }
-        const QString stagingRoot = QFileInfo(configuredStaging).canonicalFilePath();
-        if (stagingRoot.isEmpty() || stagingMaxBytes <= 0) { if (status) *status = 409; return {{"error", "Backup storage is unavailable and no bounded laptop staging folder is configured"}}; }
-        destination = QDir(stagingRoot).filePath(target);
-        if (!QDir().mkpath(destination)) { if (status) *status = 409; return {{"error", "Laptop staging folder could not be prepared"}}; }
-        selectedRoot = stagingRoot; QString identityError; storageIdentity = VerifiedCopy::liveStorageIdentity(stagingRoot, &identityError); filesystemType = QStorageInfo(stagingRoot).fileSystemType();
-        if (storageIdentity.isEmpty()) { if (status) *status = 409; return {{"error", identityError}}; }
-        storageId = QStringLiteral("staging-%1").arg(QString::fromLatin1(QCryptographicHash::hash(stagingRoot.toUtf8(), QCryptographicHash::Sha256).toHex().left(16)));
-        destinationStorageLabel = QStringLiteral("Laptop staging"); destinationStorageKind = QStringLiteral("local");
+    if (toLaptop) {
+        stagingMaxBytes = route.value("stagingMaxBytes").toLongLong();
+        if (stagingMaxBytes <= 0) { if (status) *status = 409; return {{"error", "Enable Cache on this connection before receiving files on the computer"}}; }
+        destination = QFileInfo(route.value("source").toString()).canonicalFilePath(); selectedRoot = destination;
+        if (destination.isEmpty() || !QFileInfo(destination).isWritable()) { if (status) *status = 409; return {{"error", "The computer library folder is unavailable"}}; }
+        if (QFileInfo(route.value("stagingRoot").toString()).canonicalFilePath() != destination) { if (status) *status = 409; return {{"error", "Re-save this connection's Cache settings to use its source library. Previous cache files are retained."}}; }
+        storageIdentity = VerifiedCopy::liveStorageIdentity(destination); filesystemType = QStorageInfo(destination).fileSystemType();
+        storageId = "laptop-intake-" + QString::fromLatin1(QCryptographicHash::hash(destination.toUtf8(), QCryptographicHash::Sha256).toHex().left(16));
+        destinationStorageLabel = "Computer cache"; destinationStorageKind = "local";
+        const QStorageInfo cacheDisk(destination);
+        if (!cacheDisk.isValid() || !cacheDisk.isReady() || cacheDisk.bytesTotal() <= 0) { if (status) *status = 409; return {{"error", "Cache disk capacity is unavailable"}}; }
+        stagingMaxBytes = 0; // Percentage reserve is checked before every published file.
+        minimumFreeBytes = cacheDisk.bytesTotal() - cacheDisk.bytesTotal() / 100 * route.value("cacheLimitPercent", 80).toInt();
     }
+    // Serialize intake against other transfers, including routes sharing a source folder.
+    for (auto *active : std::as_const(m_routeEngines)) if (active && active->running()) { if (status) *status = 409; return {{"error", "Another transfer is active; retry when it finishes"}}; }
     if (destination.isEmpty() || selectedRoot.isEmpty() || storageIdentity.isEmpty()) { if (status) *status = 409; return {{"error", "The destination route is not ready"}}; }
 
     QUrl source(phone.value("phoneRoot").toString()); QString sourcePath = source.path(QUrl::FullyDecoded); if (!sourcePath.endsWith('/')) sourcePath += '/'; sourcePath += phoneRootName + '/'; source.setPath(sourcePath);
-    const QString id = QStringLiteral("phone-import-%1").arg(QUuid::createUuid().toString(QUuid::Id128));
     const QString phoneStable = phone.value("stableIdentity").toString(), phoneRoot = phone.value("phoneRoot").toString();
+    if (!previewOnly && !scheduled && (boundPreview.value("revision").toInteger() != m_model->configRevision()
+        || boundPreview.value("phoneStableIdentity").toString() != phoneStable
+        || boundPreview.value("phoneRoot").toString() != phoneRoot
+        || boundPreview.value("storageId").toString() != storageId
+        || boundPreview.value("storageIdentity").toString() != storageIdentity
+        || boundPreview.value("destinationRoot").toString() != destination
+        || boundPreview.value("selectedStorageRoot").toString() != selectedRoot)) {
+        if (status) *status = 409;
+        return {{"error", "The phone, connection, or destination changed; preview again"}};
+    }
+    if (!previewOnly && !scheduled && !boundPreview.value("preview").toObject().value("ok").toBool()) {
+        if (status) *status = 409;
+        return {{"error", "The phone preview has findings that must be resolved before copying"}};
+    }
+    if (!previewOnly && !scheduled && !boundPreview.contains("expectedSourceHashes")) {
+        if (status) *status = 409;
+        return {{"error", "The phone preview hash evidence is unavailable; preview again"}};
+    }
+    const QString id = QStringLiteral("phone-import-%1").arg(QUuid::createUuid().toString(QUuid::Id128));
     const QString storageDigest = QString::fromLatin1(QCryptographicHash::hash((phoneStable + QLatin1Char('\n') + phoneRoot).toUtf8(), QCryptographicHash::Sha256).toHex());
     const QString routeDigest = QString::fromLatin1(QCryptographicHash::hash((route.value("id").toString() + QLatin1Char('\n') + phoneStable + QLatin1Char('\n') + phoneRootName + QLatin1Char('\n') + storageIdentity).toUtf8(), QCryptographicHash::Sha256).toHex());
     auto *engine = new VerifiedCopy(m_model->databasePath(), this);
-    QVariantMap request{{"sourceUrl", source.toString()}, {"destinationRoot", destination}, {"selectedStorageRoot", selectedRoot}, {"storageIdentity", storageIdentity}, {"filesystemType", filesystemType}, {"minimumFreeBytes", minimumFreeBytes}, {"stagingMaxBytes", stagingMaxBytes}, {"routeId", QStringLiteral("mtp-import-%1").arg(routeDigest.left(16))}, {"destinationStorageId", storageId}, {"destinationStorageKind", destinationStorageKind}, {"destinationStorageLabel", destinationStorageLabel}, {"sourceStorageId", QStringLiteral("mtp-storage-%1").arg(storageDigest.left(16))}, {"sourceStorageIdentity", QStringLiteral("mtp:%1").arg(storageDigest)}, {"sourceStorageLabel", QStringLiteral("Phone storage")}, {"sourceDeviceId", phone.value("id")}, {"sourceDeviceStableId", phoneStable}, {"sourceDeviceName", phone.value("label")}};
+    QVariantMap request{{"sourceUrl", source.toString()}, {"destinationRoot", destination}, {"selectedStorageRoot", selectedRoot}, {"storageIdentity", storageIdentity}, {"filesystemType", filesystemType}, {"minimumFreeBytes", minimumFreeBytes}, {"stagingMaxBytes", stagingMaxBytes}, {"scanOnly", previewOnly}, {"routeId", QStringLiteral("mtp-import-%1").arg(routeDigest.left(16))}, {"destinationStorageId", storageId}, {"destinationStorageKind", destinationStorageKind}, {"destinationStorageLabel", destinationStorageLabel}, {"sourceStorageId", QStringLiteral("mtp-storage-%1").arg(storageDigest.left(16))}, {"sourceStorageIdentity", QStringLiteral("mtp:%1").arg(storageDigest)}, {"sourceStorageLabel", QStringLiteral("Phone storage")}, {"sourceDeviceId", phone.value("id")}, {"sourceDeviceStableId", phoneStable}, {"sourceDeviceName", phone.value("label")}};
+    if (!previewOnly && !scheduled) request.insert("expectedSourceHashes", boundPreview.value("expectedSourceHashes").toObject().toVariantMap());
     {
         QMutexLocker lock(&m_previewMutex);
-        m_routePreviews.insert(id, {{"id", id}, {"state", "copying"}, {"phase", "phone-import"}, {"target", target}, {"root", phoneRootName}, {"progress", 0}});
+        if (!previewOnly && !scheduled) {
+            const QString previewId = options.value("previewId").toString();
+            if (m_routePreviews.value(previewId).value("consumed").toBool()) { if (status) *status = 409; engine->deleteLater(); return {{"error", "This preview has already been used; preview again"}}; }
+            auto claimed = m_routePreviews.value(previewId); claimed.insert("consumed", true); m_routePreviews[previewId] = claimed;
+        }
+        m_routePreviews.insert(id, {{"id", id}, {"routeId", routeId}, {"revision", m_model->configRevision()}, {"state", previewOnly ? "scanning" : "copying"}, {"phase", previewOnly ? "phone-preview" : "phone-import"}, {"target", target}, {"root", phoneRootName}, {"phoneId", phoneId}, {"phoneLabel", phone.value("label").toString()}, {"phoneStableIdentity", phoneStable}, {"phoneRoot", phoneRoot}, {"toLaptop", toLaptop}, {"storageId", storageId}, {"storageIdentity", storageIdentity}, {"destination", destinationStorageLabel}, {"destinationRoot", destination}, {"selectedStorageRoot", selectedRoot}, {"progress", 0}});
         m_routeEngines.insert(id, engine);
     }
     connect(engine, &VerifiedCopy::progressChanged, this, [this, id](qint64 done, qint64 total, const QString &path) { QMutexLocker lock(&m_previewMutex); auto operation = m_routePreviews.value(id); operation.insert("bytesDone", done); operation.insert("bytesTotal", total); operation.insert("path", path); m_routePreviews[id] = operation; });
-    connect(engine, &VerifiedCopy::finished, this, [this, engine, id](bool success, const QString &message) { QMutexLocker lock(&m_previewMutex); auto operation = m_routePreviews.value(id); operation.insert("state", success ? "transferred" : "failed"); operation.insert("result", message); m_routePreviews[id] = operation; m_routeEngines.remove(id); engine->deleteLater(); });
-    if (!engine->startRemoteImportDirectory(request)) { QMutexLocker lock(&m_previewMutex); m_routePreviews.remove(id); m_routeEngines.remove(id); engine->deleteLater(); if (status) *status = 409; return {{"error", "The phone import could not start"}}; }
+    connect(engine, &VerifiedCopy::finished, this, [this, engine, id, previewOnly](bool success, const QString &message) { if (!success) emit scheduleNotice(message); m_cacheTicks = 29; QMutexLocker lock(&m_previewMutex); auto operation = m_routePreviews.value(id); operation.insert("state", success ? (previewOnly ? "complete" : "transferred") : "failed"); operation.insert("result", message); if (previewOnly) { operation.insert("preview", QJsonObject::fromVariantMap(engine->previewData())); if (success && engine->previewData().value("ok").toBool()) { QJsonObject hashes; const auto sourceHashes = engine->previewSourceHashes(); for (auto it = sourceHashes.cbegin(); it != sourceHashes.cend(); ++it) hashes.insert(it.key(), QString::fromLatin1(it.value().toHex())); operation.insert("expectedSourceHashes", hashes); } } m_routePreviews[id] = operation; m_routeEngines.remove(id); engine->deleteLater(); });
+    if (!engine->startRemoteImportDirectory(request)) { QMutexLocker lock(&m_previewMutex); m_routePreviews.remove(id); m_routeEngines.remove(id); if (!previewOnly && !scheduled) { auto claimed = m_routePreviews.value(options.value("previewId").toString()); claimed.insert("consumed", false); m_routePreviews[options.value("previewId").toString()] = claimed; } engine->deleteLater(); if (status) *status = 409; return {{"error", "The phone import could not start"}}; }
     if (status) *status = 202;
-    return {{"id", id}, {"state", "copying"}, {"target", target}, {"destination", destinationStorageLabel}};
+    return {{"id", id}, {"state", previewOnly ? "scanning" : "copying"}, {"target", target}, {"phoneId", phoneId}, {"phone", phone.value("label").toString()}, {"routeId", routeId}, {"toLaptop", toLaptop}, {"destination", destinationStorageLabel}, {"destinationRoot", destination}, {"revision", m_model->configRevision()}};
 }
 
 QJsonObject LocalApi::startPhoneExport(const QJsonObject &options, int *status) {
@@ -601,11 +974,110 @@ QJsonObject LocalApi::recentFiles() const {
     return {{"items", items}, {"truncated", items.size() == 100}};
 }
 
+QJsonObject LocalApi::libraryUsage() const {
+    const QString drive = QFileInfo(routeFor(m_model, QStringLiteral("Drive")).value("source").toString()).canonicalFilePath();
+    const QString photos = QFileInfo(routeFor(m_model, QStringLiteral("Photos")).value("source").toString()).canonicalFilePath();
+    return {{"drive", scanLibraryUsage(drive, false)}, {"photos", scanLibraryUsage(photos, true)}};
+}
+
+QJsonObject LocalApi::archives(const QString &library, int *status) const {
+    if (status) *status = 200;
+    if (!library.isEmpty() && library != "Drive" && library != "Photos") { if (status) *status = 400; return {{"error", "Choose Drive or Photos"}}; }
+    QJsonArray items;
+    for (const auto &value : m_model->storages()) {
+        const auto storage = value.toMap();
+        if (!storage.value("present").toBool()) continue;
+        const QString root = QFileInfo(storage.value("root").toString()).canonicalFilePath();
+        if (root.isEmpty()) continue;
+        for (const QFileInfo &archive : QDir(root).entryInfoList({"*.ldrive"}, QDir::Files | QDir::NoSymLinks, QDir::Name)) {
+            const QJsonObject index = runArchiveTool({"index", archive.canonicalFilePath()});
+            if (index.contains("error") || (!library.isEmpty() && index.value("library") != library)) continue;
+            items.append(QJsonObject{{"storageId", storage.value("id").toString()}, {"storage", storage.value("label").toString()}, {"name", archive.fileName()}, {"library", index.value("library")}, {"size", archive.size()}, {"modified", archive.lastModified().toString(Qt::ISODate)}});
+        }
+    }
+    return {{"items", items}};
+}
+
+static QString archiveFile(const SetupModel *model, const QString &storageId, const QString &name) {
+    if (storageId.trimmed().isEmpty() || name.isEmpty() || QFileInfo(name).fileName() != name || !name.endsWith(".ldrive") || name.startsWith('.')) return {};
+    for (const auto &value : model->storages()) {
+        const auto storage = value.toMap();
+        if (storage.value("id").toString() != storageId || !storage.value("present").toBool()) continue;
+        const QString root = QFileInfo(storage.value("root").toString()).canonicalFilePath();
+        const QFileInfo candidate(QDir(root).filePath(name));
+        const QString canonical = candidate.canonicalFilePath();
+        if (!root.isEmpty() && candidate.isFile() && !candidate.isSymLink() && QDir(root).relativeFilePath(canonical) == name) return canonical;
+    }
+    return {};
+}
+
+QJsonObject LocalApi::archiveIndex(const QString &storageId, const QString &name, int *status) const {
+    if (status) *status = 404;
+    const QString path = archiveFile(m_model, storageId, name);
+    if (path.isEmpty()) return {{"error", "Archive is unavailable on the selected storage"}};
+    const QJsonObject result = runArchiveTool({"index", path});
+    if (result.contains("error")) { if (status) *status = 409; return result; }
+    if (status) *status = 200;
+    return result;
+}
+
+QString LocalApi::archiveCacheEntry(const QString &storageId, const QString &name, const QString &relativePath, QString *error) const {
+    const QString path = archiveFile(m_model, storageId, name);
+    if (path.isEmpty()) { if (error) *error = "Archive is unavailable on the selected storage"; return {}; }
+    const QString cache = qEnvironmentVariableIsSet("LOCAL_DRIVE_ARCHIVE_CACHE") ? qEnvironmentVariable("LOCAL_DRIVE_ARCHIVE_CACHE") : QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)).filePath("archive-preview");
+    const QJsonObject result = runArchiveTool({"extract", path, relativePath, cache});
+    if (result.contains("error")) { if (error) *error = result.value("error").toString(); return {}; }
+    const QString cached = QFileInfo(result.value("path").toString()).canonicalFilePath();
+    const QString cacheRoot = QFileInfo(cache).canonicalFilePath();
+    if (cached.isEmpty() || cacheRoot.isEmpty() || !QFileInfo(cached).isFile() || !cached.startsWith(cacheRoot + '/')) { if (error) *error = "Archive cache entry is unavailable"; return {}; }
+    return cached;
+}
+
+QJsonObject LocalApi::archiveCleanup(const QString &storageId, const QString &name, int *status) {
+    if (status) *status = 400;
+    if (!m_workers.isEmpty() || !catalogState(m_model->databasePath()).value("activeTransfer").isNull()) { if (status) *status = 409; return {{"error", "Wait for active work to finish before moving archive originals"}}; }
+    int indexStatus = 500;
+    const QJsonObject archive = archiveIndex(storageId, name, &indexStatus);
+    if (indexStatus != 200) { if (status) *status = indexStatus; return archive; }
+    const QString library = archive.value("library").toString();
+    const QString root = QFileInfo(routeFor(m_model, library).value("source").toString()).canonicalFilePath();
+    if (root.isEmpty()) return {{"error", library + " library is unavailable"}};
+    struct Source { QString path; };
+    QList<Source> sources;
+    for (const auto &value : archive.value("items").toArray()) {
+        const QJsonObject item = value.toObject(); const QString relative = item.value("path").toString(); const QByteArray expected = QByteArray::fromHex(item.value("sha256").toString().toLatin1());
+        if (!safeRelative(relative) || expected.size() != 32) return {{"error", "Archive manifest is invalid"}};
+        const QFileInfo candidate(QDir(root).filePath(relative)); const QString canonical = candidate.canonicalFilePath(); const QString confined = canonical.isEmpty() ? QStringLiteral("..") : QDir(root).relativeFilePath(canonical);
+        if (!candidate.isFile() || candidate.isSymLink() || confined == ".." || confined.startsWith("../") || QDir::isAbsolutePath(confined) || candidate.size() != item.value("size").toInteger(-1)) { if (status) *status = 409; return {{"error", "Originals changed or are unavailable; nothing was moved"}}; }
+        QFile source(canonical); QCryptographicHash digest(QCryptographicHash::Sha256);
+        if (!source.open(QIODevice::ReadOnly) || !digest.addData(&source) || digest.result() != expected) { if (status) *status = 409; return {{"error", "Originals no longer match the verified archive; nothing was moved"}}; }
+        sources.append({canonical});
+    }
+    if (sources.isEmpty()) return {{"error", "Archive contains no items to move"}};
+    auto labels = fileLabels(); if (labels.contains("error")) { if (status) *status = 500; return labels; }
+    auto items = labels.value("items").toObject(); int moved = 0;
+    for (const auto &source : sources) {
+        QString trashPath;
+        if (!QFile::moveToTrash(source.path, &trashPath)) { if (status) *status = 409; return {{"error", QStringLiteral("Moved %1 originals to Trash before the next item failed; review Trash before retrying").arg(moved)}, {"moved", moved}}; }
+        ++moved;
+        for (const auto &key : items.keys()) if (key == source.path) items.remove(key);
+    }
+    labels.insert("items", items); QSaveFile saved(m_model->databasePath() + ".file-labels.json"); const QByteArray data = QJsonDocument(labels).toJson();
+    if (!saved.open(QIODevice::WriteOnly) || saved.write(data) != data.size() || !saved.commit()) { if (status) *status = 500; return {{"error", "Originals are in Trash, but labels could not be updated; refresh Photos"}, {"moved", moved}}; }
+    if (status) *status = 200;
+    return {{"ok", true}, {"moved", moved}, {"message", "Verified archive originals moved to the system Trash"}};
+}
+
 QJsonObject LocalApi::photos(const QString &after, bool screenshots) const {
     const QVariantMap selected = routeFor(m_model, QStringLiteral("Photos"));
     const QString root = screenshots ? screenshotsRoot() : selected.value("source").toString();
     QJsonArray items;
     if (!root.isEmpty() && QFileInfo(root).isDir()) {
+        QJsonArray collections;
+        if (!screenshots) {
+            QDirIterator directories(root, QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDirIterator::Subdirectories);
+            while (directories.hasNext()) collections.append(QDir(root).relativeFilePath(directories.next()));
+        }
         QDirIterator iterator(root, QDir::Files | QDir::NoSymLinks, QDirIterator::Subdirectories);
         // ponytail: O(N) scan per page, bounded 501-entry buffer; use the catalog index for large libraries.
         QMap<QString, QFileInfo> page;
@@ -633,7 +1105,7 @@ QJsonObject LocalApi::photos(const QString &after, bool screenshots) const {
                                      {"type", isVideo(entry) ? QStringLiteral("Video") : QStringLiteral("Photo")},
                                      {"collection", folder == "." ? QStringLiteral("Unsorted") : folder}});
         }
-        return {{"root", root}, {"verifiedOn", QString()}, {"items", items}, {"truncated", more}, {"nextCursor", more ? page.lastKey() : QString()}};
+        return {{"root", root}, {"verifiedOn", QString()}, {"items", items}, {"collections", collections}, {"truncated", more}, {"nextCursor", more ? page.lastKey() : QString()}};
     }
     return {{"root", screenshots ? root : QString()}, {"verifiedOn", QString()}, {"items", items}, {"truncated", false}};
 }
@@ -801,13 +1273,14 @@ QJsonObject LocalApi::openFile(const QString &contentType, const QString &relati
     return {{"ok", true}, {"root", contentType}, {"path", confined}};
 }
 
-QJsonObject LocalApi::createFolder(const QString &relativeParent, const QString &rawName, int *status) const {
+QJsonObject LocalApi::createFolder(const QString &contentType, const QString &relativeParent, const QString &rawName, int *status) const {
     if (status) *status = 400;
+    if (contentType != "Drive" && contentType != "Photos") return {{"error", "Choose Drive or Photos"}};
     const QString name = rawName.trimmed(), requested = QDir::cleanPath(relativeParent.trimmed()), relative = requested == "." ? QString() : requested;
     if (name.isEmpty() || name == "." || name == ".." || name.size() > 255 || name.contains('/') || name.contains('\\')
         || std::any_of(name.cbegin(), name.cend(), [](QChar character) { return character.isNull() || character.category() == QChar::Other_Control; })) return {{"error", "Choose a valid folder name"}};
     if (!relative.isEmpty() && !safeRelative(relative)) return {{"error", "Parent folder is outside Drive"}};
-    const QString root = QFileInfo(routeFor(m_model, QStringLiteral("Drive")).value("source").toString()).canonicalFilePath();
+    const QString root = QFileInfo(routeFor(m_model, contentType).value("source").toString()).canonicalFilePath();
     const QString parent = relative.isEmpty() ? root : QFileInfo(QDir(root).filePath(relative)).canonicalFilePath();
     const QString confined = parent.isEmpty() ? QStringLiteral("..") : QDir(root).relativeFilePath(parent);
     if (root.isEmpty() || !QFileInfo(parent).isDir() || confined == ".." || confined.startsWith("../") || QDir::isAbsolutePath(confined)) { if (status) *status = 404; return {{"error", "Parent folder not found or outside Drive"}}; }
@@ -842,7 +1315,7 @@ QJsonObject LocalApi::fileAction(const QJsonObject &options, int *status) {
 #else
         if (action == "reveal-photo") opened = QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath()));
         else {
-            for (const QString &name : {QStringLiteral("kolourpaint"), QStringLiteral("krita"), QStringLiteral("gimp")}) {
+            for (const QString &name : imageEditorPrograms) {
                 const QString program = QStandardPaths::findExecutable(name);
                 if (!program.isEmpty()) { opened = QProcess::startDetached(program, {path}); break; }
             }
@@ -851,20 +1324,21 @@ QJsonObject LocalApi::fileAction(const QJsonObject &options, int *status) {
         *status = opened ? 200 : 503;
         return opened ? QJsonObject{{"state", "opened"}} : QJsonObject{{"error", "Could not open desktop application. For editing install Krita, KolourPaint or GIMP"}};
     }
-    if (action == "export-photos") {
+    if (action == "export-photos" || action == "export-archive") {
         if (!m_workers.isEmpty()) { *status = 409; return {{"error", "Wait for current work to finish"}}; }
-        const auto source = routeFor(m_model, "Photos").value("source").toString();
+        const QString library = action == "export-photos" ? QStringLiteral("Photos") : options.value("root").toString();
+        const auto source = routeFor(m_model, library).value("source").toString();
         QString destination;
         for (const auto &value : m_model->storages()) { const auto storage = value.toMap(); if (storage.value("id").toString() == options.value("storageId").toString() && storage.value("present").toBool()) destination = storage.value("root").toString(); }
         const QString name = options.value("name").toString();
-        if (source.isEmpty() || destination.isEmpty() || !name.endsWith(".ldrive") || name.startsWith('.') || name.contains('/') || name.contains('\\') || name.contains(QChar::Null)) return {{"error", "Choose available storage and a .ldrive filename"}};
+        if ((library != "Drive" && library != "Photos") || source.isEmpty() || destination.isEmpty() || !name.endsWith(".ldrive") || name.startsWith('.') || name.contains('/') || name.contains('\\') || name.contains(QChar::Null)) return {{"error", "Choose an available library, storage and .ldrive filename"}};
         QFile script(":/src/photo_archive.py");
         if (!script.open(QIODevice::ReadOnly)) { *status = 500; return {{"error", "Archive exporter is missing"}}; }
         const auto code = QString::fromUtf8(script.readAll());
-        const auto id = QStringLiteral("photo-export-") + QUuid::createUuid().toString(QUuid::Id128);
+        const auto id = QStringLiteral("archive-export-") + QUuid::createUuid().toString(QUuid::Id128);
         { QMutexLocker lock(&m_previewMutex); m_routePreviews.insert(id, QJsonObject{{"state", "copying"}}); }
-        auto *worker = QThread::create([this, source, destination, name, code, id] {
-            QProcess process; process.start("python3", {"-c", code, source, destination, name});
+        auto *worker = QThread::create([this, source, destination, name, library, code, id] {
+            QProcess process; process.start("python3", {"-c", code, "export", source, destination, name, library});
             if (!process.waitForStarted()) { QMutexLocker lock(&m_previewMutex); m_routePreviews[id] = QJsonObject{{"state", "failed"}, {"result", "Python 3.14 is required for archive export"}}; return; }
             QByteArray pending;
             while (true) {
@@ -888,7 +1362,7 @@ QJsonObject LocalApi::fileAction(const QJsonObject &options, int *status) {
             opened = QDesktopServices::openUrl(QUrl("trash:/"));
 #endif
         } else {
-            for (const auto &name : QStringList{"skanpage", "simple-scan", "skanlite"}) {
+            for (const auto &name : scannerPrograms) {
                 const auto program = QStandardPaths::findExecutable(name); if (program.isEmpty()) continue;
 #ifdef LOCAL_DRIVE_TESTING
                 opened = true;
@@ -904,11 +1378,17 @@ QJsonObject LocalApi::fileAction(const QJsonObject &options, int *status) {
     if (action == "create-tag") {
         const QString tag = options.value("tag").toString().trimmed();
         if (tag.isEmpty() || tag.size() > 80 || std::any_of(tag.cbegin(), tag.cend(), [](QChar c) { return c.category() == QChar::Other_Control; })) return {{"error", "Choose a tag of 1–80 printable characters"}};
+        const QString color = options.value("color").toString("#387fa2").toLower();
+        const QStringList colors{"#b65470", "#387fa2", "#438260", "#8262a8", "#a06c28", "#626d73"};
+        if (!colors.contains(color)) return {{"error", "Choose one of the available tag colors"}};
         auto labels = fileLabels(); if (labels.contains("error")) { *status = 500; return labels; }
-        auto tags = labels.value("tags").toArray(); if (!tags.contains(tag)) tags.append(tag); labels.insert("tags", tags);
+        auto tags = labels.value("tags").toArray();
+        if (tags.contains(tag)) { *status = 409; return {{"error", "A tag with this name already exists"}}; }
+        tags.append(tag); labels.insert("tags", tags);
+        auto tagColors = labels.value("tagColors").toObject(); tagColors.insert(tag, color); labels.insert("tagColors", tagColors);
         QSaveFile saved(m_model->databasePath() + ".file-labels.json"); const auto data = QJsonDocument(labels).toJson();
         if (!saved.open(QIODevice::WriteOnly) || saved.write(data) != data.size() || !saved.commit()) { *status = 500; return {{"error", "Tag could not be saved"}}; }
-        *status = 200; return {{"ok", true}, {"tags", tags}};
+        *status = 200; return {{"ok", true}, {"tags", tags}, {"tagColors", tagColors}};
     }
     if (!QStringList{"rename", "move", "copy", "trash", "labels"}.contains(action)) return {{"error", "Unknown file action"}};
     if (action != "labels" && (!m_workers.isEmpty() || !catalogState(m_model->databasePath()).value("activeTransfer").isNull())) { *status = 409; return {{"error", "Wait for active transfers to finish before changing files"}}; }
@@ -944,7 +1424,10 @@ QJsonObject LocalApi::fileAction(const QJsonObject &options, int *status) {
             if (!tags.contains(tag)) tags.append(tag);
         }
         items.insert(source, QJsonObject{{"favorite", options.value("favorite")}, {"tags", tags}});
-        auto registered = labels.value("tags").toArray(); for (const auto &tag : tags) if (!registered.contains(tag)) registered.append(tag); labels.insert("tags", registered);
+        auto registered = labels.value("tags").toArray();
+        auto tagColors = labels.value("tagColors").toObject();
+        for (const auto &tag : tags) if (!registered.contains(tag)) { registered.append(tag); tagColors.insert(tag.toString(), "#626d73"); }
+        labels.insert("tags", registered); labels.insert("tagColors", tagColors);
     } else if (action == "trash") {
         QString trashPath;
         if (!QFile::moveToTrash(source, &trashPath)) { *status = 500; return {{"error", "Could not move to system Trash; no permanent deletion attempted"}}; }
@@ -1041,28 +1524,53 @@ QJsonObject LocalApi::createFromTemplate(const QJsonObject &options, int *status
 
 QJsonObject LocalApi::saveRoute(const QJsonObject &options, int *status) {
     if (status) *status = 400;
-    const QString type = options.value("contentType").toString(), source = options.value("source").toString(), storageId = options.value("storageId").toString(), destination = options.value("destination").toString(), keepPolicy = options.value("keepPolicy").toString("Everything");
-    if ((type != "Drive" && type != "Photos") || source.trimmed().isEmpty() || storageId.trimmed().isEmpty() || destination.trimmed().isEmpty()) return {{"error", "Choose Drive or Photos, source, storage, and destination"}};
-    for (const auto &value : m_model->routes()) {
-        const auto route = value.toMap(); if (route.value("contentType") != type) continue;
-        if (route.value("storageId") == storageId) { if (status) *status = 409; return {{"error", QStringLiteral("This %1 relationship already exists").arg(type)}}; }
-        if (QDir::cleanPath(route.value("source").toString()) != QDir::cleanPath(source)) { if (status) *status = 409; return {{"error", QStringLiteral("All %1 relationships must share the same computer root").arg(type)}}; }
+    QStringList types;
+    if (options.value("contentTypes").isArray()) {
+        for (const auto &value : options.value("contentTypes").toArray()) if (value.isString() && !types.contains(value.toString())) types.append(value.toString());
+    } else {
+        types.append(options.value("contentType").toString());
     }
+    const QString storageId = options.value("storageId").toString(), keepPolicy = options.value("keepPolicy").toString("Everything");
+    if (types.isEmpty() || types.size() > 2 || std::any_of(types.cbegin(), types.cend(), [](const QString &type) { return type != "Drive" && type != "Photos"; }) || storageId.trimmed().isEmpty()) return {{"error", "Choose Drive, Photos, or both and a destination storage"}};
     QVariantMap storage; for (const auto &value : m_model->storages()) if (value.toMap().value("id") == storageId) storage = value.toMap();
-    const QString suggestedSource = QDir(m_model->homeRoot()).filePath(QStringLiteral("Local Drive/%1").arg(type));
-    const QString suggestedDestination = QDir(storage.value("root").toString()).filePath(QStringLiteral("Local Drive/%1").arg(type));
-    const bool madeSource = !QFileInfo::exists(source) && QDir::cleanPath(source) == QDir::cleanPath(suggestedSource);
-    const bool madeDestination = !QFileInfo::exists(destination) && QDir::cleanPath(destination) == QDir::cleanPath(suggestedDestination);
+    if (storage.isEmpty() || !storage.value("present").toBool() || storage.value("root").toString().isEmpty()) { if (status) *status = 409; return {{"error", "Connect and mount the destination storage first"}}; }
+    const auto sourceFor = [&](const QString &type) {
+        for (const auto &value : m_model->routes()) { const auto route = value.toMap(); if (route.value("contentType") == type && route.value("storageId") == storageId) return QString(); }
+        return m_model->contentRoot(type);
+    };
+    QMap<QString, QString> sources;
+    for (const auto &type : types) {
+        const QString source = sourceFor(type);
+        if (source.isEmpty()) { if (status) *status = 409; return {{"error", QStringLiteral("This %1 relationship already exists").arg(type)}}; }
+        sources.insert(type, source);
+    }
+    if (types.size() == 2) {
+        const QString sourceParent = QFileInfo(sources.value("Drive")).absolutePath();
+        if (QFileInfo(sources.value("Photos")).absolutePath() != sourceParent) { if (status) *status = 409; return {{"error", "Drive and Photos must use the same computer library parent"}}; }
+        const bool madeSourceParent = !QFileInfo::exists(sourceParent);
+        if (madeSourceParent && !QDir().mkpath(sourceParent)) { if (status) *status = 409; return {{"error", "The computer library could not be created"}}; }
+        if (!m_model->saveInitialRoutes(sourceParent, storageId, storage.value("root").toString(), keepPolicy, 0, options.value("organizePhotos").toBool(false))) { if (madeSourceParent) QDir().rmdir(sourceParent); return {{"error", m_model->errorMessage()}}; }
+        if (status) *status = 200;
+        return {{"ok", true}, {"contentTypes", QJsonArray{"Drive", "Photos"}}, {"destinationParent", storage.value("root").toString()}, {"configRevision", m_model->configRevision()}};
+    }
+    const QString type = types.first(), source = sources.value(type);
+    const QString destination = QDir(storage.value("root").toString()).filePath(type);
+    if (options.contains("source") && QDir::cleanPath(options.value("source").toString()) != QDir::cleanPath(source)) { if (status) *status = 409; return {{"error", "The computer library location is managed by Local Drive"}}; }
+    if (options.contains("destination") && QDir::cleanPath(options.value("destination").toString()) != QDir::cleanPath(destination)) { if (status) *status = 409; return {{"error", "Use the storage root or choose a location in the current setup"}}; }
+    const bool madeSource = !QFileInfo::exists(source);
+    const bool madeDestination = !QFileInfo::exists(destination);
     if (madeSource && !QDir().mkpath(source)) { if (status) *status = 409; return {{"error", "The proposed computer folder could not be created"}}; }
     if (madeDestination && !QDir().mkpath(destination)) { if (madeSource) QDir().rmdir(source); if (status) *status = 409; return {{"error", "The proposed storage folder could not be created"}}; }
     if (!m_model->saveRoute(source, storageId, destination, keepPolicy, 0, options.value("organizePhotos").toBool(false), 0, {}, type)) { if (madeDestination) QDir().rmdir(destination); if (madeSource) QDir().rmdir(source); return {{"error", m_model->errorMessage()}}; }
     if (status) *status = 200;
-    return {{"ok", true}, {"contentType", type}, {"configRevision", m_model->configRevision()}};
+    return {{"ok", true}, {"contentType", type}, {"source", source}, {"destination", destination}, {"configRevision", m_model->configRevision()}};
 }
 
 QJsonObject LocalApi::routePreview(const QString &id) const {
     QMutexLocker lock(&m_previewMutex);
-    return m_routePreviews.value(id);
+    QJsonObject operation = m_routePreviews.value(id);
+    operation.remove("expectedSourceHashes");
+    return operation;
 }
 
 QJsonObject LocalApi::startRoutePreview(const QString &routeId, int *status) {
@@ -1076,7 +1584,7 @@ QJsonObject LocalApi::startRoutePreview(const QString &routeId, int *status) {
         for (auto iterator = m_routePreviews.begin(); iterator != m_routePreviews.end();) {
             if (iterator.value().value("routeId") != routeId) { ++iterator; continue; }
             const QString state = iterator.value().value("state").toString();
-            if (state == "scanning" || state == "copying") { if (status) *status = 409; return {{"error", "This route already has an active operation"}}; }
+            if (state == "scanning" || state == "copying" || state == "cleaning") { if (status) *status = 409; return {{"error", "This route already has an active operation"}}; }
             if (auto *old = m_routeEngines.take(iterator.key())) replaced.append(old);
             m_routeManifests.remove(iterator.key());
             iterator = m_routePreviews.erase(iterator);
@@ -1090,7 +1598,7 @@ QJsonObject LocalApi::startRoutePreview(const QString &routeId, int *status) {
 #endif
     {
         QMutexLocker lock(&m_previewMutex);
-        m_routePreviews.insert(id, {{"id", id}, {"routeId", routeId}, {"state", "scanning"}});
+        m_routePreviews.insert(id, {{"id", id}, {"routeId", routeId}, {"revision", m_model->configRevision()}, {"state", "scanning"}});
         m_routeEngines.insert(id, engine);
     }
     connect(engine, &VerifiedCopy::runningChanged, this, [this, engine, id, routeId] {
@@ -1098,14 +1606,24 @@ QJsonObject LocalApi::startRoutePreview(const QString &routeId, int *status) {
         QMutexLocker lock(&m_previewMutex);
         if (m_routePreviews.value(id).value("state") != "scanning") return;
         const QJsonObject preview = QJsonObject::fromVariantMap(engine->previewData());
-        m_routePreviews[id] = {{"id", id}, {"routeId", routeId}, {"state", "complete"}, {"preview", preview}};
+        const auto revision = m_routePreviews.value(id).value("revision");
+        m_routePreviews[id] = {{"id", id}, {"routeId", routeId}, {"revision", revision}, {"state", "complete"}, {"preview", preview}, {"cleanup", QJsonObject::fromVariantMap(engine->cleanupPreview())}};
         if (preview.value("ok").toBool()) m_routeManifests.insert(id, QJsonObject::fromVariantMap(engine->manifestData()));
         else { m_routeEngines.remove(id); engine->deleteLater(); }
     });
     connect(engine, &VerifiedCopy::progressChanged, this, [this, id](qint64 done, qint64 total, const QString &path) { QMutexLocker lock(&m_previewMutex); QJsonObject operation = m_routePreviews.value(id); if (operation.value("state") != "copying") return; operation.insert("bytesDone", done); operation.insert("bytesTotal", total); operation.insert("path", path); m_routePreviews[id] = operation; });
     connect(engine, &VerifiedCopy::pausedChanged, this, [this, engine, id] { QMutexLocker lock(&m_previewMutex); QJsonObject operation = m_routePreviews.value(id); if (operation.value("state") != "copying") return; operation.insert("paused", engine->paused()); m_routePreviews[id] = operation; });
     connect(engine, &VerifiedCopy::statusChanged, this, [this, engine, id] { QMutexLocker lock(&m_previewMutex); QJsonObject operation = m_routePreviews.value(id); if (operation.value("state") != "copying") return; operation.insert("status", engine->status()); m_routePreviews[id] = operation; });
-    connect(engine, &VerifiedCopy::finished, this, [this, engine, id](bool success, const QString &message) { QMutexLocker lock(&m_previewMutex); QJsonObject operation = m_routePreviews.value(id); operation.insert("state", success ? "transferred" : "failed"); operation.insert("result", message); m_routePreviews[id] = operation; m_routeEngines.remove(id); engine->deleteLater(); });
+    connect(engine, &VerifiedCopy::finished, this, [this, engine, id](bool success, const QString &message) {
+        QMutexLocker lock(&m_previewMutex);
+        QJsonObject operation = m_routePreviews.value(id);
+        const bool cleaning = operation.value("state") == "cleaning";
+        operation.insert("state", success ? (cleaning ? "cleaned" : "transferred") : "failed");
+        operation.insert("result", message);
+        operation.insert("cleanup", QJsonObject::fromVariantMap(engine->cleanupPreview()));
+        m_routePreviews[id] = operation;
+        if (!engine->cleanupReady()) { m_routeEngines.remove(id); engine->deleteLater(); }
+    });
     if (!engine->previewRoute(routeId)) {
         QMutexLocker lock(&m_previewMutex);
         m_routePreviews[id] = {{"id", id}, {"routeId", routeId}, {"state", "complete"}, {"preview", QJsonObject::fromVariantMap(engine->previewData())}};
@@ -1128,26 +1646,33 @@ QJsonObject LocalApi::routeManifest(const QString &id, int *status) const {
 
 QJsonObject LocalApi::routeHistory(const QString &routeId, int *status) const {
     if (status) *status = 404;
-    const QVariantList routes = m_model->routes();
-    if (routeId.isEmpty() || std::none_of(routes.cbegin(), routes.cend(), [&](const QVariant &value) { return value.toMap().value("id").toString() == routeId; })) return {{"error", "Route not found"}};
+    if (routeId.isEmpty() || !m_model->routeExists(routeId)) return {{"error", "Route not found"}};
     if (status) *status = 200;
     return {{"routeId", routeId}, {"items", json(VerifiedCopy::recentHistoryForRoute(m_model->databasePath(), routeId))}};
 }
 
-QJsonObject LocalApi::startRouteExecution(const QString &id, int *status) {
+QJsonObject LocalApi::startRouteExecution(const QString &id, int *status, bool cleanup) {
     if (status) *status = 404;
     VerifiedCopy *engine = nullptr;
+    QJsonObject operation;
     {
         QMutexLocker lock(&m_previewMutex);
-        const QJsonObject operation = m_routePreviews.value(id);
+        operation = m_routePreviews.value(id);
         if (id.isEmpty() || operation.isEmpty()) return {{"error", "Preview not found"}};
-        if (operation.value("state") != "complete" || !operation.value("preview").toObject().value("ok").toBool() || !m_routeEngines.contains(id)) { if (status) *status = 409; return {{"error", "Only a completed successful preview can be transferred"}}; }
+        const QString state = operation.value("state").toString();
+        const auto review = operation.value("cleanup").toObject();
+        const bool ready = cleanup
+            ? (state == "complete" || state == "transferred" || state == "failed") && review.value("ok").toBool() && !review.value("uncertain").toBool()
+            : state == "complete" && operation.value("preview").toObject().value("ok").toBool();
+        if (!ready || !m_routeEngines.contains(id)) { if (status) *status = 409; return {{"error", "Preview this connection before starting the requested operation"}}; }
+        if (operation.value("revision").toInteger() != m_model->configRevision()) { if (status) *status = 409; return {{"error", "Settings changed; preview this connection again"}}; }
         engine = m_routeEngines.value(id);
-        QJsonObject copying = operation; copying.insert("state", "copying"); copying.insert("bytesDone", 0); copying.insert("bytesTotal", operation.value("preview").toObject().value("toCopy")); m_routePreviews[id] = copying;
+        if (engine->running()) { if (status) *status = 409; return {{"error", "Wait for the current operation to finish"}}; }
+        QJsonObject active = operation; active.insert("state", cleanup ? "cleaning" : "copying"); active.insert("bytesDone", 0); active.insert("bytesTotal", operation.value("preview").toObject().value("toCopy")); m_routePreviews[id] = active;
     }
-    if (!engine->startCopy()) { QMutexLocker lock(&m_previewMutex); QJsonObject operation = m_routePreviews.value(id); operation.insert("state", "complete"); m_routePreviews[id] = operation; if (status) *status = 409; return {{"error", "Transfer could not start from this preview"}}; }
+    if (!(cleanup ? engine->cleanup(operation.value("cleanup").toObject().value("cutoff").toInteger()) : engine->startCopy())) { QMutexLocker lock(&m_previewMutex); m_routePreviews[id] = operation; if (status) *status = 409; return {{"error", "Operation could not start; preview again"}}; }
     if (status) *status = 202;
-    return {{"id", id}, {"state", "copying"}};
+    return {{"id", id}, {"state", cleanup ? "cleaning" : "copying"}};
 }
 
 QJsonObject LocalApi::routeControl(const QString &id, const QString &action, int *status) {
@@ -1157,8 +1682,10 @@ QJsonObject LocalApi::routeControl(const QString &id, const QString &action, int
         QMutexLocker lock(&m_previewMutex);
         const QJsonObject operation = m_routePreviews.value(id);
         if (id.isEmpty() || operation.isEmpty()) return {{"error", "Transfer not found"}};
-        if (operation.value("state") != "copying" || !m_routeEngines.contains(id)) { if (status) *status = 409; return {{"error", "This transfer is not active"}}; }
+        const QString state = operation.value("state").toString();
+        if ((state != "copying" && state != "scanning") || !m_routeEngines.contains(id)) { if (status) *status = 409; return {{"error", "This transfer is not active"}}; }
         engine = m_routeEngines.value(id);
+        if (state == "scanning" && action != "cancel") { if (status) *status = 409; return {{"error", "A scan can only be cancelled"}}; }
     }
     if (action == "pause") engine->pause();
     else if (action == "resume") { if (!engine->paused()) { if (status) *status = 409; return {{"error", "This transfer is not paused"}}; } engine->resume(); }
@@ -1207,6 +1734,64 @@ QByteArray LocalApi::photoThumbnail(const QString &relativePath, bool screenshot
     buffer.open(QIODevice::WriteOnly);
     if (!image.save(&buffer, "JPEG", preview ? 92 : 78)) return {};
     return bytes;
+}
+
+QJsonObject LocalApi::startRestorePreview(const QJsonObject &options, int *status) {
+    if (status) *status = 400;
+    const QString routeId = options.value("routeId").toString().trimmed(), historyId = options.value("historyId").toString().trimmed();
+    QVariantMap route;
+    for (const QVariant &value : m_model->routes()) if (value.toMap().value("id").toString() == routeId) { route = value.toMap(); break; }
+    if (route.isEmpty() || historyId.isEmpty()) return {{"error", "Choose a verified backup item to restore"}};
+    if (!route.value("storagePresent").toBool()) { if (status) *status = 409; return {{"error", "Reconnect the exact backup storage before restoring"}}; }
+
+    QString sourcePath, destinationPath, expectedHex;
+    qint64 expectedSize = -1;
+    const QString connection = QStringLiteral("restore-preview-%1").arg(QUuid::createUuid().toString(QUuid::Id128));
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connection); db.setDatabaseName(m_model->databasePath()); db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
+        if (db.open()) {
+            QSqlQuery query(db);
+            query.prepare("SELECT h.destination_path,h.source_path,h.destination_sha256,ji.expected_size FROM history h JOIN jobs j ON j.id=h.job_id JOIN job_items ji ON ji.id=h.item_id WHERE h.id=? AND j.route_id=? AND h.event='verified'");
+            query.addBindValue(historyId); query.addBindValue(routeId);
+            if (query.exec() && query.next()) { sourcePath = query.value(0).toString(); destinationPath = query.value(1).toString(); expectedHex = query.value(2).toString().toLower(); expectedSize = query.value(3).toLongLong(); }
+        }
+        db.close();
+    }
+    QSqlDatabase::removeDatabase(connection);
+
+    const QString backupRoot = QFileInfo(route.value("destination").toString()).canonicalFilePath();
+    const QString libraryRoot = QFileInfo(route.value("source").toString()).canonicalFilePath();
+    const QString canonicalSource = QFileInfo(sourcePath).canonicalFilePath();
+    const QString relative = backupRoot.isEmpty() || canonicalSource.isEmpty() ? QString() : QDir(backupRoot).relativeFilePath(canonicalSource);
+    const QString localRelative = libraryRoot.isEmpty() || destinationPath.isEmpty() ? QString() : QDir(libraryRoot).relativeFilePath(QDir::cleanPath(destinationPath));
+    const QByteArray expectedHash = QByteArray::fromHex(expectedHex.toLatin1());
+    if (libraryRoot.isEmpty() || !safeRelative(relative) || !safeRelative(localRelative) || !QFileInfo(canonicalSource).isFile() || QFileInfo(canonicalSource).isSymLink() || QDir::cleanPath(destinationPath) != QDir::cleanPath(QDir(libraryRoot).filePath(localRelative)) || expectedSize < 0 || expectedHash.size() != 32) {
+        if (status) *status = 409;
+        return {{"error", "The verified backup receipt no longer matches an available file"}};
+    }
+    QString identityError;
+    const QString localIdentity = VerifiedCopy::liveStorageIdentity(libraryRoot, &identityError);
+    if (localIdentity.isEmpty()) { if (status) *status = 409; return {{"error", identityError.isEmpty() ? QStringLiteral("The computer library is unavailable") : identityError}}; }
+
+    VerifiedCopy::Request request;
+    request.sourceRoot = backupRoot; request.destinationRoot = libraryRoot; request.selectedStorageRoot = libraryRoot; request.storageIdentity = localIdentity; request.filesystemType = QString::fromLatin1(QStorageInfo(libraryRoot).fileSystemType()); request.databasePath = m_model->databasePath();
+    request.routeId = QStringLiteral("restore-%1").arg(routeId); request.destinationStorageId = QStringLiteral("local"); request.contentType = route.value("contentType").toString(); request.routeEnabled = false;
+    request.sourceStorageId = route.value("storageId").toString(); request.sourceStorageIdentity = route.value("storageIdentity").toString(); request.sourceStorageKind = QStringLiteral("removable"); request.sourceStorageLabel = QStringLiteral("Backup storage");
+    request.includedSourcePaths = {relative}; request.expectedSourceHashes.insert(relative, expectedHash); request.destinationOverrides.insert(relative, localRelative);
+    const QString id = QStringLiteral("restore-%1").arg(QUuid::createUuid().toString(QUuid::Id128));
+    {
+        QMutexLocker lock(&m_previewMutex);
+        m_importPreviews[id] = {{"id", id}, {"state", "scanning"}, {"phase", "restore-preview"}, {"target", request.contentType}, {"routeId", routeId}, {"historyId", historyId}, {"path", localRelative}};
+    }
+    QThread *worker = QThread::create([this, id, request, routeId, historyId, localRelative] {
+        const VerifiedCopy::Preview result = VerifiedCopy::inspect(request, &m_stopping);
+        QMutexLocker lock(&m_previewMutex);
+        m_importPreviews[id] = {{"id", id}, {"state", "complete"}, {"phase", "restore-preview"}, {"target", request.contentType}, {"routeId", routeId}, {"historyId", historyId}, {"path", localRelative}, {"preview", QJsonObject::fromVariantMap(result.toMap())}};
+        m_importRequests.insert(id, request); m_importPlans.insert(id, result);
+    });
+    m_workers.append(worker); connect(worker, &QThread::finished, this, [this, worker] { m_workers.removeOne(worker); worker->deleteLater(); }); worker->start();
+    if (status) *status = 202;
+    return {{"id", id}, {"state", "scanning"}, {"path", localRelative}};
 }
 
 QJsonObject LocalApi::importPreview(const QString &id) const {
@@ -1268,12 +1853,14 @@ QJsonObject LocalApi::startImportExecution(const QString &id, int *status) {
     if (status) *status = 400;
     VerifiedCopy::Request request;
     VerifiedCopy::Preview plan;
+    bool restore = false;
     {
         QMutexLocker lock(&m_previewMutex);
         const QJsonObject operation = m_importPreviews.value(id);
         if (id.isEmpty() || operation.isEmpty()) { if (status) *status = 404; return {{"error", "Preview not found"}}; }
         if (operation.value("state") != "complete" || !m_importRequests.contains(id) || !m_importPlans.contains(id)) { if (status) *status = 409; return {{"error", "Preview is not ready for execution"}}; }
-        request = m_importRequests.value(id); plan = m_importPlans.value(id);
+        request = m_importRequests.value(id); plan = m_importPlans.value(id); restore = operation.value("phase") == "restore-preview";
+        if (restore && plan.toCopy <= 0) { if (status) *status = 409; return {{"error", "The computer copy already exists; nothing needs restoring"}}; }
         if (!plan.ok) return {{"error", plan.error.isEmpty() ? QStringLiteral("Preview did not pass") : plan.error}};
         if (plan.unreadable) {
             if (status) *status = 409;
@@ -1321,10 +1908,10 @@ QJsonObject LocalApi::startImportExecution(const QString &id, int *status) {
         if (operation.value("state") != "complete") { if (status) *status = 409; return {{"error", "Import already started or preview is no longer ready"}}; }
         m_importPreviews[id] = {{"id", id}, {"state", "copying"}, {"phase", "import"}, {"target", operation.value("target")}, {"preview", operation.value("preview")}};
     }
-    QThread *worker = QThread::create([this, id, request, plan, acceptedPairs, acceptedConflicts, acceptedConflictHashes, acceptedUnsupported] {
+    QThread *worker = QThread::create([this, id, request, plan, acceptedPairs, acceptedConflicts, acceptedConflictHashes, acceptedUnsupported, restore] {
         VerifiedCopy copy(request.databasePath);
         QString error, completion;
-        VerifiedCopy::Request fullRequest = request; fullRequest.excludedSourcePaths.clear(); fullRequest.destinationOverrides.clear();
+        VerifiedCopy::Request fullRequest = request; fullRequest.excludedSourcePaths.clear(); if (!restore) fullRequest.destinationOverrides.clear();
         const VerifiedCopy::Preview current = VerifiedCopy::inspect(fullRequest, &m_stopping);
         QStringList currentPairs = current.duplicatePaths; currentPairs.sort(); currentPairs.removeDuplicates();
         QStringList currentConflicts = current.conflictPaths; currentConflicts.sort(); currentConflicts.removeDuplicates();

@@ -1,3 +1,4 @@
+#include "catalog/yearretention.h"
 #include "verifiedcopy.h"
 #include "remoteinventory.h"
 
@@ -5,6 +6,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
@@ -22,6 +24,7 @@
 #include <QSqlQuery>
 #include <QThread>
 #include <QTextStream>
+#include <QTimer>
 #include <QUuid>
 #include <KIO/CopyJob>
 #include <KIO/DeleteJob>
@@ -60,6 +63,7 @@ struct PreviewCancelScope {
 
 qint64 cleanupCutoff(const QString &policy) {
     if (policy == QStringLiteral("Nothing")) return std::numeric_limits<qint64>::max();
+    if (policy == QStringLiteral("Last year")) return QDateTime::currentDateTimeUtc().addYears(-1).toMSecsSinceEpoch();
     if (policy == QStringLiteral("Last day")) return QDateTime::currentDateTimeUtc().addDays(-1).toMSecsSinceEpoch();
     if (policy == QStringLiteral("Last week")) return QDateTime::currentDateTimeUtc().addDays(-7).toMSecsSinceEpoch();
     return QDateTime::currentDateTimeUtc().addMonths(-1).toMSecsSinceEpoch();
@@ -197,6 +201,21 @@ bool excludeSources(QVector<SourceFile> &files, const QStringList &requested, QS
     const qsizetype before = files.size();
     files.erase(std::remove_if(files.begin(), files.end(), [&](const SourceFile &file) { return excluded.contains(file.relative); }), files.end());
     if (before - files.size() != excluded.size()) { if (error) *error = "Accepted duplicate evidence changed; preview again"; return false; }
+    return true;
+}
+
+bool includeSources(QVector<SourceFile> &files, const QStringList &requested, QString *error) {
+    if (requested.isEmpty()) return true;
+    QSet<QString> wanted;
+    for (const QString &entry : requested) {
+        const QString path = QDir::cleanPath(entry);
+        if (path.isEmpty() || path == "." || path == ".." || path.startsWith("../") || path.contains("/../") || QFileInfo(path).isAbsolute()) { if (error) *error = "Included source path is unsafe"; return false; }
+        wanted.insert(path);
+    }
+    QVector<SourceFile> selected;
+    for (const SourceFile &file : files) if (wanted.remove(file.relative)) selected.append(file);
+    if (!wanted.isEmpty()) { if (error) *error = "Included source file is unavailable"; return false; }
+    files = std::move(selected);
     return true;
 }
 
@@ -646,10 +665,19 @@ bool initializeCatalog(QSqlDatabase &db, QString *error) {
                 || !ensureCatalogColumn(db, "app_config", "hub_limit_percent", "hub_limit_percent INTEGER NOT NULL DEFAULT 80 CHECK (hub_limit_percent BETWEEN 1 AND 95)", &migrationError)
                 || !q.exec("UPDATE schema_version SET version=17,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
                 || !db.commit()) { db.rollback(); if (error) *error = migrationError.isEmpty() ? q.lastError().text() : migrationError; return false; }
-        } else if (version != 17) {
+        } else if (version != 17 && version != 18 && version != 19) {
             if (error) *error = "Unsupported catalog schema version"; return false;
         }
     }
+    if (!upgradeYearRetention(db, error)) return false;
+    if (!q.exec("SELECT version FROM schema_version WHERE singleton=1") || !q.next()) { if (error) *error = "Unsupported catalog schema version"; return false; }
+    if (q.value(0).toInt() != 18) return true;
+    QString migrationError;
+    if (!db.transaction()
+        || !ensureCatalogColumn(db, "devices", "icon", "icon TEXT NOT NULL DEFAULT '' CHECK (icon IN ('', 'Laptop', 'PC', 'Server', 'Phone', 'HD', 'SSD'))", &migrationError)
+        || !ensureCatalogColumn(db, "storage", "icon", "icon TEXT NOT NULL DEFAULT '' CHECK (icon IN ('', 'Laptop', 'PC', 'Server', 'Phone', 'HD', 'SSD'))", &migrationError)
+        || !q.exec("UPDATE schema_version SET version=19,installed_at=CURRENT_TIMESTAMP WHERE singleton=1")
+        || !db.commit()) { db.rollback(); if (error) *error = migrationError.isEmpty() ? q.lastError().text() : migrationError; return false; }
     return true;
 }
 
@@ -673,6 +701,11 @@ bool prepareCatalog(QSqlDatabase &db, const VerifiedCopy::Request &r, const Veri
     if (!db.transaction()) { if (error) *error = db.lastError().text(); return false; }
     QSqlQuery q(db);
     QString sourceDeviceId = r.sourceDeviceId.isEmpty() ? QStringLiteral("local") : r.sourceDeviceId;
+    if (r.routeEnabled) {
+        q.prepare("SELECT enabled FROM routes WHERE id=?"); q.addBindValue(routeId);
+        if (!q.exec()) { db.rollback(); if (error) *error = q.lastError().text(); return false; }
+        if (q.next() && !q.value(0).toBool()) { db.rollback(); if (error) *error = QStringLiteral("This connection has been removed."); return false; }
+    }
     const QString sourceDeviceStableId = r.sourceDeviceStableId.isEmpty() ? sourceDeviceId : r.sourceDeviceStableId;
     const QString sourceDeviceName = r.sourceDeviceName.isEmpty() ? QStringLiteral("Computer") : r.sourceDeviceName;
     const QString sourceDeviceKind = r.sourceDeviceKind.isEmpty() ? QStringLiteral("Desktop") : r.sourceDeviceKind;
@@ -714,6 +747,10 @@ bool prepareCatalog(QSqlDatabase &db, const VerifiedCopy::Request &r, const Veri
         q.addBindValue(sourceStorageId); q.addBindValue(sourceStorageIdentity); q.addBindValue(sourceDeviceId); q.addBindValue(sourceStorageKind); q.addBindValue(sourceStorageLabel); q.addBindValue(QString()); q.addBindValue(QStringLiteral("/")); q.addBindValue(QStringLiteral("present"));
     }
     if (!q.exec()) { db.rollback(); if (error) *error = q.lastError().text(); return false; }
+    if (sourceStorageId != QStringLiteral("local") && (sourceTransport == QStringLiteral("mtp") || sourceTransport == QStringLiteral("wireless"))) {
+        q.prepare("UPDATE storage SET onboarding_seen=1 WHERE id=?"); q.addBindValue(sourceStorageId);
+        if (!q.exec()) { db.rollback(); if (error) *error = q.lastError().text(); return false; }
+    }
     if (sourceDeviceId != QStringLiteral("local") && sourceStorageIdentity != QStringLiteral("local") && (sourceTransport == QStringLiteral("mtp") || sourceTransport == QStringLiteral("wireless"))) {
         q.prepare("INSERT INTO device_aliases(alias,device_id,transport,last_seen_at) VALUES(?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(alias) DO UPDATE SET device_id=excluded.device_id,transport=excluded.transport,last_seen_at=CURRENT_TIMESTAMP");
         q.addBindValue(sourceStorageIdentity); q.addBindValue(sourceDeviceId); q.addBindValue(sourceTransport);
@@ -747,12 +784,16 @@ bool prepareCatalog(QSqlDatabase &db, const VerifiedCopy::Request &r, const Veri
     const QString catalogRoot = destinationRootUrl.scheme().isEmpty() ? r.destinationRoot : destinationRootUrl.path(QUrl::FullyDecoded);
     q.addBindValue(destinationStorageId); q.addBindValue(r.storageIdentity); q.addBindValue(destinationDeviceId); q.addBindValue(r.destinationStorageKind); q.addBindValue(r.destinationStorageLabel); q.addBindValue(r.filesystemType); q.addBindValue(catalogRoot); q.addBindValue("present");
     if (!q.exec()) { db.rollback(); if (error) *error = QStringLiteral("Destination storage catalog: %1").arg(q.lastError().text()); return false; }
+    if (r.destinationStorageKind == QStringLiteral("mtp") || r.destinationStorageKind == QStringLiteral("wireless")) {
+        q.prepare("UPDATE storage SET onboarding_seen=1 WHERE id=?"); q.addBindValue(destinationStorageId);
+        if (!q.exec()) { db.rollback(); if (error) *error = QStringLiteral("Destination storage catalog: %1").arg(q.lastError().text()); return false; }
+    }
     q.prepare("INSERT OR IGNORE INTO routes(id,source_storage_id,destination_storage_id,source_root,destination_root,behavior,keep_policy,content_type,staging_max_bytes,minimum_free_bytes,organize_photos,enabled) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)");
     const QString contentType = r.contentType == QStringLiteral("Photos") || r.contentType == QStringLiteral("Drive") ? r.contentType
                                                                                                                          : (r.organizePhotos ? QStringLiteral("Photos") : QStringLiteral("Drive"));
     q.addBindValue(routeId); q.addBindValue(sourceStorageId); q.addBindValue(destinationStorageId); q.addBindValue(r.sourceRoot); q.addBindValue(r.destinationRoot); q.addBindValue(r.behavior); q.addBindValue(r.keepPolicy); q.addBindValue(contentType); q.addBindValue(r.stagingMaxBytes); q.addBindValue(r.minimumFreeBytes); q.addBindValue(r.organizePhotos); q.addBindValue(r.routeEnabled);
     if (!q.exec()) { db.rollback(); if (error) *error = QStringLiteral("Route insert: %1").arg(q.lastError().text()); return false; }
-    q.prepare("UPDATE routes SET staging_max_bytes=?,minimum_free_bytes=?,organize_photos=?,enabled=? WHERE id=?"); q.addBindValue(r.stagingMaxBytes); q.addBindValue(r.minimumFreeBytes); q.addBindValue(r.organizePhotos); q.addBindValue(r.routeEnabled); q.addBindValue(routeId);
+    q.prepare("UPDATE routes SET staging_max_bytes=CASE WHEN enabled=1 THEN staging_max_bytes ELSE ? END,minimum_free_bytes=?,organize_photos=?,enabled=? WHERE id=?"); q.addBindValue(r.stagingMaxBytes); q.addBindValue(r.minimumFreeBytes); q.addBindValue(r.organizePhotos); q.addBindValue(r.routeEnabled); q.addBindValue(routeId);
     if (!q.exec()) { db.rollback(); if (error) *error = QStringLiteral("Route update: %1").arg(q.lastError().text()); return false; }
     q.prepare("INSERT OR IGNORE INTO jobs(id,route_id,behavior,keep_policy,source_path,destination_path,bytes_total) VALUES(?,?,?,?,?,?,?)");
     q.addBindValue(jobId); q.addBindValue(routeId); q.addBindValue(r.behavior); q.addBindValue(r.keepPolicy); q.addBindValue(r.sourceRoot); q.addBindValue(r.destinationRoot); q.addBindValue(preview.bytes);
@@ -943,7 +984,7 @@ bool recordCleanupUncertain(QSqlDatabase &db, const QVector<CleanupItem> &items,
 }
 
 bool trashVerifiedMove(QSqlDatabase &db, const VerifiedCopy::Request &request, const QString &jobId, QString *error,
-                       const std::atomic_bool *cancelled, const std::function<void(const QString &, const QString &)> &testHook) {
+                       const std::atomic_bool *cancelled, const std::function<void(const QString &, const QString &)> &testHook, qint64 reviewedCutoff) {
     if (request.keepPolicy == QStringLiteral("Everything")) { if (error) *error = "Keep Everything has no cleanup"; return false; }
     QSqlQuery q(db);
     q.prepare("SELECT behavior,keep_policy,state FROM jobs WHERE id=?"); q.addBindValue(jobId);
@@ -951,7 +992,7 @@ bool trashVerifiedMove(QSqlDatabase &db, const VerifiedCopy::Request &request, c
     q.prepare("SELECT id,source_path,destination_path,expected_size,source_mtime,expected_sha256 FROM job_items WHERE job_id=? AND state='Complete' AND cleanup_state IN ('not_requested','failed') ORDER BY source_path"); q.addBindValue(jobId);
     if (!q.exec()) { if (error) *error = q.lastError().text(); return false; }
     QVector<CleanupItem> items;
-    const qint64 cutoff = cleanupCutoff(request.keepPolicy);
+    const qint64 cutoff = reviewedCutoff > 0 ? reviewedCutoff : cleanupCutoff(request.keepPolicy);
     while (q.next()) {
         if (q.value(4).toLongLong() >= cutoff) continue;
         items.push_back({q.value(0).toString(), {QString(), q.value(1).toString(), {}, q.value(3).toLongLong(), q.value(4).toLongLong()}, q.value(2).toString(), QByteArray::fromHex(q.value(5).toString().toLatin1())});
@@ -1129,11 +1170,21 @@ bool remoteStat(const QUrl &url, qint64 *size, qint64 *mtime, QString *error) {
     return true;
 }
 
-bool remoteHash(const QUrl &url, qint64 expectedSize, QByteArray *hash, QString *error) {
+bool remoteHash(const QUrl &url, qint64 expectedSize, QByteArray *hash, QString *error,
+                const std::atomic_bool *cancelled = nullptr, int timeoutMs = 0) {
+    if (cancelled && cancelled->load()) { if (error) *error = QStringLiteral("Remote hash cancelled"); return false; }
     QEventLoop loop; QCryptographicHash digest(QCryptographicHash::Sha256); qint64 received = 0; QString failure;
     auto *job = KIO::get(url, KIO::NoReload, KIO::HideProgressInfo);
     QObject::connect(job, &KIO::TransferJob::data, &loop, [&](KIO::Job *, const QByteArray &data) { digest.addData(data); received += data.size(); });
-    QObject::connect(job, &KJob::result, &loop, [&](KJob *finished) { if (finished->error()) failure = finished->errorText(); loop.quit(); });
+    QObject::connect(job, &KJob::result, &loop, [&](KJob *finished) { if (finished->error() && failure.isEmpty()) failure = finished->errorText(); loop.quit(); });
+    QElapsedTimer elapsed; elapsed.start();
+    QTimer watchdog; watchdog.setInterval(50);
+    QObject::connect(&watchdog, &QTimer::timeout, &loop, [&] {
+        if ((!cancelled || !cancelled->load()) && (timeoutMs <= 0 || elapsed.elapsed() < timeoutMs)) return;
+        failure = cancelled && cancelled->load() ? QStringLiteral("Remote hash cancelled") : QStringLiteral("Remote hash timed out");
+        job->kill(KJob::EmitResult);
+    });
+    watchdog.start();
     loop.exec();
     if (!failure.isEmpty() || received != expectedSize) { if (error) *error = failure.isEmpty() ? QStringLiteral("Remote size changed during verification") : failure; return false; }
     if (hash) *hash = digest.result();
@@ -1228,7 +1279,7 @@ VerifiedCopy::Preview VerifiedCopy::inspect(const Request &request, const std::a
     if (request.behavior != "Copy" && request.behavior != "Move") { result.error = "Unknown transfer behavior"; return result; }
     if (request.minimumFreeBytes < 0) { result.error = "Minimum free-space margin cannot be negative"; return result; }
     if (request.stagingMaxBytes < 0) { result.error = "Staging maximum cannot be negative"; return result; }
-    if (request.keepPolicy != "Everything" && request.keepPolicy != "Last month" && request.keepPolicy != "Last week" && request.keepPolicy != "Last day" && request.keepPolicy != "Nothing") { result.error = "Unknown Keep policy"; return result; }
+    if (request.keepPolicy != "Everything" && request.keepPolicy != "Last year" && request.keepPolicy != "Last month" && request.keepPolicy != "Last week" && request.keepPolicy != "Last day" && request.keepPolicy != "Nothing") { result.error = "Unknown Keep policy"; return result; }
     if ((request.keepPolicy == "Nothing" && request.behavior != "Move") || (request.keepPolicy == "Everything" && request.behavior == "Move")) { result.error = "Keep policy and transfer behavior do not match"; return result; }
     const QString source = canonicalDir(request.sourceRoot), destination = canonicalDir(request.destinationRoot);
     if (source.isEmpty()) { result.error = "Source folder is unavailable or is a symlink"; return result; }
@@ -1250,7 +1301,7 @@ VerifiedCopy::Preview VerifiedCopy::inspect(const Request &request, const std::a
     QVector<SourceFile> files;
     QString scanError; scanPinned(pins.source, source, {}, files, result.unsupported, result.unsupportedPaths, result.unsupportedEvidence, &scanError, previewCancel);
     if (!scanError.isEmpty()) { result.error = scanError; closePins(pins); return result; }
-    if (!excludeSources(files, request.excludedSourcePaths, &result.error)) { closePins(pins); return result; }
+    if (!includeSources(files, request.includedSourcePaths, &result.error) || !excludeSources(files, request.excludedSourcePaths, &result.error)) { closePins(pins); return result; }
     std::sort(files.begin(), files.end(), [](const SourceFile &a, const SourceFile &b) { return a.relative < b.relative; });
     assignDestinationPaths(request, files);
     if (!validateDestinationOverrides(request, files, &result.error)) { closePins(pins); return result; }
@@ -1276,6 +1327,7 @@ VerifiedCopy::Preview VerifiedCopy::inspect(const Request &request, const std::a
         if (!sameFileOpenedFd(pins.source, file.relative, file, &sourceHash, nullptr, &sourceError)) {
             ++result.unreadable; result.paths.append(file.relative); continue;
         }
+        if (request.expectedSourceHashes.contains(file.relative) && request.expectedSourceHashes.value(file.relative) != sourceHash) { result.error = "Verified source copy changed; preview again"; closePins(pins); return result; }
         const QByteArray duplicateKey = sourceHash + '\0' + QByteArray::number(file.size);
         const QString sourceDuplicate = sourceHashes.value(duplicateKey);
         if (!sourceDuplicate.isEmpty()) {
@@ -1295,6 +1347,7 @@ VerifiedCopy::Preview VerifiedCopy::inspect(const Request &request, const std::a
         }
         const bool targetRegular = S_ISREG(targetStat.st_mode);
         if (!targetRegular) { ++result.conflicts; result.conflictPaths.append(file.destinationRelative); result.conflictEvidence.append(QStringLiteral("%1\n%2\n%3\nnon-regular:%4:%5").arg(file.relative, file.destinationRelative, QString::fromLatin1(sourceHash.toHex()), QString::number(targetStat.st_size), QString::number(targetStat.st_mtim.tv_sec * 1000 + targetStat.st_mtim.tv_nsec / 1000000))); continue; }
+        if (targetStat.st_size != file.size) { ++result.conflicts; result.conflictPaths.append(file.destinationRelative); result.conflictEvidence.append(QStringLiteral("%1\n%2\n%3\nsize:%4").arg(file.relative, file.destinationRelative, QString::fromLatin1(sourceHash.toHex()), QString::number(targetStat.st_size))); result.paths.append(file.relative); continue; }
         QByteArray targetHash;
         if (!sameFileOpenedFd(pins.destination, file.destinationRelative, file, &targetHash, nullptr, &error)) { result.error = error; closePins(pins); return result; }
         if (sourceHash == targetHash && targetStat.st_size == file.size) ++result.identical;
@@ -1322,7 +1375,7 @@ QVariantMap VerifiedCopy::routeMap(const QString &routeId) {
         QSqlQuery q(db); q.prepare("SELECT r.source_root,r.destination_root,r.behavior,r.keep_policy,r.destination_storage_id,s.stable_identity,COALESCE(s.filesystem_type,''),s.selected_root,COALESCE(r.staging_max_bytes,0),COALESCE(r.minimum_free_bytes,0),COALESCE(r.organize_photos,0),s.presence FROM routes r JOIN storage s ON s.id=r.destination_storage_id WHERE r.id=? AND r.enabled=1"); q.addBindValue(routeId);
         if (q.exec() && q.next()) {
             if (q.value(11).toString() != QStringLiteral("present")) { result = {{"ok", false}, {"error", "Saved route is Waiting for the exact storage to reconnect"}}; releaseDatabase(db, connection); return result; }
-            m_request = Request{q.value(0).toString(), q.value(1).toString(), q.value(7).toString(), q.value(5).toString(), q.value(6).toString(), dbPath, routeId, q.value(4).toString(), q.value(2).toString(), q.value(3).toString(), q.value(9).toLongLong(), q.value(8).toLongLong(), q.value(10).toBool(), QStringLiteral("local"), QStringLiteral("local"), QStringLiteral("local"), QStringLiteral("Computer"), QStringLiteral("local"), QStringLiteral("local"), QStringLiteral("Computer"), QStringLiteral("Desktop")};
+            m_request = Request{q.value(0).toString(), q.value(1).toString(), q.value(7).toString(), q.value(5).toString(), q.value(6).toString(), dbPath, routeId, q.value(4).toString(), q.value(2).toString(), q.value(3).toString(), q.value(9).toLongLong(), 0, q.value(10).toBool(), QStringLiteral("local"), QStringLiteral("local"), QStringLiteral("local"), QStringLiteral("Computer"), QStringLiteral("local"), QStringLiteral("local"), QStringLiteral("Computer"), QStringLiteral("Desktop")};
             result = {{"ok", true}};
         } else result = {{"ok", false}, {"error", "Saved destination storage is unavailable"}};
     } else result = {{"ok", false}, {"error", db.lastError().text()}};
@@ -1370,7 +1423,7 @@ QVariantMap VerifiedCopy::cleanupPreview() const {
         if (items.value(2).toString() == QStringLiteral("pending")) { ++pending; continue; }
         if (items.value(1).toLongLong() < cutoff) { ++files; bytes += items.value(0).toLongLong(); }
     }
-    result.insert("ok", true); result.insert("files", files); result.insert("bytes", bytes); result.insert("pending", pending); result.insert("uncertain", pending > 0); result.insert("policy", m_request.keepPolicy);
+    result.insert("ok", true); result.insert("cutoff", cutoff); result.insert("files", files); result.insert("bytes", bytes); result.insert("pending", pending); result.insert("uncertain", pending > 0); result.insert("policy", m_request.keepPolicy);
     releaseDatabase(db, connection);
     return result;
 }
@@ -1385,8 +1438,8 @@ QVariantList VerifiedCopy::recentHistoryForRoute(const QString &databasePath, co
     const QString connection = QStringLiteral("history-%1").arg(QUuid::createUuid().toString(QUuid::Id128));
     auto db = QSqlDatabase::addDatabase("QSQLITE", connection); db.setDatabaseName(databasePath);
     if (!db.open()) return result;
-    QSqlQuery q(db); q.prepare("SELECT h.event,h.source_path,h.destination_path,h.result,h.occurred_at FROM history h JOIN jobs j ON j.id=h.job_id WHERE j.route_id=? ORDER BY h.occurred_at DESC,h.rowid DESC LIMIT 8"); q.addBindValue(routeId);
-    if (q.exec()) while (q.next()) result.append(QVariantMap{{"event", q.value(0)}, {"source", q.value(1)}, {"destination", q.value(2)}, {"result", q.value(3)}, {"occurredAt", q.value(4)}});
+    QSqlQuery q(db); q.prepare("SELECT h.id,h.event,h.source_path,h.destination_path,h.result,h.occurred_at FROM history h JOIN jobs j ON j.id=h.job_id WHERE j.route_id=? ORDER BY h.occurred_at DESC,h.rowid DESC LIMIT 8"); q.addBindValue(routeId);
+    if (q.exec()) while (q.next()) result.append(QVariantMap{{"id", q.value(0)}, {"event", q.value(1)}, {"source", q.value(2)}, {"destination", q.value(3)}, {"result", q.value(4)}, {"occurredAt", q.value(5)}});
     releaseDatabase(db, connection);
     return result;
 }
@@ -1458,23 +1511,36 @@ bool VerifiedCopy::startRemoteImportDirectory(const QVariantMap &options) {
     base.destinationDeviceId = options.value("destinationDeviceId", QStringLiteral("local")).toString();
     base.destinationDeviceStableId = options.value("destinationDeviceStableId", QStringLiteral("local")).toString();
     base.destinationDeviceName = options.value("destinationDeviceName", QStringLiteral("Computer")).toString();
+    const QVariantMap expectedHashes = options.value("expectedSourceHashes").toMap();
+    const bool previewHashesRequired = options.contains("expectedSourceHashes");
+    for (auto it = expectedHashes.cbegin(); it != expectedHashes.cend(); ++it) {
+        const QByteArray hash = QByteArray::fromHex(it.value().toString().toLatin1());
+        if (it.key().isEmpty() || hash.size() != QCryptographicHash::hashLength(QCryptographicHash::Sha256)) return false;
+        base.expectedSourceHashes.insert(it.key(), hash);
+    }
     base.minimumFreeBytes = options.value("minimumFreeBytes").toLongLong();
     base.stagingMaxBytes = options.value("stagingMaxBytes").toLongLong();
     base.resumable = options.value("resumable").toBool() || base.sourceStorageIdentity.startsWith(QStringLiteral("wireless:"));
-    const QString destinationPrefix = QDir::cleanPath(options.value("destinationPrefix").toString());
+    const bool scanOnly = options.value("scanOnly").toBool();
+    const QString cleanedPrefix = QDir::cleanPath(options.value("destinationPrefix").toString());
+    const QString destinationPrefix = cleanedPrefix == QStringLiteral(".") ? QString() : cleanedPrefix;
     bool itemsOk = false, bytesOk = false;
     const qint64 maxItems = options.value("maxItems", 100000).toLongLong(&itemsOk);
     const qint64 maxBytes = options.value("maxBytes", 64LL * 1024 * 1024 * 1024).toLongLong(&bytesOk);
-    if (!base.sourceUrl.isValid() || (base.sourceUrl.scheme() != QStringLiteral("mtp") && base.sourceUrl.scheme() != QStringLiteral("file")) || base.destinationRoot.isEmpty() || base.storageIdentity.isEmpty() || base.minimumFreeBytes < 0 || base.stagingMaxBytes < 0 || !itemsOk || !bytesOk || maxItems < 0 || maxBytes < 0) return false;
+    const int scanTimeoutMs = options.value("scanTimeoutMs", 300000).toInt();
+    if (!base.sourceUrl.isValid() || (base.sourceUrl.scheme() != QStringLiteral("mtp") && base.sourceUrl.scheme() != QStringLiteral("file")) || base.destinationRoot.isEmpty() || base.storageIdentity.isEmpty() || base.minimumFreeBytes < 0 || base.stagingMaxBytes < 0 || !itemsOk || !bytesOk || maxItems < 0 || maxBytes < 0 || scanTimeoutMs <= 0) return false;
 
+    m_preview = {}; emit previewChanged();
     m_cancelled.store(false); m_paused.store(false); m_copying.store(false); emit pausedChanged(); m_running.store(true); emit runningChanged(); setStatus(QStringLiteral("Scanning phone"));
-    QThread *thread = QThread::create([this, base, destinationPrefix, maxItems, maxBytes] {
+    QThread *thread = QThread::create([this, base, destinationPrefix, maxItems, maxBytes, scanOnly, scanTimeoutMs, previewHashesRequired] {
         QVector<RemoteInventoryItem> items;
+        Preview preview;
+        QElapsedTimer scanElapsed; scanElapsed.start();
         QString error;
-        bool success = collectRemoteDirectory(base.sourceUrl, maxItems, maxBytes, items, &error);
+        bool success = collectRemoteDirectory(base.sourceUrl, maxItems, maxBytes, items, &error, &m_cancelled, scanTimeoutMs);
         qint64 total = 0, done = 0;
         for (const RemoteInventoryItem &item : items) total += item.size;
-        if (success && base.stagingMaxBytes > 0) {
+        if (success && !scanOnly && base.stagingMaxBytes > 0) {
             qint64 used = 0, incoming = 0;
             success = stagingUsage(base.destinationRoot, &used, &error);
             if (success) for (const RemoteInventoryItem &item : items) {
@@ -1483,13 +1549,72 @@ bool VerifiedCopy::startRemoteImportDirectory(const QVariantMap &options) {
             }
             if (success && (used > base.stagingMaxBytes || incoming > base.stagingMaxBytes - used)) { success = false; error = QStringLiteral("Staging capacity reached; phone source was not modified"); }
         }
-        if (success) {
+        if (success && scanOnly) {
+            const QString destinationRoot = canonicalDir(base.destinationRoot);
+            const QString selectedRoot = canonicalDir(base.selectedStorageRoot.isEmpty() ? base.destinationRoot : base.selectedStorageRoot);
+            QString identityError;
+            if (destinationRoot.isEmpty() || selectedRoot.isEmpty() || !under(destinationRoot, selectedRoot)) { success = false; error = QStringLiteral("Destination is outside the selected storage root"); }
+            else if (storageIdentity(destinationRoot, &identityError) != base.storageIdentity) { success = false; error = identityError.isEmpty() ? QStringLiteral("Destination storage identity could not be verified") : identityError; }
+            RootPins pins;
+            if (success && !pinRoot(destinationRoot, pins.destination, &pins.destinationDevice, &pins.destinationInode, &error)) success = false;
+            preview.files = items.size(); preview.bytes = total; preview.minimumFreeBytes = base.minimumFreeBytes; preview.stagingMaxBytes = base.stagingMaxBytes;
+            QHash<QByteArray, QString> sourceHashes;
+            if (success) QMetaObject::invokeMethod(this, [this] { setStatus(QStringLiteral("Hashing phone preview")); }, Qt::QueuedConnection);
+            for (const RemoteInventoryItem &item : items) {
+                if (!success) break;
+                if (m_cancelled.load()) { success = false; error = QStringLiteral("Preview cancelled"); break; }
+                const QString relative = destinationPrefix.isEmpty() ? item.relative : QDir(destinationPrefix).filePath(item.relative);
+                preview.manifest.append({item.relative, relative, item.size, 0});
+                if (!item.supported) { ++preview.unsupported; preview.unsupportedPaths.append(item.relative); continue; }
+                QByteArray sourceHash; QString hashError;
+                const int remainingMs = scanTimeoutMs - static_cast<int>(scanElapsed.elapsed());
+                if (remainingMs <= 0 || !remoteHash(item.url, item.size, &sourceHash, &hashError, &m_cancelled, remainingMs)) {
+                    if (m_cancelled.load() || remainingMs <= 0 || hashError.contains(QStringLiteral("timed out"))) { success = false; error = m_cancelled.load() ? QStringLiteral("Preview cancelled") : QStringLiteral("Phone preview timed out"); break; }
+                    ++preview.unreadable; preview.paths.append(item.relative); continue;
+                }
+                preview.expectedSourceHashes.insert(item.relative, sourceHash);
+                done += item.size;
+                QMetaObject::invokeMethod(this, [this, done, total, item] { emit progressChanged(done, total, item.relative); }, Qt::QueuedConnection);
+                const QByteArray duplicateKey = sourceHash + '\0' + QByteArray::number(item.size);
+                if (sourceHashes.contains(duplicateKey)) { ++preview.duplicates; preview.duplicatePaths.append(QStringLiteral("%1 ↔ %2").arg(item.relative, sourceHashes.value(duplicateKey))); continue; }
+                sourceHashes.insert(duplicateKey, item.relative);
+                struct stat targetStat{}; QString statError;
+                if (!statPinned(pins.destination, destinationRoot, relative, &targetStat, &statError)) {
+                    if (!statError.isEmpty()) { success = false; error = statError; break; }
+                    preview.toCopy += item.size; preview.paths.append(item.relative); continue;
+                }
+                if (!S_ISREG(targetStat.st_mode) || targetStat.st_size != item.size) {
+                    ++preview.conflicts; preview.conflictPaths.append(relative); preview.paths.append(item.relative); continue;
+                }
+                SourceFile target{item.relative, {}, relative, item.size, 0}; QByteArray destinationHash;
+                if (!sameFileOpenedFd(pins.destination, relative, target, &destinationHash, nullptr, &statError)) { success = false; error = statError.isEmpty() ? QStringLiteral("Destination contains an unreadable item") : statError; break; }
+                if (sourceHash == destinationHash) ++preview.identical;
+                else { ++preview.conflicts; preview.conflictPaths.append(relative); preview.paths.append(item.relative); }
+            }
+            preview.freeBytes = destinationRoot.isEmpty() ? 0 : QStorageInfo(destinationRoot).bytesAvailable();
+            qint64 stagingUsed = 0;
+            if (success && base.stagingMaxBytes > 0 && !stagingUsage(destinationRoot, &stagingUsed, &error)) success = false;
+            if (success && preview.unreadable) preview.error = QStringLiteral("Unreadable phone items remain; reconnect or unlock the phone, then preview again");
+            else if (success && preview.conflicts) preview.error = QStringLiteral("Conflicting destination items remain; review them before copying");
+            else if (success && preview.duplicates) preview.error = QStringLiteral("Exact duplicate phone items remain; review them before copying");
+            else if (success && preview.unsupported) preview.error = QStringLiteral("Unsupported phone items remain; they will stay on the phone");
+            else if (success && base.stagingMaxBytes > 0 && (stagingUsed > base.stagingMaxBytes || preview.toCopy > base.stagingMaxBytes - stagingUsed)) preview.error = QStringLiteral("Staging limit reached before transfer");
+            else if (success && (preview.freeBytes < preview.toCopy || preview.freeBytes - preview.toCopy < base.minimumFreeBytes)) preview.error = QStringLiteral("Not enough free space including the configured safety margin");
+            preview.ok = success && preview.error.isEmpty();
+            closePins(pins);
+        }
+        if (success && !scanOnly) {
             for (const RemoteInventoryItem &item : items) {
                 if (m_cancelled.load()) { success = false; error = QStringLiteral("Import cancelled"); break; }
+                if (!item.supported) { success = false; error = QStringLiteral("Phone contents changed or include an unsupported item; preview again"); break; }
                 RemoteRequest request = base;
                 request.sourceUrl = item.url;
                 request.sourceRelative = item.relative;
                 request.destinationRelative = destinationPrefix.isEmpty() ? item.relative : QDir(destinationPrefix).filePath(item.relative);
+                if (previewHashesRequired) {
+                    if (!base.expectedSourceHashes.contains(item.relative)) { success = false; error = QStringLiteral("Phone preview hash evidence is missing; preview again"); break; }
+                    request.expectedSourceHash = base.expectedSourceHashes.value(item.relative);
+                }
                 request.progressOffset = done;
                 request.progressTotal = total;
                 QMetaObject::invokeMethod(this, [this, item] { setStatus(QStringLiteral("Importing %1").arg(item.relative)); }, Qt::QueuedConnection);
@@ -1498,9 +1623,10 @@ bool VerifiedCopy::startRemoteImportDirectory(const QVariantMap &options) {
                 QMetaObject::invokeMethod(this, [this, done, total, item] { emit progressChanged(done, total, item.relative); }, Qt::QueuedConnection);
             }
         }
-        QMetaObject::invokeMethod(this, [this, success, error] {
-            setStatus(success ? QStringLiteral("Complete") : (error == QStringLiteral("Import cancelled") ? QStringLiteral("Cancelled") : QStringLiteral("Failed")));
-            emit finished(success, success ? QStringLiteral("Phone import completed") : error);
+        QMetaObject::invokeMethod(this, [this, success, error, scanOnly, total, count = items.size(), preview] {
+            if (scanOnly) { m_preview = preview; emit previewChanged(); }
+            setStatus(success ? QStringLiteral("Complete") : (error.contains(QStringLiteral("cancelled"), Qt::CaseInsensitive) ? QStringLiteral("Cancelled") : QStringLiteral("Failed")));
+            emit finished(success, success ? (scanOnly ? QStringLiteral("Phone preview ready: %1 files · %2 bytes").arg(count).arg(total) : QStringLiteral("Phone import completed")) : error);
         }, Qt::QueuedConnection);
     });
     connect(thread, &QThread::finished, this, [this, thread] { thread->deleteLater(); if (m_thread == thread) { m_thread = nullptr; m_running.store(false); emit runningChanged(); } });
@@ -1509,12 +1635,12 @@ bool VerifiedCopy::startRemoteImportDirectory(const QVariantMap &options) {
     return true;
 }
 
-bool VerifiedCopy::cleanup() {
+bool VerifiedCopy::cleanup(qint64 cutoff) {
     if (m_running.load() || m_thread != nullptr || !m_cleanupReady.load() || m_request.keepPolicy == "Everything") return false;
     m_cancelled.store(false); m_paused.store(false); m_copying.store(false); emit pausedChanged(); m_running.store(true); emit runningChanged(); setStatus("Moving verified sources to Trash");
     const Request request = m_request;
-    QThread *thread = QThread::create([this, request] {
-        QString error; const bool success = cleanupBlocking(request, &error);
+    QThread *thread = QThread::create([this, request, cutoff] {
+        QString error; const bool success = cleanupBlocking(request, &error, cutoff);
         QMetaObject::invokeMethod(this, [this, success, error] {
             if (m_paused.exchange(false)) { m_pauseCondition.notify_all(); emit pausedChanged(); }
             if (success) { m_cleanupReady.store(false); emit cleanupChanged(); }
@@ -1623,6 +1749,7 @@ bool VerifiedCopy::executeResumableLocalRemoteBlocking(const RemoteRequest &remo
     request.sourceDeviceStableId = remote.sourceDeviceStableId;
     request.sourceDeviceName = remote.sourceDeviceName;
     request.sourceDeviceKind = QStringLiteral("Phone");
+    request.routeEnabled = false;
     SourceFile source{remote.sourceRelative.isEmpty() ? sourceInfo.fileName() : remote.sourceRelative, sourcePath, destinationRelative, sourceSize, sourceMtime};
     Preview plan;
     plan.ok = true; plan.files = 1; plan.bytes = sourceSize; plan.toCopy = sourceSize; plan.freeBytes = QStorageInfo(destinationRoot).bytesAvailable();
@@ -1762,6 +1889,7 @@ bool VerifiedCopy::executeRemoteBlocking(const RemoteRequest &remote, QString *e
     request.sourceDeviceStableId = remote.sourceDeviceStableId;
     request.sourceDeviceName = remote.sourceDeviceName;
     request.sourceDeviceKind = QStringLiteral("Phone");
+    request.routeEnabled = false;
     SourceFile source{remote.sourceRelative, remote.sourceUrl.toString(), destinationRelative, sourceSize, sourceMtime};
     if (source.relative.isEmpty()) source.relative = QFileInfo(remote.sourceUrl.path(QUrl::FullyDecoded)).fileName();
     if (source.relative.isEmpty()) { if (error) *error = "MTP source filename is unavailable"; return false; }
@@ -1812,8 +1940,10 @@ bool VerifiedCopy::executeRemoteBlocking(const RemoteRequest &remote, QString *e
     if (!streamError.isEmpty()) { partial.close(); return failRemote("MTP transfer failed: " + streamError); }
     if (received != sourceSize || !partial.flush() || ::fsync(partial.handle()) != 0) { partial.close(); return failRemote("MTP source size or destination flush check failed"); }
     if (!setItemState(db, itemId, QStringLiteral("Verifying"), &catalogError)) { partial.close(); return failRemote(catalogError); }
+    const QByteArray copiedSourceHash = sourceHash.result();
+    if (!remote.expectedSourceHash.isEmpty() && remote.expectedSourceHash != copiedSourceHash) { partial.close(); return failRemote(QStringLiteral("Verified phone source changed after preview; preview again")); }
     QByteArray destinationHash; struct stat partialStat{}; FdGuard partialVerified;
-    if (!hashFd(partial.handle(), sourceSize, &destinationHash, &partialStat, &catalogError, &partialVerified.fd) || destinationHash != sourceHash.result()) { partial.close(); return failRemote(catalogError.isEmpty() ? QStringLiteral("Destination hash mismatch") : catalogError); }
+    if (!hashFd(partial.handle(), sourceSize, &destinationHash, &partialStat, &catalogError, &partialVerified.fd) || destinationHash != copiedSourceHash) { partial.close(); return failRemote(catalogError.isEmpty() ? QStringLiteral("Destination hash mismatch") : catalogError); }
     partial.close();
     qint64 sourceSizeAfter = 0, sourceMtimeAfter = 0;
     if (!remoteStat(remote.sourceUrl, &sourceSizeAfter, &sourceMtimeAfter, &catalogError) || sourceSizeAfter != sourceSize || (sourceMtime > 0 && sourceMtimeAfter > 0 && sourceMtimeAfter != sourceMtime)) return failRemote(catalogError.isEmpty() ? QStringLiteral("MTP source changed during transfer") : catalogError);
@@ -1871,6 +2001,7 @@ bool VerifiedCopy::executeExportBlocking(const ExportRequest &remote, QString *e
     request.storageIdentity = remote.destinationStorageIdentity; request.filesystemType = QStringLiteral("mtp"); request.databasePath = remote.databasePath.isEmpty() ? defaultCatalogPath() : remote.databasePath;
     request.routeId = remote.routeId; request.destinationStorageId = remote.destinationStorageId; request.destinationStorageKind = QStringLiteral("mtp"); request.destinationStorageLabel = remote.destinationStorageLabel;
     request.destinationDeviceId = remote.destinationDeviceId; request.destinationDeviceStableId = remote.destinationDeviceStableId; request.destinationDeviceName = remote.destinationDeviceName; request.destinationDeviceKind = QStringLiteral("Phone");
+    request.routeEnabled = false;
     SourceFile item{sourceInfo.fileName(), sourceInfo.absoluteFilePath(), relative, sourceSize, sourceMtime};
     Preview plan; plan.ok = true; plan.files = 1; plan.bytes = sourceSize; plan.toCopy = sourceSize; plan.manifest.append({item.relative, relative, sourceSize, sourceMtime});
     const QString connection = QStringLiteral("remote-export-%1").arg(QUuid::createUuid().toString(QUuid::Id128));
@@ -1918,7 +2049,7 @@ bool VerifiedCopy::executeExportBlocking(const ExportRequest &remote, QString *e
     releaseDatabase(db, connection); return true;
 }
 
-bool VerifiedCopy::cleanupBlocking(const Request &request, QString *error) {
+bool VerifiedCopy::cleanupBlocking(const Request &request, QString *error, qint64 cutoff) {
     const QString databasePath = request.databasePath.isEmpty() ? defaultCatalogPath() : request.databasePath;
     const QString connection = QStringLiteral("cleanup-%1").arg(QUuid::createUuid().toString(QUuid::Id128));
     auto db = QSqlDatabase::addDatabase("QSQLITE", connection); db.setDatabaseName(databasePath);
@@ -1926,7 +2057,7 @@ bool VerifiedCopy::cleanupBlocking(const Request &request, QString *error) {
     QSqlQuery job(db); job.prepare("SELECT id FROM jobs WHERE route_id=? AND keep_policy=? AND state='Cleanup pending' ORDER BY created_at DESC,rowid DESC LIMIT 1"); job.addBindValue(request.routeId); job.addBindValue(request.keepPolicy);
     if (!job.exec() || !job.next()) { if (error) *error = "No verified job is waiting for cleanup"; releaseDatabase(db, connection); return false; }
     const QString jobId = job.value(0).toString();
-    const bool result = trashVerifiedMove(db, request, jobId, error, &m_cancelled, m_testHook);
+    const bool result = trashVerifiedMove(db, request, jobId, error, &m_cancelled, m_testHook, cutoff);
     releaseDatabase(db, connection);
     return result;
 }
@@ -1956,7 +2087,7 @@ bool VerifiedCopy::execute(const Request &request, const Preview &authorized, QS
     unsupportedEvidence.sort(); unsupportedEvidence.removeDuplicates();
     QStringList acceptedUnsupported = request.acceptedUnsupportedEvidence; acceptedUnsupported.sort(); acceptedUnsupported.removeDuplicates();
     if (unsupportedEvidence != acceptedUnsupported) { if (error) *error = "Unsupported-item evidence changed; preview again"; return false; }
-    if (!excludeSources(files, request.excludedSourcePaths, error)) return false;
+    if (!includeSources(files, request.includedSourcePaths, error) || !excludeSources(files, request.excludedSourcePaths, error)) return false;
     std::sort(files.begin(), files.end(), [](const SourceFile &a, const SourceFile &b) { return a.relative < b.relative; });
     assignDestinationPaths(request, files);
     if (!validateDestinationOverrides(request, files, error)) return false;
@@ -1996,6 +2127,7 @@ bool VerifiedCopy::execute(const Request &request, const Preview &authorized, QS
         if (sameFileOpenedFd(rootPins.pins.destination, source.destinationRelative, source, &destinationHash, &boundDestination, &connectionError, &boundDestinationFd.fd)) {
             QString sourceError; QByteArray sourceHash;
             if (!sameFileOpenedFd(rootPins.pins.source, source.relative, source, &sourceHash, nullptr, &sourceError)) { const QString failure = sourceError.isEmpty() ? "Source could not be opened safely" : sourceError; if (!terminalizeJob(db, jobId, &source, destination, "Failed", "failed", failure, &connectionError)) { if (error) *error = "Catalog terminalization failed: " + connectionError; } else if (error) *error = failure; releaseDatabase(db, connection); return false; }
+            if (request.expectedSourceHashes.contains(source.relative) && request.expectedSourceHashes.value(source.relative) != sourceHash) { const QString failure = "Verified source copy changed after preview"; if (!terminalizeJob(db, jobId, &source, destination, "Failed", "failed", failure, &connectionError)) { if (error) *error = "Catalog terminalization failed: " + connectionError; } else if (error) *error = failure; releaseDatabase(db, connection); return false; }
             if (sourceHash != destinationHash) { conflictSeen = true; if (!markItemTerminal(db, jobId, source, destination, "Conflict", "conflict", "destination differs", &connectionError)) { if (error) *error = connectionError; releaseDatabase(db, connection); return false; } done += source.size; emit progressChanged(done, plan.bytes, source.relative); continue; }
             if (!rootsStillPinned()) { const QString failure = "Destination storage identity changed"; if (!terminalizeJob(db, jobId, &source, destination, "Failed", "failed", failure, &connectionError)) { if (error) *error = "Catalog terminalization failed: " + connectionError; } else if (error) *error = failure; releaseDatabase(db, connection); return false; }
             if (boundDestinationFd.fd < 0 || ::fsync(boundDestinationFd.fd) != 0) { const QString failure = "Existing destination could not be flushed"; if (!terminalizeJob(db, jobId, &source, destination, "Failed", "failed", failure, &connectionError)) { if (error) *error = "Catalog terminalization failed: " + connectionError; } else if (error) *error = failure; releaseDatabase(db, connection); return false; }
@@ -2043,6 +2175,7 @@ bool VerifiedCopy::execute(const Request &request, const Preview &authorized, QS
         if (m_testHook) m_testHook(destination, QStringLiteral("before-verification"));
         if (!waitIfPaused(db, jobId, &connectionError)) { if (error) *error = connectionError; partialFile.close(); sourceFile.close(); releaseDatabase(db, connection); return false; }
         if (m_cancelled.load()) { partialFile.close(); sourceFile.close(); if (!terminalizeJob(db, jobId, &source, destination, "Cancelled", "cancelled", "cancelled during verification", &connectionError)) { if (error) *error = "Catalog terminalization failed: " + connectionError; } else if (error) *error = "Copy cancelled; source retained and no final destination was published"; releaseDatabase(db, connection); return false; }
+        if (request.expectedSourceHashes.contains(source.relative) && request.expectedSourceHashes.value(source.relative) != sourceHash.result()) { const QString failure = "Verified source copy changed during restore"; partialFile.close(); sourceFile.close(); if (!terminalizeJob(db, jobId, &source, destination, "Failed", "failed", failure, &connectionError)) { if (error) *error = "Catalog terminalization failed: " + connectionError; } else if (error) *error = failure; releaseDatabase(db, connection); return false; }
         QByteArray verifiedHash; struct stat partialStat{}; FdGuard partialVerifiedFd;
         if (!hashFd(partialFd, source.size, &verifiedHash, &partialStat, &connectionError, &partialVerifiedFd.fd) || verifiedHash != sourceHash.result()) { const QString failure = connectionError.isEmpty() ? "Destination hash mismatch" : connectionError; partialFile.close(); sourceFile.close(); if (!terminalizeJob(db, jobId, &source, destination, "Failed", "failed", failure, &connectionError)) { if (error) *error = "Catalog terminalization failed: " + connectionError; } else if (error) *error = failure; releaseDatabase(db, connection); return false; }
         if (!waitIfPaused(db, jobId, &connectionError)) { if (error) *error = connectionError; partialFile.close(); sourceFile.close(); releaseDatabase(db, connection); return false; }

@@ -43,7 +43,7 @@ class CatalogSchemaTest(unittest.TestCase):
             """)
             self.assertEqual(db.execute("SELECT state FROM locations WHERE id='loc-1'").fetchone()[0], "verified")
             self.assertEqual(db.execute("SELECT event FROM history WHERE id='event-1'").fetchone()[0], "verified")
-            self.assertEqual(db.execute("SELECT version FROM schema_version").fetchone()[0], 17)
+            self.assertEqual(db.execute("SELECT version FROM schema_version").fetchone()[0], 19)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM device_aliases").fetchone()[0], 0)
             db.execute("INSERT INTO review_items(id,category,source_kind,source_id,title,item_count) VALUES ('review-1','Duplicates','import','preview-1','Review copies',2)")
             self.assertEqual(db.execute("SELECT item_count FROM review_items WHERE id='review-1'").fetchone()[0], 2)

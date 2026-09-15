@@ -1,12 +1,12 @@
-# Local Drive v0.1.0-alpha.2
+# Local Drive v0.1.0-alpha.3
 
-First GitHub desktop Alpha for short, controlled testing, superseding the earlier local alpha1 package. **Not a 1.0 release and not yet a replacement for Syncthing or your existing backups.**
+Local desktop Alpha for short, controlled wired testing, superseding Alpha 2. It fixes Xiaomi/KDE MTP discovery when KIO omits device URLs, prevents operational phone-transfer receipts from appearing as duplicate user connections, and adds real device/media icons and real library-usage reporting. **Not a 1.0 release and not yet a replacement for Syncthing or your existing backups.**
 
 ## Platform and installation
 
 - Ubuntu 26.04, amd64 (x86-64). This binary is not advertised as compatible with Ubuntu 24.04, other distributions, Windows or macOS.
-- Download `local-drive_0.1.0~alpha2_amd64.deb` and verify it against `SHA256SUMS`.
-- Install from the download directory: `sudo apt install ./local-drive_0.1.0~alpha2_amd64.deb`.
+- Install the local package `local-drive_0.1.0~alpha3_amd64.deb` after verifying its SHA-256 checksum.
+- Install from its directory: `sudo apt install ./local-drive_0.1.0~alpha3_amd64.deb`.
 - Open **Local Drive Alpha** from the applications menu. The package serves the installed UI at `http://127.0.0.1:43172/` in your default browser. It needs neither Node/Vite nor the source checkout at runtime.
 - Quit an older development backend before launching the installed version. Closing a browser tab does not stop the backend; use its tray menu to quit after transfers finish.
 - No login autostart or automatic wireless receiver is enabled by this release. Android/Wi-Fi are outside this desktop test release.

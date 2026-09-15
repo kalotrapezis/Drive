@@ -56,7 +56,7 @@ Kirigami.ApplicationWindow {
         }
         return ({})
     }
-    property var keepPolicies: ["Everything", "Last month", "Last week", "Last day", "Nothing"]
+    property var keepPolicies: ["Everything", "Last year", "Last month", "Last week", "Last day", "Nothing"]
     function homeRoot() {
         return decodeURIComponent(StandardPaths.writableLocation(StandardPaths.HomeLocation).toString().replace(/^file:\/\//, ""))
     }
@@ -182,6 +182,7 @@ Kirigami.ApplicationWindow {
     }
     function keepPolicyDescription(policy) {
         if (policy === "Nothing") return qsTr("Keep Nothing — verified Move; requires explicit Trash confirmation")
+        if (policy === "Last year") return qsTr("Keep Last year — copy and verify; review older sources before Trash")
         if (policy === "Last month") return qsTr("Keep Last month — copy and verify; review older sources before Trash")
         if (policy === "Last week") return qsTr("Keep Last week — copy and verify; review older sources before Trash")
         if (policy === "Last day") return qsTr("Keep Last day — copy and verify; review older sources before Trash")

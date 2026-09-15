@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FilePdf, Trash } from "@phosphor-icons/react";
 
-export function DesktopAction({ action, fixture }: { action: "scan" | "open-trash"; fixture: boolean }) {
+export function DesktopAction({ action, fixture, available = true }: { action: "scan" | "open-trash"; fixture: boolean; available?: boolean }) {
   const [status, setStatus] = useState("");
   const run = async () => {
     if (fixture) { setStatus("Demo only. Open the live app to use desktop tools."); return; }
@@ -14,5 +14,5 @@ export function DesktopAction({ action, fixture }: { action: "scan" | "open-tras
       setStatus(action === "scan" ? "Scanner opened. Save the scan inside Drive, or import the saved document." : "System Trash opened. Restore files there; then refresh the library.");
     } catch (error) { setStatus(error instanceof Error ? error.message : "Desktop tool unavailable"); }
   };
-  return <><button disabled={status === "Opening…"} onClick={() => void run()}>{action === "scan" ? <FilePdf /> : <Trash />}{action === "scan" ? "Open document scanner" : "Open system Trash"}</button>{status && <p role="status">{status}</p>}</>;
+  return <><button disabled={!available || status === "Opening…"} title={!available ? "Required desktop application is unavailable" : undefined} onClick={() => void run()}>{action === "scan" ? <FilePdf /> : <Trash />}{action === "scan" ? "Open document scanner" : "Open system Trash"}</button>{status && <p role="status">{status}</p>}</>;
 }

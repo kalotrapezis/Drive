@@ -58,6 +58,8 @@ public:
         QString destinationDeviceStableId = QStringLiteral("local");
         QString destinationDeviceName = QStringLiteral("Computer");
         QString destinationDeviceKind = QStringLiteral("Desktop");
+        QStringList includedSourcePaths;
+        QHash<QString, QByteArray> expectedSourceHashes;
     };
     struct RemoteRequest {
         QUrl sourceUrl;
@@ -87,6 +89,8 @@ public:
         QString destinationDeviceId = QStringLiteral("local");
         QString destinationDeviceStableId = QStringLiteral("local");
         QString destinationDeviceName = QStringLiteral("Computer");
+        QHash<QString, QByteArray> expectedSourceHashes;
+        QByteArray expectedSourceHash;
     };
     struct Preview {
         struct ManifestEntry { QString relative; QString destination; qint64 size = 0; qint64 mtime = 0; };
@@ -115,6 +119,7 @@ public:
         QStringList unsupportedPaths;
         QStringList unsupportedEvidence;
         QVector<ManifestEntry> manifest;
+        QHash<QString, QByteArray> expectedSourceHashes;
         QVariantMap toMap() const;
     };
     struct ExportRequest {
@@ -144,6 +149,7 @@ public:
     bool executeBlocking(const Request &request, QString *error = nullptr);
     bool executePreviewBlocking(const Request &request, const Preview &preview, QString *error = nullptr, QString *completionMessage = nullptr);
     bool executeRemoteBlocking(const RemoteRequest &request, QString *error = nullptr);
+    QHash<QString, QByteArray> previewSourceHashes() const { return m_preview.expectedSourceHashes; }
     bool executeExportBlocking(const ExportRequest &request, QString *error = nullptr);
     bool running() const { return m_running.load(); }
     bool previewSuccessful() const { return m_preview.ok; }
@@ -160,12 +166,12 @@ public:
     Q_INVOKABLE bool exportManifest(const QUrl &url, const QString &format = QStringLiteral("json")) const;
     Q_INVOKABLE bool startCopy();
     Q_INVOKABLE bool startRemoteImportDirectory(const QVariantMap &options);
-    Q_INVOKABLE bool cleanup();
+    Q_INVOKABLE bool cleanup(qint64 cutoff = 0);
     Q_INVOKABLE void pause();
     Q_INVOKABLE void resume();
     Q_INVOKABLE void cancel();
 
-    bool cleanupBlocking(const Request &request, QString *error = nullptr);
+    bool cleanupBlocking(const Request &request, QString *error = nullptr, qint64 cutoff = 0);
 
     // Test-only deterministic fault hook: called after final publication and before receipt commit.
     void setFailAfterPublishOnce(bool enabled) { m_failAfterPublishOnce.store(enabled); }
