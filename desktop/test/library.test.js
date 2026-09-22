@@ -34,3 +34,47 @@ test('scan indexes photos, is incremental, follows deletions and never touches t
   assert.deepEqual(await library.scan(db, root, data), { total: 0, changed: 0, removed: 1 })
   fs.rmSync(tmp, { recursive: true })
 })
+
+test('favorites and collections are keyed by hash, use tombstones, and survive a file leaving', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-meta-'))
+  const root = path.join(tmp, 'Photos'), data = path.join(tmp, 'data')
+  fs.mkdirSync(root)
+  const sharp = require('sharp')
+  for (const n of ['a', 'b']) await sharp({ create: { width: 8, height: 8, channels: 3, background: n === 'a' ? '#f00' : '#00f' } }).png().toFile(path.join(root, n + '.png'))
+  const db = library.open(data)
+  await library.scan(db, root, data)
+  const [a, b] = library.list(db).sort((x, y) => x.path.localeCompare(y.path))
+
+  library.setFavorite(db, [a.sha256], true)
+  assert.equal(library.list(db).find(m => m.id === a.id).favorite, 1)
+  assert.throws(() => library.setFavorite(db, ['../etc/passwd'], true), /Invalid/)
+
+  assert.throws(() => library.createCollection(db, '   '), /empty/)
+  assert.throws(() => library.createCollection(db, 'x'.repeat(61)), /60/)
+  assert.throws(() => library.createCollection(db, 'a\nb'), /unsupported/)
+  const trip = library.createCollection(db, ' Trip ')
+  assert.equal(trip.name, 'Trip')
+  assert.throws(() => library.createCollection(db, 'trip'), /already exists/)
+
+  library.setMembership(db, trip.id, [a.sha256, b.sha256], true)
+  library.setMembership(db, trip.id, [b.sha256], false)
+  assert.deepEqual(library.members(db, trip.id), [a.sha256])
+  assert.equal(db.prepare('SELECT deleted FROM collection_items WHERE sha256 = ?').get(b.sha256).deleted, 1) // tombstone, not removed
+  assert.deepEqual(library.collections(db).map(c => [c.name, c.count, c.cover]), [['Trip', 1, a.sha256]])
+
+  // Trash: file goes to the (fake) trash, row leaves, metadata stays for a restore.
+  const trashed = []
+  assert.deepEqual(await library.trash(db, root, [a.id, 9999], async f => { trashed.push(f); fs.renameSync(f, path.join(tmp, 'restored.png')) }), { trashed: 1, failed: ['9999'] })
+  assert.deepEqual(trashed, [path.join(root, 'a.png')])
+  assert.equal(library.collections(db)[0].count, 0)
+  fs.renameSync(path.join(tmp, 'restored.png'), path.join(root, 'a.png'))
+  await library.scan(db, root, data)
+  assert.equal(library.list(db).find(m => m.path === 'a.png').favorite, 1)
+  assert.equal(library.collections(db)[0].count, 1)
+
+  library.deleteCollection(db, trip.id)
+  assert.deepEqual(library.collections(db), [])
+  assert.equal(library.list(db).length, 2) // photos stay
+  assert.ok(library.createCollection(db, 'Trip')) // name is free again
+  fs.rmSync(tmp, { recursive: true })
+})

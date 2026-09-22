@@ -38,6 +38,13 @@ app.whenReady().then(() => {
   ipcMain.handle('library:info', () => ({ photosRoot: PHOTOS_ROOT }))
   ipcMain.handle('library:list', () => library.list(db))
   ipcMain.handle('library:scan', () => startScan())
+  ipcMain.handle('photos:favorite', (_, shas, on) => library.setFavorite(db, shas, on))
+  ipcMain.handle('photos:trash', (_, ids) => library.trash(db, PHOTOS_ROOT, ids, f => shell.trashItem(f)))
+  ipcMain.handle('collections:list', () => library.collections(db))
+  ipcMain.handle('collections:create', (_, name) => library.createCollection(db, name))
+  ipcMain.handle('collections:delete', (_, id) => library.deleteCollection(db, id))
+  ipcMain.handle('collections:members', (_, id) => library.members(db, id))
+  ipcMain.handle('collections:set', (_, id, shas, member) => library.setMembership(db, id, shas, member))
   ipcMain.handle('library:show', (_, id) => {
     const row = db.prepare('SELECT path FROM media WHERE id = ?').get(id)
     if (row) shell.showItemInFolder(path.join(PHOTOS_ROOT, row.path))

@@ -8,7 +8,13 @@ const when = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric'
 interface View { scale: number; x: number; y: number }
 const RESET: View = { scale: 1, x: 0, y: 0 }
 
-export function Viewer({ media, index, setIndex, onClose }: { media: Media[]; index: number; setIndex: (i: number) => void; onClose: () => void }) {
+interface Props {
+  media: Media[]; index: number; setIndex: (i: number) => void; onClose: () => void
+  onFavorite: (m: Media) => void; onTrash: (m: Media) => void
+  onCollect?: (m: Media) => void; onUncollect?: (m: Media) => void
+}
+
+export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect }: Props) {
   const item = media[index]
   const [view, setView] = useState<View>(RESET)
   const [details, setDetails] = useState(false)
@@ -39,6 +45,7 @@ export function Viewer({ media, index, setIndex, onClose }: { media: Media[]; in
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector('dialog[open]')) return
       if (e.key === 'Escape') view.scale > 1 ? setView(RESET) : onClose() // Esc resets zoom before leaving, like Back on the phone
       else if (e.key === 'ArrowLeft') go(index - 1)
       else if (e.key === 'ArrowRight') go(index + 1)
@@ -46,6 +53,8 @@ export function Viewer({ media, index, setIndex, onClose }: { media: Media[]; in
       else if (e.key === '+' || e.key === '=') zoomAt(view.scale * 1.5)
       else if (e.key === '-') zoomAt(view.scale / 1.5)
       else if (e.key === '0') setView(RESET)
+      else if (e.key === 'f') onFavorite(item)
+      else if (e.key === 'Delete') onTrash(item)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -81,6 +90,11 @@ export function Viewer({ media, index, setIndex, onClose }: { media: Media[]; in
             <button className="round flat" title="Zoom out (−)" onClick={() => zoomAt(view.scale / 1.5)}><Icon name="zoomOut" /></button>
             <button className="round flat" title="Zoom in (+)" onClick={() => zoomAt(view.scale * 1.5)}><Icon name="zoomIn" /></button>
           </>}
+          <button className="round flat" title={item.favorite ? 'Remove from Favorites (F)' : 'Add to Favorites (F)'} onClick={() => onFavorite(item)}>
+            <Icon name={item.favorite ? 'heartFill' : 'heart'} /></button>
+          {onCollect && <button className="round flat" title="Add to collection" onClick={() => onCollect(item)}><Icon name="collect" /></button>}
+          {onUncollect && <button className="round flat" title="Remove from this collection" onClick={() => onUncollect(item)}><Icon name="uncollect" /></button>}
+          <button className="round flat" title="Move to Trash (Delete)" onClick={() => onTrash(item)}><Icon name="trash" /></button>
           <button className="round flat" title="Show in folder" onClick={() => window.drive.show(item.id)}><Icon name="folder" /></button>
           <button className={`round flat ${details ? 'on' : ''}`} title="Details (i)" onClick={() => setDetails(d => !d)}><Icon name="info" /></button>
         </div>

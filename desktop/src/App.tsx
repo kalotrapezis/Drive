@@ -1,120 +1,211 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { group, LEVELS, type Level, type Media } from './timeline'
-import { Icon } from './Icon'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { isScreenshot, matches, type Level, type Media } from './timeline'
+import type { Collection } from './drive'
+import { Icon, type IconName } from './Icon'
+import { Timeline } from './Timeline'
 import { Viewer } from './Viewer'
+import { Collections } from './Collections'
+import { CollectionPicker, Confirm, NewCollection, errorText } from './Dialogs'
 
-const THUMB: Record<Level, number> = { week: 240, month: 160, year: 88 }
-const GAP = 4
+type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string }
+
+const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
+  { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
+  { id: 'videos', name: 'Videos', icon: 'video', test: m => !!m.is_video },
+  { id: 'screenshots', name: 'Screenshots', icon: 'screenshot', test: m => isScreenshot(m.path) },
+]
+
+const stored = (key: string) => { try { return localStorage.getItem(key) } catch { return null } }
+const store = (key: string, value: string) => { try { localStorage.setItem(key, value) } catch {} }
 
 export function App() {
   const [media, setMedia] = useState<Media[] | null>(null)
+  const [collections, setCollections] = useState<Collection[]>([])
+  const [members, setMembers] = useState<Set<string> | null>(null)
   const [root, setRoot] = useState('')
   const [scan, setScan] = useState<string | null>('Looking for photos…')
-  const [level, setLevel] = useState<Level>('month')
+  const [page, setPage] = useState<Page>({ kind: 'photos' })
+  const [level, setLevel] = useState<Level>(() => (stored('level') as Level) || 'month')
+  const [query, setQuery] = useState('')
+  const [hideScreenshots, setHideScreenshots] = useState(() => stored('hideScreenshots') === '1')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
   const [open, setOpen] = useState<number | null>(null)
+  const [dialog, setDialog] = useState<ReactNode>(null)
+  const [toast, setToast] = useState('')
+
+  const custom = page.kind === 'collection' && !SYSTEM.some(s => s.id === page.id) ? page.id : null
+
+  async function reload() {
+    const [m, c] = await Promise.all([window.drive.list(), window.drive.collections()])
+    setMedia(m); setCollections(c)
+    if (custom) setMembers(new Set(await window.drive.members(custom)))
+  }
 
   async function rescan() {
     setScan('Looking for photos…')
-    try { await window.drive.scan() } catch (e) { console.error(e) }
-    setMedia(await window.drive.list())
+    try { await window.drive.scan() } catch (e) { say(errorText(e)) }
+    await reload()
     setScan(null)
   }
 
   useEffect(() => {
     window.drive.info().then(i => setRoot(i.photosRoot))
-    window.drive.list().then(setMedia)
+    reload()
     const off = window.drive.onScanProgress(p => setScan(p.changed ? `Adding photos… ${p.changed} new` : `Checking… ${p.done}`))
     rescan()
     return off
   }, [])
 
+  useEffect(() => { store('level', level) }, [level])
+  useEffect(() => { store('hideScreenshots', hideScreenshots ? '1' : '0') }, [hideScreenshots])
+  useEffect(() => {
+    setSelected(new Set()); setOpen(null); setMembers(null)
+    if (custom) window.drive.members(custom).then(m => setMembers(new Set(m)))
+  }, [page])
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 4000); return () => clearTimeout(t) }, [toast])
+
+  const items = useMemo(() => {
+    if (!media) return []
+    if (page.kind === 'photos') return query.trim() ? media.filter(m => matches(m, query)) : hideScreenshots ? media.filter(m => !isScreenshot(m.path)) : media
+    if (page.kind === 'collection') {
+      const system = SYSTEM.find(s => s.id === page.id)
+      return system ? media.filter(system.test) : members ? media.filter(m => members.has(m.sha256)) : []
+    }
+    return []
+  }, [media, page, query, hideScreenshots, members])
+
+  // Keep the viewer on a valid item when the list shrinks (trash, unfavorite in Favorites, remove from collection).
+  useEffect(() => { if (open !== null && open >= items.length) setOpen(items.length ? items.length - 1 : null) }, [items, open])
+
+  const picked = items.filter(m => selected.has(m.id))
+  const say = (text: string) => setToast(text)
+  const count = (n: number) => n === 1 ? '1 item' : `${n} items`
+  const close = () => setDialog(null)
+
+  async function run(fn: () => Promise<unknown>, done?: string) {
+    try { await fn(); if (done) say(done) } catch (e) { say(errorText(e)) }
+    await reload()
+  }
+
+  const favorite = (list: Media[]) => {
+    const on = !list.every(m => m.favorite)
+    return run(() => window.drive.favorite(list.map(m => m.sha256), on), list.length > 1 ? `${on ? 'Added' : 'Removed'} ${count(list.length)} ${on ? 'to' : 'from'} Favorites` : undefined)
+  }
+
+  function newCollection(then?: (c: Collection) => void) {
+    setDialog(<NewCollection onClose={close} onCreate={async name => {
+      const c = await window.drive.createCollection(name)
+      await reload()
+      if (then) then(c); else say(`Created “${c.name}”`)
+    }} />)
+  }
+
+  function collect(list: Media[]) {
+    const add = (c: Collection) => run(() => window.drive.setMembership(c.id, list.map(m => m.sha256), true), `Added ${count(list.length)} to “${c.name}”`)
+    setDialog(<CollectionPicker collections={collections} count={list.length} onClose={close} onPick={add} onNew={() => newCollection(add)} />)
+  }
+
+  const uncollect = (list: Media[]) => custom && page.kind === 'collection' &&
+    run(() => window.drive.setMembership(custom, list.map(m => m.sha256), false), `Removed ${count(list.length)} from “${page.name}”`)
+      .then(() => setSelected(new Set()))
+
+  function trash(list: Media[]) {
+    setDialog(<Confirm title={`Move ${count(list.length)} to Trash?`} action="Move to Trash" danger onClose={close}
+      body="They go to the system Trash and can be restored from your file manager. Favorites and collections come back with them."
+      onConfirm={() => run(async () => {
+        const r = await window.drive.trash(list.map(m => m.id))
+        setSelected(new Set())
+        say(r.failed.length ? `Moved ${r.trashed}; could not move ${r.failed.length}: ${r.failed.slice(0, 3).join(', ')}` : `Moved ${count(r.trashed)} to Trash`)
+      })} />)
+  }
+
+  function deleteCollection(c: Collection) {
+    setDialog(<Confirm title={`Delete “${c.name}”?`} action="Delete collection" danger onClose={close}
+      body="Only the collection is removed. Its photos and videos stay in Photos." onConfirm={() => run(() => window.drive.deleteCollection(c.id), `Deleted “${c.name}”`)} />)
+  }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (open !== null || dialog || (e.target as Element).closest?.('input')) return
+      if (e.key === 'Escape' && selected.size) setSelected(new Set())
+      else if ((e.ctrlKey || e.metaKey) && e.key === 'a' && items.length) { e.preventDefault(); setSelected(new Set(items.map(m => m.id))) }
+      else if (e.key === 'Delete' && picked.length) trash(picked)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const nav = (target: Page['kind'], icon: IconName, label: string) => (
+    <button className={`nav-item ${page.kind === target || (target === 'collections' && page.kind === 'collection') ? 'active' : ''}`}
+      onClick={() => setPage(target === 'photos' ? { kind: 'photos' } : { kind: 'collections' })}><Icon name={icon} />{label}</button>
+  )
+
+  const loading = !media || (media.length === 0 && scan)
+  let content: ReactNode
+  if (loading) content = <div className="empty">Loading…</div>
+  else if (media.length === 0) content = <div className="empty"><p>No photos or videos in <code>{root}</code></p></div>
+  else if (page.kind === 'collections') {
+    content = <Collections mine={collections} onNew={() => newCollection()} onDelete={deleteCollection}
+      system={SYSTEM.map(s => ({ ...s, count: media.filter(s.test).length }))}
+      onOpen={(id, name) => setPage({ kind: 'collection', id, name })} />
+  } else {
+    const inCollection = page.kind === 'collection'
+    content = (
+      <Timeline items={items} level={level} setLevel={setLevel} selected={selected} setSelected={setSelected} onOpen={setOpen}
+        title={inCollection
+          ? <><button className="round flat" title="Back to Collections" onClick={() => setPage({ kind: 'collections' })}><Icon name="back" /></button><h1>{page.name}</h1></>
+          : <h1>Photos</h1>}
+        empty={query ? `Nothing matches “${query}”.` : inCollection ? 'Nothing here yet.' : 'Every item is hidden by Photos tools.'}
+        tools={!inCollection && <>
+          <label className="island search">
+            <Icon name="search" size={20} />
+            <input placeholder="Search names and folders" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQuery('') }} />
+            {query && <button className="eraser" title="Clear search" onClick={() => setQuery('')}><Icon name="eraser" size={20} /></button>}
+          </label>
+          <details className="menu">
+            <summary className="round" title="Photos tools"><Icon name="tune" /></summary>
+            <div className="island menu-body">
+              <label><input type="checkbox" checked={hideScreenshots} onChange={e => setHideScreenshots(e.target.checked)} /> Hide screenshots in Photos</label>
+              <small>They stay in the Screenshots collection and on disk.</small>
+            </div>
+          </details>
+        </>} />
+    )
+  }
+
   return (
     <div className="app">
       <nav className="rail island">
         <div className="brand"><img src="./icon.png" alt="" />Local Drive</div>
-        <button className="nav-item active"><Icon name="photos" />Photos</button>
+        {nav('photos', 'photos', 'Photos')}
+        {nav('collections', 'collections', 'Collections')}
         <div className="rail-foot">
           <span>{scan ?? `${media?.length ?? 0} items`}</span>
           <button className="round" title="Rescan library" disabled={!!scan} onClick={rescan}><Icon name="refresh" size={20} /></button>
         </div>
       </nav>
       <main className="content">
-        {media && media.length > 0
-          ? <Timeline media={media} level={level} setLevel={setLevel} onOpen={setOpen} />
-          : <div className="empty">{media && !scan ? <>No photos or videos in <code>{root}</code></> : 'Loading…'}</div>}
-      </main>
-      {open !== null && media && <Viewer media={media} index={open} setIndex={setOpen} onClose={() => setOpen(null)} />}
-    </div>
-  )
-}
-
-function Timeline({ media, level, setLevel, onOpen }: { media: Media[]; level: Level; setLevel: (l: Level) => void; onOpen: (i: number) => void }) {
-  const groups = useMemo(() => group(media, level), [media, level])
-  const indexOf = useMemo(() => new Map(media.map((m, i) => [m.id, i])), [media])
-  const scroller = useRef<HTMLDivElement>(null)
-  const [width, setWidth] = useState(1000)
-  const [period, setPeriod] = useState('')
-  const pinch = useRef(0)
-
-  useEffect(() => {
-    const el = scroller.current!
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth - 48))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-
-  // Touchpad pinch arrives as ctrl+wheel: pinch out = broader periods and smaller thumbnails, like the phone.
-  useEffect(() => {
-    const el = scroller.current!
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return
-      e.preventDefault()
-      pinch.current += e.deltaY
-      if (Math.abs(pinch.current) < 40) return
-      const i = LEVELS.indexOf(level) + (pinch.current > 0 ? 1 : -1)
-      pinch.current = 0
-      if (LEVELS[i]) setLevel(LEVELS[i])
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [level, setLevel])
-
-  function updatePeriod() {
-    const el = scroller.current!
-    const headers = el.querySelectorAll<HTMLElement>('[data-label]')
-    let label = headers[0]?.dataset.label ?? ''
-    for (const h of headers) { if (h.offsetTop - el.scrollTop > 80) break; label = h.dataset.label! }
-    setPeriod(label)
-  }
-  useEffect(updatePeriod, [groups])
-
-  const size = THUMB[level]
-  const columns = Math.max(1, Math.floor((width + GAP) / (size + GAP)))
-  const cell = (width - GAP * (columns - 1)) / columns
-
-  return (
-    <div className="timeline" ref={scroller} onScroll={updatePeriod}>
-      <header className="topbar">
-        <div className="island title-island"><h1>Photos</h1>{period && <span className="pill">{period}</span>}</div>
-        <div className="island segmented">
-          {LEVELS.map(l => <button key={l} className={l === level ? 'on' : ''} onClick={() => setLevel(l)}>{l[0].toUpperCase() + l.slice(1)}</button>)}
-        </div>
-      </header>
-      {groups.map(g => (
-        // content-visibility skips layout/paint of off-screen periods, so large libraries stay smooth.
-        <section key={g.key} className="period" data-label={g.label}
-          style={{ containIntrinsicSize: `auto ${48 + Math.ceil(g.items.length / columns) * (cell + GAP)}px` }}>
-          <h2>{g.label}<span>{g.items.length}</span></h2>
-          <div className="grid" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: GAP }}>
-            {g.items.map(m => (
-              <button key={m.id} className="thumb" style={{ height: cell }} onClick={() => onOpen(indexOf.get(m.id)!)} title={m.path}>
-                {m.thumb ? <img src={`media://thumb/${m.sha256}`} loading="lazy" decoding="async" alt="" /> : <span className="no-thumb">{m.path.split('.').pop()}</span>}
-                {m.is_video ? <span className="badge"><Icon name="play" size={16} /></span> : null}
-              </button>
-            ))}
+        {content}
+        {picked.length > 0 && (
+          <div className="island selection-bar">
+            <button className="round flat" title="Clear selection (Esc)" onClick={() => setSelected(new Set())}><Icon name="close" /></button>
+            <strong>{picked.length} selected</strong>
+            <button className="round flat" title={picked.every(m => m.favorite) ? 'Remove from Favorites' : 'Add to Favorites'} onClick={() => favorite(picked)}>
+              <Icon name={picked.every(m => m.favorite) ? 'heartFill' : 'heart'} /></button>
+            {custom
+              ? <button className="round flat" title="Remove from this collection" onClick={() => uncollect(picked)}><Icon name="uncollect" /></button>
+              : <button className="round flat" title="Add to collection" onClick={() => collect(picked)}><Icon name="collect" /></button>}
+            <button className="round flat" title="Move to Trash (Delete)" onClick={() => trash(picked)}><Icon name="trash" /></button>
           </div>
-        </section>
-      ))}
+        )}
+      </main>
+      {open !== null && items[open] && (
+        <Viewer media={items} index={open} setIndex={setOpen} onClose={() => setOpen(null)}
+          onFavorite={m => favorite([m])} onTrash={m => trash([m])}
+          onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} />
+      )}
+      {dialog}
+      {toast && <div className="island toast" role="status">{toast}</div>}
     </div>
   )
 }

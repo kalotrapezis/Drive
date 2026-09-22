@@ -4,7 +4,7 @@ export const LEVELS: Level[] = ['week', 'month', 'year']
 export interface Media {
   id: number; path: string; sha256: string; mime: string; is_video: number; size: number
   taken_at: number; width: number | null; height: number | null
-  latitude: number | null; longitude: number | null; camera: string | null; thumb: number
+  latitude: number | null; longitude: number | null; camera: string | null; thumb: number; favorite: number
 }
 
 export interface Group<T> { key: string; label: string; items: T[] }
@@ -59,3 +59,15 @@ export function formatBytes(n: number): string {
   while (n >= 1024 && i < units.length - 1) { n /= 1024; i++ }
   return `${n.toFixed(i && n < 10 ? 1 : 0)} ${units[i]}`
 }
+
+/** Lowercase and strip accents, so "φωτο" finds "Φωτό" and "cafe" finds "Café". */
+export const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+
+/** Every word of the query must appear in the file name or folder path. */
+export function matches(item: { path: string }, query: string): boolean {
+  const hay = fold(item.path)
+  return fold(query).split(/\s+/).filter(Boolean).every(w => hay.includes(w))
+}
+
+/** Same idea as the phone's Screenshots collection: a screenshot folder or file name. */
+export const isScreenshot = (path: string) => /screenshot|στιγμιοτυπο|screen[ _-]?shot|scrnshot/.test(fold(path))

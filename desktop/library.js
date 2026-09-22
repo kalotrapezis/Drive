@@ -29,7 +29,14 @@ function open(dataDir) {
       thumb INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS media_taken ON media(taken_at DESC);
-    CREATE INDEX IF NOT EXISTS media_sha ON media(sha256);`)
+    CREATE INDEX IF NOT EXISTS media_sha ON media(sha256);
+
+    -- User metadata, keyed by content hash and UUID so it can sync (SYNC_PLAN.md).
+    -- Deletions are tombstones (deleted = 1), never row removals.
+    CREATE TABLE IF NOT EXISTS photo_state (sha256 TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS collections (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0);
+    CREATE UNIQUE INDEX IF NOT EXISTS collections_name ON collections(name COLLATE NOCASE) WHERE deleted = 0;
+    CREATE TABLE IF NOT EXISTS collection_items (collection_id TEXT NOT NULL, sha256 TEXT NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(collection_id, sha256));`)
   return db
 }
 
@@ -118,7 +125,92 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
 }
 
 function list(db) {
-  return db.prepare('SELECT id, path, sha256, mime, is_video, size, taken_at, width, height, latitude, longitude, camera, thumb FROM media ORDER BY taken_at DESC, path').all()
+  return db.prepare(`SELECT m.id, m.path, m.sha256, m.mime, m.is_video, m.size, m.taken_at, m.width, m.height, m.latitude, m.longitude, m.camera, m.thumb,
+    COALESCE(s.favorite, 0) AS favorite FROM media m LEFT JOIN photo_state s ON s.sha256 = m.sha256 ORDER BY m.taken_at DESC, m.path`).all()
 }
 
-module.exports = { open, scan, list, sha256 }
+function transaction(db, fn) {
+  db.exec('BEGIN')
+  try { const r = fn(); db.exec('COMMIT'); return r } catch (e) { db.exec('ROLLBACK'); throw e }
+}
+
+const isHash = h => typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)
+function hashes(list) {
+  if (!Array.isArray(list) || !list.every(isHash)) throw new Error('Invalid photo list.')
+  return [...new Set(list)]
+}
+
+function setFavorite(db, shas, favorite) {
+  const now = Date.now()
+  const q = db.prepare('INSERT INTO photo_state(sha256, favorite, updated_at) VALUES(?,?,?) ON CONFLICT(sha256) DO UPDATE SET favorite = excluded.favorite, updated_at = excluded.updated_at')
+  transaction(db, () => { for (const h of hashes(shas)) q.run(h, favorite ? 1 : 0, now) })
+}
+
+// Same rules as the phone (PhotoMetadataRules.collectionName).
+function collectionName(raw) {
+  const name = String(raw ?? '').trim()
+  if (!name) throw new Error('Collection name cannot be empty.')
+  if (name.length > 60) throw new Error('Collection names can be at most 60 characters.')
+  if (/\p{Cc}/u.test(name)) throw new Error('Collection name contains unsupported characters.')
+  return name
+}
+
+/** Live collections with the count and cover (newest member) among photos present in the library. */
+function collections(db) {
+  return db.prepare(`SELECT c.id, c.name,
+      (SELECT COUNT(DISTINCT m.sha256) FROM collection_items i JOIN media m ON m.sha256 = i.sha256 WHERE i.collection_id = c.id AND i.deleted = 0) AS count,
+      (SELECT m.sha256 FROM collection_items i JOIN media m ON m.sha256 = i.sha256 WHERE i.collection_id = c.id AND i.deleted = 0 AND m.thumb = 1 ORDER BY m.taken_at DESC LIMIT 1) AS cover
+    FROM collections c WHERE c.deleted = 0 ORDER BY c.name COLLATE NOCASE`).all()
+}
+
+function createCollection(db, raw) {
+  const name = collectionName(raw)
+  if (db.prepare('SELECT 1 FROM collections WHERE deleted = 0 AND name = ? COLLATE NOCASE').get(name)) throw new Error(`A collection named “${name}” already exists.`)
+  const id = crypto.randomUUID(), now = Date.now()
+  db.prepare('INSERT INTO collections(id, name, created_at, updated_at) VALUES(?,?,?,?)').run(id, name, now, now)
+  return { id, name, count: 0, cover: null }
+}
+
+function liveCollection(db, id) {
+  if (!db.prepare('SELECT 1 FROM collections WHERE id = ? AND deleted = 0').get(String(id))) throw new Error('This collection no longer exists.')
+}
+
+/** Removes the collection and its memberships only; photos stay in the library. */
+function deleteCollection(db, id) {
+  liveCollection(db, id)
+  const now = Date.now()
+  transaction(db, () => {
+    db.prepare('UPDATE collections SET deleted = 1, updated_at = ? WHERE id = ?').run(now, id)
+    db.prepare('UPDATE collection_items SET deleted = 1, updated_at = ? WHERE collection_id = ? AND deleted = 0').run(now, id)
+  })
+}
+
+function setMembership(db, id, shas, member) {
+  liveCollection(db, id)
+  const now = Date.now()
+  const q = db.prepare('INSERT INTO collection_items(collection_id, sha256, updated_at, deleted) VALUES(?,?,?,?) ON CONFLICT(collection_id, sha256) DO UPDATE SET deleted = excluded.deleted, updated_at = excluded.updated_at')
+  transaction(db, () => { for (const h of hashes(shas)) q.run(id, h, now, member ? 0 : 1) })
+}
+
+function members(db, id) {
+  return db.prepare('SELECT sha256 FROM collection_items WHERE collection_id = ? AND deleted = 0').all(String(id)).map(r => r.sha256)
+}
+
+/**
+ * Sends library files to the system Trash (reversible from the file manager). Only paths the
+ * database knows, inside root. Favorites and collections stay, keyed by hash, so a restore brings them back.
+ */
+async function trash(db, root, ids, trashItem) {
+  const get = db.prepare('SELECT path FROM media WHERE id = ?')
+  const del = db.prepare('DELETE FROM media WHERE id = ?')
+  const result = { trashed: 0, failed: [] }
+  for (const id of ids) {
+    const row = get.get(Number(id))
+    const full = row && path.resolve(root, row.path)
+    if (!full || !full.startsWith(path.resolve(root) + path.sep)) { result.failed.push(String(id)); continue }
+    try { await trashItem(full); del.run(Number(id)); result.trashed++ } catch { result.failed.push(row.path) }
+  }
+  return result
+}
+
+module.exports = { open, scan, list, sha256, trash, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members }

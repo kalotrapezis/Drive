@@ -1,6 +1,6 @@
 # Local Drive — desktop app and phone ↔ desktop sync plan
 
-Updated: 2026-09-22 (phase 1 done). The same file lives in both `Drive-Android/` and `Drive/`.
+Updated: 2026-09-22 (phases 1–2 done). The same file lives in both `Drive-Android/` and `Drive/`.
 Edit one, copy it to the other.
 
 Goal: a personal Google Photos + Google Drive. The phone and the desktop have
@@ -163,6 +163,18 @@ real `~/Drive/Photos`, HEIC originals (thumbnail fallback only), video capture
 date (uses file time).
 
 ### 2. Desktop: Collections, Favorites, Search, Trash
+
+**Status 2026-09-22: done.** Favorites and My collections stored by SHA-256 with
+UUIDs, `updated_at` and tombstones (sync-ready). System collections: Favorites,
+Videos, Screenshots. Collection rules match the phone (non-empty, ≤ 60 chars,
+unique ignoring case); deleting one keeps its photos. Multi-select: check
+circle, Ctrl+click, Shift+click range, drag with edge auto-scroll, Ctrl+A, Esc;
+selection island and viewer offer Favorite, Add to / Remove from collection,
+Move to Trash. Search matches file name and folder, ignoring case and accents
+(labels, people and places join in later phases). Photos tools: hide
+Screenshots from Photos. Trash = system Trash after confirmation; favorites and
+collections return with a restored file. Not yet: rename collection (also
+deferred on the phone).
 
 ### 3. Desktop: Files module
 
