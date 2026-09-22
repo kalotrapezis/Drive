@@ -1,6 +1,6 @@
 # Local Drive — desktop app and phone ↔ desktop sync plan
 
-Updated: 2026-09-22 (phases 1–4 done, phase 5 in progress — see its status). The same file lives in both `Drive-Android/` and `Drive/`.
+Updated: 2026-09-22 (phases 1–5 done; next: phase 0 on the phone, then 6). The same file lives in both `Drive-Android/` and `Drive/`.
 Edit one, copy it to the other.
 
 Goal: a personal Google Photos + Google Drive. The phone and the desktop have
@@ -218,7 +218,7 @@ decoded with libheif, which also fixed HEIC thumbnails and the viewer.
 
 ### 5. Desktop: Map, Hidden (encrypted), Editor, Documents classification
 
-**Status 2026-09-22 — paused mid-phase. Resume here.**
+**Status 2026-09-22: done** (one calibration left, see Documents).
 
 Done and tested:
 - **Map** (`src/MapView.tsx`): MapLibre + OpenFreeMap like the phone; photo
@@ -248,11 +248,28 @@ Done and tested:
   unit-tested only (in-app it would fill the real Trash with test files).
 - **Viewer fix:** portrait photos were shown cropped (not fitted) since phase 1.
 
-Next, in order:
-1. Documents: phone uses ML Kit "paper" label + OCR text amount; desktop needs a
-   local replacement (decide: OCR model vs. classifier) + Help organize
-   "Is this a document?" + hide Documents from Photos.
-2. Package check with the new modules, commit, then phase 6.
+- **Documents** (`documents.js`): the phone's ML Kit "paper" label + OCR are
+  Android-only, so PaddleOCR v4 text *detection* finds text lines; characters ≈
+  line width ÷ height feed the phone's thresholds (0.95 / 0.70 / 0.45 review),
+  plus a coverage gate replacing the "paper" label: text lines must cover ≥ 4 %
+  of the photo, because the Xiaomi/Leica watermark strip alone reads as ~80
+  characters. Test pages/receipts/photo-of-page: 0.95; all 12 real phone photos
+  and a sign: 0. User answers win over re-analysis. Documents collection,
+  "Hide documents in Photos", Help organize asks documents first (phone order),
+  Details has Mark as / Not a document. Screenshots are skipped.
+  **Pending:** calibrate the 4 % gate against the phone's 18 documents
+  (`photo_ai_record.type = 'document'`) when the phone is connected.
+- **Labels** (search + Details): EfficientNet-Lite0 "Scene: …" labels
+  (converted from the phone's model), "Likely day/night" and "Portrait", all
+  from the same pass. The phone's other labels come from ML Kit and will arrive
+  with sync for photos it analysed.
+- The analysis runner now serves People and Documents in one pass (one decode
+  per photo); each still starts only on its own explicit request.
+- Package: four ONNX models, AppImage 192 MB / deb 154 MB; the packaged app ran
+  faces, documents, labels and places end to end.
+
+Not done (small, also optional on the phone): hiding the People/Documents
+cards from Collections.
 
 QA notes: `scripts/shot.js` now renders hidden (`DRIVE_HIDDEN`), because a
 visible window on the user's desktop can be clicked by them. Disposable test

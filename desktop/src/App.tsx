@@ -7,7 +7,7 @@ import { Viewer } from './Viewer'
 import { Collections } from './Collections'
 import { CollectionPicker, Confirm, NewCollection, errorText } from './Dialogs'
 import { Files, type FilesMode } from './Files'
-import { CombinePicker, PeoplePage, RenamePerson, ReviewPage } from './People'
+import { AnalysisBar, CombinePicker, PeoplePage, RenamePerson, ReviewPage } from './People'
 import { MapView } from './MapView'
 import { HiddenPage, VaultGate } from './Hidden'
 import { Editor } from './Editor'
@@ -19,6 +19,7 @@ const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => bo
   { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
   { id: 'videos', name: 'Videos', icon: 'video', test: m => !!m.is_video },
   { id: 'screenshots', name: 'Screenshots', icon: 'screenshot', test: m => isScreenshot(m.path) },
+  { id: 'documents', name: 'Documents', icon: 'document', test: m => !!m.document },
 ]
 
 const stored = (key: string) => { try { return localStorage.getItem(key) } catch { return null } }
@@ -34,6 +35,7 @@ export function App() {
   const [level, setLevel] = useState<Level>(() => (stored('level') as Level) || 'month')
   const [query, setQuery] = useState('')
   const [hideScreenshots, setHideScreenshots] = useState(() => stored('hideScreenshots') === '1')
+  const [hideDocuments, setHideDocuments] = useState(() => stored('hideDocuments') === '1')
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [open, setOpen] = useState<number | null>(null)
   const [dialog, setDialog] = useState<ReactNode>(null)
@@ -79,6 +81,7 @@ export function App() {
   reloadRef.current = reload
   useEffect(() => { store('level', level) }, [level])
   useEffect(() => { store('hideScreenshots', hideScreenshots ? '1' : '0') }, [hideScreenshots])
+  useEffect(() => { store('hideDocuments', hideDocuments ? '1' : '0') }, [hideDocuments])
   useEffect(() => {
     setSelected(new Set()); setOpen(null); setMembers(null)
     if (memberSource) memberSource().then(m => setMembers(new Set(m)))
@@ -87,7 +90,7 @@ export function App() {
 
   const items = useMemo(() => {
     if (!media) return []
-    if (page.kind === 'photos') return query.trim() ? media.filter(m => matches({ path: `${m.path} ${(names[m.sha256] ?? []).join(' ')} ${m.place_names ?? ''}` }, query)) : hideScreenshots ? media.filter(m => !isScreenshot(m.path)) : media
+    if (page.kind === 'photos') return query.trim() ? media.filter(m => matches({ path: `${m.path} ${(names[m.sha256] ?? []).join(' ')} ${m.place_names ?? ''} ${m.labels ?? ''}` }, query)) : media.filter(m => !(hideScreenshots && isScreenshot(m.path)) && !(hideDocuments && m.document))
     if (page.kind === 'collection') {
       const system = SYSTEM.find(s => s.id === page.id)
       return system ? media.filter(system.test) : members ? media.filter(m => members.has(m.sha256)) : []
@@ -95,7 +98,7 @@ export function App() {
     if (page.kind === 'person') return members ? media.filter(m => members.has(m.sha256)) : []
     if (page.kind === 'map') return media.filter(m => m.latitude != null && m.longitude != null)
     return []
-  }, [media, page, query, hideScreenshots, members, names])
+  }, [media, page, query, hideScreenshots, hideDocuments, members, names])
 
   // Keep the viewer on a valid item when the list shrinks (trash, unfavorite in Favorites, remove from collection).
   useEffect(() => { if (open !== null && open >= items.length) setOpen(items.length ? items.length - 1 : null) }, [items, open])
@@ -217,6 +220,7 @@ export function App() {
           : inCollection
           ? <><button className="round flat" title="Back to Collections" onClick={() => setPage({ kind: 'collections' })}><Icon name="back" /></button><h1>{page.name}</h1></>
           : <h1>Photos</h1>}
+        banner={page.kind === 'collection' && page.id === 'documents' ? <AnalysisBar status={analysis} kind="documents" /> : undefined}
         empty={query ? `Nothing matches “${query}”.` : inCollection ? 'Nothing here yet.' : 'Every item is hidden by Photos tools.'}
         tools={!inCollection && <>
           <label className="island search">
@@ -228,7 +232,8 @@ export function App() {
             <summary className="round" title="Photos tools"><Icon name="tune" /></summary>
             <div className="island menu-body">
               <label><input type="checkbox" checked={hideScreenshots} onChange={e => setHideScreenshots(e.target.checked)} /> Hide screenshots in Photos</label>
-              <small>They stay in the Screenshots collection and on disk.</small>
+              <label><input type="checkbox" checked={hideDocuments} onChange={e => setHideDocuments(e.target.checked)} /> Hide documents in Photos</label>
+              <small>They stay in their collections and on disk.</small>
             </div>
           </details>
         </>} />
@@ -270,6 +275,7 @@ export function App() {
       {open !== null && items[open] && (
         <Viewer media={items} index={open} setIndex={setOpen} onClose={() => setOpen(null)} people={names[items[open].sha256] ?? []}
           onShowOnMap={m => { setOpen(null); setPage({ kind: 'map', focus: m.sha256 }) }}
+          onDocument={(m, on) => run(() => window.drive.documents.set(m.sha256, on), on ? 'Marked as a document' : 'No longer a document')}
           onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={m => hide([m])} onEdit={setEditing}
           onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} />
       )}

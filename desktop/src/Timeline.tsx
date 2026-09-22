@@ -16,11 +16,12 @@ interface Props {
   setSelected: (s: Set<number>) => void
   onOpen: (index: number) => void
   thumbUrl?: (m: Media) => string
+  banner?: ReactNode
 }
 
 const defaultThumb = (m: Media) => `media://thumb/${m.sha256}`
 
-export function Timeline({ items, title, tools, empty, level, setLevel, selected, setSelected, onOpen, thumbUrl = defaultThumb }: Props) {
+export function Timeline({ items, title, tools, empty, level, setLevel, selected, setSelected, onOpen, thumbUrl = defaultThumb, banner }: Props) {
   const groups = useMemo(() => group(items, level), [items, level])
   const indexOf = useMemo(() => new Map(items.map((m, i) => [m.id, i])), [items])
   const scroller = useRef<HTMLDivElement>(null)
@@ -118,6 +119,7 @@ export function Timeline({ items, title, tools, empty, level, setLevel, selected
           </div>
         </div>
       </header>
+      {banner}
       {items.length === 0 && <div className="empty">{empty}</div>}
       {groups.map(g => (
         // content-visibility skips layout/paint of off-screen periods, so large libraries stay smooth.

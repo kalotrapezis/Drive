@@ -8,7 +8,7 @@ export interface DriveItem {
 
 export interface Person { id: string; name: string; count: number; cover: string | null }
 export interface Review { faceId: string; personId: string; sha256: string; name: string; personFace: string | null }
-export interface Analysis { running: boolean; paused: boolean; done: number; total: number; error: string; enabled?: boolean; reviews?: number }
+export interface Analysis { running: boolean; paused: boolean; done: number; total: number; error: string; enabled?: boolean; documentsEnabled?: boolean; reviews?: number }
 export interface MergeUndo { sourceId: string; faceIds: string[] }
 
 export interface VaultStatus { configured: boolean; unlocked: boolean; count: number }
@@ -42,6 +42,12 @@ declare global {
         list(): Promise<VaultItem[]>
         hide(ids: number[]): Promise<{ hidden: number; failed: string[] }>
         restore(ids: string[]): Promise<string[]>
+      }
+      documents: {
+        start(): Promise<void>
+        nextReview(): Promise<{ sha256: string } | null>
+        answer(sha: string, answer: 'yes' | 'no' | 'skip'): Promise<void>
+        set(sha: string, isDocument: boolean): Promise<void>
       }
       people: {
         status(): Promise<Analysis>

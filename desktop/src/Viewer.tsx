@@ -14,11 +14,12 @@ interface Props {
   onCollect?: (m: Media) => void; onUncollect?: (m: Media) => void
   people: string[]
   onShowOnMap?: (m: Media) => void
+  onDocument?: (m: Media, isDocument: boolean) => void
   fileUrl?: (m: Media) => string
   thumbUrl?: (m: Media) => string
 }
 
-export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect, people, onShowOnMap, onHide, onRestore, onEdit,
+export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect, people, onShowOnMap, onHide, onRestore, onEdit, onDocument,
   fileUrl = m => `media://file/${m.id}`, thumbUrl = m => `media://thumb/${m.sha256}` }: Props) {
   const item = media[index]
   const [view, setView] = useState<View>(RESET)
@@ -132,6 +133,9 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
               <dt>Folder</dt><dd>{folder}</dd>
               <dt>Size</dt><dd>{formatBytes(item.size)}{item.width ? ` · ${item.width} × ${item.height}` : ''}</dd>
               {people.length > 0 && <><dt>People</dt><dd>{people.join(', ')}</dd></>}
+              {item.labels && <><dt>Labels</dt><dd>{item.labels.replace(/Scene: /g, '')}</dd></>}
+              {onDocument && !item.is_video && <><dt>Document</dt><dd>{item.document ? 'Yes' : 'No'}
+                <button className="text-button" onClick={() => onDocument(item, !item.document)}>{item.document ? 'Not a document' : 'Mark as document'}</button></dd></>}
               {item.camera && <><dt>Camera</dt><dd>{item.camera}</dd></>}
               {item.latitude != null && <><dt>Location</dt>
                 <dd><Icon name="place" size={16} /> {item.place || 'Not named'}</dd>

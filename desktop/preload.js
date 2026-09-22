@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld('drive', {
     hide: ids => ipcRenderer.invoke('vault:hide', ids),
     restore: ids => ipcRenderer.invoke('vault:restore', ids),
   },
+  documents: {
+    start: () => ipcRenderer.invoke('documents:start'),
+    nextReview: () => ipcRenderer.invoke('documents:nextReview'),
+    answer: (sha, answer) => ipcRenderer.invoke('documents:answer', sha, answer),
+    set: (sha, on) => ipcRenderer.invoke('documents:set', sha, on),
+  },
   people: {
     status: () => ipcRenderer.invoke('people:status'),
     start: () => ipcRenderer.invoke('people:start'),

@@ -39,6 +39,7 @@ Video thumbnails use the system `ffmpeg`. HEIC goes through libheif (`heic-decod
 | `src/MapView.tsx` | Map (MapLibre + OpenFreeMap) with photo-thumbnail markers and clusters |
 | `vault.js`, `src/Hidden.tsx` | Hidden: libsodium vault (Argon2id + secretstream), setup/unlock, hide/restore |
 | `editor.js`, `src/Editor.tsx`, `src/edit.ts` | Editor: crop + straighten, rotate, markup; save copy with original EXIF (no re-encode) or replace via Trash |
+| `documents.js` | Documents (PaddleOCR text detection → phone thresholds + coverage gate), scene labels (EfficientNet-Lite0), time of day |
 | `models/` | ONNX models and their licences (`models/NOTICES.md`) |
 | `src/Viewer.tsx` | Viewer: zoom/pan, keys, details, filmstrip |
 | `src/timeline.ts` | Grouping and formatting |

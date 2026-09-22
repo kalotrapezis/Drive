@@ -7,23 +7,25 @@ export const FaceCircle = ({ face, size = 96 }: { face: string | null; size?: nu
   <span className="face" style={{ width: size, height: size }}>{face ? <img src={`media://face/${face}`} alt="" /> : <Icon name="photos" size={size / 2.5} />}</span>
 )
 
-/** Shared analysis control: explicit start, progress, pause. */
-export function AnalysisBar({ status }: { status: Analysis | null }) {
+/** Shared analysis control: explicit start, progress, pause. People and Documents are started separately, like the phone. */
+export function AnalysisBar({ status, kind = 'people' }: { status: Analysis | null; kind?: 'people' | 'documents' }) {
   if (!status) return null
+  const enabled = kind === 'people' ? status.enabled : status.documentsEnabled
+  const start = () => kind === 'people' ? window.drive.people.start() : window.drive.documents.start()
   if (status.running) return (
     <div className="island analysis">
       <span className="spinner" />
-      <span>Looking for faces… {status.done.toLocaleString()} / {status.total.toLocaleString()}</span>
+      <span>Analysing photos… {status.done.toLocaleString()} / {status.total.toLocaleString()}</span>
       <button className="text-button" onClick={() => window.drive.people.pause()}>Pause</button>
     </div>
   )
   return (
     <div className="island analysis">
       <Icon name="info" />
-      <span>{status.error ? `Analysis stopped: ${status.error}` : status.enabled
+      <span>{status.error ? `Analysis stopped: ${status.error}` : enabled
         ? status.paused ? `Paused at ${status.done} of ${status.total}.` : 'New photos are analysed after each rescan.'
-        : 'Find people runs on this computer only. Nothing is uploaded.'}</span>
-      <button className="filled-button" onClick={() => window.drive.people.start()}>{status.enabled ? (status.paused ? 'Resume' : 'Check again') : 'Find people'}</button>
+        : `${kind === 'people' ? 'Find people' : 'Find documents'} runs on this computer only. Nothing is uploaded.`}</span>
+      <button className="filled-button" onClick={start}>{enabled ? (status.paused ? 'Resume' : 'Check again') : kind === 'people' ? 'Find people' : 'Find documents'}</button>
     </div>
   )
 }
@@ -86,10 +88,17 @@ export function CombinePicker({ person, people, onClose, onPick }: { person: Per
 
 export function ReviewPage({ onBack, onChanged }: { onBack: () => void; onChanged: () => void }) {
   const [review, setReview] = useState<Review | null | undefined>(undefined)
-  const load = () => window.drive.people.nextReview().then(setReview)
+  const [doc, setDoc] = useState<{ sha256: string } | null>(null)
+  // Phone order: document questions first, then faces.
+  async function load() {
+    const d = await window.drive.documents.nextReview()
+    setDoc(d)
+    setReview(d ? undefined : await window.drive.people.nextReview())
+  }
   useEffect(() => { load() }, [])
   async function answer(a: 'yes' | 'no' | 'skip') {
-    await window.drive.people.answer(review!.faceId, review!.personId, a)
+    if (doc) await window.drive.documents.answer(doc.sha256, a)
+    else await window.drive.people.answer(review!.faceId, review!.personId, a)
     onChanged(); load()
   }
   return (
@@ -97,7 +106,18 @@ export function ReviewPage({ onBack, onChanged }: { onBack: () => void; onChange
       <header className="topbar">
         <div className="island title-island"><button className="round flat" title="Back to Collections" onClick={onBack}><Icon name="back" /></button><h1>Help organize</h1></div>
       </header>
-      {review === null && <div className="empty">Nothing needs a review right now.</div>}
+      {review === null && !doc && <div className="empty">Nothing needs a review right now.</div>}
+      {doc && (
+        <div className="island review">
+          <h2>Is this a document?</h2>
+          <img className="review-photo large" src={`media://thumb/${doc.sha256}`} alt="" />
+          <div className="dialog-actions center">
+            <button className="text-button" onClick={() => answer('skip')}>Skip</button>
+            <button className="filled-button secondary" onClick={() => answer('no')}>No</button>
+            <button className="filled-button" onClick={() => answer('yes')}>Yes, a document</button>
+          </div>
+        </div>
+      )}
       {review && (
         <div className="island review">
           <h2>Is this the same person?</h2>

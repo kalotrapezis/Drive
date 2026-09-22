@@ -9,6 +9,7 @@ const faces = require('./faces')
 const places = require('./places')
 const { Vault } = require('./vault')
 const editor = require('./editor')
+const docs = require('./documents')
 
 // Override both for testing with disposable files.
 const PHOTOS_ROOT = process.env.DRIVE_PHOTOS || path.join(os.homedir(), 'Drive', 'Photos')
@@ -17,44 +18,63 @@ const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME |
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
-let db, files, people, vault, win, scanning = null
+let db, files, people, documents, vault, win, scanning = null
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage']
 
 function startScan() {
   scanning ??= library.scan(db, PHOTOS_ROOT, DATA_DIR, (done, changed) => win?.webContents.send('scan-progress', { done, changed }))
     .then(r => { places.fill(db); return r })
-    .finally(() => { scanning = null; if (setting('people_enabled') === '1') analyzePeople() })
+    .finally(() => { scanning = null; analyzeLibrary() })
   return scanning
 }
 
 const setting = key => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value
 const setSetting = (key, value) => db.prepare('INSERT INTO settings(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
 
-// People analysis: only after an explicit start (like the phone), pausable, never uploads anything.
+// Local analysis (People, Documents): each starts only after an explicit request, like the phone; pausable; nothing
+// is uploaded. One pass decodes each photo once for whatever still needs it.
 const analysis = { running: false, paused: false, done: 0, total: 0, error: '' }
-let engine = null
+const engines = {}
 const sendAnalysis = () => win?.webContents.send('people-progress', { ...analysis })
 const isScreenshot = p => /screenshot|στιγμιοτυπο|screen[ _-]?shot|scrnshot/.test(p.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase())
 
-async function analyzePeople() {
+async function analyzeLibrary() {
   if (analysis.running) return
   Object.assign(analysis, { running: true, paused: false, done: 0, error: '' })
   try {
-    engine ??= await faces.FaceEngine.load(path.join(__dirname, 'models'))
-    const todo = people.pending()
-    analysis.total = todo.length
+    const wantFaces = setting('people_enabled') === '1', wantDocs = setting('documents_enabled') === '1'
+    const todo = new Map()
+    if (wantFaces) for (const r of people.pending()) todo.set(r.sha256, { ...r, faces: true })
+    if (wantDocs) for (const r of documents.pending()) todo.set(r.sha256, { ...(todo.get(r.sha256) ?? r), docs: true })
+    if (wantFaces) engines.faces ??= await faces.FaceEngine.load(path.join(__dirname, 'models'))
+    if (wantDocs) engines.docs ??= await docs.DocEngine.load(path.join(__dirname, 'models'))
+    if (wantDocs) engines.scene ??= await docs.SceneEngine.load(path.join(__dirname, 'models'))
+    analysis.total = todo.size
     sendAnalysis()
-    for (const { sha256, path: rel } of todo) {
+    for (const job of todo.values()) {
       if (analysis.paused) break
-      if (isScreenshot(rel)) people.skip(sha256) // the phone skips screenshots too
-      else {
-        try {
-          const img = await faces.FaceEngine.decode(path.join(PHOTOS_ROOT, rel))
-          const found = await engine.analyze(img)
-          const ids = people.record(sha256, found, img)
-          for (const [i, id] of ids.entries()) await people.saveCrop(img, id, found[i].box).catch(() => {})
-        } catch { people.skip(sha256) } // unreadable image: analysed as "no faces", like a failed decode on the phone
+      if (isScreenshot(job.path)) { // screenshots have their own collection; the phone skips faces there too
+        if (job.faces) people.skip(job.sha256)
+        if (job.docs) documents.record(job.sha256, 0)
+      } else {
+        let img = null
+        try { img = await faces.FaceEngine.decode(path.join(PHOTOS_ROOT, job.path)) } catch {}
+        if (job.faces) {
+          try {
+            if (!img) throw new Error('unreadable')
+            const found = await engines.faces.analyze(img)
+            const ids = people.record(job.sha256, found, img)
+            for (const [i, id] of ids.entries()) await people.saveCrop(img, id, found[i].box).catch(() => {})
+          } catch { people.skip(job.sha256) } // unreadable image: analysed as "no faces", like a failed decode on the phone
+        }
+        if (job.docs) {
+          // Phone: one classification pass gives the document score and the search labels.
+          const row = img && db.prepare('SELECT MAX(taken_at) t FROM media WHERE sha256 = ?').get(job.sha256)
+          const labels = img ? [...await engines.scene.classify(img).catch(() => []), docs.likelyTimeOfDay(row.t, docs.averageLuminance(img))].filter(Boolean) : []
+          if (db.prepare('SELECT 1 FROM faces WHERE sha256 = ? AND deleted = 0').get(job.sha256)) labels.push('Portrait')
+          documents.record(job.sha256, img ? (await engines.docs.classify(img).catch(() => ({ confidence: 0 }))).confidence : 0, labels)
+        }
       }
       analysis.done++
       if (analysis.done % 5 === 0 || analysis.done === analysis.total) sendAnalysis()
@@ -69,6 +89,7 @@ app.whenReady().then(() => {
   files = new Files(db, FILES_ROOT)
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
+  documents = new docs.Documents(db)
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
 
   // media://thumb/<sha256>  and  media://file/<id>  — only files the database knows about are served.
@@ -107,8 +128,13 @@ app.whenReady().then(() => {
   ipcMain.handle('collections:delete', (_, id) => library.deleteCollection(db, id))
   ipcMain.handle('collections:members', (_, id) => library.members(db, id))
   ipcMain.handle('collections:set', (_, id, shas, member) => library.setMembership(db, id, shas, member))
-  ipcMain.handle('people:status', () => ({ ...analysis, enabled: setting('people_enabled') === '1', reviews: people.reviewCount() }))
-  ipcMain.handle('people:start', () => { setSetting('people_enabled', '1'); analyzePeople() })
+  ipcMain.handle('people:status', () => ({ ...analysis, enabled: setting('people_enabled') === '1', documentsEnabled: setting('documents_enabled') === '1',
+    reviews: people.reviewCount() + documents.reviewCount() }))
+  ipcMain.handle('people:start', () => { setSetting('people_enabled', '1'); analyzeLibrary() })
+  ipcMain.handle('documents:start', () => { setSetting('documents_enabled', '1'); analyzeLibrary() })
+  ipcMain.handle('documents:nextReview', () => documents.nextReview())
+  ipcMain.handle('documents:answer', (_, sha, answer) => documents.answer(sha, answer))
+  ipcMain.handle('documents:set', (_, sha, on) => documents.set(sha, on))
   ipcMain.handle('people:pause', () => { analysis.paused = true })
   ipcMain.handle('people:list', () => people.list())
   ipcMain.handle('people:shas', (_, id) => people.shas(id))

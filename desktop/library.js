@@ -40,7 +40,12 @@ function open(dataDir) {
     CREATE TABLE IF NOT EXISTS photo_state (sha256 TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS collections (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0);
     CREATE UNIQUE INDEX IF NOT EXISTS collections_name ON collections(name COLLATE NOCASE) WHERE deleted = 0;
-    CREATE TABLE IF NOT EXISTS collection_items (collection_id TEXT NOT NULL, sha256 TEXT NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(collection_id, sha256));`)
+    CREATE TABLE IF NOT EXISTS collection_items (collection_id TEXT NOT NULL, sha256 TEXT NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(collection_id, sha256));
+    -- Phone: photo_ai_record. type 'document' or NULL; the user's answer (user_verified) always wins.
+    CREATE TABLE IF NOT EXISTS photo_ai (sha256 TEXT PRIMARY KEY, type TEXT, confidence REAL NOT NULL DEFAULT 0, user_verified INTEGER NOT NULL DEFAULT 0,
+      review_state TEXT NOT NULL DEFAULT 'none', version TEXT, updated_at INTEGER NOT NULL);
+    -- Phone: photo_ai_label. Local English labels for search ("Scene: …", "Likely day", "Portrait").
+    CREATE TABLE IF NOT EXISTS photo_labels (sha256 TEXT NOT NULL, label TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY(sha256, label));`)
   // Added after the first release: place name ('' = looked up, nothing near) and its search spellings.
   const columns = db.prepare('PRAGMA table_info(media)').all().map(c => c.name)
   if (!columns.includes('place')) db.exec('ALTER TABLE media ADD COLUMN place TEXT; ALTER TABLE media ADD COLUMN place_names TEXT;')
@@ -160,7 +165,9 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
 
 function list(db) {
   return db.prepare(`SELECT m.id, m.path, m.sha256, m.mime, m.is_video, m.size, m.taken_at, m.width, m.height, m.latitude, m.longitude, m.camera, m.thumb, m.place, m.place_names,
-    COALESCE(s.favorite, 0) AS favorite FROM media m LEFT JOIN photo_state s ON s.sha256 = m.sha256 ORDER BY m.taken_at DESC, m.path`).all()
+    COALESCE(s.favorite, 0) AS favorite, COALESCE(a.type = 'document', 0) AS document,
+    (SELECT GROUP_CONCAT(label, ', ') FROM photo_labels l WHERE l.sha256 = m.sha256) AS labels
+    FROM media m LEFT JOIN photo_state s ON s.sha256 = m.sha256 LEFT JOIN photo_ai a ON a.sha256 = m.sha256 ORDER BY m.taken_at DESC, m.path`).all()
 }
 
 function transaction(db, fn) {
