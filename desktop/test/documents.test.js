@@ -11,7 +11,7 @@ test('phone thresholds, with the coverage gate replacing the paper label', () =>
   assert.equal(documentConfidence(80, 2, 0.2), 0.70)
   assert.equal(documentConfidence(35, 1, 0.2), 0.45)
   assert.equal(documentConfidence(34, 9, 0.2), 0)
-  assert.equal(documentConfidence(500, 9, 0.01), 0) // a watermark strip is not a document
+  assert.equal(documentConfidence(500, 9, 0.029), 0) // a watermark strip is not a document
 })
 
 test('text lines are measured from the probability map', () => {

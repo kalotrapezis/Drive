@@ -7,9 +7,10 @@ const path = require('node:path')
 const SIDE = 960 // long side fed to the detector (multiple of 32)
 const MEAN = [0.485, 0.456, 0.406], STD = [0.229, 0.224, 0.225]
 const TEXT_PROB = 0.3, MIN_LINE_AREA = 24
-// ponytail: share of the photo's area covered by text lines. Test documents 0.07–0.63, real phone photos ≤ 0.015
-// (camera watermark, signs, shirts). Recalibrate against the phone's 18 documents when the phone is connected.
-const MIN_COVERAGE = 0.04
+// Share of the photo's area covered by text lines (replaces the phone's "paper" gate). Calibrated 2026-09-22 against
+// the phone's own decisions: its 18 documents 0.033–0.227, 57 of 60 non-documents ≤ 0.029 (watermarks, signs, shirts).
+// At 0.03: 17/18 documents found (the miss: tiny passport-style text), 1/60 false alarm (a handwritten notebook page).
+const MIN_COVERAGE = 0.03
 
 /** Phone: PhotoClassifier.documentConfidence thresholds, fed with estimated characters and text lines. */
 function documentConfidence(chars, lines, coverage = 1) {
@@ -114,7 +115,7 @@ class DocEngine {
   }
 }
 
-const VERSION = 'ppocrv4-det+coverage0.04+effnetlite0'
+const VERSION = 'ppocrv4-det+coverage0.03+effnetlite0'
 
 /** Phone: PhotoMetadataStore.recordClassification / nextReview / resolveReview for documents. */
 class Documents {

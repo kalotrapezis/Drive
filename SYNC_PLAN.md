@@ -1,6 +1,6 @@
 # Local Drive — desktop app and phone ↔ desktop sync plan
 
-Updated: 2026-09-22 (phases 1–5 done; next: phase 0 on the phone, then 6). The same file lives in both `Drive-Android/` and `Drive/`.
+Updated: 2026-09-22 (phases 1–5 done; phase 0 on the phone in progress, then 6). The same file lives in both `Drive-Android/` and `Drive/`.
 Edit one, copy it to the other.
 
 Goal: a personal Google Photos + Google Drive. The phone and the desktop have
@@ -218,7 +218,7 @@ decoded with libheif, which also fixed HEIC thumbnails and the viewer.
 
 ### 5. Desktop: Map, Hidden (encrypted), Editor, Documents classification
 
-**Status 2026-09-22: done** (one calibration left, see Documents).
+**Status 2026-09-22: done.**
 
 Done and tested:
 - **Map** (`src/MapView.tsx`): MapLibre + OpenFreeMap like the phone; photo
@@ -251,14 +251,16 @@ Done and tested:
 - **Documents** (`documents.js`): the phone's ML Kit "paper" label + OCR are
   Android-only, so PaddleOCR v4 text *detection* finds text lines; characters ≈
   line width ÷ height feed the phone's thresholds (0.95 / 0.70 / 0.45 review),
-  plus a coverage gate replacing the "paper" label: text lines must cover ≥ 4 %
+  plus a coverage gate replacing the "paper" label: text lines must cover ≥ 3 %
   of the photo, because the Xiaomi/Leica watermark strip alone reads as ~80
   characters. Test pages/receipts/photo-of-page: 0.95; all 12 real phone photos
   and a sign: 0. User answers win over re-analysis. Documents collection,
   "Hide documents in Photos", Help organize asks documents first (phone order),
   Details has Mark as / Not a document. Screenshots are skipped.
-  **Pending:** calibrate the 4 % gate against the phone's 18 documents
-  (`photo_ai_record.type = 'document'`) when the phone is connected.
+  **Calibrated** on the phone's own decisions (its 18 documents + 60 random
+  non-documents): gate lowered to 3 % → 17/18 documents found (miss: tiny
+  passport-style text), 1/60 false alarm (a handwritten notebook page).
+  Screenshots stay excluded (the phone counted 2 document-viewer screenshots).
 - **Labels** (search + Details): EfficientNet-Lite0 "Scene: …" labels
   (converted from the phone's model), "Likely day/night" and "Portrait", all
   from the same pass. The phone's other labels come from ML Kit and will arrive
