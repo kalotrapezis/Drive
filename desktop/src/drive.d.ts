@@ -14,6 +14,9 @@ export interface MergeUndo { sourceId: string; faceIds: string[] }
 export interface VaultStatus { configured: boolean; unlocked: boolean; count: number }
 export interface VaultItem { id: string; sha256: string; name: string; rel_path: string; mime: string; is_video: number; size: number; taken_at: number; has_thumb: number }
 
+export interface SyncDevice { id: string; name: string; paired_at: number; last_seen: number | null; received: number }
+export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[] }
+
 export interface Collection { id: string; name: string; count: number; cover: string | null }
 
 declare global {
@@ -42,6 +45,12 @@ declare global {
         list(): Promise<VaultItem[]>
         hide(ids: number[]): Promise<{ hidden: number; failed: string[] }>
         restore(ids: string[]): Promise<string[]>
+      }
+      sync: {
+        status(): Promise<SyncStatus>
+        pair(): Promise<{ payload: { hosts: string[]; port: number }; qr: string }>
+        forget(id: string): Promise<void>
+        onReceived(fn: () => void): () => void
       }
       documents: {
         start(): Promise<void>

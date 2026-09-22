@@ -10,6 +10,7 @@ const places = require('./places')
 const { Vault } = require('./vault')
 const editor = require('./editor')
 const docs = require('./documents')
+const { SyncServer } = require('./sync')
 
 // Override both for testing with disposable files.
 const PHOTOS_ROOT = process.env.DRIVE_PHOTOS || path.join(os.homedir(), 'Drive', 'Photos')
@@ -18,7 +19,7 @@ const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME |
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
-let db, files, people, documents, vault, win, scanning = null
+let db, files, people, documents, vault, sync, win, scanning = null
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage']
 
@@ -90,6 +91,13 @@ app.whenReady().then(() => {
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
+  // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
+  let rescanTimer = null
+  sync = new SyncServer({ db, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, onReceived: () => {
+    clearTimeout(rescanTimer)
+    rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
+  } })
+  sync.start().catch(e => { sync.error = e.message })
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
 
   // media://thumb/<sha256>  and  media://file/<id>  — only files the database knows about are served.
@@ -194,6 +202,14 @@ app.whenReady().then(() => {
     await startScan()
     return path.relative(PHOTOS_ROOT, target)
   })
+  ipcMain.handle('sync:status', () => ({ port: sync.port, fingerprint: sync.fingerprint, error: sync.error ?? null,
+    addresses: require('node:os').networkInterfaces && Object.values(require('node:os').networkInterfaces()).flat().filter(a => a?.family === 'IPv4' && !a.internal).map(a => a.address),
+    devices: sync.devices() }))
+  ipcMain.handle('sync:pair', async () => {
+    const payload = sync.startPairing()
+    return { payload, qr: await require('qrcode').toDataURL(JSON.stringify(payload), { margin: 1, width: 360, errorCorrectionLevel: 'M' }) }
+  })
+  ipcMain.handle('sync:forget', (_, id) => sync.forget(id))
   ipcMain.handle('open-map', (_, lat, lon) => {
     if (![lat, lon].every(Number.isFinite) || Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error('Invalid location.')
     return shell.openExternal(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`)

@@ -304,3 +304,11 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .sheet-row small { color: var(--muted); }
 .sheet-row:disabled { opacity: .5; }
 .review-photo.large { max-height: 50vh; }
+
+/* Sync */
+.qr { display: grid; place-items: center; background: #fff; border-radius: 20px; padding: 12px; margin: 8px 0; min-height: 200px; }
+.qr img { width: 300px; height: 300px; image-rendering: pixelated; }
+.device-list { display: grid; gap: 8px; }
+.device { display: flex; align-items: center; gap: 14px; padding: 14px 18px; }
+.device > div { flex: 1; display: grid; }
+.device small { color: var(--muted); }

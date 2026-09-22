@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld('drive', {
     hide: ids => ipcRenderer.invoke('vault:hide', ids),
     restore: ids => ipcRenderer.invoke('vault:restore', ids),
   },
+  sync: {
+    status: () => ipcRenderer.invoke('sync:status'),
+    pair: () => ipcRenderer.invoke('sync:pair'),
+    forget: id => ipcRenderer.invoke('sync:forget', id),
+    onReceived: fn => { const l = () => fn(); ipcRenderer.on('sync-received', l); return () => ipcRenderer.off('sync-received', l) },
+  },
   documents: {
     start: () => ipcRenderer.invoke('documents:start'),
     nextReview: () => ipcRenderer.invoke('documents:nextReview'),

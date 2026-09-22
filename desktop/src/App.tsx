@@ -11,9 +11,10 @@ import { AnalysisBar, CombinePicker, PeoplePage, RenamePerson, ReviewPage } from
 import { MapView } from './MapView'
 import { HiddenPage, VaultGate } from './Hidden'
 import { Editor } from './Editor'
+import { SyncPage } from './Sync'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string }
-  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' }
+  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' }
 
 const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
@@ -65,6 +66,7 @@ export function App() {
   useEffect(() => {
     window.drive.info().then(i => setRoot(i.photosRoot))
     reload()
+    const offSync = window.drive.sync.onReceived(() => reloadRef.current())
     const off = window.drive.onScanProgress(p => setScan(p.changed ? `Adding photos… ${p.changed} new` : `Checking… ${p.done}`))
     let wasRunning = false
     const offPeople = window.drive.people.onProgress(a => {
@@ -74,7 +76,7 @@ export function App() {
       wasRunning = a.running
     })
     rescan()
-    return () => { off(); offPeople() }
+    return () => { off(); offPeople(); offSync() }
   }, [])
 
   const reloadRef = useRef(reload)
@@ -196,6 +198,7 @@ export function App() {
   else if (loading) content = <div className="empty">Loading…</div>
   else if (media.length === 0) content = <div className="empty"><p>No photos or videos in <code>{root}</code></p></div>
   else if (page.kind === 'people') content = <PeoplePage people={people} status={analysis} onBack={() => setPage({ kind: 'collections' })} onOpen={p => setPage({ kind: 'person', id: p.id, name: p.name })} />
+  else if (page.kind === 'sync') content = <SyncPage setDialog={setDialog} />
   else if (page.kind === 'hidden') content = <HiddenPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (page.kind === 'map') content = <MapView items={items} focus={page.focus} onOpen={setOpen} onBack={() => setPage({ kind: 'collections' })} />
   else if (page.kind === 'review') content = <ReviewPage onBack={() => setPage({ kind: 'collections' })} onChanged={reload} />
@@ -251,6 +254,8 @@ export function App() {
         {nav({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
         {nav({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
         {nav({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', 'Recent')}
+        <small className="rail-head">Devices</small>
+        {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Phone sync')}
         <div className="rail-foot">
           <span>{scan ?? `${media?.length ?? 0} items`}</span>
           <button className="round" title="Rescan library" disabled={!!scan} onClick={rescan}><Icon name="refresh" size={20} /></button>

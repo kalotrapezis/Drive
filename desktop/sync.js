@@ -1,0 +1,151 @@
+// Phone → desktop sync server (SYNC_PLAN.md phase 6). HTTPS with a self-signed certificate that the phone pins by
+// its SHA-256 fingerprint (from the pairing QR); a one-time pairing code becomes a per-phone bearer token.
+// Photos arrive as a stream, are hashed while written to a .part file, and only a matching SHA-256 becomes a file
+// and a receipt. Nothing here ever deletes or overwrites.
+const fs = require('node:fs')
+const fsp = require('node:fs/promises')
+const path = require('node:path')
+const os = require('node:os')
+const https = require('node:https')
+const crypto = require('node:crypto')
+
+const PORT = 43180
+const PAIRING_MS = 10 * 60 * 1000
+const MAX_HAVE = 5000
+const sha = s => crypto.createHash('sha256').update(s).digest('hex')
+const isHash = h => typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)
+const safeRel = rel => typeof rel === 'string' && rel.length < 512 && !rel.startsWith('/') && rel.split('/').every(p => p !== '.' && p !== '..') && !/[\\\0]/.test(rel)
+const safeName = n => typeof n === 'string' && n.length > 0 && n.length < 256 && !/[/\\\0]/.test(n) && n !== '.' && n !== '..'
+
+async function identity(dir) {
+  const keyFile = path.join(dir, 'key.pem'), certFile = path.join(dir, 'cert.pem')
+  if (!fs.existsSync(keyFile)) {
+    const pems = await require('selfsigned').generate([{ name: 'commonName', value: 'Local Drive' }], { keySize: 2048, days: 3650, algorithm: 'sha256' })
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(keyFile, pems.private, { mode: 0o600 })
+    fs.writeFileSync(certFile, pems.cert)
+  }
+  const cert = fs.readFileSync(certFile, 'utf8')
+  return { key: fs.readFileSync(keyFile, 'utf8'), cert, fingerprint: new crypto.X509Certificate(cert).fingerprint256.replace(/:/g, '').toLowerCase() }
+}
+
+function lanAddresses() {
+  return Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === 'IPv4' && !a.internal).map(a => a.address)
+}
+
+class SyncServer {
+  /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan). */
+  constructor({ db, dataDir, photosRoot, onReceived = () => {}, port = PORT }) {
+    Object.assign(this, { db, dataDir, photosRoot, onReceived, port })
+    this.pairing = null
+    db.exec(`CREATE TABLE IF NOT EXISTS sync_devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, paired_at INTEGER NOT NULL, last_seen INTEGER);
+      CREATE TABLE IF NOT EXISTS sync_receipts (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256));`)
+  }
+
+  async start() {
+    const id = await identity(path.join(this.dataDir, 'sync'))
+    this.fingerprint = id.fingerprint
+    this.server = https.createServer({ key: id.key, cert: id.cert }, (req, res) => this.handle(req, res).catch(e => this.send(res, e.status ?? 500, { error: e.expose ? e.message : 'Server error' })))
+    await new Promise((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.port, '0.0.0.0', resolve) })
+    this.port = this.server.address().port
+    return this
+  }
+
+  stop() { return new Promise(r => this.server ? this.server.close(r) : r()) }
+
+  /** A fresh one-time code for the QR; valid 10 minutes or until used. */
+  startPairing() {
+    this.pairing = { code: crypto.randomBytes(16).toString('base64url'), until: Date.now() + PAIRING_MS }
+    return { v: 1, name: os.hostname(), hosts: lanAddresses(), port: this.port, fp: this.fingerprint, code: this.pairing.code }
+  }
+
+  devices() {
+    return this.db.prepare(`SELECT d.id, d.name, d.paired_at, d.last_seen, (SELECT COUNT(*) FROM sync_receipts r WHERE r.device_id = d.id) AS received FROM sync_devices d ORDER BY d.paired_at`).all()
+  }
+  forget(id) { this.db.prepare('DELETE FROM sync_devices WHERE id = ?').run(String(id)) }
+
+  send(res, status, body) {
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  }
+
+  async json(req, limit = 1 << 20) {
+    let size = 0
+    const parts = []
+    for await (const c of req) { size += c.length; if (size > limit) throw Object.assign(new Error('Request too large.'), { status: 413, expose: true }); parts.push(c) }
+    try { return JSON.parse(Buffer.concat(parts).toString('utf8')) } catch { throw Object.assign(new Error('Invalid JSON.'), { status: 400, expose: true }) }
+  }
+
+  device(req) {
+    const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]
+    const d = token && this.db.prepare('SELECT id, name FROM sync_devices WHERE token_hash = ?').get(sha(token))
+    if (!d) throw Object.assign(new Error('Not paired.'), { status: 401, expose: true })
+    this.db.prepare('UPDATE sync_devices SET last_seen = ? WHERE id = ?').run(Date.now(), d.id)
+    return d
+  }
+
+  have(hash) {
+    return !!this.db.prepare('SELECT 1 FROM media WHERE sha256 = ?').get(hash) || !!this.db.prepare('SELECT 1 FROM sync_receipts WHERE sha256 = ?').get(hash)
+  }
+
+  async handle(req, res) {
+    const url = new URL(req.url, 'https://x')
+    if (req.method === 'POST' && url.pathname === '/pair') {
+      const body = await this.json(req)
+      const p = this.pairing
+      if (!p || Date.now() > p.until || typeof body.code !== 'string' || body.code.length !== p.code.length
+        || !crypto.timingSafeEqual(Buffer.from(body.code), Buffer.from(p.code))) return this.send(res, 403, { error: 'Pairing code is not valid. Show a new QR code on the computer.' })
+      this.pairing = null // one use
+      const token = crypto.randomBytes(32).toString('base64url'), id = crypto.randomUUID()
+      this.db.prepare('INSERT INTO sync_devices(id, name, token_hash, paired_at) VALUES(?,?,?,?)').run(id, String(body.name ?? 'Phone').slice(0, 80), sha(token), Date.now())
+      return this.send(res, 200, { deviceId: id, token, name: os.hostname() })
+    }
+    const device = this.device(req)
+    if (req.method === 'POST' && url.pathname === '/have') {
+      const { hashes } = await this.json(req, 1 << 22)
+      if (!Array.isArray(hashes) || hashes.length > MAX_HAVE || !hashes.every(isHash)) return this.send(res, 400, { error: `Send up to ${MAX_HAVE} SHA-256 hashes.` })
+      return this.send(res, 200, { missing: hashes.filter(h => !this.have(h)) })
+    }
+    const blob = /^\/blob\/([0-9a-f]{64})$/.exec(url.pathname)
+    if (req.method === 'PUT' && blob) return this.send(res, 200, await this.receive(req, device, blob[1], url.searchParams))
+    this.send(res, 404, { error: 'Unknown request.' })
+  }
+
+  /** Streams to <Photos>/<relative path>/<name>.part, verifies SHA-256, then renames without overwriting. */
+  async receive(req, device, expected, params) {
+    const rel = params.get('path') ?? '', name = params.get('name') ?? ''
+    if (!safeRel(rel) || !safeName(name)) throw Object.assign(new Error('Invalid path or name.'), { status: 400, expose: true })
+    const dir = path.join(this.photosRoot, rel)
+    if (!path.resolve(dir).startsWith(path.resolve(this.photosRoot))) throw Object.assign(new Error('Invalid path.'), { status: 400, expose: true })
+    const existing = this.db.prepare('SELECT path FROM media WHERE sha256 = ?').get(expected)
+    if (existing) return this.receipt(device, expected, existing.path, 0) // already here: no second copy
+    await fsp.mkdir(dir, { recursive: true })
+    const part = path.join(dir, `.${name}.${crypto.randomUUID()}.part`)
+    const hash = crypto.createHash('sha256')
+    let size = 0
+    const out = fs.createWriteStream(part, { flags: 'wx' })
+    try {
+      for await (const chunk of req) { hash.update(chunk); size += chunk.length; if (!out.write(chunk)) await new Promise(r => out.once('drain', r)) }
+      await new Promise((resolve, reject) => out.end(err => err ? reject(err) : resolve()))
+      const fd = await fsp.open(part, 'r+'); await fd.sync(); await fd.close()
+      if (hash.digest('hex') !== expected) throw Object.assign(new Error('The file changed in transit; nothing was kept.'), { status: 422, expose: true })
+      let target = path.join(dir, name)
+      const { name: base, ext } = path.parse(name)
+      for (let n = 2; fs.existsSync(target); n++) target = path.join(dir, `${base} (${n})${ext}`) // same name, other content: keep both
+      await fsp.link(part, target) // fails instead of replacing if something appeared meanwhile
+      await fsp.rm(part)
+      const taken = Number(params.get('modified'))
+      if (Number.isFinite(taken) && taken > 0) await fsp.utimes(target, new Date(), new Date(taken))
+      const receipt = this.receipt(device, expected, path.relative(this.photosRoot, target), size)
+      this.onReceived(receipt)
+      return receipt
+    } catch (e) { out.destroy(); await fsp.rm(part, { force: true }); throw e }
+  }
+
+  receipt(device, hash, rel, size) {
+    this.db.prepare('INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at) VALUES(?,?,?,?,?)').run(device.id, hash, rel, size, Date.now())
+    return { sha256: hash, path: rel, verified: true }
+  }
+}
+
+module.exports = { SyncServer, identity, PORT }
