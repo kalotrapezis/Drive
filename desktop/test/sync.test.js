@@ -30,12 +30,14 @@ test('pairing, missing list and verified uploads that never overwrite', async ()
   const server = await new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0, onReceived: r => received.push(r) }).start()
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
   try {
+    const older = server.startPairing() // a code still on screen stays valid when a newer one is shown
     const qr = server.startPairing()
     assert.equal(qr.fp, server.fingerprint)
     assert.equal((await call('POST', '/pair', { json: { code: 'wrong'.padEnd(qr.code.length, 'x') } })).status, 403)
     const paired = await call('POST', '/pair', { json: { code: qr.code, name: 'Xiaomi 15' } })
     assert.equal(paired.status, 200)
     assert.equal((await call('POST', '/pair', { json: { code: qr.code } })).status, 403, 'a code works once')
+    assert.equal((await call('POST', '/pair', { json: { code: older.code, name: 'Tablet' } })).status, 200, 'the older code still works')
     const token = paired.body.token
     assert.equal((await call('POST', '/have', { json: { hashes: [] } })).status, 401, 'no token, no access')
 
@@ -61,6 +63,7 @@ test('pairing, missing list and verified uploads that never overwrite', async ()
     assert.deepEqual(fs.readFileSync(path.join(tmp, 'Photos/DCIM/Camera/IMG_1.jpg')), photo, 'first file untouched')
     assert.equal(received.length, 2)
     assert.equal(server.devices()[0].received, 2)
+    assert.equal(server.devices().length, 2)
   } finally {
     await server.stop()
     fs.rmSync(tmp, { recursive: true })

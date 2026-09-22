@@ -37,7 +37,7 @@ class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan). */
   constructor({ db, dataDir, photosRoot, onReceived = () => {}, port = PORT }) {
     Object.assign(this, { db, dataDir, photosRoot, onReceived, port })
-    this.pairing = null
+    this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS sync_devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, paired_at INTEGER NOT NULL, last_seen INTEGER);
       CREATE TABLE IF NOT EXISTS sync_receipts (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256));`)
   }
@@ -55,8 +55,9 @@ class SyncServer {
 
   /** A fresh one-time code for the QR; valid 10 minutes or until used. */
   startPairing() {
-    this.pairing = { code: crypto.randomBytes(16).toString('base64url'), until: Date.now() + PAIRING_MS }
-    return { v: 1, name: os.hostname(), hosts: lanAddresses(), port: this.port, fp: this.fingerprint, code: this.pairing.code }
+    const code = crypto.randomBytes(16).toString('base64url')
+    this.codes.set(code, Date.now() + PAIRING_MS)
+    return { v: 1, name: os.hostname(), hosts: lanAddresses(), port: this.port, fp: this.fingerprint, code }
   }
 
   devices() {
@@ -92,10 +93,13 @@ class SyncServer {
     const url = new URL(req.url, 'https://x')
     if (req.method === 'POST' && url.pathname === '/pair') {
       const body = await this.json(req)
-      const p = this.pairing
-      if (!p || Date.now() > p.until || typeof body.code !== 'string' || body.code.length !== p.code.length
-        || !crypto.timingSafeEqual(Buffer.from(body.code), Buffer.from(p.code))) return this.send(res, 403, { error: 'Pairing code is not valid. Show a new QR code on the computer.' })
-      this.pairing = null // one use
+      for (const [c, until] of this.codes) if (Date.now() > until) this.codes.delete(c)
+      const code = typeof body.code === 'string' ? [...this.codes.keys()].find(c => c.length === body.code.length && crypto.timingSafeEqual(Buffer.from(c), Buffer.from(body.code))) : null
+      if (!code) {
+        console.warn(`[sync] pairing refused from ${req.socket.remoteAddress}: ${this.codes.size ? 'unknown or expired code' : 'no code is being shown'}`)
+        return this.send(res, 403, { error: 'Pairing code is not valid. Show a new QR code on the computer.' })
+      }
+      this.codes.delete(code) // one use
       const token = crypto.randomBytes(32).toString('base64url'), id = crypto.randomUUID()
       this.db.prepare('INSERT INTO sync_devices(id, name, token_hash, paired_at) VALUES(?,?,?,?)').run(id, String(body.name ?? 'Phone').slice(0, 80), sha(token), Date.now())
       return this.send(res, 200, { deviceId: id, token, name: os.hostname() })
