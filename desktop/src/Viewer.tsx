@@ -10,12 +10,16 @@ const RESET: View = { scale: 1, x: 0, y: 0 }
 
 interface Props {
   media: Media[]; index: number; setIndex: (i: number) => void; onClose: () => void
-  onFavorite: (m: Media) => void; onTrash: (m: Media) => void
+  onFavorite?: (m: Media) => void; onTrash?: (m: Media) => void; onHide?: (m: Media) => void; onRestore?: (m: Media) => void
   onCollect?: (m: Media) => void; onUncollect?: (m: Media) => void
   people: string[]
+  onShowOnMap?: (m: Media) => void
+  fileUrl?: (m: Media) => string
+  thumbUrl?: (m: Media) => string
 }
 
-export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect, people }: Props) {
+export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect, people, onShowOnMap, onHide, onRestore,
+  fileUrl = m => `media://file/${m.id}`, thumbUrl = m => `media://thumb/${m.sha256}` }: Props) {
   const item = media[index]
   const [view, setView] = useState<View>(RESET)
   const [details, setDetails] = useState(false)
@@ -54,8 +58,8 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
       else if (e.key === '+' || e.key === '=') zoomAt(view.scale * 1.5)
       else if (e.key === '-') zoomAt(view.scale / 1.5)
       else if (e.key === '0') setView(RESET)
-      else if (e.key === 'f') onFavorite(item)
-      else if (e.key === 'Delete') onTrash(item)
+      else if (e.key === 'f') onFavorite?.(item)
+      else if (e.key === 'Delete') onTrash?.(item)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -91,12 +95,14 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
             <button className="round flat" title="Zoom out (−)" onClick={() => zoomAt(view.scale / 1.5)}><Icon name="zoomOut" /></button>
             <button className="round flat" title="Zoom in (+)" onClick={() => zoomAt(view.scale * 1.5)}><Icon name="zoomIn" /></button>
           </>}
-          <button className="round flat" title={item.favorite ? 'Remove from Favorites (F)' : 'Add to Favorites (F)'} onClick={() => onFavorite(item)}>
-            <Icon name={item.favorite ? 'heartFill' : 'heart'} /></button>
+          {onFavorite && <button className="round flat" title={item.favorite ? 'Remove from Favorites (F)' : 'Add to Favorites (F)'} onClick={() => onFavorite(item)}>
+            <Icon name={item.favorite ? 'heartFill' : 'heart'} /></button>}
           {onCollect && <button className="round flat" title="Add to collection" onClick={() => onCollect(item)}><Icon name="collect" /></button>}
           {onUncollect && <button className="round flat" title="Remove from this collection" onClick={() => onUncollect(item)}><Icon name="uncollect" /></button>}
-          <button className="round flat" title="Move to Trash (Delete)" onClick={() => onTrash(item)}><Icon name="trash" /></button>
-          <button className="round flat" title="Show in folder" onClick={() => window.drive.show(item.id)}><Icon name="folder" /></button>
+          {onHide && <button className="round flat" title="Move to Hidden" onClick={() => onHide(item)}><Icon name="lock" /></button>}
+          {onRestore && <button className="round flat" title="Restore to Photos" onClick={() => onRestore(item)}><Icon name="lockOpen" /></button>}
+          {onTrash && <button className="round flat" title="Move to Trash (Delete)" onClick={() => onTrash(item)}><Icon name="trash" /></button>}
+          {onTrash && <button className="round flat" title="Show in folder" onClick={() => window.drive.show(item.id)}><Icon name="folder" /></button>}
           <button className={`round flat ${details ? 'on' : ''}`} title="Details (i)" onClick={() => setDetails(d => !d)}><Icon name="info" /></button>
         </div>
       </div>
@@ -108,9 +114,9 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           onPointerMove={e => { if (drag.current) { const d = drag.current; setView(v => ({ ...v, x: e.clientX - d.x, y: e.clientY - d.y })) } }}
           onPointerUp={() => { drag.current = null }}>
           {item.is_video
-            ? <video key={item.id} src={`media://file/${item.id}`} controls autoPlay />
+            ? <video key={item.id} src={fileUrl(item)} controls autoPlay />
             : <img key={item.id} draggable={false} alt={name}
-                src={failed ? `media://thumb/${item.sha256}` : `media://file/${item.id}`}
+                src={failed ? thumbUrl(item) : fileUrl(item)}
                 onError={() => setFailed(true)} // formats Chromium cannot draw (HEIC) fall back to the thumbnail
                 style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }} />}
           {index > 0 && <button className="round nav prev" title="Previous (←)" onClick={() => go(index - 1)}><Icon name="back" /></button>}
@@ -126,7 +132,10 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
               <dt>Size</dt><dd>{formatBytes(item.size)}{item.width ? ` · ${item.width} × ${item.height}` : ''}</dd>
               {people.length > 0 && <><dt>People</dt><dd>{people.join(', ')}</dd></>}
               {item.camera && <><dt>Camera</dt><dd>{item.camera}</dd></>}
-              {item.latitude != null && <><dt>Location</dt><dd><Icon name="place" size={16} /> {item.latitude.toFixed(5)}, {item.longitude!.toFixed(5)}</dd></>}
+              {item.latitude != null && <><dt>Location</dt>
+                <dd><Icon name="place" size={16} /> {item.place || 'Not named'}</dd>
+                <dd className="mono">{item.latitude.toFixed(5)}, {item.longitude!.toFixed(5)}</dd>
+                <dd><button className="text-button" onClick={() => onShowOnMap?.(item)}><Icon name="map" size={18} /> Show on map</button></dd></>}
               <dt>SHA-256</dt><dd className="mono">{item.sha256}</dd>
             </dl>
           </aside>
@@ -137,7 +146,7 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
         {media.map((m, i) => (
           // ponytail: renders every item; window it if libraries above ~20k feel slow here.
           <button key={m.id} className={i === index ? 'current' : ''} onClick={() => setIndex(i)}>
-            {m.thumb ? <img src={`media://thumb/${m.sha256}`} loading="lazy" alt="" /> : null}
+            {m.thumb ? <img src={thumbUrl(m)} loading="lazy" alt="" /> : null}
           </button>
         ))}
       </div>

@@ -11,6 +11,9 @@ export interface Review { faceId: string; personId: string; sha256: string; name
 export interface Analysis { running: boolean; paused: boolean; done: number; total: number; error: string; enabled?: boolean; reviews?: number }
 export interface MergeUndo { sourceId: string; faceIds: string[] }
 
+export interface VaultStatus { configured: boolean; unlocked: boolean; count: number }
+export interface VaultItem { id: string; sha256: string; name: string; rel_path: string; mime: string; is_video: number; size: number; taken_at: number; has_thumb: number }
+
 export interface Collection { id: string; name: string; count: number; cover: string | null }
 
 declare global {
@@ -20,6 +23,7 @@ declare global {
       list(): Promise<Media[]>
       scan(): Promise<{ total: number; changed: number; removed: number }>
       show(id: number): Promise<void>
+      openMap(lat: number, lon: number): Promise<void>
       onScanProgress(fn: (p: { done: number; changed: number }) => void): () => void
       favorite(shas: string[], on: boolean): Promise<void>
       trash(ids: number[]): Promise<{ trashed: number; failed: string[] }>
@@ -28,6 +32,15 @@ declare global {
       deleteCollection(id: string): Promise<void>
       members(id: string): Promise<string[]>
       setMembership(id: string, shas: string[], member: boolean): Promise<void>
+      vault: {
+        status(): Promise<VaultStatus>
+        setup(pass: string): Promise<void>
+        unlock(pass: string): Promise<void>
+        lock(): Promise<void>
+        list(): Promise<VaultItem[]>
+        hide(ids: number[]): Promise<{ hidden: number; failed: string[] }>
+        restore(ids: string[]): Promise<string[]>
+      }
       people: {
         status(): Promise<Analysis>
         start(): Promise<void>

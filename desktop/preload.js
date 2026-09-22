@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('drive', {
   list: () => ipcRenderer.invoke('library:list'),
   scan: () => ipcRenderer.invoke('library:scan'),
   show: id => ipcRenderer.invoke('library:show', id),
+  openMap: (lat, lon) => ipcRenderer.invoke('open-map', lat, lon),
   favorite: (shas, on) => ipcRenderer.invoke('photos:favorite', shas, on),
   trash: ids => ipcRenderer.invoke('photos:trash', ids),
   collections: () => ipcRenderer.invoke('collections:list'),
@@ -17,6 +18,15 @@ contextBridge.exposeInMainWorld('drive', {
     call: (method, ...args) => ipcRenderer.invoke('files:call', method, ...args),
     open: rel => ipcRenderer.invoke('files:open', rel),
     reveal: rel => ipcRenderer.invoke('files:reveal', rel),
+  },
+  vault: {
+    status: () => ipcRenderer.invoke('vault:status'),
+    setup: pass => ipcRenderer.invoke('vault:setup', pass),
+    unlock: pass => ipcRenderer.invoke('vault:unlock', pass),
+    lock: () => ipcRenderer.invoke('vault:lock'),
+    list: () => ipcRenderer.invoke('vault:list'),
+    hide: ids => ipcRenderer.invoke('vault:hide', ids),
+    restore: ids => ipcRenderer.invoke('vault:restore', ids),
   },
   people: {
     status: () => ipcRenderer.invoke('people:status'),

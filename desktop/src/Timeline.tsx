@@ -15,9 +15,12 @@ interface Props {
   selected: Set<number>
   setSelected: (s: Set<number>) => void
   onOpen: (index: number) => void
+  thumbUrl?: (m: Media) => string
 }
 
-export function Timeline({ items, title, tools, empty, level, setLevel, selected, setSelected, onOpen }: Props) {
+const defaultThumb = (m: Media) => `media://thumb/${m.sha256}`
+
+export function Timeline({ items, title, tools, empty, level, setLevel, selected, setSelected, onOpen, thumbUrl = defaultThumb }: Props) {
   const groups = useMemo(() => group(items, level), [items, level])
   const indexOf = useMemo(() => new Map(items.map((m, i) => [m.id, i])), [items])
   const scroller = useRef<HTMLDivElement>(null)
@@ -126,7 +129,7 @@ export function Timeline({ items, title, tools, empty, level, setLevel, selected
               <button key={m.id} className={`thumb ${selected.has(m.id) ? 'selected' : ''}`} style={{ height: cell }} title={m.path}
                 onPointerDown={e => pointerDown(e, m)} onPointerEnter={() => pointerEnter(m)}
                 onClick={() => { if (handled.current) handled.current = false; else onOpen(indexOf.get(m.id)!) }}>
-                {m.thumb ? <img src={`media://thumb/${m.sha256}`} loading="lazy" decoding="async" draggable={false} alt="" /> : <span className="no-thumb">{m.path.split('.').pop()}</span>}
+                {m.thumb ? <img src={thumbUrl(m)} loading="lazy" decoding="async" draggable={false} alt="" /> : <span className="no-thumb">{m.path.split('.').pop()}</span>}
                 {m.is_video ? <span className="badge"><Icon name="play" size={16} /></span> : null}
                 {m.favorite ? <span className="badge fav"><Icon name="heartFill" size={16} /></span> : null}
                 <span className="check" title="Select"><Icon name={selected.has(m.id) ? 'checked' : 'unchecked'} size={24} /></span>

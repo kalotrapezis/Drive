@@ -5,6 +5,7 @@ export interface Media {
   id: number; path: string; sha256: string; mime: string; is_video: number; size: number
   taken_at: number; width: number | null; height: number | null
   latitude: number | null; longitude: number | null; camera: string | null; thumb: number; favorite: number
+  place: string | null; place_names: string | null
 }
 
 export interface Group<T> { key: string; label: string; items: T[] }

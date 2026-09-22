@@ -1,6 +1,6 @@
 # Local Drive — desktop app and phone ↔ desktop sync plan
 
-Updated: 2026-09-22 (phases 1–4 done). The same file lives in both `Drive-Android/` and `Drive/`.
+Updated: 2026-09-22 (phases 1–4 done, phase 5 in progress — see its status). The same file lives in both `Drive-Android/` and `Drive/`.
 Edit one, copy it to the other.
 
 Goal: a personal Google Photos + Google Drive. The phone and the desktop have
@@ -217,6 +217,43 @@ phone. Yaw is estimated from landmarks (calibrated on those faces). HEIC is
 decoded with libheif, which also fixed HEIC thumbnails and the viewer.
 
 ### 5. Desktop: Map, Hidden (encrypted), Editor, Documents classification
+
+**Status 2026-09-22 — paused mid-phase. Resume here.**
+
+Done and tested:
+- **Map** (`src/MapView.tsx`): MapLibre + OpenFreeMap like the phone; photo
+  thumbnails as markers, clusters show the newest photo + count and split on
+  zoom (markers rebuilt on `idle` from rendered features). Worker bundled via
+  `?worker&url` because the page loads from `file://`. Viewer Details show
+  place + coordinates + Show on map; OpenStreetMap opens externally.
+- **Place names offline** (`places.js`): nearest GeoNames place ≤ 50 km,
+  Greek spellings included for search. GPS was silently dropped since phase 1
+  (EXIF pick filter) — fixed; `meta_v` re-reads existing rows once without
+  re-hashing; 0,0 = no fix.
+- **Hidden** (`vault.js`, `src/Hidden.tsx`): passphrase → Argon2id, files and
+  thumbnails encrypted (secretstream / secretbox), key only in memory, locks on
+  quit. Hide = encrypt → decrypt → SHA-256 check → delete plaintext original,
+  thumbnail, HEIC preview and face crops. Restore verifies and never
+  overwrites. Checked in the app: locked start, wrong passphrase, unlock,
+  hide 3, restore 1.
+- **Editor save backend** (`editor.js`): Save copy (`_edited.jpg`, original
+  date/camera/GPS spliced in without re-encoding, same mtime) and Replace
+  (original → system Trash first). Tested; **not wired to IPC/UI yet**.
+
+Next, in order:
+1. Editor UI (`src/Editor.tsx`, canvas): crop rectangle + straighten slider,
+   rotate ±90°, markup (swatches, custom colour, size, undo), Save sheet
+   (Save / Save as copy / Discard), max 8192 px. IPC `editor:save` → `editor.js`,
+   then rescan. On Replace, carry favorites/collections from the old SHA-256 to
+   the new one (the phone loses them today — its known key bug).
+2. Documents: phone uses ML Kit "paper" label + OCR text amount; desktop needs a
+   local replacement (decide: OCR model vs. classifier) + Help organize
+   "Is this a document?" + hide Documents from Photos.
+3. Package check with the new modules, commit, then phase 6.
+
+QA notes: `scripts/shot.js` now renders hidden (`DRIVE_HIDDEN`), because a
+visible window on the user's desktop can be clicked by them. Disposable test
+libraries live in the session scratchpad, not in the repo.
 
 ### 6. Sync
 

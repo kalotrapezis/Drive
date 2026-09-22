@@ -8,6 +8,10 @@ const { execFile } = require('node:child_process')
 const { DatabaseSync } = require('node:sqlite')
 
 const IMAGE = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.heic': 'image/heic', '.heif': 'image/heif', '.avif': 'image/avif', '.tif': 'image/tiff', '.tiff': 'image/tiff', '.bmp': 'image/bmp' }
+// Bump when imageInfo learns something new: unchanged files get their details re-read once (no re-hash).
+// v2: GPS was dropped by the EXIF field filter in v1. v3: 0,0 means no GPS fix.
+const META_VERSION = 3
+
 const VIDEO = { '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mkv': 'video/x-matroska', '.3gp': 'video/3gpp' }
 
 function open(dataDir) {
@@ -37,6 +41,10 @@ function open(dataDir) {
     CREATE TABLE IF NOT EXISTS collections (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0);
     CREATE UNIQUE INDEX IF NOT EXISTS collections_name ON collections(name COLLATE NOCASE) WHERE deleted = 0;
     CREATE TABLE IF NOT EXISTS collection_items (collection_id TEXT NOT NULL, sha256 TEXT NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(collection_id, sha256));`)
+  // Added after the first release: place name ('' = looked up, nothing near) and its search spellings.
+  const columns = db.prepare('PRAGMA table_info(media)').all().map(c => c.name)
+  if (!columns.includes('place')) db.exec('ALTER TABLE media ADD COLUMN place TEXT; ALTER TABLE media ADD COLUMN place_names TEXT;')
+  if (!columns.includes('meta_v')) db.exec('ALTER TABLE media ADD COLUMN meta_v INTEGER NOT NULL DEFAULT 1')
   return db
 }
 
@@ -82,10 +90,11 @@ async function imageInfo(file) {
   const exifr = require('exifr')
   const out = {}
   try {
-    const x = await exifr.parse(file, { gps: true, pick: ['DateTimeOriginal', 'CreateDate', 'Make', 'Model', 'latitude', 'longitude'] })
+    const x = await exifr.parse(file, { gps: true, pick: ['DateTimeOriginal', 'CreateDate', 'Make', 'Model', 'GPSLatitude', 'GPSLatitudeRef', 'GPSLongitude', 'GPSLongitudeRef'] })
     const date = x?.DateTimeOriginal || x?.CreateDate
     if (date instanceof Date && !isNaN(date)) out.taken_at = date.getTime()
-    if (Number.isFinite(x?.latitude) && Number.isFinite(x?.longitude)) { out.latitude = x.latitude; out.longitude = x.longitude }
+    // 0,0 is what cameras write without a GPS fix, not a real place.
+    if (Number.isFinite(x?.latitude) && Number.isFinite(x?.longitude) && (x.latitude || x.longitude)) { out.latitude = x.latitude; out.longitude = x.longitude }
     const camera = [x?.Make, x?.Model].filter(Boolean).join(' ').trim()
     if (camera) out.camera = camera
   } catch {}
@@ -116,12 +125,12 @@ async function makeThumb(file, isVideo, target) {
 
 /** Brings the database in line with the folder. Unchanged files (same size + mtime) are not re-read. */
 async function scan(db, root, dataDir, onProgress = () => {}) {
-  const known = new Map(db.prepare('SELECT path, size, mtime, sha256, thumb FROM media').all().map(r => [r.path, r]))
+  const known = new Map(db.prepare('SELECT path, size, mtime, sha256, thumb, meta_v FROM media').all().map(r => [r.path, r]))
   const seen = new Set()
-  const insert = db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, width, height, latitude, longitude, camera, thumb)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(path) DO UPDATE SET sha256=excluded.sha256, mime=excluded.mime, is_video=excluded.is_video,
+  const insert = db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, width, height, latitude, longitude, camera, thumb, meta_v)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,${META_VERSION}) ON CONFLICT(path) DO UPDATE SET sha256=excluded.sha256, mime=excluded.mime, is_video=excluded.is_video,
     size=excluded.size, mtime=excluded.mtime, taken_at=excluded.taken_at, width=excluded.width, height=excluded.height,
-    latitude=excluded.latitude, longitude=excluded.longitude, camera=excluded.camera, thumb=excluded.thumb`)
+    latitude=excluded.latitude, longitude=excluded.longitude, camera=excluded.camera, thumb=excluded.thumb, meta_v=excluded.meta_v, place=NULL, place_names=NULL`)
   let done = 0, changed = 0
   for await (const file of walk(root)) {
     const ext = path.extname(file).toLowerCase()
@@ -131,9 +140,10 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
     seen.add(rel)
     const st = await fsp.stat(file)
     const old = known.get(rel)
-    if (old && old.size === st.size && old.mtime === Math.trunc(st.mtimeMs) && old.thumb) { onProgress(++done, changed); continue }
+    const same = old && old.size === st.size && old.mtime === Math.trunc(st.mtimeMs)
+    if (same && old.thumb && old.meta_v >= META_VERSION) { onProgress(++done, changed); continue }
     const isVideo = !!VIDEO[ext]
-    const hash = await sha256(file)
+    const hash = same ? old.sha256 : await sha256(file)
     const info = isVideo ? {} : await imageInfo(file)
     const thumbFile = path.join(dataDir, 'thumbs', hash + '.webp')
     let thumb = fs.existsSync(thumbFile)
@@ -149,7 +159,7 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
 }
 
 function list(db) {
-  return db.prepare(`SELECT m.id, m.path, m.sha256, m.mime, m.is_video, m.size, m.taken_at, m.width, m.height, m.latitude, m.longitude, m.camera, m.thumb,
+  return db.prepare(`SELECT m.id, m.path, m.sha256, m.mime, m.is_video, m.size, m.taken_at, m.width, m.height, m.latitude, m.longitude, m.camera, m.thumb, m.place, m.place_names,
     COALESCE(s.favorite, 0) AS favorite FROM media m LEFT JOIN photo_state s ON s.sha256 = m.sha256 ORDER BY m.taken_at DESC, m.path`).all()
 }
 

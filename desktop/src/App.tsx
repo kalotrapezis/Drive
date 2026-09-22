@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { isScreenshot, matches, type Level, type Media } from './timeline'
-import type { Analysis, Collection, MergeUndo, Person } from './drive'
+import type { Analysis, Collection, MergeUndo, Person, VaultStatus } from './drive'
 import { Icon, type IconName } from './Icon'
 import { Timeline } from './Timeline'
 import { Viewer } from './Viewer'
@@ -8,9 +8,11 @@ import { Collections } from './Collections'
 import { CollectionPicker, Confirm, NewCollection, errorText } from './Dialogs'
 import { Files, type FilesMode } from './Files'
 import { CombinePicker, PeoplePage, RenamePerson, ReviewPage } from './People'
+import { MapView } from './MapView'
+import { HiddenPage, VaultGate } from './Hidden'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string }
-  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' }
+  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' }
 
 const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
@@ -38,13 +40,14 @@ export function App() {
   const [people, setPeople] = useState<Person[]>([])
   const [names, setNames] = useState<Record<string, string[]>>({})
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
+  const [vault, setVault] = useState<VaultStatus | null>(null)
 
   const custom = page.kind === 'collection' && !SYSTEM.some(s => s.id === page.id) ? page.id : null
   const memberSource = custom ? () => window.drive.members(custom) : page.kind === 'person' ? () => window.drive.people.shas(page.id) : null
 
   async function reload() {
-    const [m, c, p, n, a] = await Promise.all([window.drive.list(), window.drive.collections(), window.drive.people.list(), window.drive.people.names(), window.drive.people.status()])
-    setMedia(m); setCollections(c); setPeople(p); setNames(n); setAnalysis(a)
+    const [m, c, p, n, a, v] = await Promise.all([window.drive.list(), window.drive.collections(), window.drive.people.list(), window.drive.people.names(), window.drive.people.status(), window.drive.vault.status()])
+    setMedia(m); setCollections(c); setPeople(p); setNames(n); setAnalysis(a); setVault(v)
     if (memberSource) setMembers(new Set(await memberSource()))
   }
 
@@ -82,12 +85,13 @@ export function App() {
 
   const items = useMemo(() => {
     if (!media) return []
-    if (page.kind === 'photos') return query.trim() ? media.filter(m => matches({ path: `${m.path} ${(names[m.sha256] ?? []).join(' ')}` }, query)) : hideScreenshots ? media.filter(m => !isScreenshot(m.path)) : media
+    if (page.kind === 'photos') return query.trim() ? media.filter(m => matches({ path: `${m.path} ${(names[m.sha256] ?? []).join(' ')} ${m.place_names ?? ''}` }, query)) : hideScreenshots ? media.filter(m => !isScreenshot(m.path)) : media
     if (page.kind === 'collection') {
       const system = SYSTEM.find(s => s.id === page.id)
       return system ? media.filter(system.test) : members ? media.filter(m => members.has(m.sha256)) : []
     }
     if (page.kind === 'person') return members ? media.filter(m => members.has(m.sha256)) : []
+    if (page.kind === 'map') return media.filter(m => m.latitude != null && m.longitude != null)
     return []
   }, [media, page, query, hideScreenshots, members, names])
 
@@ -136,6 +140,19 @@ export function App() {
       })} />)
   }
 
+  // Hidden needs the vault open: set it up or unlock it first, then encrypt, verify and remove the originals.
+  function hide(list: Media[]) {
+    const go = () => setDialog(<Confirm title={`Move ${count(list.length)} to Hidden?`} action="Move to Hidden" onClose={close}
+      body="Each item is encrypted and checked, then removed from Photos. Only your passphrase can open Hidden."
+      onConfirm={() => run(async () => {
+        const r = await window.drive.vault.hide(list.map(m => m.id))
+        setSelected(new Set())
+        say(r.failed.length ? `Hid ${r.hidden}; ${r.failed.length} stayed in Photos: ${r.failed[0]}` : `Moved ${count(r.hidden)} to Hidden`)
+      })} />)
+    if (vault?.unlocked) go()
+    else if (vault) setDialog(<VaultGate status={vault} onClose={close} onOpen={async () => { setVault(await window.drive.vault.status()); go() }} />)
+  }
+
   function deleteCollection(c: Collection) {
     setDialog(<Confirm title={`Delete “${c.name}”?`} action="Delete collection" danger onClose={close}
       body="Only the collection is removed. Its photos and videos stay in Photos." onConfirm={() => run(() => window.drive.deleteCollection(c.id), `Deleted “${c.name}”`)} />)
@@ -174,15 +191,19 @@ export function App() {
   else if (loading) content = <div className="empty">Loading…</div>
   else if (media.length === 0) content = <div className="empty"><p>No photos or videos in <code>{root}</code></p></div>
   else if (page.kind === 'people') content = <PeoplePage people={people} status={analysis} onBack={() => setPage({ kind: 'collections' })} onOpen={p => setPage({ kind: 'person', id: p.id, name: p.name })} />
+  else if (page.kind === 'hidden') content = <HiddenPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
+  else if (page.kind === 'map') content = <MapView items={items} focus={page.focus} onOpen={setOpen} onBack={() => setPage({ kind: 'collections' })} />
   else if (page.kind === 'review') content = <ReviewPage onBack={() => setPage({ kind: 'collections' })} onChanged={reload} />
   else if (page.kind === 'collections') {
     content = <Collections mine={collections} onNew={() => newCollection()} onDelete={deleteCollection}
       system={[
         { id: 'people', name: 'People', icon: 'person' as IconName, count: people.length },
         ...SYSTEM.map(s => ({ ...s, count: media.filter(s.test).length })),
+        { id: 'hidden', name: 'Hidden', icon: 'lock' as IconName, count: vault?.count ?? 0 },
+        { id: 'map', name: 'Map', icon: 'map' as IconName, count: media.filter(m => m.latitude != null).length },
         { id: 'review', name: 'Help organize', icon: 'tag' as IconName, count: analysis?.reviews ?? 0 },
       ]}
-      onOpen={(id, name) => setPage(id === 'people' ? { kind: 'people' } : id === 'review' ? { kind: 'review' } : { kind: 'collection', id, name })} />
+      onOpen={(id, name) => setPage(id === 'people' ? { kind: 'people' } : id === 'review' ? { kind: 'review' } : id === 'map' ? { kind: 'map' } : id === 'hidden' ? { kind: 'hidden' } : { kind: 'collection', id, name })} />
   } else {
     const inCollection = page.kind === 'collection' || page.kind === 'person'
     content = (
@@ -218,7 +239,7 @@ export function App() {
         <div className="brand"><img src="./icon.png" alt="" />Local Drive</div>
         <small className="rail-head">Photos</small>
         {nav({ kind: 'photos' }, page.kind === 'photos', 'photos', 'Photos')}
-        {nav({ kind: 'collections' }, ['collections', 'collection', 'people', 'person', 'review'].includes(page.kind), 'collections', 'Collections')}
+        {nav({ kind: 'collections' }, ['collections', 'collection', 'people', 'person', 'review', 'map', 'hidden'].includes(page.kind), 'collections', 'Collections')}
         <small className="rail-head">Files</small>
         {nav({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
         {nav({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
@@ -239,13 +260,15 @@ export function App() {
             {custom
               ? <button className="round flat" title="Remove from this collection" onClick={() => uncollect(picked)}><Icon name="uncollect" /></button>
               : <button className="round flat" title="Add to collection" onClick={() => collect(picked)}><Icon name="collect" /></button>}
+            <button className="round flat" title="Move to Hidden" onClick={() => hide(picked)}><Icon name="lock" /></button>
             <button className="round flat" title="Move to Trash (Delete)" onClick={() => trash(picked)}><Icon name="trash" /></button>
           </div>
         )}
       </main>
       {open !== null && items[open] && (
         <Viewer media={items} index={open} setIndex={setOpen} onClose={() => setOpen(null)} people={names[items[open].sha256] ?? []}
-          onFavorite={m => favorite([m])} onTrash={m => trash([m])}
+          onShowOnMap={m => { setOpen(null); setPage({ kind: 'map', focus: m.sha256 }) }}
+          onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={m => hide([m])}
           onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} />
       )}
       {dialog}

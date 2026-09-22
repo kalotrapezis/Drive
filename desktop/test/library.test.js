@@ -12,7 +12,7 @@ test('scan indexes photos, is incremental, follows deletions and never touches t
   const sharp = require('sharp')
   const photo = path.join(root, 'Camera', 'a.jpg')
   await sharp({ create: { width: 64, height: 32, channels: 3, background: '#808080' } }).jpeg()
-    .withMetadata({ orientation: 6, exif: { IFD2: { DateTimeOriginal: '2024:05:06 07:08:09' } } }).toFile(photo)
+    .withMetadata({ orientation: 6, exif: { IFD2: { DateTimeOriginal: '2024:05:06 07:08:09' }, IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '40/1 38/1 2424/100', GPSLongitudeRef: 'E', GPSLongitude: '22/1 56/1 4000/100' } } }).toFile(photo)
   fs.writeFileSync(path.join(root, 'notes.txt'), 'not media')
   fs.writeFileSync(path.join(root, '.hidden.jpg'), 'skip me')
   const before = fs.readFileSync(photo)
@@ -24,6 +24,7 @@ test('scan indexes photos, is incremental, follows deletions and never touches t
   assert.equal(row.sha256, await library.sha256(photo))
   assert.equal(row.taken_at, new Date(2024, 4, 6, 7, 8, 9).getTime())
   assert.deepEqual([row.width, row.height], [32, 64]) // orientation 6 = rotated
+  assert.deepEqual([row.latitude.toFixed(4), row.longitude.toFixed(4)], ['40.6401', '22.9444'])
   assert.ok(fs.existsSync(path.join(data, 'thumbs', row.sha256 + '.webp')))
 
   assert.deepEqual(await library.scan(db, root, data), { total: 1, changed: 0, removed: 0 })
@@ -77,4 +78,12 @@ test('favorites and collections are keyed by hash, use tombstones, and survive a
   assert.equal(library.list(db).length, 2) // photos stay
   assert.ok(library.createCollection(db, 'Trip')) // name is free again
   fs.rmSync(tmp, { recursive: true })
+})
+
+test('offline place names', () => {
+  const places = require('../places')
+  assert.equal(places.nearest(40.6401, 22.9444).name, 'Thessaloníki')
+  assert.match(places.nearest(40.6401, 22.9444).names, /Θεσσαλονίκη/)
+  assert.equal(places.nearest(40.5830, 22.9510).name, 'Kalamariá')
+  assert.equal(places.nearest(0, -30), null) // mid-Atlantic
 })
