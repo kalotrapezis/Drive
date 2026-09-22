@@ -200,12 +200,13 @@ export function App() {
 
   const loading = !media || (media.length === 0 && scan)
   let content: ReactNode
+  // Pages that do not depend on the photo library come first: an empty library must not hide Devices, Files or Hidden.
   if (page.kind === 'files') content = <Files mode={page.mode} folder={page.folder} go={(mode, folder) => setPage({ kind: 'files', mode, folder })} setDialog={setDialog} say={say} />
-  else if (loading) content = <div className="empty">Loading…</div>
-  else if (media.length === 0) content = <div className="empty"><p>No photos or videos in <code>{root}</code></p></div>
-  else if (page.kind === 'people') content = <PeoplePage people={people} status={analysis} onBack={() => setPage({ kind: 'collections' })} onOpen={p => setPage({ kind: 'person', id: p.id, name: p.name })} />
   else if (page.kind === 'sync') content = <SyncPage setDialog={setDialog} />
   else if (page.kind === 'hidden') content = <HiddenPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
+  else if (loading) content = <div className="empty">Loading…</div>
+  else if (media.length === 0) content = <div className="empty"><p>No photos or videos in <code>{root}</code> yet. Pair your phone in <b>Devices</b> to back it up here.</p></div>
+  else if (page.kind === 'people') content = <PeoplePage people={people} status={analysis} onBack={() => setPage({ kind: 'collections' })} onOpen={p => setPage({ kind: 'person', id: p.id, name: p.name })} />
   else if (page.kind === 'map') content = <MapView items={items} focus={page.focus} onOpen={setOpen} onBack={() => setPage({ kind: 'collections' })} />
   else if (page.kind === 'review') content = <ReviewPage onBack={() => setPage({ kind: 'collections' })} onChanged={reload} />
   else if (page.kind === 'collections') {
@@ -268,8 +269,8 @@ export function App() {
         {nav({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
         {nav({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
         {nav({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', 'Recent')}
-        <small className="rail-head">Devices</small>
-        {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Phone sync')}
+        <small className="rail-head">Sync</small>
+        {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Devices')}
         <div className="rail-foot">
           <span>{scan ?? `${media?.length ?? 0} items`}</span>
           <button className="round" title="Rescan library" disabled={!!scan} onClick={rescan}><Icon name="refresh" size={20} /></button>

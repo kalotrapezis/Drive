@@ -327,3 +327,20 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .menu-head { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-top: 8px; }
 .menu-body label .count { margin-left: auto; }
 .menu-body { max-height: 70vh; overflow-y: auto; }
+.pairing { display: grid; grid-template-columns: auto 1fr; gap: 8px 28px; align-items: center; }
+.pairing .qr { grid-row: span 2; margin: 0; }
+.pairing ol { margin: 0; padding-left: 20px; display: grid; gap: 10px; font-size: 15px; }
+.pairing .hint { grid-column: 2; margin: 0; }
+.dialog .pairing { grid-template-columns: 1fr; }
+.dialog .pairing .qr { grid-row: auto; }
+.dialog .pairing .hint { grid-column: 1; }
+.dialog:has(.pairing) { width: min(460px, 92vw); }
+.add-first { padding: 24px 28px; }
+.add-first h2 { margin: 0 0 16px; font-size: 20px; }
+.device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.device-card { display: grid; justify-items: center; text-align: center; gap: 4px; padding: 22px 16px 12px; }
+.device-card strong { margin-top: 8px; font-size: 16px; }
+.device-card small { color: var(--muted); }
+.device-card small.live { color: #3fa96b; font-weight: 600; }
+.device-card.add { border: 2px dashed var(--island-2); background: none; padding-bottom: 22px; }
+.device-card.add:hover { background: var(--hover); }
