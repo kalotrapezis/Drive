@@ -28,31 +28,45 @@ export function SyncPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
   const load = () => window.drive.sync.status().then(setStatus)
   useEffect(() => { load(); const off = window.drive.sync.onReceived(load); const t = setInterval(load, 5000); return () => { off(); clearInterval(t) } }, [])
   const close = () => { setDialog(null); load() }
+  const pair = () => setDialog(<PairDialog onClose={close} />)
   const forget = (d: SyncDevice) => setDialog(<Confirm title={`Forget ${d.name}?`} action="Forget phone" danger onClose={close}
     body="It can no longer send photos until you pair it again. Photos already received stay." onConfirm={async () => { await window.drive.sync.forget(d.id); load() }} />)
+  const total = status?.devices.reduce((n, d) => n + d.received, 0) ?? 0
+  const active = (d: SyncDevice) => !!d.last_seen && Date.now() - d.last_seen < 15_000
   return (
     <div className="timeline">
       <header className="topbar">
-        <div className="island title-island"><h1>Phone sync</h1></div>
-        <button className="island lock-button" onClick={() => setDialog(<PairDialog onClose={close} />)}><Icon name="add" size={20} />Pair a phone</button>
+        <div className="island title-island"><Icon name="refresh" /><h1>Phone sync</h1></div>
       </header>
-      {status && (
-        <div className="island analysis">
-          <Icon name={status.error ? 'warning' : 'info'} />
-          <span>{status.error ? `Sync is not running: ${status.error}` : `Ready on ${status.addresses.join(', ') || 'this computer'} · port ${status.port}. Only paired phones can send photos; each one is checked by SHA-256 before it is kept.`}</span>
+      <div className="island sync-hero">
+        <span className={`sync-badge ${status && !status.error ? 'on' : ''}`}><Icon name="refresh" size={30} /></span>
+        <div>
+          <h2>{status?.error ? 'Sync is not running' : status?.devices.length ? `${status.devices.length === 1 ? 'One phone' : `${status.devices.length} phones`} paired` : 'No phone yet'}</h2>
+          <p>{status?.error ? status.error : status ? `Ready on ${status.addresses.join(', ') || 'this computer'} · port ${status.port}` : 'Starting…'}</p>
+        </div>
+        <button className="filled-button big" onClick={pair}><Icon name="add" size={20} /> Pair a phone</button>
+      </div>
+      {!!status?.devices.length && (
+        <div className="sync-stats">
+          <div className="island stat"><strong>{total.toLocaleString()}</strong><small>Photos received</small></div>
+          <div className="island stat"><strong>SHA-256</strong><small>Every file checked before it is kept</small></div>
         </div>
       )}
       <h2 className="section">Paired phones</h2>
-      {status?.devices.length === 0 && <p className="hint">No phone is paired yet.</p>}
+      {status?.devices.length === 0 && <p className="hint">Open Local Drive on the phone › Sync › Pair with computer, and scan the code from “Pair a phone”.</p>}
       <div className="device-list">
         {status?.devices.map(d => (
           <div key={d.id} className="island device">
-            <Icon name="photos" />
-            <div><strong>{d.name}</strong><small>Paired {when.format(d.paired_at)} · {d.last_seen ? `last seen ${when.format(d.last_seen)}` : 'not connected yet'} · {d.received} photos received</small></div>
+            <span className={`sync-badge small ${active(d) ? 'on' : ''}`}><Icon name="photos" /></span>
+            <div>
+              <strong>{d.name}</strong>
+              <small>{active(d) ? 'Sending now…' : d.last_seen ? `Last seen ${when.format(d.last_seen)}` : 'Not connected yet'} · {d.received.toLocaleString()} photos received · paired {when.format(d.paired_at)}</small>
+            </div>
             <button className="text-button" onClick={() => forget(d)}>Forget</button>
           </div>
         ))}
       </div>
+      <p className="hint">Only paired phones can send. Photos keep their phone folders under Photos, nothing is ever overwritten, and nothing is deleted from the phone.</p>
     </div>
   )
 }

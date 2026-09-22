@@ -300,6 +300,22 @@ Move → Hidden. Then the phone's Sync card becomes real.
 collections, people and Hidden; a second sync transfers nothing; Move deletes
 only items with receipts.
 
+### 7. Later: folders as albums (requested 2026-09-22)
+
+- **Phone:** on opening, find every folder with photos or videos outside the
+  Camera/Screenshots defaults (Viber, Messenger, WhatsApp, Download…). Each new
+  folder appears in **Help organize** as "Include <folder> in Local Drive?"
+  (Yes/No). A Yes makes it a **user album named after the folder**; its media
+  shows in Gallery like any album (and can be hidden from Gallery with the
+  album toggle).
+- **Phone Settings › Gallery › Folders:** a toggle per folder with media to
+  include or exclude it at any time (the Help organize answer is just the
+  first setting of that toggle).
+- **Desktop:** the same for folders under the Photos root once phone folders
+  arrive through sync (album per folder, include/exclude toggles).
+- Rules: including never moves or copies files; excluding only hides them
+  from the app.
+
 ## Safety rules (from the old desktop, kept on both sides)
 
 - Copy → verify SHA-256 → receipt. A partial file is never visible or counted.

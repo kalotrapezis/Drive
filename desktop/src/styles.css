@@ -312,3 +312,18 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .device { display: flex; align-items: center; gap: 14px; padding: 14px 18px; }
 .device > div { flex: 1; display: grid; }
 .device small { color: var(--muted); }
+.sync-hero { display: flex; align-items: center; gap: 20px; padding: 22px 24px; margin-bottom: 12px; }
+.sync-hero > div { flex: 1; }
+.sync-hero h2 { margin: 0; font-size: 22px; }
+.sync-hero p { margin: 4px 0 0; color: var(--muted); }
+.sync-badge { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--island-2); color: var(--muted); flex: none; }
+.sync-badge.on { background: var(--accent); color: var(--on-accent); }
+.sync-badge.small { width: 44px; height: 44px; }
+.filled-button.big { display: flex; align-items: center; gap: 8px; padding: 14px 22px; }
+.sync-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stat { padding: 18px 22px; display: grid; }
+.stat strong { font-size: 24px; }
+.stat small { color: var(--muted); }
+.menu-head { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-top: 8px; }
+.menu-body label .count { margin-left: auto; }
+.menu-body { max-height: 70vh; overflow-y: auto; }

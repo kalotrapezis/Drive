@@ -37,6 +37,8 @@ export function App() {
   const [query, setQuery] = useState('')
   const [hideScreenshots, setHideScreenshots] = useState(() => stored('hideScreenshots') === '1')
   const [hideDocuments, setHideDocuments] = useState(() => stored('hideDocuments') === '1')
+  const [hiddenAlbums, setHiddenAlbums] = useState<string[]>(() => { try { return JSON.parse(stored('hiddenAlbums') ?? '[]') } catch { return [] } })
+  const [hiddenAlbumShas, setHiddenAlbumShas] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [open, setOpen] = useState<number | null>(null)
   const [dialog, setDialog] = useState<ReactNode>(null)
@@ -85,6 +87,10 @@ export function App() {
   useEffect(() => { store('hideScreenshots', hideScreenshots ? '1' : '0') }, [hideScreenshots])
   useEffect(() => { store('hideDocuments', hideDocuments ? '1' : '0') }, [hideDocuments])
   useEffect(() => {
+    store('hiddenAlbums', JSON.stringify(hiddenAlbums))
+    Promise.all(hiddenAlbums.map(id => window.drive.members(id).catch(() => []))).then(lists => setHiddenAlbumShas(new Set(lists.flat())))
+  }, [hiddenAlbums, collections])
+  useEffect(() => {
     setSelected(new Set()); setOpen(null); setMembers(null)
     if (memberSource) memberSource().then(m => setMembers(new Set(m)))
   }, [page])
@@ -92,7 +98,7 @@ export function App() {
 
   const items = useMemo(() => {
     if (!media) return []
-    if (page.kind === 'photos') return query.trim() ? media.filter(m => matches({ path: `${m.path} ${(names[m.sha256] ?? []).join(' ')} ${m.place_names ?? ''} ${m.labels ?? ''}` }, query)) : media.filter(m => !(hideScreenshots && isScreenshot(m.path)) && !(hideDocuments && m.document))
+    if (page.kind === 'photos') return query.trim() ? media.filter(m => matches({ path: `${m.path} ${(names[m.sha256] ?? []).join(' ')} ${m.place_names ?? ''} ${m.labels ?? ''}` }, query)) : media.filter(m => !(hideScreenshots && isScreenshot(m.path)) && !(hideDocuments && m.document) && !hiddenAlbumShas.has(m.sha256))
     if (page.kind === 'collection') {
       const system = SYSTEM.find(s => s.id === page.id)
       return system ? media.filter(system.test) : members ? media.filter(m => members.has(m.sha256)) : []
@@ -100,7 +106,7 @@ export function App() {
     if (page.kind === 'person') return members ? media.filter(m => members.has(m.sha256)) : []
     if (page.kind === 'map') return media.filter(m => m.latitude != null && m.longitude != null)
     return []
-  }, [media, page, query, hideScreenshots, hideDocuments, members, names])
+  }, [media, page, query, hideScreenshots, hideDocuments, hiddenAlbumShas, members, names])
 
   // Keep the viewer on a valid item when the list shrinks (trash, unfavorite in Favorites, remove from collection).
   useEffect(() => { if (open !== null && open >= items.length) setOpen(items.length ? items.length - 1 : null) }, [items, open])
@@ -234,9 +240,17 @@ export function App() {
           <details className="menu">
             <summary className="round" title="Photos tools"><Icon name="tune" /></summary>
             <div className="island menu-body">
-              <label><input type="checkbox" checked={hideScreenshots} onChange={e => setHideScreenshots(e.target.checked)} /> Hide screenshots in Photos</label>
-              <label><input type="checkbox" checked={hideDocuments} onChange={e => setHideDocuments(e.target.checked)} /> Hide documents in Photos</label>
-              <small>They stay in their collections and on disk.</small>
+              <strong>Hide from Photos</strong>
+              <small>Hidden albums stay in Collections and on disk; only the Photos view skips them.</small>
+              <span className="menu-head">System albums</span>
+              <label><input type="checkbox" checked={hideScreenshots} onChange={e => setHideScreenshots(e.target.checked)} /> Screenshots</label>
+              <label><input type="checkbox" checked={hideDocuments} onChange={e => setHideDocuments(e.target.checked)} /> Documents</label>
+              <span className="menu-head">My albums</span>
+              {collections.length === 0 && <small>No albums yet. Create one in Collections with +.</small>}
+              {collections.map(c => (
+                <label key={c.id}><input type="checkbox" checked={hiddenAlbums.includes(c.id)}
+                  onChange={e => setHiddenAlbums(list => e.target.checked ? [...list, c.id] : list.filter(x => x !== c.id))} /> {c.name}<small className="count">{c.count}</small></label>
+              ))}
             </div>
           </details>
         </>} />
