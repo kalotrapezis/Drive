@@ -379,6 +379,71 @@ Not done, on purpose:
 - **Files** (tags, favorites, colours, recents) are still outside the protocol
   entirely — they use path identity, not content hashes. Own design pass.
 
+### 6d. Files: tags, favorites, colours and recents
+
+**Status 2026-09-23: done.** The Files module's own metadata rides the same
+`/metadata` endpoint, as `files` (one record per path: favorite, colour and the
+whole tag set) and `fileRecents`. Files are keyed by their `Drive/`-relative
+path, which is the same path on both devices, so a record needs nothing but a
+time: the newest edit of a path wins. Tags travel as the **whole set** for a
+path rather than as individual tombstones — the set the newer side holds is the
+answer, and a tag missing from it was removed. Recents merge on the newest open
+of each file, whichever device it happened on, and each side quietly drops the
+entries it cannot see when it reads them.
+
+The phone's `drive_metadata` preferences gained an `updated_at` map keyed by
+path (`DriveMetadata.touch`), which is all that was missing; the desktop's
+`file_meta` / `file_tags` already had `updated_at`.
+
+### 6e. Files: the files themselves, and Trash
+
+**Status 2026-09-23: done, phone → computer.** `POST /files/manifest` (the
+phone offers every file under `Drive/` with its SHA-256) and
+`PUT /file/<sha256>?path=&modified=` (the same verified write as photos: a
+`.part` hashed as it is written, renamed only on a match, existing files never
+replaced — a different file of the same name keeps both).
+
+**Content is the identity, not the path.** A file whose bytes the computer
+already holds under another name was moved or renamed on the phone, so the
+computer **moves its own copy to match** instead of asking for the bytes again.
+That is what makes "move to Trash" arrive as a move into `Drive/Trash/` rather
+than as a second copy, and it costs nothing extra: renames, moves between
+folders and Trash are all the same case. A path the phone no longer has is left
+alone — sync copies, it never deletes.
+
+Both sides cache file hashes against size and mtime, so each file is read once
+(`DriveManifest` on the phone, `file_hashes` on the desktop). Folders on the
+receiving side are created one level at a time, each re-checked against the
+Drive root, so a symlink cannot be followed out of it.
+
+Tested: `desktop/test/sync.test.js` (two suites — Files metadata, and the
+manifest with rename → move, move → Trash, a wrong hash keeping nothing, a path
+outside Drive refused, same name different content keeping both) plus a **real
+run against the phone's own Drive folder**: 36 files offered, 29 wanted and
+verified across, then a file moved into Trash on the phone arrived as
+`want 0, moved 1` — the computer moved its copy into Trash and made no
+duplicate.
+
+Not done: **computer → phone**. The phone is the client in this protocol, so a
+file created on the computer waits for the phone to ask. Closing that needs the
+phone to answer requests (a small listener) or to pull a manifest of its own.
+
+### 6f. Sync without being asked
+
+**Status 2026-09-23: done on the phone.** `SyncService.syncInBackground` runs a
+sync when the app opens, and straight away after the scanner saves a PDF. It is
+deliberately easy to talk out of: no paired computer, a backup already running,
+a metered connection, or a sync less than 15 minutes ago and it simply does not
+happen (the PDF case passes `gap = 0` — something just changed, send it).
+
+Wi-Fi only is a rule, not a setting: a backup is the whole camera roll, never
+something to put on mobile data by itself.
+
+**Opening the desktop app cannot start a sync today.** The phone is the client
+and the computer has no way to reach it, so the computer would have to announce
+itself (mDNS) and the phone listen for it. Until then, opening the phone app is
+what catches both up.
+
 ### 7. Later: folders as albums (requested 2026-09-22)
 
 - **Phone:** on opening, find every folder with photos or videos outside the

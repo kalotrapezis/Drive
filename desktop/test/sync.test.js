@@ -9,6 +9,7 @@ const library = require('../library')
 const { SyncServer } = require('../sync')
 const { Documents } = require('../documents')
 const { People } = require('../faces')
+const { Files } = require('../files')
 
 // A client like the phone's: trusts exactly the certificate whose SHA-256 came in the QR code.
 function request(port, fp, method, url, { token, json, body } = {}) {
@@ -77,7 +78,8 @@ test('metadata sync: phone rows are authoritative, last-write-wins, and never re
   const db = library.open(path.join(tmp, 'data'))
   const documents = new Documents(db)
   const people = new People(db, path.join(tmp, 'data'))
-  const server = await new SyncServer({ db, documents, people, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const files = new Files(db, path.join(tmp, 'Drive'))
+  const server = await new SyncServer({ db, documents, people, files, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
   try {
     const qr = server.startPairing()
@@ -113,7 +115,8 @@ test('metadata sync: favorites, collections, labels, people and faces cross over
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-all-'))
   const db = library.open(path.join(tmp, 'data'))
   const people = new People(db, path.join(tmp, 'data'))
-  const server = await new SyncServer({ db, documents: new Documents(db), people, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const files = new Files(db, path.join(tmp, 'Drive'))
+  const server = await new SyncServer({ db, documents: new Documents(db), people, files, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
   const embedding = Buffer.from(new Float32Array(192).fill(0.1).buffer).toString('base64')
   try {
@@ -171,6 +174,109 @@ test('metadata sync: favorites, collections, labels, people and faces cross over
     assert.deepEqual(pulled.favorites, [{ sha256: sha, favorite: true, updatedAt: pulled.favorites[0].updatedAt }])
     assert.deepEqual(pulled.people.map(p => p.name), ['Αντιγόνη Κ'])
     assert.deepEqual((await call('GET', `/metadata?since=${Date.now() + 1000}`, { token })).body.people, [])
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('files sync: tags, favorites, colours and recents cross over by path, newest edit wins', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-files-'))
+  fs.mkdirSync(path.join(tmp, 'Drive'), { recursive: true })
+  const db = library.open(path.join(tmp, 'data'))
+  const files = new Files(db, path.join(tmp, 'Drive'))
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
+    dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  try {
+    const { token } = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    const push = json => call('POST', '/metadata', { token, json })
+
+    // The file itself has not arrived yet: its metadata is still kept, not thrown away.
+    await push({ files: [{ path: 'Notes/plan.pdf', favorite: true, color: null, tags: ['work', 'tax'], updatedAt: 1000 }] })
+    assert.equal(db.prepare('SELECT favorite FROM file_meta WHERE path = ?').get('Notes/plan.pdf').favorite, 1)
+    assert.deepEqual(db.prepare('SELECT tag FROM file_tags WHERE path = ? AND deleted = 0 ORDER BY tag').all('Notes/plan.pdf').map(r => r.tag), ['tax', 'work'])
+
+    // An older edit loses; a newer one replaces the whole set, so a tag it no longer holds is gone.
+    await push({ files: [{ path: 'Notes/plan.pdf', favorite: false, tags: [], updatedAt: 500 }] })
+    assert.equal(db.prepare('SELECT favorite FROM file_meta WHERE path = ?').get('Notes/plan.pdf').favorite, 1, 'older push ignored')
+    await push({ files: [{ path: 'Notes/plan.pdf', favorite: false, tags: ['work'], updatedAt: 2000 }] })
+    assert.deepEqual(db.prepare('SELECT tag FROM file_tags WHERE path = ? AND deleted = 0').all('Notes/plan.pdf').map(r => r.tag), ['work'])
+    assert.equal(db.prepare('SELECT favorite FROM file_meta WHERE path = ?').get('Notes/plan.pdf').favorite, 0)
+
+    // A folder colour, and a path that tries to leave Drive.
+    await push({ files: [
+      { path: 'Notes', favorite: false, color: 'Blue', tags: [], updatedAt: 1000 },
+      { path: '../escape', favorite: true, tags: [], updatedAt: 9000 },
+    ] })
+    assert.equal(db.prepare('SELECT color FROM file_meta WHERE path = ?').get('Notes').color, 'Blue')
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM file_meta WHERE path = ?').get('../escape').n, 0, 'a path outside Drive is refused')
+
+    // Recents merge on the newest open, in both directions.
+    await push({ fileRecents: [{ path: 'Notes/plan.pdf', openedAt: 5000 }, { path: 'Notes/old.pdf', openedAt: 100 }] })
+    await push({ fileRecents: [{ path: 'Notes/plan.pdf', openedAt: 3000 }] })
+    assert.equal(db.prepare('SELECT opened_at FROM file_recents WHERE path = ?').get('Notes/plan.pdf').opened_at, 5000, 'an older open never wins')
+
+    const pulled = (await call('GET', '/metadata?since=1500', { token })).body
+    assert.deepEqual(pulled.files.map(f => f.path), ['Notes/plan.pdf'], 'only what changed after the cursor')
+    assert.deepEqual(pulled.files[0].tags, ['work'])
+    assert.equal(pulled.fileRecents.length, 2)
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('drive files: the computer asks only for what it lacks, and follows a move into Trash instead of copying again', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-drive-'))
+  const root = path.join(tmp, 'Drive')
+  fs.mkdirSync(path.join(root, 'Notes'), { recursive: true })
+  const db = library.open(path.join(tmp, 'data'))
+  const files = new Files(db, root)
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
+    dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex')
+  try {
+    const { token } = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    const pdf = Buffer.from('%PDF-1.4 scanned receipt'), pdfHash = sha(pdf)
+    const manifest = json => call('POST', '/files/manifest', { token, json })
+
+    // Nothing here yet: the computer asks for it, and only keeps a verified copy.
+    let r = await manifest({ files: [{ path: 'Notes/receipt.pdf', sha256: pdfHash, size: pdf.length }] })
+    assert.deepEqual(r.body, { want: ['Notes/receipt.pdf'], moved: [] })
+    assert.equal((await call('PUT', `/file/${sha(Buffer.from('other'))}?path=Notes/receipt.pdf`, { token, body: pdf })).status, 422, 'wrong hash keeps nothing')
+    assert.equal(fs.existsSync(path.join(root, 'Notes/receipt.pdf')), false)
+    r = await call('PUT', `/file/${pdfHash}?path=Notes/receipt.pdf`, { token, body: pdf })
+    assert.deepEqual(r.body, { sha256: pdfHash, path: 'Notes/receipt.pdf', verified: true })
+
+    // Second run: it is here now, so nothing is asked for again.
+    assert.deepEqual((await manifest({ files: [{ path: 'Notes/receipt.pdf', sha256: pdfHash, size: pdf.length }] })).body, { want: [], moved: [] })
+
+    // The phone renamed it: same bytes, new path — the computer moves its copy rather than fetching it again.
+    r = await manifest({ files: [{ path: 'Notes/receipt-2026.pdf', sha256: pdfHash, size: pdf.length }] })
+    assert.deepEqual(r.body, { want: [], moved: [{ from: 'Notes/receipt.pdf', to: 'Notes/receipt-2026.pdf' }] })
+    assert.equal(fs.existsSync(path.join(root, 'Notes/receipt.pdf')), false)
+    assert.equal(fs.readFileSync(path.join(root, 'Notes/receipt-2026.pdf')).toString(), pdf.toString())
+
+    // The phone moved it to Trash: that reaches here as a move into Trash, not as a second copy.
+    r = await manifest({ files: [{ path: 'Trash/receipt-2026.pdf', sha256: pdfHash, size: pdf.length }] })
+    assert.deepEqual(r.body.moved, [{ from: 'Notes/receipt-2026.pdf', to: 'Trash/receipt-2026.pdf' }])
+    assert.equal(fs.existsSync(path.join(root, 'Trash/receipt-2026.pdf')), true)
+
+    // A file only this computer has is left alone: sync copies, it never deletes.
+    fs.writeFileSync(path.join(root, 'Notes/mine.txt'), 'desktop only')
+    await manifest({ files: [{ path: 'Trash/receipt-2026.pdf', sha256: pdfHash, size: pdf.length }] })
+    assert.equal(fs.existsSync(path.join(root, 'Notes/mine.txt')), true)
+
+    // A different file of the same name keeps both, as everywhere else in Drive.
+    const other = Buffer.from('a different receipt')
+    r = await call('PUT', `/file/${sha(other)}?path=Notes/mine.txt`, { token, body: other })
+    assert.equal(r.body.path, 'Notes/mine (2).txt')
+    assert.equal(fs.readFileSync(path.join(root, 'Notes/mine.txt')).toString(), 'desktop only')
+
+    // A path that tries to leave Drive is refused.
+    assert.equal((await call('PUT', `/file/${pdfHash}?path=../escape.pdf`, { token, body: pdf })).status, 400)
   } finally {
     await server.stop()
     fs.rmSync(tmp, { recursive: true })

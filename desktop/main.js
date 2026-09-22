@@ -93,7 +93,7 @@ app.whenReady().then(() => {
   documents = new docs.Documents(db)
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
-  sync = new SyncServer({ db, documents, people, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, onReceived: () => {
+  sync = new SyncServer({ db, documents, people, files, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   } })

@@ -36,8 +36,8 @@ function lanAddresses() {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan). */
-  constructor({ db, documents, people, dataDir, photosRoot, onReceived = () => {}, port = PORT }) {
-    Object.assign(this, { db, documents, people, dataDir, photosRoot, onReceived, port })
+  constructor({ db, documents, people, files, dataDir, photosRoot, onReceived = () => {}, port = PORT }) {
+    Object.assign(this, { db, documents, people, files, dataDir, photosRoot, onReceived, port })
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS sync_devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, paired_at INTEGER NOT NULL, last_seen INTEGER);
       CREATE TABLE IF NOT EXISTS sync_receipts (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256));`)
@@ -113,10 +113,20 @@ class SyncServer {
     }
     const blob = /^\/blob\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'PUT' && blob) return this.send(res, 200, await this.receive(req, device, blob[1], url.searchParams))
+    if (req.method === 'POST' && url.pathname === '/files/manifest') {
+      if (!this.files) return this.send(res, 200, { want: [], moved: [] })
+      const { files: offered } = await this.json(req, 1 << 24)
+      return this.send(res, 200, await this.files.reconcile(Array.isArray(offered) ? offered : []))
+    }
+    const file = /^\/file\/([0-9a-f]{64})$/.exec(url.pathname)
+    if (req.method === 'PUT' && file) return this.send(res, 200, await this.receiveFile(req, file[1], url.searchParams))
     if (req.method === 'POST' && url.pathname === '/metadata') return this.send(res, 200, this.applyMetadata(await this.json(req, 1 << 24)))
     if (req.method === 'GET' && url.pathname === '/metadata') {
       const since = Number(url.searchParams.get('since')) || 0
-      return this.send(res, 200, { documents: this.documents.changedSince(since), ...library.metadataSince(this.db, since), ...this.people.changedSince(since) })
+      return this.send(res, 200, {
+        documents: this.documents.changedSince(since), ...library.metadataSince(this.db, since), ...this.people.changedSince(since),
+        files: this.files?.metadataSince(since) ?? [], fileRecents: this.files?.recentsAll() ?? [],
+      })
     }
     this.send(res, 404, { error: 'Unknown request.' })
   }
@@ -138,6 +148,8 @@ class SyncServer {
     each('collectionItems', forPhoto(i => library.applyCollectionItem(this.db, String(i.collection), i.sha256, !!i.deleted, at(i))))
     each('labels', forPhoto(l => library.applyLabels(this.db, l.sha256, Array.isArray(l.labels) ? l.labels : [])))
     each('people', p => this.people.applyPerson(String(p.uuid), library.collectionName(p.name), at(p)))
+    each('files', f => this.files?.applyMetadata({ ...f, path: String(f.path), updatedAt: at(f) }))
+    if (Array.isArray(body?.fileRecents)) try { this.files?.mergeRecents(body.fileRecents) } catch (e) { skipped.push(`fileRecents: ${e.message}`) }
     each('faces', forPhoto(f => this.people.applyFace({
       uuid: String(f.uuid), sha256: f.sha256, quality: Number(f.quality) || 1, model: f.model, person: f.person ? String(f.person) : null, updatedAt: at(f),
       box: Array.isArray(f.box) && f.box.length === 4 && f.box.every(Number.isFinite) ? f.box.map(Number) : null,
@@ -175,6 +187,39 @@ class SyncServer {
       const receipt = this.receipt(device, expected, path.relative(this.photosRoot, target), size)
       this.onReceived(receipt)
       return receipt
+    } catch (e) { out.destroy(); await fsp.rm(part, { force: true }); throw e }
+  }
+
+  /**
+   * A file of the Files module, streamed into Drive at the path the phone keeps it at. Same rule as photos:
+   * a .part is hashed while it is written and only a matching SHA-256 becomes a file, and an existing file is
+   * never replaced — a different file of the same name keeps both, as it does everywhere else in Drive.
+   */
+  async receiveFile(req, expected, params) {
+    const rel = params.get('path') ?? ''
+    if (!this.files || !safeRel(rel) || rel === '') throw Object.assign(new Error('Invalid path.'), { status: 400, expose: true })
+    // Create the folders one level at a time, re-checking each against Drive, so a symlink cannot be followed
+    // out of the root on the way down. Only then is the file itself resolved.
+    const parts = rel.split('/')
+    for (let i = 1; i < parts.length; i++) await fsp.mkdir(this.files.resolve(parts.slice(0, i).join('/'), false), { recursive: false }).catch(e => {
+      if (e.code !== 'EEXIST') throw e
+    })
+    const target = this.files.resolve(rel, false)
+    const part = `${target}.${crypto.randomUUID()}.part`
+    const hash = crypto.createHash('sha256')
+    const out = fs.createWriteStream(part, { flags: 'wx' })
+    try {
+      for await (const chunk of req) { hash.update(chunk); if (!out.write(chunk)) await new Promise(r => out.once('drain', r)) }
+      await new Promise((resolve, reject) => out.end(err => err ? reject(err) : resolve()))
+      if (hash.digest('hex') !== expected) throw Object.assign(new Error('The file changed in transit; nothing was kept.'), { status: 422, expose: true })
+      let kept = target
+      const { dir, name, ext } = path.parse(target)
+      for (let n = 2; fs.existsSync(kept); n++) kept = path.join(dir, `${name} (${n})${ext}`)
+      await fsp.link(part, kept)
+      await fsp.rm(part)
+      const modified = Number(params.get('modified'))
+      if (Number.isFinite(modified) && modified > 0) await fsp.utimes(kept, new Date(), new Date(modified))
+      return { sha256: expected, path: this.files.rel(kept), verified: true }
     } catch (e) { out.destroy(); await fsp.rm(part, { force: true }); throw e }
   }
 

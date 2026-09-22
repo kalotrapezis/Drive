@@ -230,6 +230,117 @@ class Files {
     for (const t of cleaned) { put.run(rel, t, now); this.createTag(t) }
   }
 
+  /**
+   * Files the phone has, answered with the ones this device wants (SYNC_PLAN.md phase 6e). Content is the
+   * identity here, not the path: a file whose bytes are already in Drive under another name has been moved or
+   * renamed on the phone, so this moves its copy to match instead of asking for the bytes again — which is what
+   * makes a move into Drive/Trash/ arrive as a move into Trash rather than as a second copy.
+   *
+   * Copy, never delete: a path the phone no longer has is left alone, and a path this device already holds with
+   * other bytes is never overwritten — the newer file arrives beside it, both kept, as everywhere else.
+   */
+  async reconcile(entries) {
+    const offered = new Map()
+    for (const e of entries ?? []) if (isSafeRel(e?.path) && /^[0-9a-f]{64}$/.test(e?.sha256 ?? '')) offered.set(e.path, e.sha256)
+    const mine = new Map() // sha256 → the paths this device holds
+    for (const rel of await this.walk('')) {
+      const sha = await this.hash(rel)
+      if (!sha) continue
+      if (!mine.has(sha)) mine.set(sha, [])
+      mine.get(sha).push(rel)
+    }
+    const want = [], moved = []
+    for (const [rel, sha] of offered) {
+      if (mine.get(sha)?.includes(rel)) continue // already here, at this very path
+      const elsewhere = (mine.get(sha) ?? []).find(other => !offered.has(other)) // the phone moved it away from there
+      if (elsewhere) {
+        const target = path.join(this.root, rel)
+        if (fs.existsSync(target)) continue // something else is already there; keep both, ask for nothing
+        await fsp.mkdir(path.dirname(target), { recursive: true })
+        await this.moveTo(this.resolve(elsewhere), target)
+        mine.set(sha, mine.get(sha).filter(p => p !== elsewhere).concat(rel))
+        moved.push({ from: elsewhere, to: rel })
+      } else want.push(rel)
+    }
+    return { want, moved }
+  }
+
+  /** Every file under Drive, as Drive-relative paths. Dotfiles and links are skipped, as everywhere else. */
+  async walk(rel) {
+    const out = []
+    let entries
+    try { entries = await fsp.readdir(path.join(this.root, rel), { withFileTypes: true }) } catch { return out }
+    for (const e of entries) {
+      if (e.isSymbolicLink() || e.name.startsWith('.')) continue
+      const child = rel ? `${rel}/${e.name}` : e.name
+      if (e.isDirectory()) out.push(...await this.walk(child))
+      else if (e.isFile()) out.push(child)
+    }
+    return out
+  }
+
+  /** SHA-256 of a file, cached against its size and mtime so each file is read once. */
+  async hash(rel) {
+    this.db.exec('CREATE TABLE IF NOT EXISTS file_hashes (path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime INTEGER NOT NULL, sha256 TEXT NOT NULL)')
+    let st
+    try { st = await fsp.stat(path.join(this.root, rel)) } catch { return null }
+    const size = st.size, mtime = Math.trunc(st.mtimeMs)
+    const cached = this.db.prepare('SELECT sha256 FROM file_hashes WHERE path = ? AND size = ? AND mtime = ?').get(rel, size, mtime)
+    if (cached) return cached.sha256
+    const sha = await sha256(path.join(this.root, rel))
+    this.db.prepare(`INSERT INTO file_hashes(path, size, mtime, sha256) VALUES(?,?,?,?)
+      ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, sha256 = excluded.sha256`).run(rel, size, mtime, sha)
+    return sha
+  }
+
+  // --- Sync (SYNC_PLAN.md phase 6d). Files are keyed by their Drive-relative path on both devices, which is the
+  // same path, so a record only needs a time: the newest edit of a path wins. Tags travel as the whole set for a
+  // path — the set the newer side holds is the answer, and a tag missing from it was removed. `resolve` is not
+  // called here on purpose: metadata for a file this device has not received yet is kept, not thrown away.
+
+  /** Everything the user set on a file or folder, one record per path, changed after `since`. */
+  metadataSince(since = 0) {
+    const rows = this.db.prepare(`SELECT path, MAX(at) AS updatedAt FROM (
+        SELECT path, updated_at AS at FROM file_meta UNION ALL SELECT path, updated_at FROM file_tags
+      ) GROUP BY path HAVING updatedAt > ?`).all(since)
+    const meta = this.db.prepare('SELECT favorite, color FROM file_meta WHERE path = ?')
+    const tags = this.db.prepare('SELECT tag FROM file_tags WHERE path = ? AND deleted = 0')
+    return rows.map(r => ({
+      path: r.path, updatedAt: r.updatedAt,
+      favorite: !!meta.get(r.path)?.favorite, color: meta.get(r.path)?.color ?? null,
+      tags: tags.all(r.path).map(t => t.tag),
+    }))
+  }
+
+  applyMetadata({ path, favorite, color, tags, updatedAt }) {
+    if (!isSafeRel(path)) return
+    const mine = this.db.prepare(`SELECT MAX(at) AS at FROM (
+      SELECT updated_at AS at FROM file_meta WHERE path = ? UNION ALL SELECT updated_at FROM file_tags WHERE path = ?)`).get(path, path)
+    if (mine?.at != null && mine.at >= updatedAt) return
+    this.db.prepare(`INSERT INTO file_meta(path, favorite, color, updated_at) VALUES(?,?,?,?)
+      ON CONFLICT(path) DO UPDATE SET favorite = excluded.favorite, color = excluded.color, updated_at = excluded.updated_at`)
+      .run(path, favorite ? 1 : 0, COLORS.includes(color) ? color : null, updatedAt)
+    this.db.prepare('UPDATE file_tags SET deleted = 1, updated_at = ? WHERE path = ? AND deleted = 0').run(updatedAt, path)
+    const put = this.db.prepare(`INSERT INTO file_tags(path, tag, updated_at, deleted) VALUES(?,?,?,0)
+      ON CONFLICT(path, tag) DO UPDATE SET deleted = 0, updated_at = excluded.updated_at`)
+    for (const raw of tags ?? []) {
+      const name = (() => { try { return tagName(raw) } catch { return null } })()
+      if (name) { put.run(path, name, updatedAt); this.createTag(name) }
+    }
+  }
+
+  recentsAll() {
+    return this.db.prepare('SELECT path, opened_at AS openedAt FROM file_recents').all()
+  }
+
+  /** The most recent open of each file wins, whichever device it happened on. */
+  mergeRecents(incoming) {
+    const put = this.db.prepare(`INSERT INTO file_recents(path, opened_at) VALUES(?,?)
+      ON CONFLICT(path) DO UPDATE SET opened_at = excluded.opened_at WHERE file_recents.opened_at < excluded.opened_at`)
+    for (const r of incoming ?? []) if (isSafeRel(r.path) && Number(r.openedAt) > 0) put.run(r.path, Number(r.openedAt))
+    this.db.prepare(`DELETE FROM file_recents WHERE path NOT IN (SELECT path FROM file_recents ORDER BY opened_at DESC LIMIT ${RECENTS_LIMIT})`).run()
+  }
+
   async properties(rel) {
     const full = this.resolve(rel)
     const st = await fsp.stat(full)
