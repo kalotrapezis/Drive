@@ -1,5 +1,8 @@
 # Local Drive
 
+> **2026-09-22:** Direction changed. This C++/Qt project is now a reference for
+> safety rules; the desktop app is being rebuilt in Electron in [desktop/](desktop/README.md). See [SYNC_PLAN.md](SYNC_PLAN.md).
+
 Local-first Linux and Android file/photo transfer, using a C++/Qt safety core,
 SQLite verification receipts and a React desktop interface.
 
@@ -47,6 +50,7 @@ originals. Cache is not a verified final backup until forwarding is verified.
 
 | Document | Purpose |
 |---|---|
+| [SYNC_PLAN.md](SYNC_PLAN.md) | **Current direction:** new Electron desktop app and phone ↔ desktop sync (shared with `../Drive-Android/`) |
 | [SPEC.md](SPEC.md) | Detailed behavior and safety contracts |
 | [Plan.md](Plan.md) | Historical product plan and session record |
 | [inspections.md](inspections.md) | Dated inspection and physical-test evidence |

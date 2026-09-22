@@ -1,0 +1,197 @@
+# Local Drive — desktop app and phone ↔ desktop sync plan
+
+Updated: 2026-09-22 (phase 1 done). The same file lives in both `Drive-Android/` and `Drive/`.
+Edit one, copy it to the other.
+
+Goal: a personal Google Photos + Google Drive. The phone and the desktop have
+the **same features and the same data model**, and later sync 1:1 (Copy or
+Move) over Wi-Fi. Order: shared data model → desktop features → sync.
+
+## Decisions
+
+- **Desktop is a new, self-contained Electron app** in TypeScript, in
+  `Drive/desktop/` on branch `electron-desktop`. No C++/Qt, no browser page,
+  no local web server.
+- The old C++/Qt + React code in `Drive/` stays untouched as a **reference** for
+  safety rules and past tests. Its code is not carried over.
+- Desktop library (existing layout): photos in `~/Drive/Photos/`, files in
+  `~/Drive/Drive/` (like the phone's `/sdcard/Drive/`). Synced photos will land
+  in `~/Drive/Photos/YYYY/MM/`. App data (database, thumbnails, encrypted
+  vault) in `~/.local/share/local-drive-desktop/`.
+- The desktop becomes the main library; the phone is its client. Metadata syncs
+  both ways.
+- Everything syncs, including **People** (hand-made groups and names) and
+  **Hidden**. Nothing is dropped.
+- Scanner and Codes stay phone-only (they need a camera).
+
+## What exists now
+
+### Phone (`Drive-Android`, branch `alpha`) — feature complete
+
+Authoritative list: `FEATURES.md`. Summary:
+
+| Module | Works |
+|---|---|
+| Photos | MediaStore timeline, pinch Week/Month/Year, viewer, filmstrip, zoom, details, default gallery, editor (crop/rotate/markup, save / save copy) |
+| Collections | Favorites, My collections, Screenshots, Videos, Documents (local AI), Map, Hidden |
+| People | ML Kit face detection → MobileFaceNet embeddings → automatic groups; rename, merge (with undo), Help organize reviews |
+| Search | Name, path, AI labels, people names, cached place names |
+| Hidden | Biometric lock; verified private copy, then Android removes the public original; Restore |
+| Files | `/sdcard/Drive/` browser, search, tags, favorites, folder colours, copy/move/rename/share, Trash |
+| Scanner, Codes | Phone only |
+| Sync | Home card only ("no trusted paired device") |
+
+Phone storage today:
+
+| Data | Where | Key |
+|---|---|---|
+| Favorite, collections, AI record/labels, location/place, faces, people, reviews | `photo_metadata.db` (SQLite, v12) | `photo_key` |
+| Hidden items | `hidden_vault.db` + `files/hidden_media/` | `photo_key`, has `sha256` |
+| File tags, favorites, colours | SharedPreferences `drive_metadata` | Drive-relative path |
+| Recents, openers, settings | SharedPreferences | path / none |
+
+**Problem:** `photo_key = sha256(content URI + path + name + size)`
+(`PhotoMetadataRules.stableKey`). The URI contains a MediaStore row id that only
+exists on this phone, and **Save** after an edit changes the size, so the key
+changes. Result: keys cannot be matched on another device, and an edited photo
+likely loses its favorite/collections/faces today. People, collections and
+faces use local integer ids. Face boxes are pixels. Hidden has no encryption of
+its own (it relies on Android storage encryption + app-private folder).
+
+### Old desktop (`Drive`, branch `codex/live-ui-audit`) — reference only
+
+| Works | Kept as |
+|---|---|
+| Verified copy: copy → SHA-256 → receipt, no overwrite, `.part` files | Rules, rewritten in TypeScript |
+| Move = copy + verify + separate cleanup to Trash | Rule |
+| Phone preview/hashing over USB/MTP (KIO) | Dropped (Wi-Fi replaces it) |
+| TLS wireless receiver with pinned client certificate, metadata deltas with sequence numbers | Ideas only (pinning, sequence/cursors) |
+| React web UI (dashboard style) | Dropped; new UI mirrors the phone |
+| Schedules, cache routes, capacity thresholds, acceptance matrices | Out of scope |
+
+## Shared data model (both apps)
+
+Both apps keep their own SQLite database with the same tables and keys.
+Nothing ever copies a `.db` file between devices.
+
+- **Photo id = SHA-256 of the file bytes** (lowercase hex). The phone caches
+  the hash against `(MediaStore id, size, date_modified)` so it hashes each
+  file once.
+- **Every user-made thing gets a UUID:** person (`face_groups`), collection,
+  face sample. Integer ids stay local.
+- **Every record has `updated_at`** (epoch ms) and deletions are kept as
+  tombstones (`deleted = 1`) so a removal can sync.
+- **Face box** = `[left, top, right, bottom]` as fractions 0–1 of the image
+  *after* EXIF rotation.
+- **Embedding** = MobileFaceNet (`mobilefacenet.tflite`, landmark-aligned
+  crop), float32 little-endian, stored with a `model` string. Both apps must use
+  the same model and alignment, and the same thresholds: same person ≥ 0.74,
+  review 0.66–0.74, unreliable faces join at ≥ 0.55.
+- **Files** are identified by their `Drive/`-relative path; tags, favorites and
+  colours stay keyed by path.
+
+Per photo, the model carries: sha256, original relative path and name, mime,
+size, taken date, favorite, hidden, collection UUIDs, AI type/labels and
+`user_verified`, latitude/longitude/place name, faces (UUID, box, embedding,
+person UUID, quality), pending reviews.
+
+## Transfer design (phase 6)
+
+1. **Pair by QR.** The desktop shows a QR code with its address, port, TLS
+   certificate fingerprint and a one-time token. The phone scans it with Codes.
+   Both remember each other; the phone pins the certificate.
+2. **HTTPS, phone → desktop** (Node `https` on the desktop, the phone is the
+   client):
+   - `POST /have` — list of hashes → the desktop answers which are missing.
+   - `PUT /blob/<sha256>` — streamed upload. The desktop writes a `.part`,
+     hashes while writing, renames only if the hash matches, and returns a
+     **receipt**. Otherwise it deletes the `.part` and reports failure.
+   - `POST /metadata` — changed records since the last sync (JSON above).
+   - `GET /metadata?since=<cursor>` — changes made on the desktop, for the
+     phone.
+3. **Conflicts:** newest `updated_at` wins per record. Merging people is sent
+   as "face X → person Y" changes, so it works in both directions.
+4. **Copy** keeps everything on the phone. **Move** deletes on the phone only
+   after a receipt, through Android's own confirmation (Gallery) or directly
+   (vault items).
+5. **Hidden:** sent over the same TLS connection and encrypted on the desktop
+   while streaming, so plaintext never touches the desktop disk. libsodium:
+   passphrase → Argon2id key, files with `secretstream`. The desktop asks for
+   the passphrase to open Hidden.
+6. Never delete on either side because of a sync. Phone Trash does not delete
+   desktop copies.
+
+## Desktop stack
+
+Electron + Vite + React + TypeScript, one process tree, packaged as AppImage /
+deb. built-in `node:sqlite` (database, no native build), `sharp` (thumbnails), `exifr` (EXIF/GPS),
+`onnxruntime-node` (MobileFaceNet converted to ONNX; YuNet or SCRFD for face
+detection, since ML Kit is Android only), `maplibre-gl` (map),
+`libsodium-wrappers` (vault). UI follows the phone's design: Photos and Files
+first, sync as a small status indicator.
+
+## Phases
+
+Each phase ends with a working app and a short check. One phase per session or
+more; do not start the next before the current one is done.
+
+### 0. Phone: shared data model — first
+
+- Back up `photo_metadata.db` and `hidden_vault.db` before migration.
+- Add content hashes (cached), move all tables to hash keys. Old keys of photos
+  that no longer exist are kept, not deleted.
+- Add UUIDs, `updated_at`, tombstones; convert face boxes to fractions; record
+  embedding model.
+- Keep hashes up to date after the editor's **Save**, so an edit keeps
+  favorite, collections and faces.
+- **Done when:** after migration every favorite, collection, person name and
+  face group is still there, and an edited photo keeps its metadata.
+
+### 1. Desktop: skeleton + Gallery
+
+Electron app, `~/Drive/Photos/` scan + hash, thumbnails, timeline
+(Week/Month/Year), viewer with filmstrip, zoom and details.
+**Done when:** a packaged app opens on its own and shows a real library.
+
+**Status 2026-09-22: done** (`desktop/`). Scan is incremental (size + mtime),
+SHA-256 per file, EXIF date/camera/GPS, sharp thumbnails, ffmpeg video frames.
+Timeline Week/Month/Year with touchpad pinch, period pill; viewer with wheel
+zoom to 5×, pan, double-click 2×, ←/→, Esc, `i` details, filmstrip, Show in
+folder, video playback. `npm test` passes; AppImage + deb build, and the
+unpacked package indexed a 70-item disposable library. Not yet: a run on the
+real `~/Drive/Photos`, HEIC originals (thumbnail fallback only), video capture
+date (uses file time).
+
+### 2. Desktop: Collections, Favorites, Search, Trash
+
+### 3. Desktop: Files module
+
+`~/Drive/` browser with tags, favorites, colours, copy/move/rename, Trash — the
+phone's rules (no overwrite, no escaping the root).
+
+### 4. Desktop: People
+
+Detect → embed → group with the phone's thresholds; rename, merge, undo,
+Help organize.
+**Done when:** embeddings of the same photo on phone and desktop match
+(cosine ≥ 0.74).
+
+### 5. Desktop: Map, Hidden (encrypted), Editor, Documents classification
+
+### 6. Sync
+
+QR pairing → `/have` + blob upload with receipts (Copy) → metadata both ways →
+Move → Hidden. Then the phone's Sync card becomes real.
+**Done when:** a Copy of the whole phone gives the desktop the same Gallery,
+collections, people and Hidden; a second sync transfers nothing; Move deletes
+only items with receipts.
+
+## Safety rules (from the old desktop, kept on both sides)
+
+- Copy → verify SHA-256 → receipt. A partial file is never visible or counted.
+- Never overwrite silently; name conflicts keep both files.
+- Move = verified copy first, then a separate delete through the platform's
+  confirmation or Trash.
+- A preview or sync never deletes anything by itself.
+- Test with disposable files and a copy of the databases, never the real
+  library.

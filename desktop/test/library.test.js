@@ -1,0 +1,36 @@
+const { test } = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const library = require('../library')
+
+test('scan indexes photos, is incremental, follows deletions and never touches the library', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-lib-'))
+  const root = path.join(tmp, 'Photos'), data = path.join(tmp, 'data')
+  fs.mkdirSync(path.join(root, 'Camera'), { recursive: true })
+  const sharp = require('sharp')
+  const photo = path.join(root, 'Camera', 'a.jpg')
+  await sharp({ create: { width: 64, height: 32, channels: 3, background: '#808080' } }).jpeg()
+    .withMetadata({ orientation: 6, exif: { IFD2: { DateTimeOriginal: '2024:05:06 07:08:09' } } }).toFile(photo)
+  fs.writeFileSync(path.join(root, 'notes.txt'), 'not media')
+  fs.writeFileSync(path.join(root, '.hidden.jpg'), 'skip me')
+  const before = fs.readFileSync(photo)
+
+  const db = library.open(data)
+  assert.deepEqual(await library.scan(db, root, data), { total: 1, changed: 1, removed: 0 })
+  const [row] = library.list(db)
+  assert.equal(row.path, path.join('Camera', 'a.jpg'))
+  assert.equal(row.sha256, await library.sha256(photo))
+  assert.equal(row.taken_at, new Date(2024, 4, 6, 7, 8, 9).getTime())
+  assert.deepEqual([row.width, row.height], [32, 64]) // orientation 6 = rotated
+  assert.ok(fs.existsSync(path.join(data, 'thumbs', row.sha256 + '.webp')))
+
+  assert.deepEqual(await library.scan(db, root, data), { total: 1, changed: 0, removed: 0 })
+  assert.deepEqual(fs.readFileSync(photo), before)
+  assert.deepEqual(fs.readdirSync(root).sort(), ['.hidden.jpg', 'Camera', 'notes.txt'])
+
+  fs.rmSync(photo)
+  assert.deepEqual(await library.scan(db, root, data), { total: 0, changed: 0, removed: 1 })
+  fs.rmSync(tmp, { recursive: true })
+})
