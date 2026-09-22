@@ -403,13 +403,21 @@ phone offers every file under `Drive/` with its SHA-256) and
 `.part` hashed as it is written, renamed only on a match, existing files never
 replaced — a different file of the same name keeps both).
 
-**Content is the identity, not the path.** A file whose bytes the computer
-already holds under another name was moved or renamed on the phone, so the
-computer **moves its own copy to match** instead of asking for the bytes again.
-That is what makes "move to Trash" arrive as a move into `Drive/Trash/` rather
-than as a second copy, and it costs nothing extra: renames, moves between
-folders and Trash are all the same case. A path the phone no longer has is left
-alone — sync copies, it never deletes.
+**Content is the identity, not the path** — but only where the phone actually
+moved something. A file whose bytes the computer already holds under another
+name counts as **moved** when the phone had it at that other path *last time*
+and does not now: a rename, a move between folders, or a move into
+`Drive/Trash/`. The computer then moves its own copy to match instead of asking
+for the bytes again, so "move to Trash" arrives as a move into Trash rather
+than as a second copy, and renames, moves and Trash are all the same case.
+
+The memory matters, and finding that out cost a real run: without it, two
+devices that simply keep the same document in different folders look like a
+move, and the computer quietly reorganises its own Drive to match the phone's
+layout. So the last manifest is remembered per device (`sync_manifest`), and
+the first sync with a device moves nothing.
+
+A path the phone no longer has is left alone — sync copies, it never deletes.
 
 Both sides cache file hashes against size and mtime, so each file is read once
 (`DriveManifest` on the phone, `file_hashes` on the desktop). Folders on the
@@ -417,12 +425,12 @@ receiving side are created one level at a time, each re-checked against the
 Drive root, so a symlink cannot be followed out of it.
 
 Tested: `desktop/test/sync.test.js` (two suites — Files metadata, and the
-manifest with rename → move, move → Trash, a wrong hash keeping nothing, a path
-outside Drive refused, same name different content keeping both) plus a **real
-run against the phone's own Drive folder**: 36 files offered, 29 wanted and
-verified across, then a file moved into Trash on the phone arrived as
-`want 0, moved 1` — the computer moved its copy into Trash and made no
-duplicate.
+manifest with rename → move, move → Trash, a layout the computer chose being
+left alone, a wrong hash keeping nothing, a path outside Drive refused, same
+name different content keeping both) plus a **real run against the phone's own
+Drive folder**: 36 files offered and verified across, the computer's own
+differently-filed copies left where they were, then a file moved into Trash on
+the phone arrived as `want 0, moved 1` — moved into Trash, no duplicate.
 
 Not done: **computer → phone**. The phone is the client in this protocol, so a
 file created on the computer waits for the phone to ask. Closing that needs the

@@ -253,6 +253,19 @@ test('drive files: the computer asks only for what it lacks, and follows a move 
     // Second run: it is here now, so nothing is asked for again.
     assert.deepEqual((await manifest({ files: [{ path: 'Notes/receipt.pdf', sha256: pdfHash, size: pdf.length }] })).body, { want: [], moved: [] })
 
+    // Bytes this computer keeps somewhere the phone never had them is NOT a move: the two devices simply file the
+    // same document differently, and Drive is not quietly reorganised to match the phone.
+    const own = Buffer.from('a letter both devices keep'), ownHash = sha(own)
+    fs.writeFileSync(path.join(root, 'MyFiling/letter.txt'.split('/')[0] + '.txt'), own) // this computer's own place for it
+    r = await manifest({ files: [
+      { path: 'Notes/receipt.pdf', sha256: pdfHash, size: pdf.length },
+      { path: 'Letters/letter.txt', sha256: ownHash, size: own.length },
+    ] })
+    assert.deepEqual(r.body.moved, [], 'a layout this computer chose is left alone')
+    assert.deepEqual(r.body.want, ['Letters/letter.txt'], 'the phone\'s copy is asked for instead')
+    assert.equal(fs.existsSync(path.join(root, 'MyFiling.txt')), true)
+    fs.rmSync(path.join(root, 'MyFiling.txt'))
+
     // The phone renamed it: same bytes, new path — the computer moves its copy rather than fetching it again.
     r = await manifest({ files: [{ path: 'Notes/receipt-2026.pdf', sha256: pdfHash, size: pdf.length }] })
     assert.deepEqual(r.body, { want: [], moved: [{ from: 'Notes/receipt.pdf', to: 'Notes/receipt-2026.pdf' }] })

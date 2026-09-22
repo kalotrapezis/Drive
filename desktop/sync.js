@@ -49,7 +49,12 @@ class SyncServer {
   async start() {
     const id = await identity(path.join(this.dataDir, 'sync'))
     this.fingerprint = id.fingerprint
-    this.server = https.createServer({ key: id.key, cert: id.cert }, (req, res) => this.handle(req, res).catch(e => this.send(res, e.status ?? 500, { error: e.expose ? e.message : 'Server error' })))
+    this.server = https.createServer({ key: id.key, cert: id.cert }, (req, res) => this.handle(req, res).catch(e => {
+      // A request that fails for a reason the phone is not told about is worth saying out loud here, or a sync
+      // that quietly transfers nothing has no way of being explained.
+      if (!e.expose) console.error(`[sync] ${req.method} ${req.url} failed:`, e)
+      this.send(res, e.status ?? 500, { error: e.expose ? e.message : 'Server error' })
+    }))
     await new Promise((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.port, '0.0.0.0', resolve) })
     this.port = this.server.address().port
     return this
@@ -122,7 +127,7 @@ class SyncServer {
     if (req.method === 'POST' && url.pathname === '/files/manifest') {
       if (!this.files) return this.send(res, 200, { want: [], moved: [] })
       const { files: offered } = await this.json(req, 1 << 24)
-      return this.send(res, 200, await this.files.reconcile(Array.isArray(offered) ? offered : []))
+      return this.send(res, 200, await this.files.reconcile(Array.isArray(offered) ? offered : [], device.id))
     }
     const file = /^\/file\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'PUT' && file) return this.send(res, 200, await this.receiveFile(req, device, file[1], url.searchParams))

@@ -231,17 +231,22 @@ class Files {
   }
 
   /**
-   * Files the phone has, answered with the ones this device wants (SYNC_PLAN.md phase 6e). Content is the
-   * identity here, not the path: a file whose bytes are already in Drive under another name has been moved or
-   * renamed on the phone, so this moves its copy to match instead of asking for the bytes again — which is what
-   * makes a move into Drive/Trash/ arrive as a move into Trash rather than as a second copy.
+   * Files the phone has, answered with the ones this device wants (SYNC_PLAN.md phase 6e).
+   *
+   * A file whose bytes are already in Drive under another name is only treated as **moved** when the phone had
+   * it at that other path last time and does not now — that is a rename, a move between folders, or a move into
+   * Drive/Trash/, and this follows it rather than asking for the bytes again. Without that memory, two devices
+   * that simply keep the same file in different folders would look like a move, and this computer would quietly
+   * reorganise its own Drive to match the phone's. So the last manifest is remembered per device.
    *
    * Copy, never delete: a path the phone no longer has is left alone, and a path this device already holds with
    * other bytes is never overwritten — the newer file arrives beside it, both kept, as everywhere else.
    */
-  async reconcile(entries) {
+  async reconcile(entries, deviceId = 'phone') {
+    this.db.exec('CREATE TABLE IF NOT EXISTS sync_manifest (device_id TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, PRIMARY KEY(device_id, path))')
     const offered = new Map()
     for (const e of entries ?? []) if (isSafeRel(e?.path) && /^[0-9a-f]{64}$/.test(e?.sha256 ?? '')) offered.set(e.path, e.sha256)
+    const before = new Map(this.db.prepare('SELECT path, sha256 FROM sync_manifest WHERE device_id = ?').all(deviceId).map(r => [r.path, r.sha256]))
     const mine = new Map() // sha256 → the paths this device holds
     for (const rel of await this.walk('')) {
       const sha = await this.hash(rel)
@@ -252,7 +257,8 @@ class Files {
     const want = [], moved = []
     for (const [rel, sha] of offered) {
       if (mine.get(sha)?.includes(rel)) continue // already here, at this very path
-      const elsewhere = (mine.get(sha) ?? []).find(other => !offered.has(other)) // the phone moved it away from there
+      // The phone kept these bytes here last time and does not any more: it moved them, so follow.
+      const elsewhere = (mine.get(sha) ?? []).find(other => before.get(other) === sha && !offered.has(other))
       if (elsewhere) {
         const target = path.join(this.root, rel)
         if (fs.existsSync(target)) continue // something else is already there; keep both, ask for nothing
@@ -262,6 +268,13 @@ class Files {
         moved.push({ from: elsewhere, to: rel })
       } else want.push(rel)
     }
+    this.db.exec('BEGIN')
+    try {
+      this.db.prepare('DELETE FROM sync_manifest WHERE device_id = ?').run(deviceId)
+      const put = this.db.prepare('INSERT INTO sync_manifest(device_id, path, sha256) VALUES(?,?,?)')
+      for (const [rel, sha] of offered) put.run(deviceId, rel, sha)
+      this.db.exec('COMMIT')
+    } catch (e) { this.db.exec('ROLLBACK'); throw e }
     return { want, moved }
   }
 
