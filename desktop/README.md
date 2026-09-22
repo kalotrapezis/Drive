@@ -19,7 +19,7 @@ npm run dist     # release/*.AppImage and *.deb
 ```
 
 Video thumbnails use the system `ffmpeg`. HEIC goes through libheif (`heic-decode`), since the bundled libvips has no HEVC. The AppImage needs `libfuse2`; the deb does not.
-`node_modules/.bin/electron scripts/shot.js out.png [js]` renders the window hidden and captures it for visual QA
+`node_modules/.bin/electron scripts/shot.js out.png [js]` renders the window offscreen (never shown) and captures it for visual QA
 (`SHOT_CONSOLE=1` prints the page console).
 
 ## Code
@@ -38,7 +38,7 @@ Video thumbnails use the system `ffmpeg`. HEIC goes through libheif (`heic-decod
 | `places.js`, `data/places.tsv.gz` | Offline place names (GeoNames cities1000, CC BY 4.0) |
 | `src/MapView.tsx` | Map (MapLibre + OpenFreeMap) with photo-thumbnail markers and clusters |
 | `vault.js`, `src/Hidden.tsx` | Hidden: libsodium vault (Argon2id + secretstream), setup/unlock, hide/restore |
-| `editor.js` | Save edited photos: copy with original EXIF (no re-encode) or replace via Trash — UI not built yet |
+| `editor.js`, `src/Editor.tsx`, `src/edit.ts` | Editor: crop + straighten, rotate, markup; save copy with original EXIF (no re-encode) or replace via Trash |
 | `models/` | ONNX models and their licences (`models/NOTICES.md`) |
 | `src/Viewer.tsx` | Viewer: zoom/pan, keys, details, filmstrip |
 | `src/timeline.ts` | Grouping and formatting |

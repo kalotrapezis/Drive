@@ -10,6 +10,7 @@ import { Files, type FilesMode } from './Files'
 import { CombinePicker, PeoplePage, RenamePerson, ReviewPage } from './People'
 import { MapView } from './MapView'
 import { HiddenPage, VaultGate } from './Hidden'
+import { Editor } from './Editor'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string }
   | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' }
@@ -41,6 +42,7 @@ export function App() {
   const [names, setNames] = useState<Record<string, string[]>>({})
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [vault, setVault] = useState<VaultStatus | null>(null)
+  const [editing, setEditing] = useState<Media | null>(null)
 
   const custom = page.kind === 'collection' && !SYSTEM.some(s => s.id === page.id) ? page.id : null
   const memberSource = custom ? () => window.drive.members(custom) : page.kind === 'person' ? () => window.drive.people.shas(page.id) : null
@@ -160,7 +162,7 @@ export function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (open !== null || dialog || (e.target as Element).closest?.('input')) return
+      if (open !== null || dialog || editing || (e.target as Element).closest?.('input')) return
       if (e.key === 'Escape' && selected.size) setSelected(new Set())
       else if ((e.ctrlKey || e.metaKey) && e.key === 'a' && items.length) { e.preventDefault(); setSelected(new Set(items.map(m => m.id))) }
       else if (e.key === 'Delete' && picked.length) trash(picked)
@@ -268,9 +270,10 @@ export function App() {
       {open !== null && items[open] && (
         <Viewer media={items} index={open} setIndex={setOpen} onClose={() => setOpen(null)} people={names[items[open].sha256] ?? []}
           onShowOnMap={m => { setOpen(null); setPage({ kind: 'map', focus: m.sha256 }) }}
-          onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={m => hide([m])}
+          onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={m => hide([m])} onEdit={setEditing}
           onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} />
       )}
+      {editing && <Editor item={editing} onClose={() => setEditing(null)} onSaved={msg => { setEditing(null); say(msg); reload() }} />}
       {dialog}
       {toast && <div className="island toast" role="status">{toast.text}
         {toast.undo && <button className="text-button" onClick={() => { const u = toast.undo!; setToast(null); u() }}>Undo</button>}</div>}

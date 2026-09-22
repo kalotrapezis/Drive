@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('drive', {
   scan: () => ipcRenderer.invoke('library:scan'),
   show: id => ipcRenderer.invoke('library:show', id),
   openMap: (lat, lon) => ipcRenderer.invoke('open-map', lat, lon),
+  editorLoad: id => ipcRenderer.invoke('editor:load', id),
+  editorSave: (id, bytes, mode) => ipcRenderer.invoke('editor:save', id, bytes, mode),
   favorite: (shas, on) => ipcRenderer.invoke('photos:favorite', shas, on),
   trash: ids => ipcRenderer.invoke('photos:trash', ids),
   collections: () => ipcRenderer.invoke('collections:list'),

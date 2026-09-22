@@ -8,6 +8,7 @@ const { Files } = require('./files')
 const faces = require('./faces')
 const places = require('./places')
 const { Vault } = require('./vault')
+const editor = require('./editor')
 
 // Override both for testing with disposable files.
 const PHOTOS_ROOT = process.env.DRIVE_PHOTOS || path.join(os.homedir(), 'Drive', 'Photos')
@@ -144,6 +145,29 @@ app.whenReady().then(() => {
     await startScan()
     return restored
   })
+  // Editor: bytes in (HEIC via its JPEG preview), JPEG out.
+  ipcMain.handle('editor:load', async (_, id) => {
+    const row = db.prepare('SELECT path, sha256 FROM media WHERE id = ?').get(Number(id))
+    if (!row) throw new Error('This photo is no longer in the library.')
+    const full = path.join(PHOTOS_ROOT, row.path)
+    return fs.promises.readFile(library.isHeic(row.path) ? await library.preview(full, row.sha256, DATA_DIR) : full)
+  })
+  ipcMain.handle('editor:save', async (_, id, bytes, mode) => {
+    const row = db.prepare('SELECT * FROM media WHERE id = ?').get(Number(id))
+    if (!row) throw new Error('This photo is no longer in the library.')
+    const full = path.join(PHOTOS_ROOT, row.path)
+    const target = mode === 'replace'
+      ? await editor.replace(full, bytes, row.taken_at, f => shell.trashItem(f))
+      : await editor.saveCopy(full, bytes, row.taken_at)
+    if (mode === 'replace') {
+      // The content changed, so its hash did: favorites and collections follow the photo (the phone loses them here).
+      const sha = await library.sha256(target), now = Date.now()
+      db.prepare('INSERT OR REPLACE INTO photo_state(sha256, favorite, updated_at) SELECT ?, favorite, ? FROM photo_state WHERE sha256 = ?').run(sha, now, row.sha256)
+      db.prepare('INSERT OR IGNORE INTO collection_items(collection_id, sha256, updated_at, deleted) SELECT collection_id, ?, ?, 0 FROM collection_items WHERE sha256 = ? AND deleted = 0').run(sha, now, row.sha256)
+    }
+    await startScan()
+    return path.relative(PHOTOS_ROOT, target)
+  })
   ipcMain.handle('open-map', (_, lat, lon) => {
     if (![lat, lon].every(Number.isFinite) || Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error('Invalid location.')
     return shell.openExternal(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`)
@@ -171,7 +195,7 @@ app.whenReady().then(() => {
     icon: path.join(__dirname, 'public', 'icon.png'),
     autoHideMenuBar: true,
     show: !process.env.DRIVE_HIDDEN, // visual QA (scripts/shot.js) renders without appearing on the desktop
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), backgroundThrottling: !process.env.DRIVE_HIDDEN },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), offscreen: !!process.env.DRIVE_HIDDEN },
   })
   if (process.env.VITE_DEV_URL) win.loadURL(process.env.VITE_DEV_URL)
   else win.loadFile(path.join(__dirname, 'dist', 'index.html'))

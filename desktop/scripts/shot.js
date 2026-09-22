@@ -7,6 +7,7 @@ app.whenReady().then(() => setTimeout(async () => {
   const win = BrowserWindow.getAllWindows()[0]
   if (process.env.SHOT_CONSOLE) win.webContents.on('console-message', e => console.log('[page]', e.message))
   if (js) { await win.webContents.executeJavaScript(js).catch(console.error); await new Promise(r => setTimeout(r, 1500)) }
+  win.webContents.invalidate() // a hidden, idle window paints nothing new otherwise and capturePage waits forever
   require('node:fs').writeFileSync(out, (await win.webContents.capturePage()).toPNG())
   app.quit()
 }, 4000))

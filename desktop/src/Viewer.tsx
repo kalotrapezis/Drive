@@ -10,7 +10,7 @@ const RESET: View = { scale: 1, x: 0, y: 0 }
 
 interface Props {
   media: Media[]; index: number; setIndex: (i: number) => void; onClose: () => void
-  onFavorite?: (m: Media) => void; onTrash?: (m: Media) => void; onHide?: (m: Media) => void; onRestore?: (m: Media) => void
+  onFavorite?: (m: Media) => void; onTrash?: (m: Media) => void; onHide?: (m: Media) => void; onRestore?: (m: Media) => void; onEdit?: (m: Media) => void
   onCollect?: (m: Media) => void; onUncollect?: (m: Media) => void
   people: string[]
   onShowOnMap?: (m: Media) => void
@@ -18,7 +18,7 @@ interface Props {
   thumbUrl?: (m: Media) => string
 }
 
-export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect, people, onShowOnMap, onHide, onRestore,
+export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect, people, onShowOnMap, onHide, onRestore, onEdit,
   fileUrl = m => `media://file/${m.id}`, thumbUrl = m => `media://thumb/${m.sha256}` }: Props) {
   const item = media[index]
   const [view, setView] = useState<View>(RESET)
@@ -50,7 +50,7 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (document.querySelector('dialog[open]')) return
+      if (document.querySelector('dialog[open]') || document.querySelector('.editor')) return
       if (e.key === 'Escape') view.scale > 1 ? setView(RESET) : onClose() // Esc resets zoom before leaving, like Back on the phone
       else if (e.key === 'ArrowLeft') go(index - 1)
       else if (e.key === 'ArrowRight') go(index + 1)
@@ -99,6 +99,7 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
             <Icon name={item.favorite ? 'heartFill' : 'heart'} /></button>}
           {onCollect && <button className="round flat" title="Add to collection" onClick={() => onCollect(item)}><Icon name="collect" /></button>}
           {onUncollect && <button className="round flat" title="Remove from this collection" onClick={() => onUncollect(item)}><Icon name="uncollect" /></button>}
+          {onEdit && !item.is_video && <button className="round flat" title="Edit" onClick={() => onEdit(item)}><Icon name="edit" /></button>}
           {onHide && <button className="round flat" title="Move to Hidden" onClick={() => onHide(item)}><Icon name="lock" /></button>}
           {onRestore && <button className="round flat" title="Restore to Photos" onClick={() => onRestore(item)}><Icon name="lockOpen" /></button>}
           {onTrash && <button className="round flat" title="Move to Trash (Delete)" onClick={() => onTrash(item)}><Icon name="trash" /></button>}

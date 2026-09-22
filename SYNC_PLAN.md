@@ -236,20 +236,23 @@ Done and tested:
   thumbnail, HEIC preview and face crops. Restore verifies and never
   overwrites. Checked in the app: locked start, wrong passphrase, unlock,
   hide 3, restore 1.
-- **Editor save backend** (`editor.js`): Save copy (`_edited.jpg`, original
-  date/camera/GPS spliced in without re-encoding, same mtime) and Replace
-  (original → system Trash first). Tested; **not wired to IPC/UI yet**.
+- **Editor** (`editor.js`, `src/Editor.tsx`, `src/edit.ts`): crop rectangle +
+  straighten (auto-zoom so no empty corners), rotate ±90° (crop and markup turn
+  with the photo), markup (swatches, custom colour, size, undo), Save sheet
+  (Save / Save as copy / Discard), up to 8192 px. The renderer gets the bytes
+  over IPC (a canvas drawn from `media://` could not be exported). Save copy =
+  `_edited.jpg` with original date/camera/GPS spliced in without re-encoding and
+  the original's mtime; Replace = original to system Trash first, and
+  favorites/collections move to the new SHA-256 (the phone loses them).
+  Checked in the app on a 14 MP phone photo (rotate + save copy). Replace is
+  unit-tested only (in-app it would fill the real Trash with test files).
+- **Viewer fix:** portrait photos were shown cropped (not fitted) since phase 1.
 
 Next, in order:
-1. Editor UI (`src/Editor.tsx`, canvas): crop rectangle + straighten slider,
-   rotate ±90°, markup (swatches, custom colour, size, undo), Save sheet
-   (Save / Save as copy / Discard), max 8192 px. IPC `editor:save` → `editor.js`,
-   then rescan. On Replace, carry favorites/collections from the old SHA-256 to
-   the new one (the phone loses them today — its known key bug).
-2. Documents: phone uses ML Kit "paper" label + OCR text amount; desktop needs a
+1. Documents: phone uses ML Kit "paper" label + OCR text amount; desktop needs a
    local replacement (decide: OCR model vs. classifier) + Help organize
    "Is this a document?" + hide Documents from Photos.
-3. Package check with the new modules, commit, then phase 6.
+2. Package check with the new modules, commit, then phase 6.
 
 QA notes: `scripts/shot.js` now renders hidden (`DRIVE_HIDDEN`), because a
 visible window on the user's desktop can be clicked by them. Disposable test

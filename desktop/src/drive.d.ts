@@ -24,6 +24,8 @@ declare global {
       scan(): Promise<{ total: number; changed: number; removed: number }>
       show(id: number): Promise<void>
       openMap(lat: number, lon: number): Promise<void>
+      editorLoad(id: number): Promise<Uint8Array>
+      editorSave(id: number, bytes: Uint8Array, mode: 'copy' | 'replace'): Promise<string>
       onScanProgress(fn: (p: { done: number; changed: number }) => void): () => void
       favorite(shas: string[], on: boolean): Promise<void>
       trash(ids: number[]): Promise<{ trashed: number; failed: string[] }>
