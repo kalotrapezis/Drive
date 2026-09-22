@@ -6,8 +6,9 @@ import { Timeline } from './Timeline'
 import { Viewer } from './Viewer'
 import { Collections } from './Collections'
 import { CollectionPicker, Confirm, NewCollection, errorText } from './Dialogs'
+import { Files, type FilesMode } from './Files'
 
-type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string }
+type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string }
 
 const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
@@ -135,14 +136,15 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const nav = (target: Page['kind'], icon: IconName, label: string) => (
-    <button className={`nav-item ${page.kind === target || (target === 'collections' && page.kind === 'collection') ? 'active' : ''}`}
-      onClick={() => setPage(target === 'photos' ? { kind: 'photos' } : { kind: 'collections' })}><Icon name={icon} />{label}</button>
+  const nav = (target: Page, active: boolean, icon: IconName, label: string) => (
+    <button className={`nav-item ${active ? 'active' : ''}`} onClick={() => setPage(target)}><Icon name={icon} />{label}</button>
   )
+  const filesMode = page.kind === 'files' ? page.mode : null
 
   const loading = !media || (media.length === 0 && scan)
   let content: ReactNode
-  if (loading) content = <div className="empty">Loading…</div>
+  if (page.kind === 'files') content = <Files mode={page.mode} folder={page.folder} go={(mode, folder) => setPage({ kind: 'files', mode, folder })} setDialog={setDialog} say={say} />
+  else if (loading) content = <div className="empty">Loading…</div>
   else if (media.length === 0) content = <div className="empty"><p>No photos or videos in <code>{root}</code></p></div>
   else if (page.kind === 'collections') {
     content = <Collections mine={collections} onNew={() => newCollection()} onDelete={deleteCollection}
@@ -177,8 +179,13 @@ export function App() {
     <div className="app">
       <nav className="rail island">
         <div className="brand"><img src="./icon.png" alt="" />Local Drive</div>
-        {nav('photos', 'photos', 'Photos')}
-        {nav('collections', 'collections', 'Collections')}
+        <small className="rail-head">Photos</small>
+        {nav({ kind: 'photos' }, page.kind === 'photos', 'photos', 'Photos')}
+        {nav({ kind: 'collections' }, page.kind === 'collections' || page.kind === 'collection', 'collections', 'Collections')}
+        <small className="rail-head">Files</small>
+        {nav({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
+        {nav({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
+        {nav({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', 'Recent')}
         <div className="rail-foot">
           <span>{scan ?? `${media?.length ?? 0} items`}</span>
           <button className="round" title="Rescan library" disabled={!!scan} onClick={rescan}><Icon name="refresh" size={20} /></button>

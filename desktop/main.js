@@ -3,14 +3,18 @@ const path = require('node:path')
 const os = require('node:os')
 const { pathToFileURL } = require('node:url')
 const library = require('./library')
+const { Files } = require('./files')
 
 // Override both for testing with disposable files.
 const PHOTOS_ROOT = process.env.DRIVE_PHOTOS || path.join(os.homedir(), 'Drive', 'Photos')
+const FILES_ROOT = process.env.DRIVE_FILES || path.join(os.homedir(), 'Drive', 'Drive')
 const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'local-drive-desktop')
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
-let db, win, scanning = null
+let db, files, win, scanning = null
+const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
+  'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage']
 
 function startScan() {
   scanning ??= library.scan(db, PHOTOS_ROOT, DATA_DIR, (done, changed) => win?.webContents.send('scan-progress', { done, changed }))
@@ -20,6 +24,7 @@ function startScan() {
 
 app.whenReady().then(() => {
   db = library.open(DATA_DIR)
+  files = new Files(db, FILES_ROOT)
 
   // media://thumb/<sha256>  and  media://file/<id>  — only files the database knows about are served.
   protocol.handle('media', request => {
@@ -45,6 +50,18 @@ app.whenReady().then(() => {
   ipcMain.handle('collections:delete', (_, id) => library.deleteCollection(db, id))
   ipcMain.handle('collections:members', (_, id) => library.members(db, id))
   ipcMain.handle('collections:set', (_, id, shas, member) => library.setMembership(db, id, shas, member))
+  ipcMain.handle('files:root', () => files.root)
+  ipcMain.handle('files:call', (_, method, ...args) => {
+    if (!FILE_CALLS.includes(method)) throw new Error('Unknown Files action.')
+    return files[method](...args)
+  })
+  ipcMain.handle('files:open', async (_, rel) => {
+    const full = files.resolve(rel)
+    const error = await shell.openPath(full)
+    if (error) throw new Error(error)
+    if (require('node:fs').statSync(full).isFile()) files.recordOpen(rel) // Recent lists files only, like the phone
+  })
+  ipcMain.handle('files:reveal', (_, rel) => shell.showItemInFolder(files.resolve(rel)))
   ipcMain.handle('library:show', (_, id) => {
     const row = db.prepare('SELECT path FROM media WHERE id = ?').get(id)
     if (row) shell.showItemInFolder(path.join(PHOTOS_ROOT, row.path))

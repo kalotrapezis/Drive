@@ -1,6 +1,6 @@
 # Local Drive — desktop app and phone ↔ desktop sync plan
 
-Updated: 2026-09-22 (phases 1–2 done). The same file lives in both `Drive-Android/` and `Drive/`.
+Updated: 2026-09-22 (phases 1–3 done). The same file lives in both `Drive-Android/` and `Drive/`.
 Edit one, copy it to the other.
 
 Goal: a personal Google Photos + Google Drive. The phone and the desktop have
@@ -180,6 +180,19 @@ deferred on the phone).
 
 `~/Drive/` browser with tags, favorites, colours, copy/move/rename, Trash — the
 phone's rules (no overwrite, no escaping the root).
+
+**Status 2026-09-22: done** (`desktop/files.js`, `src/Files.tsx`) on
+`~/Drive/Drive/`. Same rules as the phone's `DriveRules`: safe relative paths,
+symlinks never followed, no overwrite, no folder into itself, `Drive/Trash/`
+reversible by Move, **Empty Trash** the only permanent delete (confirmed).
+Copies are additionally verified by SHA-256. Tags (1–32 chars, no commas),
+favorites, folder colours (phone palette) and recents (50) live in SQLite,
+follow rename/move, and tags carry `updated_at` + tombstones. List/grid, sort
+by name/modified, breadcrumbs, recursive search by name and tag (accent-
+insensitive), tag chips, Favorites and Recent, Properties, storage by type,
+Open / Show in file manager. Dotfiles are hidden. Not implemented (also absent
+on the phone): creating files/folders; Share and Open with (no desktop
+equivalent chosen yet).
 
 ### 4. Desktop: People
 

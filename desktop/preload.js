@@ -12,6 +12,12 @@ contextBridge.exposeInMainWorld('drive', {
   deleteCollection: id => ipcRenderer.invoke('collections:delete', id),
   members: id => ipcRenderer.invoke('collections:members', id),
   setMembership: (id, shas, member) => ipcRenderer.invoke('collections:set', id, shas, member),
+  files: {
+    root: () => ipcRenderer.invoke('files:root'),
+    call: (method, ...args) => ipcRenderer.invoke('files:call', method, ...args),
+    open: rel => ipcRenderer.invoke('files:open', rel),
+    reveal: rel => ipcRenderer.invoke('files:reveal', rel),
+  },
   onScanProgress: fn => {
     const listener = (_, p) => fn(p)
     ipcRenderer.on('scan-progress', listener)
