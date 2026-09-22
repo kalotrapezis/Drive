@@ -1,6 +1,6 @@
 # Local Drive — desktop app and phone ↔ desktop sync plan
 
-Updated: 2026-09-22 (phases 1–5 done; phase 0 on the phone in progress, then 6). The same file lives in both `Drive-Android/` and `Drive/`.
+Updated: 2026-09-22 (phases 0–5 done; next: phase 6, sync). The same file lives in both `Drive-Android/` and `Drive/`.
 Edit one, copy it to the other.
 
 Goal: a personal Google Photos + Google Drive. The phone and the desktop have
@@ -136,6 +136,21 @@ Each phase ends with a working app and a short check. One phase per session or
 more; do not start the next before the current one is done.
 
 ### 0. Phone: shared data model — first
+
+**Status 2026-09-22: done (reduced on purpose).** Schema v13 adds a UUID to
+every person, collection and face (existing rows only extended; merge undo
+restores the same person UUID), and "Save" after an edit moves favorite,
+collections and location to the photo's new key — the edit bug. Verified on the
+real phone after a full backup (`Drive-Android-backups/2026-09-22/`): v13,
+integrity ok, 97/97 people, 387/387 faces with unique UUIDs, 34 names and 2
+favorites unchanged, gallery works. The rekey itself still needs one manual
+check (favorite a disposable photo, edit, Save, heart stays).
+
+Moved to phase 6, where the protocol makes them concrete: content-hash cache
+(hash only what is being synced), `updated_at` + deletions as a change log,
+face boxes as fractions (computed at export from the 1280-px decode size).
+Rewriting every table to hash keys was dropped: the local key stays, sync maps
+it to SHA-256, which needs no destructive migration.
 
 - Back up `photo_metadata.db` and `hidden_vault.db` before migration.
 - Add content hashes (cached), move all tables to hash keys. Old keys of photos
