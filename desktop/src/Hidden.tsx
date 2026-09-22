@@ -26,7 +26,7 @@ export function VaultGate({ status, onOpen, onClose }: { status: VaultStatus; on
       <h3>{setup ? 'Set up Hidden' : 'Hidden is locked'}</h3>
       <p>{setup
         ? 'Hidden photos are encrypted on this computer with a passphrase. There is no reset: if you forget it, hidden items cannot be recovered.'
-        : 'Enter your passphrase. Hidden locks again when Local Drive closes.'}</p>
+        : 'Enter your passphrase. Hidden locks again when Tetra closes.'}</p>
       <input className="field" type="password" autoFocus placeholder="Passphrase" value={pass} onChange={e => { setPass(e.target.value); setError('') }} />
       {setup && <input className="field" type="password" placeholder="Repeat passphrase" value={again} onChange={e => { setAgain(e.target.value); setError('') }} />}
       {error && <p className="error">{error}</p>}

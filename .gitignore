@@ -6,3 +6,5 @@ __pycache__/
 *.py[cod]
 web/node_modules/
 web/dist/
+Assets/Icons/New Icons/New/*.psd
+Assets/Icons/New Icons/New/*.ico

@@ -8,6 +8,8 @@ const crypto = require('node:crypto')
 const EMBEDDING_MODEL = 'mobilefacenet-192-eyes38x44-74x44' // phone: PhotoClassifier.embed
 const ANALYSIS_VERSION = 'yunet2023mar-2pass+' + EMBEDDING_MODEL
 const SAME_PERSON = 0.74, REVIEW_FROM = 0.66, UNRELIABLE_JOIN = 0.55, ANCHOR_QUALITY = 0.68
+// Two boxes this far into each other, on the same photo, are the same face found twice (sync, SYNC_PLAN.md 6c).
+const SAME_FACE_OVERLAP = 0.4
 const DETECT_SIZE = 640, DETECT_SCORE = 0.8, NMS_IOU = 0.3
 // ponytail: yaw from the nose offset between the eyes (ML Kit gives it directly). NOSE_DEPTH was calibrated on 16 phone
 // faces (2026-09-22) so faces ML Kit rated ≤ 30° stay ≤ 30° here; retune if frontal faces get rejected.
@@ -65,6 +67,13 @@ function l2(v) {
 }
 
 function cosine(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s }
+
+/** Overlap of two [left, top, right, bottom] boxes, as fractions of the same photo. */
+function iou(a, b) {
+  const w = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])), h = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]))
+  const union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - w * h
+  return union > 0 ? (w * h) / union : 0
+}
 
 /** YuNet 2023mar output decoding (as OpenCV FaceDetectorYN) + greedy NMS. Coordinates are in the 640×640 input. */
 function decodeYunet(out) {
@@ -271,6 +280,28 @@ class People {
       .resize(160, 160, { fit: 'cover' }).webp({ quality: 80 }).toFile(path.join(this.faceDir, faceId + '.webp'))
   }
 
+  /**
+   * The 160-px crop People shows. Faces this app detected get one during analysis; a face that arrived from the
+   * phone has none, so it is cut here from the photo itself using the fractions the phone sent.
+   */
+  async crop(faceId, photosRoot) {
+    const file = path.join(this.faceDir, faceId + '.webp')
+    if (fs.existsSync(file)) return file
+    const f = this.db.prepare(`SELECT f.box_left, f.box_top, f.box_right, f.box_bottom,
+      (SELECT MIN(m.path) FROM media m WHERE m.sha256 = f.sha256) AS path FROM faces f WHERE f.id = ?`).get(faceId)
+    if (!f?.path) return null
+    const sharp = require('sharp')
+    const source = sharp(path.join(photosRoot, f.path)).rotate() // EXIF applied: the box is of the upright image
+    const { width, height } = await source.metadata()
+    const w = (f.box_right - f.box_left) * width, h = (f.box_bottom - f.box_top) * height
+    const side = Math.round(Math.max(w, h) * 1.5)
+    const left = Math.max(0, Math.round(f.box_left * width + w / 2 - side / 2))
+    const top = Math.max(0, Math.round(f.box_top * height + h / 2 - side / 2))
+    await source.extract({ left, top, width: Math.min(side, width - left), height: Math.min(side, height - top) })
+      .resize(160, 160, { fit: 'cover' }).webp({ quality: 80 }).toFile(file)
+    return file
+  }
+
   /** Live people with photos present in the library. Named people first, like the phone. */
   list() {
     return this.db.prepare(`SELECT p.id, p.name, COUNT(DISTINCT f.sha256) AS count,
@@ -291,6 +322,49 @@ class People {
       if (!isGeneratedName(r.name)) (out[r.sha256] ??= []).push(r.name)
     }
     return out
+  }
+
+  // --- Sync (SYNC_PLAN.md phase 6c). Both apps embed with the same MobileFaceNet on the same aligned crop, so
+  // an embedding means the same thing on either side; boxes travel as fractions of the upright photo. What the
+  // phone sends is therefore usable as-is — no translation between two face models is needed, only a way to tell
+  // that a face the phone found and a face this app found are the same face, which is what overlap does below.
+
+  /** A person named on the phone. Its UUID becomes this person's id, so the name stays attached across syncs. */
+  applyPerson(uuid, name, updatedAt) {
+    const local = this.db.prepare('SELECT updated_at FROM people WHERE id = ?').get(uuid)
+    if (local) {
+      if (local.updated_at >= updatedAt) return
+      return void this.db.prepare('UPDATE people SET name = ?, updated_at = ? WHERE id = ?').run(name, updatedAt, uuid)
+    }
+    this.db.prepare('INSERT INTO people(id, name, created_at, updated_at) VALUES(?,?,?,?)').run(uuid, name, updatedAt, updatedAt)
+  }
+
+  /**
+   * A face the phone detected. If this app already found a face in the same place on the same photo, that is the
+   * same face: it joins the phone's person instead of being duplicated beside it. Otherwise the phone's face is
+   * kept whole — embedding included — so People works here even before any local analysis has run.
+   */
+  applyFace({ uuid, sha256, box, embedding, model, quality, person, updatedAt }) {
+    if (person && !this.db.prepare('SELECT 1 FROM people WHERE id = ?').get(person)) return // its person has not arrived
+    const mine = this.db.prepare('SELECT id, updated_at FROM faces WHERE id = ?').get(uuid)
+      ?? (box && this.db.prepare('SELECT id, updated_at, box_left, box_top, box_right, box_bottom FROM faces WHERE sha256 = ? AND deleted = 0').all(sha256)
+        .map(f => ({ ...f, overlap: iou(box, [f.box_left, f.box_top, f.box_right, f.box_bottom]) }))
+        .filter(f => f.overlap >= SAME_FACE_OVERLAP).sort((a, b) => b.overlap - a.overlap)[0])
+    if (mine) {
+      if (mine.updated_at >= updatedAt || !person) return
+      return void this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?').run(person, updatedAt, mine.id)
+    }
+    if (!box || !person || !embedding) return // without a box there is nothing to show and nothing to match later
+    this.db.prepare(`INSERT INTO faces(id, sha256, box_left, box_top, box_right, box_bottom, embedding, model, quality, person_id, updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(uuid, sha256, box[0], box[1], box[2], box[3], embedding, model || EMBEDDING_MODEL, quality ?? 1, person, updatedAt)
+  }
+
+  /** People and their faces for the phone's GET /metadata?since= pull. */
+  changedSince(since) {
+    return {
+      people: this.db.prepare('SELECT id AS uuid, name, updated_at AS updatedAt FROM people WHERE deleted = 0 AND updated_at > ?').all(since),
+      faces: this.db.prepare('SELECT id AS uuid, sha256, person_id AS person, updated_at AS updatedAt FROM faces WHERE deleted = 0 AND updated_at > ?').all(since),
+    }
   }
 
   live(id) { if (!this.db.prepare('SELECT 1 FROM people WHERE id = ? AND deleted = 0').get(String(id))) throw new Error('This person no longer exists.') }
@@ -350,4 +424,4 @@ class People {
   }
 }
 
-module.exports = { FaceEngine, People, ANALYSIS_VERSION, EMBEDDING_MODEL, faceQualityScore, isReliableFace, faceQuality, alignedInput, l2, cosine, decodeYunet, headAngles, isGeneratedName }
+module.exports = { FaceEngine, People, ANALYSIS_VERSION, EMBEDDING_MODEL, iou, SAME_FACE_OVERLAP, faceQualityScore, isReliableFace, faceQuality, alignedInput, l2, cosine, decodeYunet, headAngles, isGeneratedName }

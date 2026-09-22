@@ -42,14 +42,18 @@ function open(dataDir) {
     CREATE UNIQUE INDEX IF NOT EXISTS collections_name ON collections(name COLLATE NOCASE) WHERE deleted = 0;
     CREATE TABLE IF NOT EXISTS collection_items (collection_id TEXT NOT NULL, sha256 TEXT NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(collection_id, sha256));
     -- Phone: photo_ai_record. type 'document' or NULL; the user's answer (user_verified) always wins.
+    -- source: 'desktop' (this app's own OCR guess) or 'phone' (synced, SYNC_PLAN.md phase 6a) — a
+    -- 'phone' row is authoritative and is never re-guessed locally (see documents.js Documents.pending).
     CREATE TABLE IF NOT EXISTS photo_ai (sha256 TEXT PRIMARY KEY, type TEXT, confidence REAL NOT NULL DEFAULT 0, user_verified INTEGER NOT NULL DEFAULT 0,
-      review_state TEXT NOT NULL DEFAULT 'none', version TEXT, updated_at INTEGER NOT NULL);
+      review_state TEXT NOT NULL DEFAULT 'none', version TEXT, source TEXT NOT NULL DEFAULT 'desktop', updated_at INTEGER NOT NULL);
     -- Phone: photo_ai_label. Local English labels for search ("Scene: …", "Likely day", "Portrait").
     CREATE TABLE IF NOT EXISTS photo_labels (sha256 TEXT NOT NULL, label TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY(sha256, label));`)
   // Added after the first release: place name ('' = looked up, nothing near) and its search spellings.
   const columns = db.prepare('PRAGMA table_info(media)').all().map(c => c.name)
   if (!columns.includes('place')) db.exec('ALTER TABLE media ADD COLUMN place TEXT; ALTER TABLE media ADD COLUMN place_names TEXT;')
   if (!columns.includes('meta_v')) db.exec('ALTER TABLE media ADD COLUMN meta_v INTEGER NOT NULL DEFAULT 1')
+  const aiColumns = db.prepare('PRAGMA table_info(photo_ai)').all().map(c => c.name)
+  if (!aiColumns.includes('source')) db.exec("ALTER TABLE photo_ai ADD COLUMN source TEXT NOT NULL DEFAULT 'desktop'")
   return db
 }
 
@@ -254,4 +258,53 @@ async function trash(db, root, ids, trashItem) {
   return result
 }
 
-module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members }
+// --- Sync (SYNC_PLAN.md phase 6b). Every record carries updated_at and removals are tombstones, so the two
+// libraries converge without either side guessing: the newest write of a record wins, in both directions.
+
+function applyFavorite(db, sha, favorite, updatedAt) {
+  db.prepare(`INSERT INTO photo_state(sha256, favorite, updated_at) VALUES(?,?,?) ON CONFLICT(sha256)
+    DO UPDATE SET favorite = excluded.favorite, updated_at = excluded.updated_at WHERE photo_state.updated_at < excluded.updated_at`)
+    .run(sha, favorite ? 1 : 0, updatedAt)
+}
+
+/** The phone's collection UUID becomes this collection's id, so the same collection is one collection everywhere. */
+function applyCollection(db, uuid, name, deleted, updatedAt) {
+  const local = db.prepare('SELECT updated_at FROM collections WHERE id = ?').get(uuid)
+  if (local) {
+    if (local.updated_at >= updatedAt) return
+    return void db.prepare('UPDATE collections SET name = ?, deleted = ?, updated_at = ? WHERE id = ?').run(collectionName(name), deleted ? 1 : 0, updatedAt, uuid)
+  }
+  if (deleted) return // nothing here to bury
+  const sameName = db.prepare('SELECT id FROM collections WHERE deleted = 0 AND name = ? COLLATE NOCASE').get(name)
+  if (sameName) { // made on both devices under the same name: adopt the phone's id rather than keeping two
+    return transaction(db, () => {
+      db.prepare('UPDATE collection_items SET collection_id = ? WHERE collection_id = ?').run(uuid, sameName.id)
+      db.prepare('UPDATE collections SET id = ?, updated_at = ? WHERE id = ?').run(uuid, updatedAt, sameName.id)
+    })
+  }
+  db.prepare('INSERT INTO collections(id, name, created_at, updated_at, deleted) VALUES(?,?,?,?,0)').run(uuid, collectionName(name), updatedAt, updatedAt)
+}
+
+function applyCollectionItem(db, collection, sha, deleted, updatedAt) {
+  if (!db.prepare('SELECT 1 FROM collections WHERE id = ?').get(collection)) return // its collection has not arrived
+  db.prepare(`INSERT INTO collection_items(collection_id, sha256, updated_at, deleted) VALUES(?,?,?,?) ON CONFLICT(collection_id, sha256)
+    DO UPDATE SET deleted = excluded.deleted, updated_at = excluded.updated_at WHERE collection_items.updated_at < excluded.updated_at`)
+    .run(collection, sha, updatedAt, deleted ? 1 : 0)
+}
+
+/** Search labels only ever merge: they are produced by analysis, never removed by hand. */
+function applyLabels(db, sha, labels) {
+  const q = db.prepare('INSERT OR IGNORE INTO photo_labels(sha256, label) VALUES(?,?)')
+  for (const label of labels) if (typeof label === 'string' && label.trim()) q.run(sha, label.trim().slice(0, 120))
+}
+
+/** Desktop changes for the phone's GET /metadata?since= pull. */
+function metadataSince(db, since) {
+  return {
+    favorites: db.prepare('SELECT sha256, favorite, updated_at AS updatedAt FROM photo_state WHERE updated_at > ?').all(since).map(r => ({ ...r, favorite: !!r.favorite })),
+    collections: db.prepare('SELECT id AS uuid, name, deleted, updated_at AS updatedAt FROM collections WHERE updated_at > ?').all(since).map(r => ({ ...r, deleted: !!r.deleted })),
+    collectionItems: db.prepare('SELECT collection_id AS collection, sha256, deleted, updated_at AS updatedAt FROM collection_items WHERE updated_at > ?').all(since).map(r => ({ ...r, deleted: !!r.deleted })),
+  }
+}
+
+module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }

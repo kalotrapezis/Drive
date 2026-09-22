@@ -5,7 +5,7 @@ import { Confirm, Modal } from './Dialogs'
 
 const when = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
-/** Pairing QR: the phone scans it in Local Drive › Sync. It carries the address, the certificate fingerprint and a one-time code. */
+/** Pairing QR: the phone scans it in Tetra › Sync. It carries the address, the certificate fingerprint and a one-time code. */
 function PairingCode() {
   const [pair, setPair] = useState<{ qr: string; payload: { hosts: string[]; port: number } } | null>(null)
   const [left, setLeft] = useState(600)
@@ -16,7 +16,7 @@ function PairingCode() {
     <div className="pairing">
       <div className="qr">{pair && left ? <img src={pair.qr} alt="Pairing QR code" /> : left ? <span className="spinner" /> : <button className="filled-button" onClick={renew}>Show a new code</button>}</div>
       <ol>
-        <li>On the phone open <b>Local Drive</b> and tap <b>Local Sync</b>.</li>
+        <li>On the phone open <b>Tetra</b> and tap <b>Local Sync</b>.</li>
         <li>Tap <b>Pair with computer</b> and point the camera at this code.</li>
         <li>The phone appears in the list, ready to back up.</li>
       </ol>

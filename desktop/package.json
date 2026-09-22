@@ -1,7 +1,7 @@
 {
   "name": "local-drive-desktop",
   "version": "0.1.0",
-  "description": "Local Drive desktop app",
+  "description": "Tetra desktop app",
   "main": "main.js",
   "scripts": {
     "dev": "vite & sleep 2; VITE_DEV_URL=http://localhost:5199 electron .; kill %1",
@@ -33,12 +33,12 @@
     "selfsigned": "^5.5.0",
     "sharp": "^0.35.4"
   },
-  "productName": "Local Drive",
+  "productName": "Tetra",
   "private": true,
   "license": "SEE LICENSE IN ../LICENSE",
   "build": {
     "appId": "com.kalotrapezis.drive.desktop",
-    "productName": "Local Drive",
+    "productName": "Tetra",
     "files": [
       "main.js",
       "preload.js",

@@ -93,7 +93,7 @@ app.whenReady().then(() => {
   documents = new docs.Documents(db)
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
-  sync = new SyncServer({ db, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, onReceived: () => {
+  sync = new SyncServer({ db, documents, people, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   } })
@@ -111,7 +111,7 @@ app.whenReady().then(() => {
       if (row) file = path.join(PHOTOS_ROOT, row.path)
       if (row && library.isHeic(row.path)) file = await library.preview(file, row.sha256, DATA_DIR).catch(() => null)
     }
-    if (url.host === 'face' && /^[0-9a-f-]{36}$/.test(key)) file = path.join(DATA_DIR, 'thumbs', 'faces', key + '.webp')
+    if (url.host === 'face' && /^[0-9a-f-]{36}$/.test(key)) file = await people.crop(key, PHOTOS_ROOT).catch(() => null)
     // Hidden: decrypted in memory only while unlocked; never written to disk in plaintext.
     if ((url.host === 'vault' || url.host === 'vault-thumb') && /^[0-9a-f-]{36}$/.test(key)) {
       if (!vault.status().unlocked) return new Response('Locked', { status: 403 })
@@ -233,7 +233,7 @@ app.whenReady().then(() => {
 
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 720, minHeight: 500,
-    backgroundColor: '#121416', title: 'Local Drive',
+    backgroundColor: '#121416', title: 'Tetra',
     icon: path.join(__dirname, 'public', 'icon.png'),
     autoHideMenuBar: true,
     show: !process.env.DRIVE_HIDDEN, // visual QA (scripts/shot.js) renders without appearing on the desktop

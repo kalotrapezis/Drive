@@ -8,6 +8,7 @@ const path = require('node:path')
 const os = require('node:os')
 const https = require('node:https')
 const crypto = require('node:crypto')
+const library = require('./library')
 
 const PORT = 43180
 const PAIRING_MS = 10 * 60 * 1000
@@ -20,7 +21,7 @@ const safeName = n => typeof n === 'string' && n.length > 0 && n.length < 256 &&
 async function identity(dir) {
   const keyFile = path.join(dir, 'key.pem'), certFile = path.join(dir, 'cert.pem')
   if (!fs.existsSync(keyFile)) {
-    const pems = await require('selfsigned').generate([{ name: 'commonName', value: 'Local Drive' }], { keySize: 2048, days: 3650, algorithm: 'sha256' })
+    const pems = await require('selfsigned').generate([{ name: 'commonName', value: 'Tetra' }], { keySize: 2048, days: 3650, algorithm: 'sha256' })
     fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(keyFile, pems.private, { mode: 0o600 })
     fs.writeFileSync(certFile, pems.cert)
@@ -35,8 +36,8 @@ function lanAddresses() {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan). */
-  constructor({ db, dataDir, photosRoot, onReceived = () => {}, port = PORT }) {
-    Object.assign(this, { db, dataDir, photosRoot, onReceived, port })
+  constructor({ db, documents, people, dataDir, photosRoot, onReceived = () => {}, port = PORT }) {
+    Object.assign(this, { db, documents, people, dataDir, photosRoot, onReceived, port })
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS sync_devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, paired_at INTEGER NOT NULL, last_seen INTEGER);
       CREATE TABLE IF NOT EXISTS sync_receipts (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256));`)
@@ -112,7 +113,38 @@ class SyncServer {
     }
     const blob = /^\/blob\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'PUT' && blob) return this.send(res, 200, await this.receive(req, device, blob[1], url.searchParams))
+    if (req.method === 'POST' && url.pathname === '/metadata') return this.send(res, 200, this.applyMetadata(await this.json(req, 1 << 24)))
+    if (req.method === 'GET' && url.pathname === '/metadata') {
+      const since = Number(url.searchParams.get('since')) || 0
+      return this.send(res, 200, { documents: this.documents.changedSince(since), ...library.metadataSince(this.db, since), ...this.people.changedSince(since) })
+    }
     this.send(res, 404, { error: 'Unknown request.' })
+  }
+
+  /**
+   * Everything the phone's user made (SYNC_PLAN.md phases 6a–6c). Each record is independent and applied on its
+   * own: a record this library cannot place yet (an unknown collection, a photo that has not arrived) is skipped
+   * rather than failing the sync, and the phone re-sends the whole set next time, so nothing is lost by skipping.
+   */
+  applyMetadata(body) {
+    const at = r => Number(r.updatedAt) || Date.now()
+    const skipped = []
+    const each = (name, fn) => { for (const r of Array.isArray(body?.[name]) ? body[name] : []) try { fn(r) } catch (e) { skipped.push(`${name}: ${e.message}`) } }
+    const forPhoto = fn => r => { if (isHash(r.sha256)) fn(r) }
+
+    each('documents', forPhoto(d => this.documents.applyFromPhone(d.sha256, d.type ?? null, Number(d.confidence) || 0, !!d.userVerified, at(d))))
+    each('favorites', forPhoto(f => library.applyFavorite(this.db, f.sha256, !!f.favorite, at(f))))
+    each('collections', c => library.applyCollection(this.db, String(c.uuid), String(c.name ?? ''), !!c.deleted, at(c)))
+    each('collectionItems', forPhoto(i => library.applyCollectionItem(this.db, String(i.collection), i.sha256, !!i.deleted, at(i))))
+    each('labels', forPhoto(l => library.applyLabels(this.db, l.sha256, Array.isArray(l.labels) ? l.labels : [])))
+    each('people', p => this.people.applyPerson(String(p.uuid), library.collectionName(p.name), at(p)))
+    each('faces', forPhoto(f => this.people.applyFace({
+      uuid: String(f.uuid), sha256: f.sha256, quality: Number(f.quality) || 1, model: f.model, person: f.person ? String(f.person) : null, updatedAt: at(f),
+      box: Array.isArray(f.box) && f.box.length === 4 && f.box.every(Number.isFinite) ? f.box.map(Number) : null,
+      embedding: typeof f.embedding === 'string' ? Buffer.from(f.embedding, 'base64') : null,
+    })))
+    if (skipped.length) console.warn(`[sync] ${skipped.length} metadata records skipped, e.g. ${skipped[0]}`)
+    return { ok: true, skipped: skipped.length }
   }
 
   /** Streams to <Photos>/<relative path>/<name>.part, verifies SHA-256, then renames without overwriting. */

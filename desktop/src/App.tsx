@@ -230,7 +230,7 @@ export function App() {
           : inCollection
           ? <><button className="round flat" title="Back to Collections" onClick={() => setPage({ kind: 'collections' })}><Icon name="back" /></button><h1>{page.name}</h1></>
           : <h1>Photos</h1>}
-        banner={page.kind === 'collection' && page.id === 'documents' ? <AnalysisBar status={analysis} kind="documents" /> : undefined}
+        banner={undefined /* "Find documents" hidden for now: desktop increasingly just receives the phone's classification via sync, SYNC_PLAN.md phase 6a */}
         empty={query ? `Nothing matches “${query}”.` : inCollection ? 'Nothing here yet.' : 'Every item is hidden by Photos tools.'}
         tools={!inCollection && <>
           <label className="island search">
@@ -261,7 +261,7 @@ export function App() {
   return (
     <div className="app">
       <nav className="rail island">
-        <div className="brand"><img src="./icon.png" alt="" />Local Drive</div>
+        <div className="brand"><img src="./icon.png" alt="" />Tetra</div>
         <small className="rail-head">Photos</small>
         {nav({ kind: 'photos' }, page.kind === 'photos', 'photos', 'Photos')}
         {nav({ kind: 'collections' }, ['collections', 'collection', 'people', 'person', 'review', 'map', 'hidden'].includes(page.kind), 'collections', 'Collections')}
@@ -271,6 +271,12 @@ export function App() {
         {nav({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', 'Recent')}
         <small className="rail-head">Sync</small>
         {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Devices')}
+        {analysis?.running && (
+          <div className="rail-progress">
+            <span>Analysing… {analysis.done.toLocaleString()}/{analysis.total.toLocaleString()}</span>
+            <progress value={analysis.done} max={Math.max(analysis.total, 1)} />
+          </div>
+        )}
         <div className="rail-foot">
           <span>{scan ?? `${media?.length ?? 0} items`}</span>
           <button className="round" title="Rescan library" disabled={!!scan} onClick={rescan}><Icon name="refresh" size={20} /></button>

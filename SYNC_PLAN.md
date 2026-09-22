@@ -1,6 +1,6 @@
 # Local Drive — desktop app and phone ↔ desktop sync plan
 
-Updated: 2026-09-22 (phases 0–5 done; next: phase 6, sync). The same file lives in both `Drive-Android/` and `Drive/`.
+Updated: 2026-09-23 (phases 0–6 done). The same file lives in both `Drive-Android/` and `Drive/`.
 Edit one, copy it to the other.
 
 Goal: a personal Google Photos + Google Drive. The phone and the desktop have
@@ -300,6 +300,85 @@ Move → Hidden. Then the phone's Sync card becomes real.
 collections, people and Hidden; a second sync transfers nothing; Move deletes
 only items with receipts.
 
+**Status 2026-09-23: phases 6a–6c done.** Everything the user makes now crosses:
+documents, **favorites, collections (with membership), search labels, people's
+names and the face → person grouping**. One endpoint carries them all:
+`POST /metadata` / `GET /metadata?since=` (`desktop/sync.js` `applyMetadata`,
+phone `SyncClient.syncMetadata`), with the work split into the modules that own
+the tables — `library.js` (favorites, collections, labels), `faces.js` (people,
+faces), `documents.js` (classification). Every record is independent: one that
+cannot be placed yet (an unknown collection, a photo that has not arrived) is
+skipped and the next sync brings it, and newest `updated_at` wins per record in
+both directions.
+
+Phone schema v15 gives `updated_at` to `photo_state`, `collections`,
+`collection_membership`, `face_groups` and `face_samples`, and turns collection
+and membership removals into tombstones (`deleted = 1`) so a removal travels
+instead of silently coming back. The desktop already had all of that.
+
+**Do the two apps need different models for tags and faces? No — and nothing
+needs translating.**
+
+- **Faces.** Both apps run the same MobileFaceNet weights on the same
+  landmark-aligned 112 px crop (`mobilefacenet-192-eyes38x44-74x44`, the string
+  both sides store), so an embedding means the same thing on either device and
+  the same thresholds apply. Only *detection* differs (ML Kit on the phone,
+  YuNet on the desktop) — that changes which faces are found, not what an
+  embedding means. So the phone's faces are usable as-is; what was actually
+  needed was a way to tell that a face the phone found and a face the desktop
+  found are **the same face**, and on a photo both devices hold that is simply
+  box overlap (`faces.js` `iou`, `SAME_FACE_OVERLAP = 0.4`), which is cheaper
+  and surer than comparing vectors. A phone face with no local counterpart is
+  kept whole, embedding included, so People works here before any local
+  analysis has run.
+- **Tags.** The phone's ML Kit labels and the desktop's EfficientNet-Lite0
+  "Scene: …" labels come from different models with different vocabularies, but
+  a label is a search string, not a measurement: they merge per photo and both
+  sets stay. No shared vocabulary is needed, and there is nothing to convert.
+- Measured on the real library (2026-09-23, 1475 photos): of the phone's 387
+  faces, 54 landed on a face the desktop had already found and joined the
+  phone's person instead of being duplicated; the 56 local faces left beside a
+  synced one are genuinely other people — their best embedding cosine against
+  any synced face on the same photo has a median of 0.23, far under the 0.74
+  "same person" line. No box fell outside the photo.
+
+**Face boxes.** They travel as fractions of the upright photo. The phone stores
+them in the pixels of the bitmap it analysed (longest side capped at 1280), so
+`SyncRules.analysisSize` reproduces that size from the photo's own dimensions.
+Those dimensions must be the **upright** ones: MediaStore reports the size as
+the file stores it, so a quarter-turn in EXIF has to be undone first
+(`listGalleryMedia` reads `ORIENTATION`). Getting this wrong put boxes outside
+the photo and stopped every overlap match — it is the one part of this protocol
+with no second chance to notice.
+
+Tested: `desktop/test/sync.test.js` (two suites — documents, then favorites,
+collections, labels, people and faces crossing over, last-write-wins both ways,
+tombstones, and the overlap merge), the phone's unit tests, and a **full real
+sync from the phone against a copy of the real desktop library**: 34 named
+people, 456 faces, 2 favorites, 6707 labels, 18 documents, 1 collection.
+
+Desktop's document detection stays phone-dependent for correctness (see
+`mistakes.md`: no independent paper-vs-text-heavy-photo signal exists on the
+desktop, and ML Kit's model is not extractable outside its own runtime).
+
+Not done, on purpose:
+
+- **Photo tags the user writes by hand.** Neither app has them — on the phone
+  "tags" in Photos search *are* the AI labels, and only Files has hand-made
+  tags. Adding them is a new feature on both sides, not a sync gap.
+- **Desktop → phone labels.** `photo_labels` has no `updated_at`, so there is
+  no cursor to send them by, and the phone analyses locally anyway.
+- **Desktop-only faces going to the phone.** Names and regrouping travel both
+  ways; a face only the desktop found is not inserted on the phone, because its
+  box is in the desktop's coordinates and the phone re-detects it itself. The
+  upgrade, if it ever matters: match such a face against the phone's person
+  centroids by embedding (≥ 0.74) — the shared model already makes that valid.
+- **The whole metadata set goes over on every sync.** Last-write-wins makes
+  that safe and self-healing, and today it is a few hundred KB. Switch to an
+  `updated_at` cursor if a library outgrows one request.
+- **Files** (tags, favorites, colours, recents) are still outside the protocol
+  entirely — they use path identity, not content hashes. Own design pass.
+
 ### 7. Later: folders as albums (requested 2026-09-22)
 
 - **Phone:** on opening, find every folder with photos or videos outside the
@@ -315,6 +394,22 @@ only items with receipts.
   arrive through sync (album per folder, include/exclude toggles).
 - Rules: including never moves or copies files; excluding only hides them
   from the app.
+
+### 8. Later: multiple paired devices (requested 2026-09-22)
+
+The phone should eventually back up to more than one paired device (e.g. the
+desktop computer **and** a tablet), not just one. Not built yet — today's
+storage layer hard-assumes exactly one active pairing:
+
+- `SyncStore`'s pairing record (`SyncClient.kt`) is a single flat
+  `SharedPreferences` entry, not a list. `savePairing` overwrites it;
+  `forgetPairing` wipes it. Needs to become a list keyed by fingerprint/id.
+- The `receipts` table (`SyncClient.kt`, "already sent to the computer") is
+  keyed only by `photo_key`, globally — it doesn't know which paired device
+  received a file. As-is, pairing a second device would make the app think
+  files already sent to the first device don't need sending to the second.
+  Needs a per-device column (or a separate receipts table per pairing).
+- Settings/Sync UI needs a device list instead of the current single card.
 
 ## Safety rules (from the old desktop, kept on both sides)
 

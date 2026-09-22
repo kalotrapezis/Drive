@@ -121,9 +121,11 @@ const VERSION = 'ppocrv4-det+coverage0.03+effnetlite0'
 class Documents {
   constructor(db) { this.db = db }
 
+  /** A 'phone' row is authoritative (synced, SYNC_PLAN.md phase 6a) and is never re-guessed here. */
   pending() {
     return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m LEFT JOIN photo_ai a ON a.sha256 = m.sha256
-      WHERE m.is_video = 0 AND (a.version IS NULL OR a.version != ?) GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all(VERSION)
+      WHERE m.is_video = 0 AND COALESCE(a.source, 'desktop') != 'phone' AND (a.version IS NULL OR a.version != ?)
+      GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all(VERSION)
   }
 
   record(sha, confidence, labels = null) {
@@ -135,9 +137,24 @@ class Documents {
     const verified = this.db.prepare('SELECT type FROM photo_ai WHERE sha256 = ? AND user_verified = 1').get(sha)
     const type = verified ? verified.type : confidence >= 0.70 ? 'document' : null
     const review = !verified && confidence >= 0.40 && confidence < 0.70 ? 'pending' : 'none'
-    this.db.prepare(`INSERT INTO photo_ai(sha256, type, confidence, user_verified, review_state, version, updated_at) VALUES(?,?,?,?,?,?,?)
+    this.db.prepare(`INSERT INTO photo_ai(sha256, type, confidence, user_verified, review_state, version, source, updated_at) VALUES(?,?,?,?,?,?,'desktop',?)
       ON CONFLICT(sha256) DO UPDATE SET type = excluded.type, confidence = excluded.confidence, review_state = excluded.review_state,
-      version = excluded.version, updated_at = excluded.updated_at`).run(sha, type, confidence, verified ? 1 : 0, review, VERSION, Date.now())
+      version = excluded.version, source = 'desktop', updated_at = excluded.updated_at`).run(sha, type, confidence, verified ? 1 : 0, review, VERSION, Date.now())
+  }
+
+  /** From the phone's POST /metadata: last-write-wins by updated_at, tagged source='phone'. */
+  applyFromPhone(sha, type, confidence, userVerified, updatedAt) {
+    const local = this.db.prepare('SELECT updated_at FROM photo_ai WHERE sha256 = ?').get(sha)
+    if (local && local.updated_at >= updatedAt) return
+    this.db.prepare(`INSERT INTO photo_ai(sha256, type, confidence, user_verified, review_state, version, source, updated_at) VALUES(?,?,?,?,'none',NULL,'phone',?)
+      ON CONFLICT(sha256) DO UPDATE SET type = excluded.type, confidence = excluded.confidence, user_verified = excluded.user_verified,
+      review_state = 'none', version = NULL, source = 'phone', updated_at = excluded.updated_at`)
+      .run(sha, type, confidence ?? 0, userVerified ? 1 : 0, updatedAt)
+  }
+
+  /** For the phone's GET /metadata?since= pull. */
+  changedSince(since) {
+    return this.db.prepare('SELECT sha256, type, confidence, user_verified AS userVerified, updated_at AS updatedAt FROM photo_ai WHERE updated_at > ?').all(since)
   }
 
   nextReview() {
