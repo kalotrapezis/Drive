@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('drive', {
   collections: () => ipcRenderer.invoke('collections:list'),
   createCollection: name => ipcRenderer.invoke('collections:create', name),
   deleteCollection: id => ipcRenderer.invoke('collections:delete', id),
+  setCollectionHidden: (id, hidden) => ipcRenderer.invoke('collections:hide', id, hidden),
+  viewSettings: () => ipcRenderer.invoke('settings:view'),
+  setViewSetting: (key, on) => ipcRenderer.invoke('settings:setView', key, on),
   members: id => ipcRenderer.invoke('collections:members', id),
   setMembership: (id, shas, member) => ipcRenderer.invoke('collections:set', id, shas, member),
   files: {

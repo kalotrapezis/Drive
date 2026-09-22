@@ -136,6 +136,14 @@ app.whenReady().then(() => {
   ipcMain.handle('collections:delete', (_, id) => library.deleteCollection(db, id))
   ipcMain.handle('collections:members', (_, id) => library.members(db, id))
   ipcMain.handle('collections:set', (_, id, shas, member) => library.setMembership(db, id, shas, member))
+  ipcMain.handle('collections:hide', (_, id, hidden) => library.setCollectionHidden(db, id, hidden))
+  // These two describe the library, not this computer, so they live in the database and sync (SYNC_PLAN.md).
+  ipcMain.handle('settings:view', () => ({ hideScreenshots: setting('hideScreenshots') === '1', hideDocuments: setting('hideDocuments') === '1' }))
+  ipcMain.handle('settings:setView', (_, key, on) => {
+    if (key !== 'hideScreenshots' && key !== 'hideDocuments') return
+    setSetting(key, on ? '1' : '0')
+    setSetting('viewSettingsUpdatedAt', String(Date.now()))
+  })
   ipcMain.handle('people:status', () => ({ ...analysis, enabled: setting('people_enabled') === '1', documentsEnabled: setting('documents_enabled') === '1',
     reviews: people.reviewCount() + documents.reviewCount() }))
   ipcMain.handle('people:start', () => { setSetting('people_enabled', '1'); analyzeLibrary() })

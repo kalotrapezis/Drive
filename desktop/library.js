@@ -52,6 +52,8 @@ function open(dataDir) {
   const columns = db.prepare('PRAGMA table_info(media)').all().map(c => c.name)
   if (!columns.includes('place')) db.exec('ALTER TABLE media ADD COLUMN place TEXT; ALTER TABLE media ADD COLUMN place_names TEXT;')
   if (!columns.includes('meta_v')) db.exec('ALTER TABLE media ADD COLUMN meta_v INTEGER NOT NULL DEFAULT 1')
+  // "Hide this album from Gallery" belongs to the album, not to this computer, so it lives here and syncs.
+  if (!db.prepare('PRAGMA table_info(collections)').all().some(c => c.name === 'hidden')) db.exec('ALTER TABLE collections ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0')
   const aiColumns = db.prepare('PRAGMA table_info(photo_ai)').all().map(c => c.name)
   if (!aiColumns.includes('source')) db.exec("ALTER TABLE photo_ai ADD COLUMN source TEXT NOT NULL DEFAULT 'desktop'")
   return db
@@ -204,8 +206,9 @@ function collectionName(raw) {
 function collections(db) {
   return db.prepare(`SELECT c.id, c.name,
       (SELECT COUNT(DISTINCT m.sha256) FROM collection_items i JOIN media m ON m.sha256 = i.sha256 WHERE i.collection_id = c.id AND i.deleted = 0) AS count,
-      (SELECT m.sha256 FROM collection_items i JOIN media m ON m.sha256 = i.sha256 WHERE i.collection_id = c.id AND i.deleted = 0 AND m.thumb = 1 ORDER BY m.taken_at DESC LIMIT 1) AS cover
-    FROM collections c WHERE c.deleted = 0 ORDER BY c.name COLLATE NOCASE`).all()
+      (SELECT m.sha256 FROM collection_items i JOIN media m ON m.sha256 = i.sha256 WHERE i.collection_id = c.id AND i.deleted = 0 AND m.thumb = 1 ORDER BY m.taken_at DESC LIMIT 1) AS cover,
+      c.hidden
+    FROM collections c WHERE c.deleted = 0 ORDER BY c.name COLLATE NOCASE`).all().map(c => ({ ...c, hidden: !!c.hidden }))
 }
 
 function createCollection(db, raw) {
@@ -268,11 +271,17 @@ function applyFavorite(db, sha, favorite, updatedAt) {
 }
 
 /** The phone's collection UUID becomes this collection's id, so the same collection is one collection everywhere. */
-function applyCollection(db, uuid, name, deleted, updatedAt) {
+function setCollectionHidden(db, id, hidden) {
+  liveCollection(db, id)
+  db.prepare('UPDATE collections SET hidden = ?, updated_at = ? WHERE id = ?').run(hidden ? 1 : 0, Date.now(), String(id))
+}
+
+function applyCollection(db, uuid, name, deleted, updatedAt, hidden = false) {
   const local = db.prepare('SELECT updated_at FROM collections WHERE id = ?').get(uuid)
   if (local) {
     if (local.updated_at >= updatedAt) return
-    return void db.prepare('UPDATE collections SET name = ?, deleted = ?, updated_at = ? WHERE id = ?').run(collectionName(name), deleted ? 1 : 0, updatedAt, uuid)
+    return void db.prepare('UPDATE collections SET name = ?, deleted = ?, hidden = ?, updated_at = ? WHERE id = ?')
+      .run(collectionName(name), deleted ? 1 : 0, hidden ? 1 : 0, updatedAt, uuid)
   }
   if (deleted) return // nothing here to bury
   const sameName = db.prepare('SELECT id FROM collections WHERE deleted = 0 AND name = ? COLLATE NOCASE').get(name)
@@ -282,7 +291,7 @@ function applyCollection(db, uuid, name, deleted, updatedAt) {
       db.prepare('UPDATE collections SET id = ?, updated_at = ? WHERE id = ?').run(uuid, updatedAt, sameName.id)
     })
   }
-  db.prepare('INSERT INTO collections(id, name, created_at, updated_at, deleted) VALUES(?,?,?,?,0)').run(uuid, collectionName(name), updatedAt, updatedAt)
+  db.prepare('INSERT INTO collections(id, name, created_at, updated_at, deleted, hidden) VALUES(?,?,?,?,0,?)').run(uuid, collectionName(name), updatedAt, updatedAt, hidden ? 1 : 0)
 }
 
 function applyCollectionItem(db, collection, sha, deleted, updatedAt) {
@@ -302,9 +311,9 @@ function applyLabels(db, sha, labels) {
 function metadataSince(db, since) {
   return {
     favorites: db.prepare('SELECT sha256, favorite, updated_at AS updatedAt FROM photo_state WHERE updated_at > ?').all(since).map(r => ({ ...r, favorite: !!r.favorite })),
-    collections: db.prepare('SELECT id AS uuid, name, deleted, updated_at AS updatedAt FROM collections WHERE updated_at > ?').all(since).map(r => ({ ...r, deleted: !!r.deleted })),
+    collections: db.prepare('SELECT id AS uuid, name, deleted, hidden, updated_at AS updatedAt FROM collections WHERE updated_at > ?').all(since).map(r => ({ ...r, deleted: !!r.deleted, hidden: !!r.hidden })),
     collectionItems: db.prepare('SELECT collection_id AS collection, sha256, deleted, updated_at AS updatedAt FROM collection_items WHERE updated_at > ?').all(since).map(r => ({ ...r, deleted: !!r.deleted })),
   }
 }
 
-module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
+module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }

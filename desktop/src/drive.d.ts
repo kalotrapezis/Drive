@@ -14,10 +14,10 @@ export interface MergeUndo { sourceId: string; faceIds: string[] }
 export interface VaultStatus { configured: boolean; unlocked: boolean; count: number }
 export interface VaultItem { id: string; sha256: string; name: string; rel_path: string; mime: string; is_video: number; size: number; taken_at: number; has_thumb: number }
 
-export interface SyncDevice { id: string; name: string; paired_at: number; last_seen: number | null; received: number }
+export interface SyncDevice { id: string; name: string; paired_at: number; last_seen: number | null; received: number; filesReceived: number }
 export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[] }
 
-export interface Collection { id: string; name: string; count: number; cover: string | null }
+export interface Collection { id: string; name: string; count: number; cover: string | null; hidden: boolean }
 
 declare global {
   interface Window {
@@ -35,6 +35,9 @@ declare global {
       collections(): Promise<Collection[]>
       createCollection(name: string): Promise<Collection>
       deleteCollection(id: string): Promise<void>
+      setCollectionHidden(id: string, hidden: boolean): Promise<void>
+      viewSettings(): Promise<{ hideScreenshots: boolean; hideDocuments: boolean }>
+      setViewSetting(key: 'hideScreenshots' | 'hideDocuments', on: boolean): Promise<void>
       members(id: string): Promise<string[]>
       setMembership(id: string, shas: string[], member: boolean): Promise<void>
       vault: {

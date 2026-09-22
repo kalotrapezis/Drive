@@ -282,3 +282,34 @@ test('drive files: the computer asks only for what it lacks, and follows a move 
     fs.rmSync(tmp, { recursive: true })
   }
 })
+
+test('settings: only what describes the library crosses; a hidden album travels with the album', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-settings-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')),
+    files: new Files(db, path.join(tmp, 'Drive')), dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  try {
+    const { token } = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    const push = json => call('POST', '/metadata', { token, json })
+    const album = crypto.randomUUID()
+
+    await push({ viewSettings: { hideScreenshots: true, hideDocuments: false, updatedAt: 1000 } })
+    assert.deepEqual(server.viewSettings(), { hideScreenshots: true, hideDocuments: false, updatedAt: 1000 })
+    await push({ viewSettings: { hideScreenshots: false, hideDocuments: true, updatedAt: 500 } })
+    assert.equal(server.viewSettings().hideScreenshots, true, 'older push ignored')
+
+    // Hiding an album from Photos belongs to the album, so it arrives on the collection itself.
+    await push({ collections: [{ uuid: album, name: 'Σχολείο', hidden: true, updatedAt: 1000 }] })
+    assert.equal(db.prepare('SELECT hidden FROM collections WHERE id = ?').get(album).hidden, 1)
+    await push({ collections: [{ uuid: album, name: 'Σχολείο', hidden: false, updatedAt: 2000 }] })
+    assert.equal(db.prepare('SELECT hidden FROM collections WHERE id = ?').get(album).hidden, 0)
+
+    const pulled = (await call('GET', '/metadata?since=0', { token })).body
+    assert.equal(pulled.viewSettings.hideScreenshots, true)
+    assert.equal(pulled.collections.find(c => c.uuid === album).hidden, false)
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})

@@ -35,9 +35,10 @@ export function App() {
   const [page, setPage] = useState<Page>({ kind: 'photos' })
   const [level, setLevel] = useState<Level>(() => (stored('level') as Level) || 'month')
   const [query, setQuery] = useState('')
-  const [hideScreenshots, setHideScreenshots] = useState(() => stored('hideScreenshots') === '1')
-  const [hideDocuments, setHideDocuments] = useState(() => stored('hideDocuments') === '1')
-  const [hiddenAlbums, setHiddenAlbums] = useState<string[]>(() => { try { return JSON.parse(stored('hiddenAlbums') ?? '[]') } catch { return [] } })
+  // These three describe the library, not this computer, so they come from the database and sync with the phone.
+  const [hideScreenshots, setHideScreenshots] = useState(false)
+  const [hideDocuments, setHideDocuments] = useState(false)
+  const hiddenAlbums = collections.filter(c => c.hidden).map(c => c.id)
   const [hiddenAlbumShas, setHiddenAlbumShas] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [open, setOpen] = useState<number | null>(null)
@@ -84,12 +85,10 @@ export function App() {
   const reloadRef = useRef(reload)
   reloadRef.current = reload
   useEffect(() => { store('level', level) }, [level])
-  useEffect(() => { store('hideScreenshots', hideScreenshots ? '1' : '0') }, [hideScreenshots])
-  useEffect(() => { store('hideDocuments', hideDocuments ? '1' : '0') }, [hideDocuments])
+  useEffect(() => { window.drive.viewSettings().then(v => { setHideScreenshots(v.hideScreenshots); setHideDocuments(v.hideDocuments) }) }, [])
   useEffect(() => {
-    store('hiddenAlbums', JSON.stringify(hiddenAlbums))
     Promise.all(hiddenAlbums.map(id => window.drive.members(id).catch(() => []))).then(lists => setHiddenAlbumShas(new Set(lists.flat())))
-  }, [hiddenAlbums, collections])
+  }, [collections])
   useEffect(() => {
     setSelected(new Set()); setOpen(null); setMembers(null)
     if (memberSource) memberSource().then(m => setMembers(new Set(m)))
@@ -244,13 +243,13 @@ export function App() {
               <strong>Hide from Photos</strong>
               <small>Hidden albums stay in Collections and on disk; only the Photos view skips them.</small>
               <span className="menu-head">System albums</span>
-              <label><input type="checkbox" checked={hideScreenshots} onChange={e => setHideScreenshots(e.target.checked)} /> Screenshots</label>
-              <label><input type="checkbox" checked={hideDocuments} onChange={e => setHideDocuments(e.target.checked)} /> Documents</label>
+              <label><input type="checkbox" checked={hideScreenshots} onChange={e => { setHideScreenshots(e.target.checked); window.drive.setViewSetting('hideScreenshots', e.target.checked) }} /> Screenshots</label>
+              <label><input type="checkbox" checked={hideDocuments} onChange={e => { setHideDocuments(e.target.checked); window.drive.setViewSetting('hideDocuments', e.target.checked) }} /> Documents</label>
               <span className="menu-head">My albums</span>
               {collections.length === 0 && <small>No albums yet. Create one in Collections with +.</small>}
               {collections.map(c => (
-                <label key={c.id}><input type="checkbox" checked={hiddenAlbums.includes(c.id)}
-                  onChange={e => setHiddenAlbums(list => e.target.checked ? [...list, c.id] : list.filter(x => x !== c.id))} /> {c.name}<small className="count">{c.count}</small></label>
+                <label key={c.id}><input type="checkbox" checked={c.hidden}
+                  onChange={e => window.drive.setCollectionHidden(c.id, e.target.checked).then(reload)} /> {c.name}<small className="count">{c.count}</small></label>
               ))}
             </div>
           </details>

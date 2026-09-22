@@ -59,6 +59,7 @@ export function SyncPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
                 <strong>{d.name}</strong>
                 <small className={s.startsWith('Connected') ? 'live' : ''}>{s}</small>
                 <small>{d.received.toLocaleString()} photos received</small>
+                {d.filesReceived > 0 && <small>{d.filesReceived.toLocaleString()} Drive files received</small>}
                 <small>Paired {when.format(d.paired_at)}</small>
                 <button className="text-button" onClick={() => forget(d)}>Forget</button>
               </div>

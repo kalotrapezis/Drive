@@ -444,6 +444,29 @@ and the computer has no way to reach it, so the computer would have to announce
 itself (mDNS) and the phone listen for it. Until then, opening the phone app is
 what catches both up.
 
+### 6g. Which settings sync (asked 2026-09-23)
+
+The question was worth asking, because the answer is not "all of them". The
+line that holds: **a setting that describes the library crosses; a setting that
+decides what this device should do stays put.**
+
+Crosses (done 2026-09-23):
+
+| Setting | Why |
+|---|---|
+| Hide Screenshots from Photos | It is a statement about the library, and the same library is on both devices. Sent as `viewSettings`, last-write-wins as a pair. |
+| Hide Documents from Photos | Same. |
+| Hide an album from Photos | Belongs to the *album*, not to a device, so it moved out of preferences onto the collection row (phone schema v16, desktop `collections.hidden`) and travels with it. This also took the desktop's copy out of `localStorage`. |
+
+Stays local, on purpose:
+
+| Setting | Why |
+|---|---|
+| People analysis on/off, Documents analysis on/off | This is "spend this device's battery and CPU for the next few hours". Syncing it would start that work on a device nobody asked. The *results* sync, which is the point. |
+| Search quality (Fast / Advanced) | A performance choice about this device's hardware. |
+| Onboarding, home backdrop, sort orders, the pairing itself | Per device by definition. |
+| Scanner settings | The phone has a camera; the computer does not. |
+
 ### 7. Later: folders as albums (requested 2026-09-22)
 
 - **Phone:** on opening, find every folder with photos or videos outside the
