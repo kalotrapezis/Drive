@@ -18,7 +18,7 @@ npm run check    # TypeScript
 npm run dist     # release/*.AppImage and *.deb
 ```
 
-Video thumbnails use the system `ffmpeg`. The AppImage needs `libfuse2`; the deb does not.
+Video thumbnails use the system `ffmpeg`. HEIC goes through libheif (`heic-decode`), since the bundled libvips has no HEVC. The AppImage needs `libfuse2`; the deb does not.
 `node_modules/.bin/electron scripts/shot.js out.png [js]` captures the window for visual QA.
 
 ## Code
@@ -32,5 +32,8 @@ Video thumbnails use the system `ffmpeg`. The AppImage needs `libfuse2`; the deb
 | `src/Collections.tsx`, `src/Dialogs.tsx` | Collections page; native `<dialog>` confirm/name/picker |
 | `files.js` | Files rules (root checks, verified copy, move/rename, Drive/Trash), tags, favorites, colours, recents |
 | `src/Files.tsx` | Files browser, item sheet, destination/rename/tags/colour/properties dialogs |
+| `faces.js` | People: YuNet detection + two-pass eye landmarks, MobileFaceNet embedding, phone quality/grouping rules, people/faces/reviews store |
+| `src/People.tsx` | People grid, analysis bar, rename, combine (undo), Help organize |
+| `models/` | ONNX models and their licences (`models/NOTICES.md`) |
 | `src/Viewer.tsx` | Viewer: zoom/pan, keys, details, filmstrip |
 | `src/timeline.ts` | Grouping and formatting |

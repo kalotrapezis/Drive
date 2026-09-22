@@ -6,6 +6,11 @@ export interface DriveItem {
   favorite: boolean; color: string | null; tags: string[]; openedAt?: number
 }
 
+export interface Person { id: string; name: string; count: number; cover: string | null }
+export interface Review { faceId: string; personId: string; sha256: string; name: string; personFace: string | null }
+export interface Analysis { running: boolean; paused: boolean; done: number; total: number; error: string; enabled?: boolean; reviews?: number }
+export interface MergeUndo { sourceId: string; faceIds: string[] }
+
 export interface Collection { id: string; name: string; count: number; cover: string | null }
 
 declare global {
@@ -23,6 +28,20 @@ declare global {
       deleteCollection(id: string): Promise<void>
       members(id: string): Promise<string[]>
       setMembership(id: string, shas: string[], member: boolean): Promise<void>
+      people: {
+        status(): Promise<Analysis>
+        start(): Promise<void>
+        pause(): Promise<void>
+        list(): Promise<Person[]>
+        shas(id: string): Promise<string[]>
+        names(): Promise<Record<string, string[]>>
+        rename(id: string, name: string): Promise<string>
+        merge(source: string, target: string): Promise<MergeUndo>
+        undoMerge(undo: MergeUndo): Promise<void>
+        nextReview(): Promise<Review | null>
+        answer(faceId: string, personId: string, answer: 'yes' | 'no' | 'skip'): Promise<void>
+        onProgress(fn: (a: Analysis) => void): () => void
+      }
       files: {
         root(): Promise<string>
         call<T = unknown>(method: string, ...args: unknown[]): Promise<T>

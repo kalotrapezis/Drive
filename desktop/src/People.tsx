@@ -1,0 +1,118 @@
+import { useEffect, useState } from 'react'
+import type { Analysis, Person, Review } from './drive'
+import { Icon } from './Icon'
+import { Modal, errorText } from './Dialogs'
+
+export const FaceCircle = ({ face, size = 96 }: { face: string | null; size?: number }) => (
+  <span className="face" style={{ width: size, height: size }}>{face ? <img src={`media://face/${face}`} alt="" /> : <Icon name="photos" size={size / 2.5} />}</span>
+)
+
+/** Shared analysis control: explicit start, progress, pause. */
+export function AnalysisBar({ status }: { status: Analysis | null }) {
+  if (!status) return null
+  if (status.running) return (
+    <div className="island analysis">
+      <span className="spinner" />
+      <span>Looking for faces… {status.done.toLocaleString()} / {status.total.toLocaleString()}</span>
+      <button className="text-button" onClick={() => window.drive.people.pause()}>Pause</button>
+    </div>
+  )
+  return (
+    <div className="island analysis">
+      <Icon name="info" />
+      <span>{status.error ? `Analysis stopped: ${status.error}` : status.enabled
+        ? status.paused ? `Paused at ${status.done} of ${status.total}.` : 'New photos are analysed after each rescan.'
+        : 'Find people runs on this computer only. Nothing is uploaded.'}</span>
+      <button className="filled-button" onClick={() => window.drive.people.start()}>{status.enabled ? (status.paused ? 'Resume' : 'Check again') : 'Find people'}</button>
+    </div>
+  )
+}
+
+export function PeoplePage({ people, status, onOpen, onBack }: { people: Person[]; status: Analysis | null; onOpen: (p: Person) => void; onBack: () => void }) {
+  return (
+    <div className="timeline">
+      <header className="topbar">
+        <div className="island title-island"><button className="round flat" title="Back to Collections" onClick={onBack}><Icon name="back" /></button><h1>People</h1></div>
+      </header>
+      <AnalysisBar status={status} />
+      {people.length === 0 && <p className="hint">{status?.enabled ? 'No people found yet.' : 'Start Find people to group the faces in your photos.'}</p>}
+      <div className="people-grid">
+        {people.map(p => (
+          <button key={p.id} className="person" onClick={() => onOpen(p)}>
+            <FaceCircle face={p.cover} />
+            <strong>{p.name}</strong><small>{p.count}</small>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function RenamePerson({ person, onClose, onDone }: { person: Person; onClose: () => void; onDone: (name: string) => void }) {
+  const [name, setName] = useState(/^Person \d+$/.test(person.name) ? '' : person.name)
+  const [error, setError] = useState('')
+  return (
+    <Modal onClose={onClose}>
+      <form onSubmit={async e => { e.preventDefault(); try { onDone(await window.drive.people.rename(person.id, name)); onClose() } catch (err) { setError(errorText(err)) } }}>
+        <div className="sheet-head"><FaceCircle face={person.cover} size={56} /><h3>Name this person</h3></div>
+        <input className="field" autoFocus maxLength={60} placeholder={person.name} value={name} onChange={e => { setName(e.target.value); setError('') }} />
+        {error && <p className="error">{error}</p>}
+        <div className="dialog-actions">
+          <button type="button" className="text-button" onClick={onClose}>Cancel</button>
+          <button className="filled-button" disabled={!name.trim()}>Save</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+/** Phone: combine keeps the open person and moves the chosen duplicate into it. */
+export function CombinePicker({ person, people, onClose, onPick }: { person: Person; people: Person[]; onClose: () => void; onPick: (other: Person) => void }) {
+  return (
+    <Modal onClose={onClose}>
+      <h3>Combine with {person.name}</h3>
+      <p>Pick the same person shown twice. Their photos move into {person.name}.</p>
+      <div className="picker">
+        {people.filter(p => p.id !== person.id).map(p => (
+          <button key={p.id} className="picker-row" onClick={() => { onClose(); onPick(p) }}>
+            <FaceCircle face={p.cover} size={44} /><span>{p.name}<small>{p.count}</small></span>
+          </button>
+        ))}
+      </div>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button></div>
+    </Modal>
+  )
+}
+
+export function ReviewPage({ onBack, onChanged }: { onBack: () => void; onChanged: () => void }) {
+  const [review, setReview] = useState<Review | null | undefined>(undefined)
+  const load = () => window.drive.people.nextReview().then(setReview)
+  useEffect(() => { load() }, [])
+  async function answer(a: 'yes' | 'no' | 'skip') {
+    await window.drive.people.answer(review!.faceId, review!.personId, a)
+    onChanged(); load()
+  }
+  return (
+    <div className="timeline">
+      <header className="topbar">
+        <div className="island title-island"><button className="round flat" title="Back to Collections" onClick={onBack}><Icon name="back" /></button><h1>Help organize</h1></div>
+      </header>
+      {review === null && <div className="empty">Nothing needs a review right now.</div>}
+      {review && (
+        <div className="island review">
+          <h2>Is this the same person?</h2>
+          <div className="review-faces">
+            <div><FaceCircle face={review.faceId} size={160} /><small>This photo</small></div>
+            <div><FaceCircle face={review.personFace} size={160} /><small>{review.name}</small></div>
+          </div>
+          <img className="review-photo" src={`media://thumb/${review.sha256}`} alt="" />
+          <div className="dialog-actions center">
+            <button className="text-button" onClick={() => answer('skip')}>Skip</button>
+            <button className="filled-button secondary" onClick={() => answer('no')}>No</button>
+            <button className="filled-button" onClick={() => answer('yes')}>Yes, same person</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

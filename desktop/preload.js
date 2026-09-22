@@ -18,6 +18,20 @@ contextBridge.exposeInMainWorld('drive', {
     open: rel => ipcRenderer.invoke('files:open', rel),
     reveal: rel => ipcRenderer.invoke('files:reveal', rel),
   },
+  people: {
+    status: () => ipcRenderer.invoke('people:status'),
+    start: () => ipcRenderer.invoke('people:start'),
+    pause: () => ipcRenderer.invoke('people:pause'),
+    list: () => ipcRenderer.invoke('people:list'),
+    shas: id => ipcRenderer.invoke('people:shas', id),
+    names: () => ipcRenderer.invoke('people:names'),
+    rename: (id, name) => ipcRenderer.invoke('people:rename', id, name),
+    merge: (source, target) => ipcRenderer.invoke('people:merge', source, target),
+    undoMerge: undo => ipcRenderer.invoke('people:undoMerge', undo),
+    nextReview: () => ipcRenderer.invoke('people:nextReview'),
+    answer: (faceId, personId, answer) => ipcRenderer.invoke('people:answer', faceId, personId, answer),
+    onProgress: fn => { const l = (_, p) => fn(p); ipcRenderer.on('people-progress', l); return () => ipcRenderer.off('people-progress', l) },
+  },
   onScanProgress: fn => {
     const listener = (_, p) => fn(p)
     ipcRenderer.on('scan-progress', listener)

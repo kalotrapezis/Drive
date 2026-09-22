@@ -58,9 +58,28 @@ function sha256(file) {
   })
 }
 
+const isHeic = file => /\.(heic|heif)$/i.test(file)
+
+/**
+ * An upright sharp pipeline for any library image. The bundled libvips reads no HEVC HEIC (the phone's
+ * camera format), so those go through libheif (WASM), which already applies the rotation.
+ */
+async function image(file) {
+  const sharp = require('sharp')
+  if (!isHeic(file)) return sharp(file).rotate()
+  const { width, height, data } = await require('heic-decode')({ buffer: await fsp.readFile(file) })
+  return sharp(Buffer.from(data.buffer, data.byteOffset, data.byteLength), { raw: { width, height, channels: 4 } })
+}
+
+/** Full-size JPEG for formats Chromium cannot draw (HEIC), made once and cached. */
+async function preview(file, sha, dataDir) {
+  const target = path.join(dataDir, 'thumbs', sha + '.preview.jpg')
+  if (!fs.existsSync(target)) await (await image(file)).resize(2560, 2560, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 88 }).toFile(target)
+  return target
+}
+
 async function imageInfo(file) {
   const exifr = require('exifr')
-  const sharp = require('sharp')
   const out = {}
   try {
     const x = await exifr.parse(file, { gps: true, pick: ['DateTimeOriginal', 'CreateDate', 'Make', 'Model', 'latitude', 'longitude'] })
@@ -71,17 +90,22 @@ async function imageInfo(file) {
     if (camera) out.camera = camera
   } catch {}
   try {
-    const m = await sharp(file).metadata()
-    const turned = m.orientation >= 5 // EXIF 5-8 swap width and height
-    out.width = turned ? m.height : m.width
-    out.height = turned ? m.width : m.height
+    if (isHeic(file)) {
+      const m = await (await image(file)).metadata()
+      out.width = m.width; out.height = m.height
+    } else {
+      const m = await require('sharp')(file).metadata()
+      const turned = m.orientation >= 5 // EXIF 5-8 swap width and height
+      out.width = turned ? m.height : m.width
+      out.height = turned ? m.width : m.height
+    }
   } catch {}
   return out
 }
 
 async function makeThumb(file, isVideo, target) {
   if (!isVideo) {
-    await require('sharp')(file).rotate().resize(480, 480, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 78 }).toFile(target)
+    await (await image(file)).resize(480, 480, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 78 }).toFile(target)
     return
   }
   // ponytail: needs a system ffmpeg; bundle ffmpeg-static if packaged users lack it.
@@ -213,4 +237,4 @@ async function trash(db, root, ids, trashItem) {
   return result
 }
 
-module.exports = { open, scan, list, sha256, trash, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members }
+module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members }

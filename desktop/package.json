@@ -23,6 +23,8 @@
   },
   "dependencies": {
     "exifr": "^7.1.3",
+    "heic-decode": "^2.1.0",
+    "onnxruntime-node": "^1.30.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "sharp": "^0.35.4"
@@ -37,12 +39,21 @@
       "main.js",
       "preload.js",
       "library.js",
+      "files.js",
+      "faces.js",
+      "models/*.onnx",
       "dist/**",
-      "public/icon.png"
+      "public/icon.png",
+      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_cuda.so",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_tensorrt.so"
     ],
     "asarUnpack": [
       "node_modules/sharp/**",
-      "node_modules/@img/**"
+      "node_modules/@img/**",
+      "node_modules/onnxruntime-node/**"
     ],
     "linux": {
       "category": "Graphics",

@@ -1,0 +1,353 @@
+// People: a port of the phone's PhotoClassifier + PhotoMetadataStore face logic.
+// Detection uses YuNet (ML Kit is Android only); alignment, MobileFaceNet embedding, quality,
+// reliability and grouping thresholds are the phone's, so embeddings and groups are interchangeable.
+const fs = require('node:fs')
+const path = require('node:path')
+const crypto = require('node:crypto')
+
+const EMBEDDING_MODEL = 'mobilefacenet-192-eyes38x44-74x44' // phone: PhotoClassifier.embed
+const ANALYSIS_VERSION = 'yunet2023mar-2pass+' + EMBEDDING_MODEL
+const SAME_PERSON = 0.74, REVIEW_FROM = 0.66, UNRELIABLE_JOIN = 0.55, ANCHOR_QUALITY = 0.68
+const DETECT_SIZE = 640, DETECT_SCORE = 0.8, NMS_IOU = 0.3
+// ponytail: yaw from the nose offset between the eyes (ML Kit gives it directly). NOSE_DEPTH was calibrated on 16 phone
+// faces (2026-09-22) so faces ML Kit rated ≤ 30° stay ≤ 30° here; retune if frontal faces get rejected.
+const NOSE_DEPTH = 0.6
+
+// ---- pure helpers (tested) ----
+
+const luminance = (d, i) => Math.trunc((d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000)
+
+function faceQualityScore(minSide, meanEdgeContrast) {
+  const clamp = v => Math.min(1, Math.max(0, v))
+  return clamp(minSide / 112) * 0.45 + clamp(meanEdgeContrast / 18) * 0.55
+}
+
+const isReliableFace = (quality, yaw = 0, roll = 0) => quality >= ANCHOR_QUALITY && Math.abs(yaw) <= 30 && Math.abs(roll) <= 20
+
+/** Phone: Bitmap.faceQuality — edge contrast sampled on a grid inside the box. */
+function faceQuality(img, b) {
+  const w = b.right - b.left, h = b.bottom - b.top
+  const step = Math.max(1, Math.trunc(Math.min(w, h) / 24))
+  let contrast = 0, samples = 0
+  for (let y = b.top; y < b.bottom - step; y += step) for (let x = b.left; x < b.right - step; x += step) {
+    const at = (xx, yy) => luminance(img.data, (yy * img.width + xx) * 3)
+    const l = at(x, y)
+    contrast += Math.abs(l - at(x + step, y)) + Math.abs(l - at(x, y + step))
+    samples += 2
+  }
+  return faceQualityScore(Math.min(w, h), Math.trunc(contrast / Math.max(1, samples)))
+}
+
+/** Phone: embed() — similarity transform putting the eyes at (38,44) and (74,44) of a 112×112 crop, bilinear, black outside. */
+function alignedInput(img, left, right) {
+  const dx = right.x - left.x, dy = right.y - left.y, len = Math.hypot(dx, dy)
+  const cos = dx / len, sin = dy / len, inv = len / 36
+  const out = new Float32Array(112 * 112 * 3)
+  const px = (x, y, c) => (x < 0 || y < 0 || x >= img.width || y >= img.height) ? 0 : img.data[(y * img.width + x) * 3 + c]
+  for (let ty = 0; ty < 112; ty++) for (let tx = 0; tx < 112; tx++) {
+    const qx = tx + 0.5 - 38, qy = ty + 0.5 - 44
+    const sx = left.x + inv * (cos * qx - sin * qy) - 0.5
+    const sy = left.y + inv * (sin * qx + cos * qy) - 0.5
+    const x0 = Math.floor(sx), y0 = Math.floor(sy), fx = sx - x0, fy = sy - y0
+    for (let c = 0; c < 3; c++) {
+      const v = px(x0, y0, c) * (1 - fx) * (1 - fy) + px(x0 + 1, y0, c) * fx * (1 - fy) + px(x0, y0 + 1, c) * (1 - fx) * fy + px(x0 + 1, y0 + 1, c) * fx * fy
+      out[(ty * 112 + tx) * 3 + c] = (v - 127.5) / 127.5
+    }
+  }
+  return out
+}
+
+function l2(v) {
+  let m = 0
+  for (const x of v) m += x * x
+  m = Math.max(Math.sqrt(m), 0.00001)
+  return Float32Array.from(v, x => x / m)
+}
+
+function cosine(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s }
+
+/** YuNet 2023mar output decoding (as OpenCV FaceDetectorYN) + greedy NMS. Coordinates are in the 640×640 input. */
+function decodeYunet(out) {
+  const faces = []
+  for (const stride of [8, 16, 32]) {
+    const cols = DETECT_SIZE / stride
+    const cls = out[`cls_${stride}`].data, obj = out[`obj_${stride}`].data, box = out[`bbox_${stride}`].data, kps = out[`kps_${stride}`].data
+    for (let i = 0; i < cls.length; i++) {
+      const score = Math.sqrt(Math.min(1, Math.max(0, cls[i])) * Math.min(1, Math.max(0, obj[i])))
+      if (score < DETECT_SCORE) continue
+      const c = i % cols, r = Math.trunc(i / cols)
+      const cx = (c + box[i * 4]) * stride, cy = (r + box[i * 4 + 1]) * stride
+      const w = Math.exp(box[i * 4 + 2]) * stride, h = Math.exp(box[i * 4 + 3]) * stride
+      const points = []
+      for (let n = 0; n < 5; n++) points.push({ x: (kps[i * 10 + 2 * n] + c) * stride, y: (kps[i * 10 + 2 * n + 1] + r) * stride })
+      faces.push({ score, x1: cx - w / 2, y1: cy - h / 2, x2: cx + w / 2, y2: cy + h / 2, points })
+    }
+  }
+  faces.sort((a, b) => b.score - a.score)
+  const iou = (a, b) => {
+    const w = Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1)), h = Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1))
+    const inter = w * h
+    return inter / ((a.x2 - a.x1) * (a.y2 - a.y1) + (b.x2 - b.x1) * (b.y2 - b.y1) - inter)
+  }
+  const kept = []
+  for (const f of faces) if (kept.every(k => iou(k, f) <= NMS_IOU)) kept.push(f)
+  return kept
+}
+
+/** Head angles from 5 landmarks: roll from the eye line, yaw from the nose offset. */
+function headAngles(left, right, nose) {
+  const roll = Math.atan2(right.y - left.y, right.x - left.x) * 180 / Math.PI
+  const eyeDist = Math.hypot(right.x - left.x, right.y - left.y)
+  const midX = (left.x + right.x) / 2
+  const yaw = Math.atan((nose.x - midX) / eyeDist / NOSE_DEPTH) * 180 / Math.PI
+  return { yaw, roll }
+}
+
+// ---- models ----
+
+class FaceEngine {
+  static async load(modelDir) {
+    const ort = require('onnxruntime-node')
+    const e = new FaceEngine()
+    e.ort = ort
+    // Loaded from buffers: works inside the packaged asar archive, where the runtime cannot open paths itself.
+    e.detector = await ort.InferenceSession.create(fs.readFileSync(path.join(modelDir, 'face_detection_yunet_2023mar.onnx')))
+    e.embedder = await ort.InferenceSession.create(fs.readFileSync(path.join(modelDir, 'mobilefacenet.onnx')))
+    return e
+  }
+
+  /** Phone: decode at most 1280 px on the long side, upright. */
+  static async decode(file) {
+    const { data, info } = await (await require('./library').image(file)).resize(1280, 1280, { fit: 'inside', withoutEnlargement: true })
+      .removeAlpha().toColourspace('srgb').raw().toBuffer({ resolveWithObject: true })
+    return { data, width: info.width, height: info.height }
+  }
+
+  async detect(img) {
+    const sharp = require('sharp')
+    const scale = DETECT_SIZE / Math.max(img.width, img.height)
+    const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale))
+    const small = await sharp(img.data, { raw: { width: img.width, height: img.height, channels: 3 } }).resize(w, h, { fit: 'fill' }).raw().toBuffer()
+    const input = new Float32Array(3 * DETECT_SIZE * DETECT_SIZE) // top-left letterbox, BGR, 0–255 like OpenCV's blobFromImage
+    const plane = DETECT_SIZE * DETECT_SIZE
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const s = (y * w + x) * 3, t = y * DETECT_SIZE + x
+      input[t] = small[s + 2]; input[plane + t] = small[s + 1]; input[2 * plane + t] = small[s]
+    }
+    const out = await this.detector.run({ input: new this.ort.Tensor('float32', input, [1, 3, DETECT_SIZE, DETECT_SIZE]) })
+    return decodeYunet(out).map(f => ({
+      score: f.score,
+      x1: f.x1 / scale, y1: f.y1 / scale, x2: f.x2 / scale, y2: f.y2 / scale,
+      points: f.points.map(p => ({ x: p.x / scale, y: p.y / scale })),
+    }))
+  }
+
+  /**
+   * Second pass on a zoomed square around one face, averaged with the first pass. Measured on 17 phone faces
+   * (2026-09-22): phone-vs-desktop cosine mean 0.877 → 0.921, worst 0.667 → 0.761 (either pass alone had outliers).
+   */
+  async refine(img, d) {
+    const cx = (d.x1 + d.x2) / 2, cy = (d.y1 + d.y2) / 2
+    const side = Math.round(Math.max(d.x2 - d.x1, d.y2 - d.y1) * 2.5)
+    const left = Math.round(cx - side / 2), top = Math.round(cy - side / 2)
+    const crop = { width: side, height: side, data: Buffer.alloc(side * side * 3) } // black outside the photo
+    for (let y = Math.max(0, -top); y < side && top + y < img.height; y++) {
+      const sy = top + y, x0 = Math.max(0, -left), x1 = Math.min(side, img.width - left)
+      if (x1 > x0) img.data.copy(crop.data, (y * side + x0) * 3, (sy * img.width + left + x0) * 3, (sy * img.width + left + x1) * 3)
+    }
+    const found = (await this.detect(crop)).map(f => ({ f, dist: Math.hypot((f.x1 + f.x2) / 2 - side / 2, (f.y1 + f.y2) / 2 - side / 2) })).sort((a, b) => a.dist - b.dist)[0]
+    if (!found || found.dist > side / 4) return d
+    const f = found.f
+    return { ...d, points: f.points.map((p, i) => ({ x: (p.x + left + d.points[i].x) / 2, y: (p.y + top + d.points[i].y) / 2 })) }
+  }
+
+  async embed(img, left, right) {
+    const out = await this.embedder.run({ input: new this.ort.Tensor('float32', alignedInput(img, left, right), [1, 112, 112, 3]) })
+    return l2(out.embeddings.data)
+  }
+
+  /** Phone: classify() faces — reliable, front-facing faces only, with usable eye distance. */
+  async analyze(img) {
+    const faces = []
+    for (const raw of await this.detect(img)) {
+      const d = await this.refine(img, raw)
+      const box = {
+        left: Math.min(img.width, Math.max(0, Math.round(d.x1))), top: Math.min(img.height, Math.max(0, Math.round(d.y1))),
+        right: Math.min(img.width, Math.max(0, Math.round(d.x2))), bottom: Math.min(img.height, Math.max(0, Math.round(d.y2))),
+      }
+      if (box.right - box.left < 24 || box.bottom - box.top < 24) continue
+      const [left, right] = [d.points[0], d.points[1]].sort((a, b) => a.x - b.x)
+      if (Math.abs(right.x - left.x) < 32) continue
+      const quality = faceQuality(img, box)
+      const { yaw, roll } = headAngles(left, right, d.points[2])
+      if (!isReliableFace(quality, yaw, roll)) continue
+      faces.push({ box, quality, yaw, roll, embedding: await this.embed(img, left, right) })
+    }
+    return faces
+  }
+}
+
+// ---- storage and grouping ----
+
+const isGeneratedName = name => /^Person \d+$/.test(name)
+
+class People {
+  constructor(db, dataDir) {
+    this.db = db
+    this.faceDir = path.join(dataDir, 'thumbs', 'faces')
+    fs.mkdirSync(this.faceDir, { recursive: true })
+    db.exec(`CREATE TABLE IF NOT EXISTS people (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS faces (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL,
+        box_left REAL NOT NULL, box_top REAL NOT NULL, box_right REAL NOT NULL, box_bottom REAL NOT NULL, -- fractions of the upright image
+        embedding BLOB NOT NULL, model TEXT NOT NULL, quality REAL NOT NULL, person_id TEXT, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0);
+      CREATE INDEX IF NOT EXISTS faces_sha ON faces(sha256);
+      CREATE INDEX IF NOT EXISTS faces_person ON faces(person_id);
+      CREATE TABLE IF NOT EXISTS face_reviews (face_id TEXT NOT NULL, person_id TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', updated_at INTEGER NOT NULL, PRIMARY KEY(face_id, person_id));
+      CREATE TABLE IF NOT EXISTS face_analysis (sha256 TEXT PRIMARY KEY, version TEXT NOT NULL, faces INTEGER NOT NULL, analyzed_at INTEGER NOT NULL);`)
+  }
+
+  tx(fn) { this.db.exec('BEGIN'); try { const r = fn(); this.db.exec('COMMIT'); return r } catch (e) { this.db.exec('ROLLBACK'); throw e } }
+
+  pending() {
+    return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m LEFT JOIN face_analysis a ON a.sha256 = m.sha256 AND a.version = ?
+      WHERE m.is_video = 0 AND a.sha256 IS NULL GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all(ANALYSIS_VERSION)
+  }
+
+  createPerson(now) {
+    const names = new Set(this.db.prepare('SELECT name FROM people WHERE deleted = 0').all().map(r => r.name))
+    let n = names.size + 1
+    while (names.has(`Person ${n}`)) n++
+    const id = crypto.randomUUID()
+    this.db.prepare('INSERT INTO people(id, name, created_at, updated_at) VALUES(?,?,?,?)').run(id, `Person ${n}`, now, now)
+    return id
+  }
+
+  /** Phone: recordFaces — match against anchors taken before this photo, join ≥ 0.74, else a new person; 0.66–0.74 also asks for review. */
+  record(sha, faces, size) {
+    const now = Date.now()
+    return this.tx(() => {
+      // A photo that already has faces (an earlier run, or synced from the phone) keeps them: re-analysis must never
+      // duplicate faces or undo manual grouping.
+      if (this.db.prepare('SELECT 1 FROM faces WHERE sha256 = ? AND deleted = 0').get(sha)) {
+        this.db.prepare('INSERT INTO face_analysis(sha256, version, faces, analyzed_at) VALUES(?,?,0,?) ON CONFLICT(sha256) DO UPDATE SET version = excluded.version, analyzed_at = excluded.analyzed_at').run(sha, ANALYSIS_VERSION, now)
+        return []
+      }
+      const candidates = this.db.prepare(`SELECT f.person_id, f.embedding FROM faces f JOIN people p ON p.id = f.person_id AND p.deleted = 0
+        WHERE f.deleted = 0 AND f.quality >= ?`).all(ANCHOR_QUALITY)
+        .map(r => ({ person: r.person_id, embedding: new Float32Array(new Uint8Array(r.embedding).buffer) }))
+      const ids = []
+      for (const face of faces) {
+        let best = null, similarity = -1
+        for (const c of candidates) { const s = cosine(face.embedding, c.embedding); if (s > similarity) { similarity = s; best = c } }
+        const reliable = isReliableFace(face.quality, face.yaw, face.roll)
+        const person = similarity >= SAME_PERSON ? best.person : !reliable && similarity >= UNRELIABLE_JOIN ? best.person : !reliable ? null : this.createPerson(now)
+        if (!person) continue
+        const id = crypto.randomUUID()
+        const b = face.box
+        this.db.prepare(`INSERT INTO faces(id, sha256, box_left, box_top, box_right, box_bottom, embedding, model, quality, person_id, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
+          .run(id, sha, b.left / size.width, b.top / size.height, b.right / size.width, b.bottom / size.height,
+            Buffer.from(face.embedding.buffer, face.embedding.byteOffset, face.embedding.byteLength), EMBEDDING_MODEL, face.quality, person, now)
+        if (reliable && similarity >= REVIEW_FROM && similarity < SAME_PERSON) {
+          this.db.prepare('INSERT OR IGNORE INTO face_reviews(face_id, person_id, state, updated_at) VALUES(?,?,?,?)').run(id, best.person, 'pending', now)
+        }
+        ids.push(id)
+      }
+      this.db.prepare('INSERT INTO face_analysis(sha256, version, faces, analyzed_at) VALUES(?,?,?,?) ON CONFLICT(sha256) DO UPDATE SET version = excluded.version, faces = excluded.faces, analyzed_at = excluded.analyzed_at')
+        .run(sha, ANALYSIS_VERSION, ids.length, now)
+      return ids
+    })
+  }
+
+  skip(sha) {
+    this.db.prepare('INSERT INTO face_analysis(sha256, version, faces, analyzed_at) VALUES(?,?,0,?) ON CONFLICT(sha256) DO UPDATE SET version = excluded.version, faces = 0, analyzed_at = excluded.analyzed_at')
+      .run(sha, ANALYSIS_VERSION, Date.now())
+  }
+
+  async saveCrop(img, faceId, box) {
+    const w = box.right - box.left, h = box.bottom - box.top, side = Math.round(Math.max(w, h) * 1.5)
+    const left = Math.max(0, Math.round(box.left + w / 2 - side / 2)), top = Math.max(0, Math.round(box.top + h / 2 - side / 2))
+    await require('sharp')(img.data, { raw: { width: img.width, height: img.height, channels: 3 } })
+      .extract({ left, top, width: Math.min(side, img.width - left), height: Math.min(side, img.height - top) })
+      .resize(160, 160, { fit: 'cover' }).webp({ quality: 80 }).toFile(path.join(this.faceDir, faceId + '.webp'))
+  }
+
+  /** Live people with photos present in the library. Named people first, like the phone. */
+  list() {
+    return this.db.prepare(`SELECT p.id, p.name, COUNT(DISTINCT f.sha256) AS count,
+        (SELECT f2.id FROM faces f2 WHERE f2.person_id = p.id AND f2.deleted = 0 ORDER BY f2.quality DESC LIMIT 1) AS cover
+      FROM people p JOIN faces f ON f.person_id = p.id AND f.deleted = 0 JOIN media m ON m.sha256 = f.sha256
+      WHERE p.deleted = 0 GROUP BY p.id`).all()
+      .sort((a, b) => Number(isGeneratedName(a.name)) - Number(isGeneratedName(b.name))
+        || (isGeneratedName(a.name) ? Number(a.name.slice(7)) - Number(b.name.slice(7)) : a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })))
+  }
+
+  shas(personId) {
+    return this.db.prepare('SELECT DISTINCT sha256 FROM faces WHERE person_id = ? AND deleted = 0').all(String(personId)).map(r => r.sha256)
+  }
+
+  namesBySha() {
+    const out = {}
+    for (const r of this.db.prepare(`SELECT DISTINCT f.sha256, p.name FROM faces f JOIN people p ON p.id = f.person_id AND p.deleted = 0 WHERE f.deleted = 0 ORDER BY p.name`).all()) {
+      if (!isGeneratedName(r.name)) (out[r.sha256] ??= []).push(r.name)
+    }
+    return out
+  }
+
+  live(id) { if (!this.db.prepare('SELECT 1 FROM people WHERE id = ? AND deleted = 0').get(String(id))) throw new Error('This person no longer exists.') }
+
+  rename(id, raw) {
+    this.live(id)
+    const name = require('./library').collectionName(raw) // phone: renameFaceGroup uses the collection-name rules
+    this.db.prepare('UPDATE people SET name = ?, updated_at = ? WHERE id = ?').run(name, Date.now(), id)
+    return name
+  }
+
+  /** Phone: mergeFaceGroups — keep the open person, move the other's faces into it. Returns what undo needs. */
+  merge(sourceId, targetId) {
+    if (sourceId === targetId) throw new Error('Choose two different people.')
+    this.live(sourceId); this.live(targetId)
+    const now = Date.now()
+    return this.tx(() => {
+      const faceIds = this.db.prepare('SELECT id FROM faces WHERE person_id = ? AND deleted = 0').all(sourceId).map(r => r.id)
+      this.db.prepare(`UPDATE face_reviews SET state = 'resolved', updated_at = ? WHERE face_id IN (SELECT id FROM faces WHERE person_id = ?)`).run(now, sourceId)
+      this.db.prepare('UPDATE face_reviews SET person_id = ?, updated_at = ? WHERE person_id = ? AND NOT EXISTS (SELECT 1 FROM face_reviews r2 WHERE r2.face_id = face_reviews.face_id AND r2.person_id = ?)').run(targetId, now, sourceId, targetId)
+      this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE person_id = ?').run(targetId, now, sourceId)
+      this.db.prepare('UPDATE people SET deleted = 1, updated_at = ? WHERE id = ?').run(now, sourceId)
+      return { sourceId, faceIds }
+    })
+  }
+
+  /** Restores the same person id (not a copy), so sync sees one continuous identity. */
+  undoMerge({ sourceId, faceIds }) {
+    const now = Date.now()
+    this.tx(() => {
+      this.db.prepare('UPDATE people SET deleted = 0, updated_at = ? WHERE id = ?').run(now, sourceId)
+      const move = this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?')
+      for (const id of faceIds) move.run(sourceId, now, id)
+    })
+  }
+
+  nextReview() {
+    return this.db.prepare(`SELECT r.face_id AS faceId, r.person_id AS personId, f.sha256, p.name,
+        (SELECT f2.id FROM faces f2 WHERE f2.person_id = p.id AND f2.deleted = 0 AND f2.id != r.face_id ORDER BY f2.quality DESC LIMIT 1) AS personFace
+      FROM face_reviews r JOIN faces f ON f.id = r.face_id AND f.deleted = 0 JOIN people p ON p.id = r.person_id AND p.deleted = 0
+      JOIN media m ON m.sha256 = f.sha256 WHERE r.state = 'pending' LIMIT 1`).get() ?? null
+  }
+
+  reviewCount() {
+    return this.db.prepare(`SELECT COUNT(*) AS n FROM face_reviews r JOIN faces f ON f.id = r.face_id AND f.deleted = 0 JOIN people p ON p.id = r.person_id AND p.deleted = 0 WHERE r.state = 'pending'`).get().n
+  }
+
+  /** Phone: resolveReview / skipReview. "Yes" moves the face into the candidate person. */
+  answer(faceId, personId, answer) {
+    const now = Date.now()
+    this.tx(() => {
+      if (answer === 'yes') this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?').run(personId, now, faceId)
+      const state = answer === 'skip' ? 'skipped' : 'resolved'
+      this.db.prepare(`UPDATE face_reviews SET state = ?, updated_at = ? WHERE face_id = ?${answer === 'skip' ? ' AND person_id = ?' : ''}`)
+        .run(...(answer === 'skip' ? [state, now, faceId, personId] : [state, now, faceId]))
+    })
+  }
+}
+
+module.exports = { FaceEngine, People, ANALYSIS_VERSION, EMBEDDING_MODEL, faceQualityScore, isReliableFace, faceQuality, alignedInput, l2, cosine, decodeYunet, headAngles, isGeneratedName }

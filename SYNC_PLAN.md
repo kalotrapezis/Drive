@@ -1,6 +1,6 @@
 # Local Drive — desktop app and phone ↔ desktop sync plan
 
-Updated: 2026-09-22 (phases 1–3 done). The same file lives in both `Drive-Android/` and `Drive/`.
+Updated: 2026-09-22 (phases 1–4 done). The same file lives in both `Drive-Android/` and `Drive/`.
 Edit one, copy it to the other.
 
 Goal: a personal Google Photos + Google Drive. The phone and the desktop have
@@ -200,6 +200,21 @@ Detect → embed → group with the phone's thresholds; rename, merge, undo,
 Help organize.
 **Done when:** embeddings of the same photo on phone and desktop match
 (cosine ≥ 0.74).
+
+**Status 2026-09-22: done** (`desktop/faces.js`, `src/People.tsx`). The phone's
+`mobilefacenet.tflite` was converted to ONNX (TFLite vs ONNX cosine 0.9999999).
+YuNet replaces ML Kit for detection; eye landmarks come from two passes (whole
+photo + zoomed face) averaged. Alignment, quality score, reliability limits and
+grouping thresholds are the phone's. Faces carry UUIDs, fractional boxes, the
+embedding model string and tombstone-able people; merge undo restores the same
+person id; re-analysis never duplicates faces or undoes manual grouping.
+**Measured on 17 faces in 12 real phone photos:** desktop found 17/17; phone vs
+desktop embedding cosine min 0.761, median 0.932; the desktop face's nearest
+phone face was the same person in 11/12 checkable cases (the miss sits 0.88 from
+a person the phone had split in two). So the target is met in the median but
+not for every face — below-threshold pairs land in Help organize, as on the
+phone. Yaw is estimated from landmarks (calibrated on those faces). HEIC is
+decoded with libheif, which also fixed HEIC thumbnails and the viewer.
 
 ### 5. Desktop: Map, Hidden (encrypted), Editor, Documents classification
 

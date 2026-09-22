@@ -12,9 +12,10 @@ interface Props {
   media: Media[]; index: number; setIndex: (i: number) => void; onClose: () => void
   onFavorite: (m: Media) => void; onTrash: (m: Media) => void
   onCollect?: (m: Media) => void; onUncollect?: (m: Media) => void
+  people: string[]
 }
 
-export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect }: Props) {
+export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect, people }: Props) {
   const item = media[index]
   const [view, setView] = useState<View>(RESET)
   const [details, setDetails] = useState(false)
@@ -123,6 +124,7 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
               <dt>Name</dt><dd>{name}</dd>
               <dt>Folder</dt><dd>{folder}</dd>
               <dt>Size</dt><dd>{formatBytes(item.size)}{item.width ? ` · ${item.width} × ${item.height}` : ''}</dd>
+              {people.length > 0 && <><dt>People</dt><dd>{people.join(', ')}</dd></>}
               {item.camera && <><dt>Camera</dt><dd>{item.camera}</dd></>}
               {item.latitude != null && <><dt>Location</dt><dd><Icon name="place" size={16} /> {item.latitude.toFixed(5)}, {item.longitude!.toFixed(5)}</dd></>}
               <dt>SHA-256</dt><dd className="mono">{item.sha256}</dd>

@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { isScreenshot, matches, type Level, type Media } from './timeline'
-import type { Collection } from './drive'
+import type { Analysis, Collection, MergeUndo, Person } from './drive'
 import { Icon, type IconName } from './Icon'
 import { Timeline } from './Timeline'
 import { Viewer } from './Viewer'
 import { Collections } from './Collections'
 import { CollectionPicker, Confirm, NewCollection, errorText } from './Dialogs'
 import { Files, type FilesMode } from './Files'
+import { CombinePicker, PeoplePage, RenamePerson, ReviewPage } from './People'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string }
+  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' }
 
 const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
@@ -32,14 +34,18 @@ export function App() {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [open, setOpen] = useState<number | null>(null)
   const [dialog, setDialog] = useState<ReactNode>(null)
-  const [toast, setToast] = useState('')
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null)
+  const [people, setPeople] = useState<Person[]>([])
+  const [names, setNames] = useState<Record<string, string[]>>({})
+  const [analysis, setAnalysis] = useState<Analysis | null>(null)
 
   const custom = page.kind === 'collection' && !SYSTEM.some(s => s.id === page.id) ? page.id : null
+  const memberSource = custom ? () => window.drive.members(custom) : page.kind === 'person' ? () => window.drive.people.shas(page.id) : null
 
   async function reload() {
-    const [m, c] = await Promise.all([window.drive.list(), window.drive.collections()])
-    setMedia(m); setCollections(c)
-    if (custom) setMembers(new Set(await window.drive.members(custom)))
+    const [m, c, p, n, a] = await Promise.all([window.drive.list(), window.drive.collections(), window.drive.people.list(), window.drive.people.names(), window.drive.people.status()])
+    setMedia(m); setCollections(c); setPeople(p); setNames(n); setAnalysis(a)
+    if (memberSource) setMembers(new Set(await memberSource()))
   }
 
   async function rescan() {
@@ -53,33 +59,43 @@ export function App() {
     window.drive.info().then(i => setRoot(i.photosRoot))
     reload()
     const off = window.drive.onScanProgress(p => setScan(p.changed ? `Adding photos… ${p.changed} new` : `Checking… ${p.done}`))
+    let wasRunning = false
+    const offPeople = window.drive.people.onProgress(a => {
+      setAnalysis(s => ({ ...s, ...a }))
+      if (a.running) window.drive.people.list().then(setPeople) // people appear while analysis runs
+      if (wasRunning && !a.running) reloadRef.current()
+      wasRunning = a.running
+    })
     rescan()
-    return off
+    return () => { off(); offPeople() }
   }, [])
 
+  const reloadRef = useRef(reload)
+  reloadRef.current = reload
   useEffect(() => { store('level', level) }, [level])
   useEffect(() => { store('hideScreenshots', hideScreenshots ? '1' : '0') }, [hideScreenshots])
   useEffect(() => {
     setSelected(new Set()); setOpen(null); setMembers(null)
-    if (custom) window.drive.members(custom).then(m => setMembers(new Set(m)))
+    if (memberSource) memberSource().then(m => setMembers(new Set(m)))
   }, [page])
-  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 4000); return () => clearTimeout(t) }, [toast])
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), toast.undo ? 8000 : 4000); return () => clearTimeout(t) }, [toast])
 
   const items = useMemo(() => {
     if (!media) return []
-    if (page.kind === 'photos') return query.trim() ? media.filter(m => matches(m, query)) : hideScreenshots ? media.filter(m => !isScreenshot(m.path)) : media
+    if (page.kind === 'photos') return query.trim() ? media.filter(m => matches({ path: `${m.path} ${(names[m.sha256] ?? []).join(' ')}` }, query)) : hideScreenshots ? media.filter(m => !isScreenshot(m.path)) : media
     if (page.kind === 'collection') {
       const system = SYSTEM.find(s => s.id === page.id)
       return system ? media.filter(system.test) : members ? media.filter(m => members.has(m.sha256)) : []
     }
+    if (page.kind === 'person') return members ? media.filter(m => members.has(m.sha256)) : []
     return []
-  }, [media, page, query, hideScreenshots, members])
+  }, [media, page, query, hideScreenshots, members, names])
 
   // Keep the viewer on a valid item when the list shrinks (trash, unfavorite in Favorites, remove from collection).
   useEffect(() => { if (open !== null && open >= items.length) setOpen(items.length ? items.length - 1 : null) }, [items, open])
 
   const picked = items.filter(m => selected.has(m.id))
-  const say = (text: string) => setToast(text)
+  const say = (text: string, undo?: () => void) => setToast({ text, undo })
   const count = (n: number) => n === 1 ? '1 item' : `${n} items`
   const close = () => setDialog(null)
 
@@ -136,6 +152,17 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  const person = page.kind === 'person' ? people.find(p => p.id === page.id) : undefined
+  function renamePerson(p: Person) {
+    setDialog(<RenamePerson person={p} onClose={close} onDone={name => { setPage({ kind: 'person', id: p.id, name }); reload() }} />)
+  }
+  function combine(p: Person) {
+    setDialog(<CombinePicker person={p} people={people} onClose={close} onPick={other => run(async () => {
+      const undo: MergeUndo = await window.drive.people.merge(other.id, p.id)
+      say(`Combined ${other.name} into ${p.name}`, () => run(() => window.drive.people.undoMerge(undo), 'Combine undone'))
+    })} />)
+  }
+
   const nav = (target: Page, active: boolean, icon: IconName, label: string) => (
     <button className={`nav-item ${active ? 'active' : ''}`} onClick={() => setPage(target)}><Icon name={icon} />{label}</button>
   )
@@ -146,15 +173,25 @@ export function App() {
   if (page.kind === 'files') content = <Files mode={page.mode} folder={page.folder} go={(mode, folder) => setPage({ kind: 'files', mode, folder })} setDialog={setDialog} say={say} />
   else if (loading) content = <div className="empty">Loading…</div>
   else if (media.length === 0) content = <div className="empty"><p>No photos or videos in <code>{root}</code></p></div>
+  else if (page.kind === 'people') content = <PeoplePage people={people} status={analysis} onBack={() => setPage({ kind: 'collections' })} onOpen={p => setPage({ kind: 'person', id: p.id, name: p.name })} />
+  else if (page.kind === 'review') content = <ReviewPage onBack={() => setPage({ kind: 'collections' })} onChanged={reload} />
   else if (page.kind === 'collections') {
     content = <Collections mine={collections} onNew={() => newCollection()} onDelete={deleteCollection}
-      system={SYSTEM.map(s => ({ ...s, count: media.filter(s.test).length }))}
-      onOpen={(id, name) => setPage({ kind: 'collection', id, name })} />
+      system={[
+        { id: 'people', name: 'People', icon: 'person' as IconName, count: people.length },
+        ...SYSTEM.map(s => ({ ...s, count: media.filter(s.test).length })),
+        { id: 'review', name: 'Help organize', icon: 'tag' as IconName, count: analysis?.reviews ?? 0 },
+      ]}
+      onOpen={(id, name) => setPage(id === 'people' ? { kind: 'people' } : id === 'review' ? { kind: 'review' } : { kind: 'collection', id, name })} />
   } else {
-    const inCollection = page.kind === 'collection'
+    const inCollection = page.kind === 'collection' || page.kind === 'person'
     content = (
       <Timeline items={items} level={level} setLevel={setLevel} selected={selected} setSelected={setSelected} onOpen={setOpen}
-        title={inCollection
+        title={page.kind === 'person'
+          ? <><button className="round flat" title="Back to People" onClick={() => setPage({ kind: 'people' })}><Icon name="back" /></button><h1>{page.name}</h1>
+              {person && <><button className="round flat" title="Rename" onClick={() => renamePerson(person)}><Icon name="rename" size={20} /></button>
+                <button className="round flat" title="Combine with another person" onClick={() => combine(person)}><Icon name="merge" size={20} /></button></>}</>
+          : inCollection
           ? <><button className="round flat" title="Back to Collections" onClick={() => setPage({ kind: 'collections' })}><Icon name="back" /></button><h1>{page.name}</h1></>
           : <h1>Photos</h1>}
         empty={query ? `Nothing matches “${query}”.` : inCollection ? 'Nothing here yet.' : 'Every item is hidden by Photos tools.'}
@@ -181,7 +218,7 @@ export function App() {
         <div className="brand"><img src="./icon.png" alt="" />Local Drive</div>
         <small className="rail-head">Photos</small>
         {nav({ kind: 'photos' }, page.kind === 'photos', 'photos', 'Photos')}
-        {nav({ kind: 'collections' }, page.kind === 'collections' || page.kind === 'collection', 'collections', 'Collections')}
+        {nav({ kind: 'collections' }, ['collections', 'collection', 'people', 'person', 'review'].includes(page.kind), 'collections', 'Collections')}
         <small className="rail-head">Files</small>
         {nav({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
         {nav({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
@@ -207,12 +244,13 @@ export function App() {
         )}
       </main>
       {open !== null && items[open] && (
-        <Viewer media={items} index={open} setIndex={setOpen} onClose={() => setOpen(null)}
+        <Viewer media={items} index={open} setIndex={setOpen} onClose={() => setOpen(null)} people={names[items[open].sha256] ?? []}
           onFavorite={m => favorite([m])} onTrash={m => trash([m])}
           onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} />
       )}
       {dialog}
-      {toast && <div className="island toast" role="status">{toast}</div>}
+      {toast && <div className="island toast" role="status">{toast.text}
+        {toast.undo && <button className="text-button" onClick={() => { const u = toast.undo!; setToast(null); u() }}>Undo</button>}</div>}
     </div>
   )
 }
