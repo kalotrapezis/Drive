@@ -201,3 +201,43 @@ test('a face the classifier put in the wrong person can be taken back out', () =
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })
+
+test('a question answered on the phone stops being asked here — including "no", which moves nothing', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-faces-reviews-'))
+  const db = library.open(tmp)
+  const people = new F.People(db, tmp)
+  const sha = n => String(n).repeat(64).slice(0, 64)
+  for (const n of [1, 2, 3]) db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb) VALUES(?,?,'image/jpeg',0,1,1,?,1)").run(`${n}.jpg`, sha(n), n)
+  people.record(sha(1), [face(base)], size)
+  people.record(sha(2), [face(withCosine(0.52, third))], size) // uncertain: a question, not a join
+  people.record(sha(3), [face(withCosine(0.50, fourth))], size) // a second one
+  assert.equal(people.reviewCount(), 2)
+  const first = people.nextReview()
+
+  // The phone answered that one — "no", which changes nothing about where the face sits, so without this the
+  // answer would leave no trace at all and this computer would ask again forever.
+  assert.deepEqual(people.reviewsSince(0), [], 'nothing has been answered here yet')
+  people.applyReview(first.faceId, first.personId, 'resolved', Date.now())
+  assert.equal(people.reviewCount(), 1, 'it is not asked here any more')
+  assert.notEqual(people.nextReview()?.faceId, first.faceId)
+
+  // And what this computer answers is offered back, once, with the time it was answered.
+  const second = people.nextReview()
+  people.answer(second.faceId, second.personId, 'no')
+  const out = people.reviewsSince(0)
+  assert.deepEqual(out.map(r => [r.face, r.person, r.state]), [
+    [first.faceId, first.personId, 'resolved'],
+    [second.faceId, second.personId, 'resolved'],
+  ])
+  assert.deepEqual(people.reviewsSince(Date.now() + 1000), [], 'and not offered again after it has been sent')
+
+  // An older answer never overrules a newer one, whichever device it comes from.
+  people.applyReview(second.faceId, second.personId, 'skipped', 1)
+  assert.equal(db.prepare('SELECT state FROM face_reviews WHERE face_id = ?').get(second.faceId).state, 'resolved')
+
+  // A question about a face or a person this computer does not have is simply not a question here.
+  people.applyReview('no-such-face', second.personId, 'resolved', Date.now())
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM face_reviews').get().n, 2)
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})

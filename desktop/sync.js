@@ -337,6 +337,7 @@ class SyncServer {
     each('collectionItems', forPhoto(i => library.applyCollectionItem(this.db, String(i.collection), i.sha256, !!i.deleted, at(i))))
     each('labels', forPhoto(l => library.applyLabels(this.db, l.sha256, Array.isArray(l.labels) ? l.labels : [])))
     each('people', p => this.people.applyPerson(String(p.uuid), library.collectionName(p.name), at(p)))
+    each('reviews', r => this.people.applyReview(String(r.face), String(r.person), String(r.state), at(r)))
     each('files', f => this.files?.applyMetadata({ ...f, path: String(f.path), updatedAt: at(f) }))
     if (body?.viewSettings) try { this.applyViewSettings(body.viewSettings) } catch (e) { skipped.push(`viewSettings: ${e.message}`) }
     if (Array.isArray(body?.fileRecents)) try { this.files?.mergeRecents(body.fileRecents) } catch (e) { skipped.push(`fileRecents: ${e.message}`) }

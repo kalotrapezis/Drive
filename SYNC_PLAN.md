@@ -1050,3 +1050,52 @@ groupings become Help organize cards rather than a silent merge, and the combini
 happens where a person can see both. That needs a way to say "these two groups are
 the same person" across devices without either one winning by default, and it is
 its own piece of work.
+
+### 6s. An answer is a decision, so it travels (2026-09-23)
+
+Asked as three questions, and the third one was right.
+
+**"If the question is answered it will be newer, so it syncs across, no?"** Half.
+Answering **yes** moves the face into that person, and the face's own record
+carries that across — so the grouping does travel. Answering **no** moves nothing,
+and nothing was recorded anywhere that could travel. So the honest answer is worse
+than "it gets asked twice": *the answer that changes nothing was the answer that
+was lost*, and both devices would go on asking about that face for ever.
+
+**"Should they not clear on the PC too? To have ids so we can sync those?"** Yes,
+and the ids already existed. A question is the pair **(face, person)**, and both of
+those are uuids that already cross, so nothing new had to be invented — only a time
+on each review, to tell an answer given here from one given elsewhere a minute
+later (phone schema v18; the desktop's `face_reviews` already had one).
+
+What travels is only the **state**. Where the face ended up is the face's own
+record, arriving on its own, under the same rule as everything else. Pending
+questions do *not* travel: a question is a device's own uncertainty, worked out
+from what it holds, and sending it would ask the other device about a pairing it
+may not even have. An answer is a decision, and decisions travel. Older answers
+never overrule newer ones, and an answer about a face or a person this device does
+not have is simply not a question here.
+
+**"You tell me the model is deterministic and a second pass can't find more?"** No,
+and it is worth being precise about which part is which:
+
+- **The embedding is deterministic.** Same weights, same aligned crop, same numbers
+  — on either device, which is what makes a cosine between a phone's face and a
+  computer's face meaningful at all.
+- **Detection is not the same on both.** ML Kit here, YuNet there, and the computer
+  decodes larger, so it finds faces this phone never saw. That is not a second pass
+  finding more by luck; it is a different detector at a different size, and it is
+  exactly why the faces flow from there to here (6r).
+- **Grouping is order-dependent.** Each face is matched against the anchors that
+  existed *before* it, so the same photos analysed in a different order can produce
+  a different set of people. Two devices starting from the same library will not
+  reach the same grouping, and neither is wrong.
+
+That last point is the reason the review state has to sync rather than be
+re-derived: two devices asking the same question is a coincidence of their two
+groupings, but a person answering it once should be the end of it everywhere.
+
+Tested: `faces.test.js` (an answer arriving from elsewhere clearing a card here, a
+"no" answered here being offered on, older answers not overruling newer, a question
+about a face this computer does not have being ignored) and
+`IncomingFaceDeviceTest` on the phone for the same rules.

@@ -423,6 +423,28 @@ class People {
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(uuid, sha256, box[0], box[1], box[2], box[3], embedding, model || EMBEDDING_MODEL, quality ?? 1, person, updatedAt)
   }
 
+  /**
+   * An answer to Help organize, as the other device can recognise it: the face and the person it was asked
+   * about, both by uuids that already cross, so the question needed no id of its own. Answers travel; a pending
+   * question does not, because it is this device's own uncertainty rather than news.
+   */
+  reviewsSince(since) {
+    return this.db.prepare(`SELECT face_id AS face, person_id AS person, state, updated_at AS updatedAt
+      FROM face_reviews WHERE state != 'pending' AND updated_at > ?`).all(since)
+  }
+
+  /** A question answered elsewhere stops being asked here. Only the state travels; where the face went is the face's own record. */
+  applyReview(faceId, personId, state, updatedAt) {
+    if (!['resolved', 'skipped'].includes(state)) return
+    if (!this.db.prepare('SELECT 1 FROM faces WHERE id = ?').get(faceId)) return
+    if (!this.db.prepare('SELECT 1 FROM people WHERE id = ?').get(personId)) return
+    const mine = this.db.prepare('SELECT state, updated_at FROM face_reviews WHERE face_id = ? AND person_id = ?').get(faceId, personId)
+    if (mine && mine.state !== 'pending' && mine.updated_at >= updatedAt) return
+    this.db.prepare(`INSERT INTO face_reviews(face_id, person_id, state, updated_at) VALUES(?,?,?,?)
+      ON CONFLICT(face_id, person_id) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at`)
+      .run(faceId, personId, state, updatedAt)
+  }
+
   /** People and their faces for the phone's GET /metadata?since= pull. */
   changedSince(since) {
     return {
@@ -430,6 +452,7 @@ class People {
       // The whole face, not only who it belongs to: this computer finds faces the phone's detector misses, and a
       // face it has never seen is only usable there if the box, the embedding and the model travel with it. The
       // box is already in the protocol's own units — fractions of the upright photo — so it needs no translating.
+      reviews: this.reviewsSince(since),
       faces: this.db.prepare(`SELECT id AS uuid, sha256, person_id AS person, updated_at AS updatedAt,
         box_left, box_top, box_right, box_bottom, embedding, model, quality
         FROM faces WHERE deleted = 0 AND updated_at > ?`).all(since).map(f => ({
