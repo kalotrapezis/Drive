@@ -145,12 +145,17 @@ test('a device that re-analysed from scratch cannot un-name a person', async () 
   assert.equal(people.list().find(p => p.id === mine.id)?.name, 'Γιάννης')
   assert.equal(people.list().find(p => p.id === mine.id)?.count, 1, 'the face stays with the person who has a name')
 
-  // But a name the user typed over there does win, however old this one is.
+  // A name the user typed over there does not win either — it asks. Two devices that have both named this face
+  // disagree about who it is, and neither is wrong: grouping is order-dependent, so two devices starting from
+  // the same library reach different people. Letting the newer one win meant the face changed hands on every
+  // sync, in whichever direction had synced last.
   people.applyPerson('named-elsewhere', 'Μαρία', Date.now() + 2000)
   people.applyFace({ uuid: 'their-face-2', sha256: sha, box: [0.1, 0.1, 0.6, 0.6],
     embedding: Buffer.from(new Float32Array(base).buffer), model: F.EMBEDDING_MODEL, quality: 0.9,
     person: 'named-elsewhere', updatedAt: Date.now() + 2000 })
-  assert.equal(people.list().find(p => p.count > 0)?.name, 'Μαρία', 'a human decision still travels')
+  assert.equal(people.list().find(p => p.count > 0)?.name, 'Γιάννης', 'the face stays where it is')
+  assert.equal(people.reviewCount(), 1, 'and the difference is asked about instead')
+  assert.equal(people.nextReview()?.name, 'Μαρία')
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })
@@ -238,6 +243,45 @@ test('a question answered on the phone stops being asked here — including "no"
   // A question about a face or a person this computer does not have is simply not a question here.
   people.applyReview('no-such-face', second.personId, 'resolved', Date.now())
   assert.equal(db.prepare('SELECT COUNT(*) n FROM face_reviews').get().n, 2)
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})
+
+test('two devices that disagree about who someone is ask, instead of taking turns overwriting', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-faces-disagree-'))
+  const db = library.open(tmp)
+  const people = new F.People(db, tmp)
+  const sha = n => String(n).repeat(64).slice(0, 64)
+  for (const n of [1, 2, 3]) db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb) VALUES(?,?,'image/jpeg',0,1,1,?,1)").run(`${n}.jpg`, sha(n), n)
+  people.record(sha(1), [face(base)], size)
+  people.record(sha(2), [face(withCosine(0.80, third))], size) // the same person here
+  const [anna] = people.list()
+  people.rename(anna.id, 'Άννα')
+  const faces = db.prepare('SELECT id FROM faces ORDER BY rowid').all().map(r => r.id)
+
+  // The other device knows these faces as someone else it has also named.
+  const maria = crypto.randomUUID()
+  people.applyPerson(maria, 'Μαρία', Date.now())
+  const later = Date.now() + 1000
+  for (const id of faces) people.applyFace({ uuid: id, sha256: sha(1), person: maria, updatedAt: later })
+
+  assert.deepEqual(people.shas(anna.id).sort(), [sha(1), sha(2)].sort(), 'nobody was torn apart')
+  assert.deepEqual(people.shas(maria), [], 'and nobody was quietly taken over')
+  assert.equal(people.reviewCount(), 1, 'one card for the pair, not one per face')
+  const asked = people.nextReview()
+  assert.equal(asked.personId, maria)
+
+  // Answering it is what moves anything, and then it is not asked again.
+  people.answer(asked.faceId, asked.personId, 'yes')
+  assert.deepEqual(people.shas(maria), [sha(1)])
+  assert.equal(people.reviewCount(), 0)
+
+  // A guess still never wins against a name, and two guesses still settle by who wrote last.
+  const guess = crypto.randomUUID()
+  people.applyPerson(guess, 'Person 9', Date.now())
+  people.applyFace({ uuid: faces[1], sha256: sha(2), person: guess, updatedAt: Date.now() + 5000 })
+  assert.deepEqual(people.shas(anna.id), [sha(2)], 'Άννα keeps the face a number tried to take')
+  assert.equal(people.reviewCount(), 0, 'and that is not a question, it is a rule')
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })

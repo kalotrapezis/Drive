@@ -1044,12 +1044,7 @@ rather than a guess, the computer's own grouping being followed when it names
 someone known here, and a number failing to replace a name. `sync.test.js` covers
 the same last rule on the computer.
 
-**Not done yet: comparing two phones' groupings.** When a second Android device
-exists, the same idea extends — each device groups, the differences between two
-groupings become Help organize cards rather than a silent merge, and the combining
-happens where a person can see both. That needs a way to say "these two groups are
-the same person" across devices without either one winning by default, and it is
-its own piece of work.
+**Done in 6t: comparing two devices' groupings.**
 
 ### 6s. An answer is a decision, so it travels (2026-09-23)
 
@@ -1099,3 +1094,40 @@ Tested: `faces.test.js` (an answer arriving from elsewhere clearing a card here,
 "no" answered here being offered on, older answers not overruling newer, a question
 about a face this computer does not have being ignored) and
 `IncomingFaceDeviceTest` on the phone for the same rules.
+
+### 6t. When two devices disagree about who someone is (2026-09-23)
+
+Grouping is order-dependent (6s), so two devices that hold the same photos reach
+different people, and neither is wrong. The question was how to handle that, and
+it turned out the wrong answer was already in the code.
+
+**What happened before:** a face assigned to a named person here and a *different*
+named person there settled by newest-wins. The face was taken from Άννα and given
+to Μαρία with no record and no question — and taken back on the next sync, in
+whichever direction had synced last. Two devices with two groupings would have
+pulled faces back and forth for ever.
+
+**What happens now:** a disagreement between two *decisions* is a question. The
+face stays exactly where it is, and the difference becomes a Help organize card —
+the existing card, the existing screen, and, since 6s, one that clears on every
+device as soon as it is answered anywhere. Answering it is what moves anything.
+
+The card is raised **once per pair of people**, not once per face. Two people who
+disagree about one face usually disagree about all of that person's faces, and a
+question each would bury the library in questions that are all the same question.
+One card says "these two named people overlap"; putting them together, if that is
+the answer, is Combine on the People page, where both can be seen.
+
+The rules underneath are unchanged and still do the work before this one is
+reached: a guess never overwrites a decision, and two guesses still settle by who
+wrote last — nobody has decided anything there, so there is nothing to ask about.
+
+This is what makes a second Android device work without anything device-specific:
+each device groups with its own rules, every difference between two groupings
+surfaces as a card, the cards are answered once anywhere, and the result syncs to
+everything. No device is authoritative, and none has to be.
+
+Tested: `faces.test.js` (one card for a pair rather than one per face, nothing
+moving until it is answered, the guess rules still applying underneath) and
+`IncomingFaceDeviceTest` on the phone for the same, including that answering the
+card is what moves the faces.

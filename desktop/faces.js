@@ -416,6 +416,11 @@ class People {
       // between those two — or a device that has just re-analysed from scratch can un-name a whole library,
       // which is exactly what happened on 2026-09-23.
       if (this.isAutoNamed(person) && this.isNamed(mine.person_id)) return
+      // Two devices that both named this face, and disagree. Neither is wrong: grouping is order-dependent, so
+      // two devices starting from the same library reach different people. Newest-wins here meant the face was
+      // torn from one person and given to the other silently — and torn back on the next sync. A disagreement
+      // between two decisions is a question, so the face stays where it is and the difference becomes a card.
+      if (this.isNamed(person) && this.isNamed(mine.person_id) && person !== mine.person_id) return void this.ask(mine.id, mine.person_id, person, updatedAt)
       return void this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?').run(person, updatedAt, mine.id)
     }
     if (!box || !person || !embedding) return // without a box there is nothing to show and nothing to match later
@@ -431,6 +436,20 @@ class People {
   reviewsSince(since) {
     return this.db.prepare(`SELECT face_id AS face, person_id AS person, state, updated_at AS updatedAt
       FROM face_reviews WHERE state != 'pending' AND updated_at > ?`).all(since)
+  }
+
+  /**
+   * Raise the difference between two groupings as one card, not fifty. Two people who disagree about a face
+   * usually disagree about all of that person's faces, and asking about each one would bury the library in
+   * questions that are all the same question. One pending card per pair of people is enough to *show* the
+   * disagreement; combining them, if that is the answer, is a person's own action on the People page.
+   */
+  ask(faceId, mine, theirs, updatedAt) {
+    const already = this.db.prepare(`SELECT 1 FROM face_reviews r JOIN faces f ON f.id = r.face_id AND f.deleted = 0
+      WHERE f.person_id = ? AND r.person_id = ? AND r.state = 'pending'`).get(mine, theirs)
+    if (already) return
+    this.db.prepare(`INSERT INTO face_reviews(face_id, person_id, state, updated_at) VALUES(?,?, 'pending', ?)
+      ON CONFLICT(face_id, person_id) DO NOTHING`).run(faceId, theirs, updatedAt)
   }
 
   /** A question answered elsewhere stops being asked here. Only the state travels; where the face went is the face's own record. */
