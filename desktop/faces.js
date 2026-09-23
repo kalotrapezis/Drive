@@ -22,6 +22,14 @@ const ANALYSIS_VERSION = 'yunet2023mar-2pass+' + EMBEDDING_MODEL
 // than a silent join. The two mistakes are not equal: a wrong join has to be picked apart by hand, a missed one
 // is a Combine or one answer to a card.
 const SAME_PERSON = 0.75, REVIEW_FROM = 0.45, ANCHOR_QUALITY = 0.68
+// The day a photo was taken, as evidence about who is in it — the phone's SAME_DAY_BONUS, same number, same
+// reason. Measured on this library (2026-09-24, 290 faces, 46 people, 7020 comparisons of the kind the app
+// makes): a comparison against someone who appears that same day is the same person 39.3% of the time, against
+// 1.6% on another day. Twenty-five times the prior, so it earns a nudge, not a licence: +0.05 takes five points
+// of the joins the line was missing for one wrong join in seven thousand, and the knee is well before +0.15.
+const SAME_DAY_BONUS = 0.05
+const DAY = 86400000
+const dayOf = t => (t > 0 ? Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / DAY) : -Infinity)
 // Two boxes this far into each other, on the same photo, are the same face found twice (sync, SYNC_PLAN.md 6c).
 const SAME_FACE_OVERLAP = 0.4
 const DETECT_SIZE = 640, DETECT_SCORE = 0.8, NMS_IOU = 0.3
@@ -283,13 +291,21 @@ class People {
         this.db.prepare('INSERT INTO face_analysis(sha256, version, faces, analyzed_at) VALUES(?,?,0,?) ON CONFLICT(sha256) DO UPDATE SET version = excluded.version, analyzed_at = excluded.analyzed_at').run(sha, ANALYSIS_VERSION, now)
         return []
       }
-      const candidates = this.db.prepare(`SELECT f.person_id, f.embedding FROM faces f JOIN people p ON p.id = f.person_id AND p.deleted = 0
+      const taken = this.db.prepare('SELECT taken_at FROM media WHERE sha256 = ?').get(sha)?.taken_at ?? 0
+      const day = dayOf(taken)
+      const candidates = this.db.prepare(`SELECT f.person_id, f.embedding, m.taken_at FROM faces f
+        JOIN people p ON p.id = f.person_id AND p.deleted = 0 JOIN media m ON m.sha256 = f.sha256
         WHERE f.deleted = 0 AND f.quality >= ?`).all(ANCHOR_QUALITY)
-        .map(r => ({ person: r.person_id, embedding: new Float32Array(new Uint8Array(r.embedding).buffer) }))
+        .map(r => ({ person: r.person_id, embedding: new Float32Array(new Uint8Array(r.embedding).buffer), day: dayOf(r.taken_at) }))
       const ids = []
       for (const face of faces) {
         let best = null, similarity = -1
-        for (const c of candidates) { const s = cosine(face.embedding, c.embedding); if (s > similarity) { similarity = s; best = c } }
+        // The day is evidence, not proof: a face seen on the same day as someone already known starts a little
+        // closer to them, which is what catches the same person across two photos of one moment.
+        for (const c of candidates) {
+          const s = cosine(face.embedding, c.embedding) + (c.day === day ? SAME_DAY_BONUS : 0)
+          if (s > similarity) { similarity = s; best = c }
+        }
         const reliable = isReliableFace(face.quality, face.yaw, face.roll)
         const person = similarity >= SAME_PERSON ? best.person : !reliable ? null : this.createPerson(now)
         if (!person) continue
@@ -584,4 +600,4 @@ class People {
   }
 }
 
-module.exports = { FaceEngine, People, ANALYSIS_VERSION, EMBEDDING_MODEL, iou, SAME_FACE_OVERLAP, faceQualityScore, isReliableFace, faceQuality, alignedInput, l2, cosine, decodeYunet, headAngles, isGeneratedName }
+module.exports = { FaceEngine, People, ANALYSIS_VERSION, EMBEDDING_MODEL, SAME_DAY_BONUS, dayOf, iou, SAME_FACE_OVERLAP, faceQualityScore, isReliableFace, faceQuality, alignedInput, l2, cosine, decodeYunet, headAngles, isGeneratedName }

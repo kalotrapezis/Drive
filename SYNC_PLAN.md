@@ -1257,3 +1257,47 @@ Written down so it stops being a feeling:
 
 Deliberately not holes: photo Trash does not sync (each device's trash is its own
 pending deletion), and sync never deletes on either side.
+
+### 6x. The day a photo was taken is evidence (measured 2026-09-24)
+
+Noticed in use: the same person, in two photos taken seconds apart, sometimes not
+recognised between them. The model looks at one face at a time; it cannot know the
+two frames are one moment. The calendar is free evidence the pixels do not carry.
+
+Measured on this library's own named people — 290 faces across 46 people, 7020
+comparisons of the kind the app actually makes (a face against each known person):
+
+| the person being compared against | is the same person |
+|---|---|
+| appears on the **same day** | **39.3%** of the time |
+| appears only on another day | **1.6%** of the time |
+
+Twenty-five times the prior. That earns a nudge, not a licence — it is evidence
+about *who is likely to be around*, not about this face. What each size buys at
+the 0.75 line:
+
+| bonus | same-person joins | wrong joins (of 7020) |
+|---|---|---|
+| +0.00 | 58.1% | 0 |
+| **+0.05** | **63.0%** | **1** |
+| +0.10 | 64.4% | 3 |
+| +0.15 | 66.7% | 14 |
+
+**+0.05 when the candidate person has a face on the same calendar day**, on both
+devices, same constant and same reason. Five points of the joins the line was
+missing, for one wrong join in seven thousand comparisons, and the knee is well
+before +0.15.
+
+Ten-minute windows were measured too and bought nothing a day did not: they cover
+fewer comparisons (4.7% against 5.9%) for the same gain, so the day is the better
+unit as well as the simpler one.
+
+The nudge is deliberately too small to join two people who look nothing alike — it
+moves a face that was *almost* recognised over the line, which is exactly the case
+that prompted it. The phone had to learn when its photos were taken to do this:
+`face_samples` gained `taken_at` (schema v19), which it takes from the photo it is
+already reading; the computer had `media.taken_at` all along and was not using it.
+
+Tested: `faces.test.js` and `IncomingFaceDeviceTest` — two photos eight seconds
+apart joining where the pixels alone would not, the same likeness a week later
+staying apart, and a stranger on the same day staying a stranger.

@@ -285,3 +285,33 @@ test('two devices that disagree about who someone is ask, instead of taking turn
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })
+
+test('two photos of one moment are read as one moment: the day is evidence, not proof', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-faces-day-'))
+  const db = library.open(tmp)
+  const people = new F.People(db, tmp)
+  const sha = n => String(n).repeat(64).slice(0, 64)
+  const noon = Date.UTC(2026, 8, 24, 12) // one day…
+  const seconds = noon + 8000            // …and eight seconds later
+  const nextWeek = noon + 7 * 86400000
+  const put = (n, when) => db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb) VALUES(?,?,'image/jpeg',0,1,1,?,1)").run(`${n}.jpg`, sha(n), when)
+  put(1, noon); put(2, seconds); put(3, nextWeek)
+
+  people.record(sha(1), [face(base)], size)
+  // Just under the line: without the day it is a new person, with it, it is the same one.
+  people.record(sha(2), [face(withCosine(0.72, third))], size)
+  assert.equal(people.list().length, 1, 'eight seconds apart, and recognised as the same person')
+
+  // The same likeness a week later is not helped, and stays a question rather than a join.
+  people.record(sha(3), [face(withCosine(0.72, fourth))], size)
+  assert.equal(people.list().length, 2, 'another day earns nothing')
+
+  // And the nudge is small enough that it cannot join two people who look nothing alike.
+  const far = Date.UTC(2026, 8, 24, 20)
+  put(4, far)
+  people.record(sha(4), [face(other)], size)
+  assert.equal(people.list().length, 3, 'a stranger on the same day is still a stranger')
+  assert.ok(F.SAME_DAY_BONUS <= 0.05)
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})
