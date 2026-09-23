@@ -18,7 +18,7 @@ const MAX_HAVE = 5000
 const MAX_KNOWN = 50000 // the phone's whole library in one question; chunking it would change the answer
 const MAX_SEND = 2000 // one answer's worth; the next sync continues where this one stopped
 const CONTENTS = ['photos', 'files']
-const DIRECTIONS = ['send', 'receive', 'both']
+const DIRECTIONS = ['off', 'send', 'receive', 'both']
 const KEEPS = ['everything', 'nothing']
 const sha = s => crypto.createHash('sha256').update(s).digest('hex')
 const isHash = h => typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)
@@ -137,7 +137,8 @@ class SyncServer {
   async nudge() {
     const devices = this.db.prepare('SELECT id, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL').all()
     await Promise.all(devices.map(async d => {
-      if (this.connection(d.id, 'photos').direction === 'send' && this.connection(d.id, 'files').direction === 'send') return
+      const ways = [this.connection(d.id, 'photos').direction, this.connection(d.id, 'files').direction]
+      if (ways.every(w => w === 'send' || w === 'off')) return // nothing here is for that device
       for (const host of String(d.peer_hosts ?? '').split(',').filter(Boolean)) {
         const reached = await this.ask(host, d).catch(() => false)
         if (reached) return
@@ -281,7 +282,8 @@ class SyncServer {
     if (req.method === 'POST' && url.pathname === '/library/manifest') {
       const { hashes } = await this.json(req, 1 << 23)
       if (!Array.isArray(hashes) || hashes.length > MAX_KNOWN || !hashes.every(isHash)) return this.send(res, 400, { error: `Send up to ${MAX_KNOWN} SHA-256 hashes.` })
-      if (this.connection(device.id, 'photos').direction === 'send') return this.send(res, 200, { send: [] }) // this device only sends
+      const photos = this.connection(device.id, 'photos').direction
+      if (photos === 'send' || photos === 'off') return this.send(res, 200, { send: [] }) // nothing goes that way
       return this.send(res, 200, { send: this.toSend(hashes) })
     }
     const blob = /^\/blob\/([0-9a-f]{64})$/.exec(url.pathname)
@@ -297,7 +299,7 @@ class SyncServer {
       const answer = await this.files.reconcile(Array.isArray(offered) ? offered : [], device.id)
       // 'want' and 'moved' are what this computer does; 'have' and 'moveTo' are what it offers the device.
       const direction = this.connection(device.id, 'files').direction
-      return this.send(res, 200, direction === 'send' ? { ...answer, have: [], moveTo: [] } : answer)
+      return this.send(res, 200, direction === 'send' || direction === 'off' ? { ...answer, have: [], moveTo: [] } : answer)
     }
     const file = /^\/file\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'GET' && file) {

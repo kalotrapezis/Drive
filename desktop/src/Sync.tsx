@@ -39,19 +39,35 @@ function PairingCode() {
  */
 function Rules({ device, connection, onChange }: { device: SyncDevice; connection: SyncConnection; onChange: () => void }) {
   const what = connection.content === 'files' ? 'Files' : 'Photos'
-  const set = async (direction: string) => {
-    await window.drive.sync.setConnection(device.id, connection.content, { direction, keep: connection.keep })
+  const set = async (direction: string, keep = connection.keep) => {
+    await window.drive.sync.setConnection(device.id, connection.content, { direction, keep })
     onChange()
   }
+  // Keep is only a question where there is one source and one direction. Two-way cannot delete on either side,
+  // and Off moves nothing at all, so both are simply Copy.
+  const canMove = connection.direction === 'send'
   return (
     <div className="connection-rules">
       <span className="rules-what">{what}</span>
       <div className="segmented">
-        {([['send', `${device.name} → here`], ['receive', `here → ${device.name}`], ['both', 'Both ways']] as const).map(([value, label]) => (
+        {([['off', 'Off'], ['send', `${device.name} → here`], ['receive', `here → ${device.name}`], ['both', 'Both ways']] as const).map(([value, label]) => (
           <button key={value} className={connection.direction === value ? 'on' : ''} onClick={() => set(value)}>{label}</button>
         ))}
       </div>
-      <small>Keep everything (Copy){connection.direction === 'both' ? ' — two-way is always a copy' : ''}</small>
+      {connection.direction === 'off' && <small>Nothing crosses, in either direction.</small>}
+      {connection.direction === 'receive' && <small>Keep everything (Copy) — {device.name} keeps its own.</small>}
+      {connection.direction === 'both' && <small>Keep everything (Copy) — two-way is always a copy.</small>}
+      {canMove && (
+        <div className="segmented">
+          {([['everything', 'Keep everything (Copy)'], ['nothing', 'Keep nothing (Move)']] as const).map(([value, label]) => (
+            <button key={value} className={connection.keep === value ? 'on' : ''} onClick={() => set('send', value)}>{label}</button>
+          ))}
+        </div>
+      )}
+      {canMove && connection.keep === 'nothing' && (
+        <small>{device.name} offers to move them off itself, once this computer has read each one back and it
+          matches. Nothing is deleted by a sync — the device asks, and they go to its own Trash.</small>
+      )}
     </div>
   )
 }

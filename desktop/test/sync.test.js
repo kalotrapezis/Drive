@@ -424,6 +424,19 @@ test('the other direction: what this computer offers, and a connection that says
     // Two-way and "keep nothing after sending" cannot both be true.
     assert.deepEqual(server.setConnection(device, 'photos', { direction: 'both', keep: 'nothing' }),
       { content: 'photos', direction: 'both', keep: 'everything' })
+
+    // One direction can be a Move, and the device is told so — it is the one that acts on it.
+    assert.deepEqual(server.setConnection(device, 'photos', { direction: 'send', keep: 'nothing' }),
+      { content: 'photos', direction: 'send', keep: 'nothing' })
+    assert.deepEqual((await call('GET', '/connections', { token })).body.connections.find(c => c.content === 'photos'),
+      { content: 'photos', direction: 'send', keep: 'nothing' })
+
+    // Off is a real answer: nothing crosses, and the device is not even told there is something new.
+    server.setConnection(device, 'photos', { direction: 'off', keep: 'everything' })
+    server.setConnection(device, 'files', { direction: 'off', keep: 'everything' })
+    assert.deepEqual((await call('POST', '/library/manifest', { token, json: { hashes: [] } })).body.send, [])
+    r = await call('POST', '/files/manifest', { token, json: { files: [] } })
+    assert.deepEqual([r.body.have, r.body.moveTo], [[], []])
   } finally {
     await server.stop()
     fs.rmSync(tmp, { recursive: true })

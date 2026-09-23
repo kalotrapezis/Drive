@@ -1197,3 +1197,63 @@ the wrong data to wait for.** What a growing library actually earns is a thresho
 that is re-measured rather than inherited, and that can be done from the grouping
 alone, on either device, whenever the library has changed enough to be worth
 asking again.
+
+### 6v. The connection card, further along (2026-09-24)
+
+**Off.** The vocabulary had no way to say *no*. A row can now be `off`, and it is a
+real answer everywhere: nothing is offered, nothing is asked for, and the computer
+does not even tell that device there is something new.
+
+**Keep, and what a Move actually is.** Keep Everything (Copy) is still the default
+and still forced whenever the direction is two-way. Keep Nothing (Move) is now
+real, in the only shape that is honest on a phone:
+
+- The computer never deletes anything on the device, and the sync never deletes
+  anything by itself. It cannot: taking a photo off a phone is **Android's own
+  request, with Android's own confirmation**, and that needs a screen the sync
+  service does not have.
+- What a verified receipt buys is the right to **offer**. A photo that has been
+  sent and read back by the computer — its own SHA-256, not a filename, not a size
+  — is queued, and the Sync page says how many there are and where they will go.
+- One tap raises Android's own dialog. They go to **Android's Trash**, which holds
+  them 30 days, so even the confirmed answer is reversible.
+- A photo with no receipt is never queued, whatever the card says.
+- If the card changes back to Copy, the offer **withdraws itself** on the next
+  sync. A question must not outlive the rule that asked it.
+
+Keep is only editable where it means something: on a one-way `send` row. Two-way
+cannot delete on either side, `receive` is about the other device's copy, and `off`
+moves nothing.
+
+Tested on the real pair: with the row set to Send · Keep nothing, 35 photos with
+verified receipts were queued and **not one was removed**; setting the row back to
+Copy emptied the queue on the next sync and left every receipt intact.
+
+### 6w. What is still missing in sync (audited 2026-09-24)
+
+Written down so it stops being a feeling:
+
+1. **The phone can only be paired with one device.** `SyncStore.pairing()` is a
+   single pairing, and a second one overwrites it. The `peers` table already holds
+   many (6l), and the computer is already multi-device — this is the phone's half,
+   and it is what a second Android device needs before any of 6t matters in
+   practice. **Biggest hole.**
+2. **Labels only travel phone → computer.** `photo_labels` has no `updated_at`, so
+   there is no cursor to send them by, and the computer's own scene tags never
+   reach the phone's search. A column and a line in `metadataSince`.
+3. **Hidden never syncs.** Phase 6's encrypted path was never built: vault items
+   exist only on the device that hid them.
+4. **Photos, computer → phone, has still not been run for real.** The code is
+   there and tested; 42 photos here are not on that phone, and putting them into
+   someone's gallery is their decision.
+5. **A transfer does not resume, it restarts.** Fine for files, wasteful for a
+   large photo on a bad link.
+6. **No backoff.** A computer that is up but broken is asked again every sync.
+7. **The phone only listens while the app is open**, so the computer's "something
+   new" reaches it only then.
+8. **Staging and timing** from the card's vocabulary — "use as cache for transfer",
+   "when the drive is connected" — are not built, and neither has come up yet.
+9. **Keep Last month / week / day** is not built; only Everything and Nothing.
+
+Deliberately not holes: photo Trash does not sync (each device's trash is its own
+pending deletion), and sync never deletes on either side.
