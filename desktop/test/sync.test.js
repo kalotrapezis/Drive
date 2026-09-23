@@ -524,3 +524,24 @@ test('a transfer that is cut off leaves the computer running and the phone holdi
     fs.rmSync(tmp, { recursive: true })
   }
 })
+
+test('a number never replaces a name, whichever device sends it', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-names-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const people = new People(db, path.join(tmp, 'data'))
+  const id = crypto.randomUUID()
+  people.applyPerson(id, 'Person 41', 1000)
+  people.applyPerson(id, 'Άννα', 2000)
+  const named = () => db.prepare('SELECT name FROM people WHERE id = ?').get(id).name
+  assert.equal(named(), 'Άννα')
+
+  // A device that has just re-analysed from scratch calls her Person 7 again, and says so more recently.
+  people.applyPerson(id, 'Person 7', 3000)
+  assert.equal(named(), 'Άννα', 'the name a person typed stands')
+
+  // Two names, though, are decided by which was written last.
+  people.applyPerson(id, 'Anna', 4000)
+  assert.equal(named(), 'Anna')
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})

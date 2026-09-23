@@ -387,9 +387,12 @@ class People {
 
   /** A person named on the phone. Its UUID becomes this person's id, so the name stays attached across syncs. */
   applyPerson(uuid, name, updatedAt) {
-    const local = this.db.prepare('SELECT updated_at FROM people WHERE id = ?').get(uuid)
+    const local = this.db.prepare('SELECT updated_at, name FROM people WHERE id = ?').get(uuid)
     if (local) {
       if (local.updated_at >= updatedAt) return
+      // The rule faces already had, and people did not: "Person 41" is what an algorithm called someone it had
+      // not been told about, and it never replaces what a human typed, however recently it was written.
+      if (isGeneratedName(name) && !isGeneratedName(local.name)) return
       return void this.db.prepare('UPDATE people SET name = ?, updated_at = ? WHERE id = ?').run(name, updatedAt, uuid)
     }
     this.db.prepare('INSERT INTO people(id, name, created_at, updated_at) VALUES(?,?,?,?)').run(uuid, name, updatedAt, updatedAt)

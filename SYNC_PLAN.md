@@ -1004,3 +1004,49 @@ Pause and Stop now reach the receiving half too — they only ever interrupted
 sending — and they land between files, never inside one. A photo half received when
 the app was killed is a pending MediaStore item: invisible, but ours, so a sync
 clears its own after an hour (Android clears them itself after a week).
+
+### 6r. Each device doing what it is better at (2026-09-23)
+
+The two devices are not equals and should not pretend to be. **The computer finds
+more faces** — it detects at a larger size, so it sees what a phone's detector
+misses. **The phone is where people are decided**: it is where the library is
+looked at, where someone is named, and where a wrong group is noticed. So faces
+should flow one way and decisions the other.
+
+What was in the way: a face from the computer whose person this phone had never
+heard of was **dropped**. `applyIncomingPerson` only ever updated a group it
+already had, and `applyIncomingFace` gave up when it could not find one — so the
+computer's extra faces only ever arrived for people the phone had itself found
+first, which is precisely the case where they add nothing.
+
+Now such a face is taken, and put through **this phone's own rules against this
+phone's own people**: ≥ 0.68 joins that person, 0.45–0.68 becomes a question for
+Help organize, and anything else becomes a new person here. The computer's
+*grouping* is still followed whenever it names a person this phone knows — that is
+a decision travelling, not a guess.
+
+The other half was already true and is now true for people as well as faces: **a
+number never replaces a name.** "Person 41" is what an algorithm called someone it
+had not been told about; a name is what a human typed. Newest-wins decides between
+two names, never between those two — on both devices, in both directions. Without
+that, a device that re-analyses from scratch can un-name a whole library, which is
+exactly what happened on 2026-09-23.
+
+So the round trip the user asked for works: the computer's faces come here, this
+phone groups and names them, and the names go back. Nothing has to be told which
+device is authoritative, because the two kinds of statement — a guess and a
+decision — are distinguishable on sight.
+
+Tested: `IncomingFaceDeviceTest` on the phone (real SQLite, its own scratch
+database, never the app's) — a computer face joining the person it looks like, one
+that looks like nobody becoming its own, the uncertain band becoming a question
+rather than a guess, the computer's own grouping being followed when it names
+someone known here, and a number failing to replace a name. `sync.test.js` covers
+the same last rule on the computer.
+
+**Not done yet: comparing two phones' groupings.** When a second Android device
+exists, the same idea extends — each device groups, the differences between two
+groupings become Help organize cards rather than a silent merge, and the combining
+happens where a person can see both. That needs a way to say "these two groups are
+the same person" across devices without either one winning by default, and it is
+its own piece of work.
