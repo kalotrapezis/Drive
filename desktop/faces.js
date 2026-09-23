@@ -363,7 +363,16 @@ class People {
   changedSince(since) {
     return {
       people: this.db.prepare('SELECT id AS uuid, name, updated_at AS updatedAt FROM people WHERE deleted = 0 AND updated_at > ?').all(since),
-      faces: this.db.prepare('SELECT id AS uuid, sha256, person_id AS person, updated_at AS updatedAt FROM faces WHERE deleted = 0 AND updated_at > ?').all(since),
+      // The whole face, not only who it belongs to: this computer finds faces the phone's detector misses, and a
+      // face it has never seen is only usable there if the box, the embedding and the model travel with it. The
+      // box is already in the protocol's own units — fractions of the upright photo — so it needs no translating.
+      faces: this.db.prepare(`SELECT id AS uuid, sha256, person_id AS person, updated_at AS updatedAt,
+        box_left, box_top, box_right, box_bottom, embedding, model, quality
+        FROM faces WHERE deleted = 0 AND updated_at > ?`).all(since).map(f => ({
+        uuid: f.uuid, sha256: f.sha256, person: f.person, updatedAt: f.updatedAt, model: f.model, quality: f.quality,
+        box: [f.box_left, f.box_top, f.box_right, f.box_bottom],
+        embedding: Buffer.from(f.embedding).toString('base64'),
+      })),
     }
   }
 

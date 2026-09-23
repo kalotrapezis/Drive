@@ -735,3 +735,41 @@ once.
 manifest — the endpoints the desktop already serves — so that a pairing between
 two Androids can actually carry something. Until then a scan between two phones
 completes and shows up as a paired device, and nothing moves yet.
+
+### 6m. Faces the phone never found (2026-09-23)
+
+Asked while looking at People on the computer: *there are faces here that the
+phone does not have — do we just sync the faces?* Yes, and it is worth doing,
+because the two detectors are not equally good. ML Kit runs on the phone; the
+computer runs YuNet at a larger size with a second zoomed pass for landmarks, and
+it finds faces the phone misses. Until now those faces stayed on the computer,
+which meant the photo never appeared under that person on the phone.
+
+**What changed:** a face now travels whole — box, embedding, model and quality,
+not just "face X belongs to person Y". The phone keeps one it has never seen
+instead of dropping it.
+
+Nothing needed translating, which is the point of the choices made in 6c:
+
+- The **box** is already in the protocol's own units, fractions of the upright
+  photo, and goes back into the analyser's pixels on arrival with the same
+  `SyncRules.analysisSize` used to send one.
+- The **embedding** means the same thing on both devices, because both run the
+  same MobileFaceNet weights on the same landmark-aligned crop. A record carrying
+  any other `model` string is refused rather than trusted.
+- The **person** is a UUID both sides already share. A face whose person has not
+  arrived yet is skipped, not guessed at — the next sync brings it.
+
+**Two detectors must not each add their own copy of one face.** The overlap rule
+that already let the computer recognise the phone's faces (`SAME_FACE_OVERLAP`,
+0.4) is now the phone's rule too, in both directions: a synced face is skipped if
+this phone already found it, and a locally detected face is skipped if the
+computer already sent it. Cheaper and surer than comparing vectors, on a photo
+both devices hold.
+
+So the workflow the question was really asking about works: **let the computer do
+the finding and the grouping, help it where it asks, and the phone inherits the
+result** — including faces its own detector could never have found.
+
+Still not done: a face the computer found on a photo the *phone does not have* is
+skipped, because there is nothing to attach it to. It arrives with the photo.
