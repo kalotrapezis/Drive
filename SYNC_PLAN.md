@@ -1369,3 +1369,147 @@ Tested on the device: choosing beats the score, the choice survives and is
 readable back, clearing it restores the best, and — the rule above — a named person
 whose photos all leave is still there when one comes back, with the same id and the
 same name.
+
+## Roadmap (set 2026-09-24)
+
+The order is the user's: **nothing more is trusted to real sync until the things
+it carries are finished.** Each item says what is actually there today, because
+half of these are further along than they look and one or two are not started at
+all.
+
+### A. Finish what sync already carries, before trusting it with more
+
+| | today | what is missing |
+|---|---|---|
+| **Files** | both ways, verified, moves mirrored (6i, 6q) | resume of a big file; no backoff (6w 5–6) |
+| **Recents** | cross both ways as `fileRecents`, merged on newest open (6d) | nothing known |
+| **Collections** | both ways with membership and tombstones, hidden-from-gallery travels with the album (6a–6c, 6g) | albums made from folders do not exist yet (§7) |
+| **Favourites, tags, colours** | both ways (6d) | — |
+| **Labels** | phone → computer only | `photo_labels` has no `updated_at`, so there is no cursor; the computer's own scene tags never reach the phone's search (6w 2). **Cheapest real gap on the list.** |
+| **Documents** | classification both ways, phone authoritative | the workflow, below |
+| **Hidden** | each device's own, never crosses | the encrypted path of phase 6, never built |
+| **People** | done, and now the model for the rest | — |
+
+### B. Documents, given what People turned out to need
+
+People works because five things are true of it, and **none of them is true of
+Documents yet**:
+
+1. **A guess and a decision are different kinds of thing** — "Person 41" is never
+   allowed to overwrite "Άννα". Documents has `user_verified`, which is the same
+   idea, but nothing in the UI shows which answers are yours and which are the
+   model's, so you cannot see what is safe to rescan.
+2. **A wrong answer can be taken back at all.** People has "not this person",
+   Combine, and History with Restore. Documents has a review card and nothing
+   else: a photo wrongly called a document is corrected one at a time, and there
+   is no list of "everything I was told is a document" to sweep through.
+3. **The uncertain band asks instead of deciding.** Documents does this
+   (0.40–0.70 → review), and it is the part that already works.
+4. **Answers cross devices** (6s). Document review answers do **not** — the same
+   photo is asked about on both.
+5. **Nothing automatic destroys a decision.** Unproven for documents; the
+   equivalent of 6z has not been checked.
+
+So Documents wants, in order: **a Documents page that can act on many at once**
+("not documents", like the photo selection bar), **review answers that sync** (the
+same (photo, answer) record shape as faces), and **a visible line between what you
+verified and what was guessed**.
+
+### C. Hidden on the desktop — no, `sudo` is the wrong tool
+
+Asked: could the desktop use root-owned files or an SQL trick to get what the
+phone gets? The phone's Hidden is safe because Android gives each app a private
+directory the rest of the system cannot read. There is no equivalent on a Linux
+desktop that root would provide: a root-owned file is readable by anyone who can
+become root — which is the same person — and it would make the app ask for a
+password to show a thumbnail.
+
+**The desktop already has the better answer and it is built**: `vault.js`
+encrypts each item with libsodium, key from the passphrase by Argon2id
+(`vault_config` holds salt, ops, mem and a check box), and the files in
+`vault/` are opaque without it. What is missing is not permissions:
+
+- Hidden **does not sync**, in either direction (phase 6's encrypted path).
+- The passphrase is asked for per session with no "stay unlocked for N minutes".
+- Thumbnails of vault items are stored in the database — check they are
+  encrypted too, or they are a preview of everything hidden.
+
+### D. Folders (§7 is the design; this is what is actually there)
+
+Confirmed today: the phone's gallery reads **only** `DCIM/%`,
+`Pictures/Screenshots/%` and `DCIM/Screenshots/%` (`listGalleryMedia`'s
+selection). Everything in `Pictures/Viber`, WhatsApp, Download and the rest is
+invisible to the app — so this is not a filter to relax, it is a feature to build:
+
+1. Find every folder that holds photos or videos (one MediaStore query grouped by
+   `RELATIVE_PATH`, no permission beyond what is already granted).
+2. **Settings › Gallery › Folders**: one toggle per folder, off by default except
+   the current three.
+3. A folder seen for the first time becomes a **Help organize card** — "Include
+   Viber in Tetra?" — because that is where this app already puts questions, and
+   answers there already sync (6s).
+4. A folder that is on becomes a **user album named after it**, which then behaves
+   like every other album, including hide-from-gallery and syncing.
+5. Including never moves or copies anything; excluding only hides it here.
+
+### E. Settings, as an island of categories
+
+The Settings screen is one list. It should be the island pattern the rest of the
+app uses: **Sync · Gallery · Files · Scanner · Notes · Appearance**, each its own
+page. This is also what makes D and F have somewhere to live.
+
+### F. Appearance: light as well as dark
+
+The app was built dark on purpose, with white text and controls, so the light
+theme is close to an inversion rather than a redesign — `islandColor()`,
+`driveNavigationSelectedColor()` and friends already branch on
+`isSystemInDarkTheme()`. What is missing is a **choice**: follow the system, or
+force one. The desktop has the same shape in `styles.css` variables.
+
+### G. Notes, in a simpler form
+
+The existing Notes app comes in as a module here rather than as a second app.
+Smaller than the original on purpose: text notes, the same Drive folder for
+storage, and the same sync path as Files (path identity, newest wins), so it
+needs no new protocol. Its settings live under Settings › Notes (E).
+
+### H. The desktop belongs in the system tray
+
+It cannot sync when it is closed, and closing it is what people do with a window.
+Tray icon, "Open" and "Quit", close-to-tray, start hidden — then the computer is
+reachable whenever the machine is on, which is the assumption the whole nudge
+mechanism (6i) quietly makes.
+
+### I. Multiple pairings on the phone (§8, and 6w 1)
+
+Still the biggest structural hole, and now the one that blocks the tablet.
+
+---
+
+## Tomorrow: what to test with the tablet
+
+The tablet pairs **with the computer**, not with the phone — each device holds one
+pairing, and the computer is the hub, so this works today without I. In order,
+stopping at the first thing that does not:
+
+1. **Pair.** Tablet › Sync › Scan a code; the computer shows one in Devices. It
+   should appear as a second device with its own connection rows, defaulted to
+   Send & receive · Keep Everything.
+2. **Set its rows before the first sync.** Photos `receive`, Files `both` is the
+   safe start: the tablet takes the library rather than pushing its own into it.
+3. **First sync moves nothing it should not.** Watch that no file on the computer
+   is moved or renamed (the first-sync rule), and that the tablet's own photos are
+   not uploaded if you set photos to `receive`.
+4. **People arrive with their names** — this is 6y, and the tablet is a fresh
+   device, so it should receive all 83 named people, and their faces, and show the
+   portraits you chose.
+5. **Then answer one Help organize card on the tablet** and check it is gone on
+   the phone and the computer (6s).
+6. **Then make the two disagree on purpose**: name someone on the tablet who is
+   already named differently on the phone, sync both. Nothing should move, and one
+   card should appear per pair of people (6t).
+7. **Rename someone on the tablet, rescan faces on the phone**, and check the name
+   survives on all three (6z).
+
+What I expect to break first: nothing in 1–4, and 6 is the one that has never run
+between two real devices.
