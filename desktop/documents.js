@@ -122,7 +122,13 @@ class Documents {
   constructor(db) { this.db = db }
 
   /** A 'phone' row is authoritative (synced, SYNC_PLAN.md phase 6a) and is never re-guessed here. */
-  pending() {
+  /** `everything` is a rescan. The phone's own answers still win: it can tell a document from a photo of text. */
+  pending(everything = false) {
+    if (everything) {
+      return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m LEFT JOIN photo_ai a ON a.sha256 = m.sha256
+        WHERE m.is_video = 0 AND COALESCE(a.source, 'desktop') != 'phone'
+        GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all()
+    }
     return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m LEFT JOIN photo_ai a ON a.sha256 = m.sha256
       WHERE m.is_video = 0 AND COALESCE(a.source, 'desktop') != 'phone' AND (a.version IS NULL OR a.version != ?)
       GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all(VERSION)

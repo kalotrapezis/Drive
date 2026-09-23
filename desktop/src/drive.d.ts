@@ -61,6 +61,7 @@ declare global {
       }
       documents: {
         start(): Promise<void>
+        rescan(): Promise<void>
         nextReview(): Promise<{ sha256: string } | null>
         answer(sha: string, answer: 'yes' | 'no' | 'skip'): Promise<void>
         set(sha: string, isDocument: boolean): Promise<void>
@@ -68,6 +69,7 @@ declare global {
       people: {
         status(): Promise<Analysis>
         start(): Promise<void>
+        rescan(): Promise<void>
         pause(): Promise<void>
         list(): Promise<Person[]>
         shas(id: string): Promise<string[]>

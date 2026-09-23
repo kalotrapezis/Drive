@@ -835,8 +835,21 @@ organize asks about the band *just under* the join line, so it was asking about
 near-certainties: hence "yes" nine times in ten.
 
 Now: **join at 0.60, review 0.45–0.60**, on both devices. Three times the joining,
-and different people still essentially never meet. Review sits where the answer is
-genuinely uncertain, which is the only place a question is worth asking.
+and different people still essentially never meet.
+
+Help organize was not removed, it was moved to where an answer is worth having.
+What each band actually contains, on the same measurement:
+
+| band | pairs it asks about | really the same person | really different |
+|---|---|---|---|
+| 0.66–0.74 (old) | 555 | **97%** | 3% |
+| 0.45–0.60 (new) | 2541 | **54%** | 46% |
+
+The old band was asking about near-certainties — 97% of its questions on the phone
+and *all* of them on the computer had one obvious answer. The new band is close to
+a coin flip, which is the definition of the only question worth asking a human. It
+catches a third of all same-person pairs instead of an eighth, so there are more
+questions, and each one decides something.
 
 **The computer's embeddings are the weaker pair.** Same-person median is 0.445
 here against the phone's 0.542, on the same model — so the difference is the crop,

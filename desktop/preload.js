@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('drive', {
   },
   documents: {
     start: () => ipcRenderer.invoke('documents:start'),
+    rescan: () => ipcRenderer.invoke('documents:rescan'),
     nextReview: () => ipcRenderer.invoke('documents:nextReview'),
     answer: (sha, answer) => ipcRenderer.invoke('documents:answer', sha, answer),
     set: (sha, on) => ipcRenderer.invoke('documents:set', sha, on),
@@ -51,6 +52,7 @@ contextBridge.exposeInMainWorld('drive', {
   people: {
     status: () => ipcRenderer.invoke('people:status'),
     start: () => ipcRenderer.invoke('people:start'),
+    rescan: () => ipcRenderer.invoke('people:rescan'),
     pause: () => ipcRenderer.invoke('people:pause'),
     list: () => ipcRenderer.invoke('people:list'),
     shas: id => ipcRenderer.invoke('people:shas', id),

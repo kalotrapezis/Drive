@@ -233,9 +233,35 @@ class People {
 
   tx(fn) { this.db.exec('BEGIN'); try { const r = fn(); this.db.exec('COMMIT'); return r } catch (e) { this.db.exec('ROLLBACK'); throw e } }
 
-  pending() {
+  /** `everything` is a rescan: read photos that were read before, because the rules have changed since. */
+  pending(everything = false) {
+    if (everything) {
+      return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m WHERE m.is_video = 0
+        GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all()
+    }
     return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m LEFT JOIN face_analysis a ON a.sha256 = m.sha256 AND a.version = ?
       WHERE m.is_video = 0 AND a.sha256 IS NULL GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all(ANALYSIS_VERSION)
+  }
+
+  /**
+   * Throws away the people nobody has named, and their faces, so a rescan can group them again with whatever the
+   * thresholds are now. People with a name keep their faces exactly as they are: a rescan redoes the guessing,
+   * never a decision. Faces the phone sent come back on the next sync, since it still holds them.
+   */
+  forgetUnnamed() {
+    return this.tx(() => {
+      const doomed = this.db.prepare("SELECT id FROM people WHERE name GLOB 'Person [0-9]*'").all().map(r => r.id)
+      this.db.prepare('DELETE FROM face_reviews WHERE face_id IN (SELECT id FROM faces WHERE person_id IS NULL)').run()
+      this.db.prepare('DELETE FROM faces WHERE person_id IS NULL').run()
+      for (const id of doomed) {
+        this.db.prepare('DELETE FROM face_reviews WHERE person_id = ? OR face_id IN (SELECT id FROM faces WHERE person_id = ?)').run(id, id)
+        this.db.prepare('DELETE FROM faces WHERE person_id = ?').run(id)
+        this.db.prepare('DELETE FROM people_merges WHERE target_id = ? OR source_id = ?').run(id, id)
+        this.db.prepare('DELETE FROM people WHERE id = ?').run(id)
+      }
+      this.db.prepare('DELETE FROM face_analysis').run() // every photo is worth reading again
+      return doomed.length
+    })
   }
 
   createPerson(now) {

@@ -40,14 +40,16 @@ const engines = {}
 const sendAnalysis = () => win?.webContents.send('people-progress', { ...analysis })
 const isScreenshot = p => /screenshot|στιγμιοτυπο|screen[ _-]?shot|scrnshot/.test(p.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase())
 
-async function analyzeLibrary() {
+/** `rescan` — 'faces' or 'documents' — reads photos that were read before, because the rules changed since. */
+async function analyzeLibrary(rescan = null) {
   if (analysis.running) return
   Object.assign(analysis, { running: true, paused: false, done: 0, error: '' })
   try {
-    const wantFaces = setting('people_enabled') === '1', wantDocs = setting('documents_enabled') === '1'
+    const wantFaces = setting('people_enabled') === '1' && rescan !== 'documents'
+    const wantDocs = setting('documents_enabled') === '1' && rescan !== 'faces'
     const todo = new Map()
-    if (wantFaces) for (const r of people.pending()) todo.set(r.sha256, { ...r, faces: true })
-    if (wantDocs) for (const r of documents.pending()) todo.set(r.sha256, { ...(todo.get(r.sha256) ?? r), docs: true })
+    if (wantFaces) for (const r of people.pending(rescan === 'faces')) todo.set(r.sha256, { ...r, faces: true })
+    if (wantDocs) for (const r of documents.pending(rescan === 'documents')) todo.set(r.sha256, { ...(todo.get(r.sha256) ?? r), docs: true })
     if (wantFaces) engines.faces ??= await faces.FaceEngine.load(path.join(__dirname, 'models'))
     if (wantDocs) engines.docs ??= await docs.DocEngine.load(path.join(__dirname, 'models'))
     if (wantDocs) engines.scene ??= await docs.SceneEngine.load(path.join(__dirname, 'models'))
@@ -157,6 +159,8 @@ app.whenReady().then(() => {
   ipcMain.handle('documents:nextReview', () => documents.nextReview())
   ipcMain.handle('documents:answer', (_, sha, answer) => documents.answer(sha, answer))
   ipcMain.handle('documents:set', (_, sha, on) => documents.set(sha, on))
+  ipcMain.handle('people:rescan', () => { setSetting('people_enabled', '1'); people.forgetUnnamed(); analyzeLibrary('faces') })
+  ipcMain.handle('documents:rescan', () => { setSetting('documents_enabled', '1'); analyzeLibrary('documents') })
   ipcMain.handle('people:pause', () => { analysis.paused = true })
   ipcMain.handle('people:list', () => people.list())
   ipcMain.handle('people:shas', (_, id) => people.shas(id))

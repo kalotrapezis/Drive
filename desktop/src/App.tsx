@@ -259,6 +259,13 @@ export function App() {
                 <label key={c.id}><input type="checkbox" checked={c.hidden}
                   onChange={e => window.drive.setCollectionHidden(c.id, e.target.checked).then(reload)} /> {c.name}<small className="count">{c.count}</small></label>
               ))}
+              <span className="menu-head">Look again</span>
+              <small>Reads every photo again with the rules as they are now. People you have named keep their faces;
+                only the groups nobody named are worked out afresh.</small>
+              <button className="sheet-row" disabled={!!analysis?.running}
+                onClick={() => run(() => window.drive.people.rescan(), 'Reading every photo again')}><Icon name="person" />Rescan faces</button>
+              <button className="sheet-row" disabled={!!analysis?.running}
+                onClick={() => run(() => window.drive.documents.rescan(), 'Reading every photo again')}><Icon name="fileDoc" />Rescan documents</button>
             </div>
           </details>
         </>} />
