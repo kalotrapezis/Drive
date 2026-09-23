@@ -445,7 +445,14 @@ a metered connection, or a sync less than 15 minutes ago and it simply does not
 happen (the PDF case passes `gap = 0` — something just changed, send it).
 
 Wi-Fi only is a rule, not a setting: a backup is the whole camera roll, never
-something to put on mobile data by itself.
+something to put on mobile data by itself. **A VPN has to be looked past to
+apply it.** An ad-blocking VPN's network reports no metering and names no
+network underneath it, so asking it alone answered "not unmetered" and turned
+every automatic sync off for anyone running one — for a whole night, silently.
+`SyncService.onUnmeteredNetwork` asks the real networks when a VPN is active.
+
+A finished sync also refreshes the pages it changed. Nothing is more confusing
+than a sync that says it is done over a page still showing the old contents.
 
 **Opening the desktop app cannot start a sync today.** The phone is the client
 and the computer has no way to reach it, so the computer would have to announce
@@ -474,6 +481,31 @@ Stays local, on purpose:
 | Search quality (Fast / Advanced) | A performance choice about this device's hardware. |
 | Onboarding, home backdrop, sort orders, the pairing itself | Per device by definition. |
 | Scanner settings | The phone has a camera; the computer does not. |
+
+### 6h. Trash, on both sides (2026-09-23)
+
+Trash was three different things and is now one idea in three places:
+
+- **Files** (both apps): `Drive/Trash/` is an ordinary folder, so it syncs as
+  paths do and a move into it crosses as a move. It is no longer *listed* as a
+  folder — it has its own way in (Files tools on the phone, the sidebar on the
+  desktop), and as a row it was only something to open by accident. A single
+  item already in Trash offers Restore; the folder's header carries Empty
+  Trash, in red, where the page's actions are.
+- **Photos, phone:** Android's own trash, queried with
+  `QUERY_ARG_MATCH_TRASHED` because trashed media is deliberately absent from
+  the ordinary listing. Android holds it 30 days and deletes it itself;
+  restoring and emptying both go through its own confirmation.
+- **Photos, desktop:** the system trash. `shell.trashItem` records where a
+  photo came from in a `.trashinfo` beside it, so reading those back gives the
+  same two answers. **Only items whose recorded origin was inside the library
+  are listed or emptied** — the rest of the user's trash is theirs. Restoring
+  puts a photo back exactly where it came from and never over something that
+  has taken the name since.
+
+Photo trash is not synced and should not be: each device's trash is that
+device's own pending deletion, and "never delete because of a sync" is the rule
+the whole protocol rests on.
 
 ### 7. Later: folders as albums (requested 2026-09-22)
 

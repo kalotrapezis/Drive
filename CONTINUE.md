@@ -1,6 +1,6 @@
 # Continue Tetra (desktop + phone)
 
-Updated: 2026-09-23, early hours. The same text starts `Drive/CONTINUE.md` and
+Updated: 2026-09-23. The same text starts `Drive/CONTINUE.md` and
 `Drive-Android/CONTINUE.md`. The plan with every phase's status is
 [SYNC_PLAN.md](SYNC_PLAN.md) (identical in both repos; edit one, copy it).
 
@@ -11,34 +11,18 @@ A personal Google Photos + Google Drive, called **Tetra**: the Android app
 branch `electron-desktop`) with the same features and data model, syncing 1:1
 over Wi-Fi. The old C++/Qt code in `Drive/` is reference only.
 
-## Test this in the morning
-
-The phone has the latest build installed. Everything below was checked against
-the real library, except the two marked **unchecked**.
-
-1. **The Dynamic Island.** Start a backup: the pill counts `84/398` next to the
-   clock, the card shows the blue progress bar. It no longer springs open on
-   every file.
-2. **Pause.** In the app, the button beside the progress bar (verified). In the
-   notification shade, the Pause action — **unchecked**, the one thing I could
-   not confirm.
-3. **Files.** Tags, favorites, folder colours and recents now cross, and so do
-   the files themselves. Move something into Drive's Trash on the phone, back
-   up, and it should move into Trash on the computer rather than appearing
-   twice.
-4. **Auto-sync.** Opening the app syncs on its own (Wi-Fi, paired, not within
-   15 minutes of the last one). Saving a scan syncs straight away — **the PDF
-   path is unchecked end to end**, only the trigger and the file transfer were
-   tested separately.
-5. **Settings.** Hide Screenshots, Hide Documents and "hide this album" now
-   look the same on both devices.
-
 ## Where things stand
 
-- **Phases 0–6g done.** Photos (blobs, documents, favorites, collections,
+- **Phases 0–6h done.** Photos (blobs, documents, favorites, collections,
   labels, people and faces), Files (tags, favorites, colours, recents, and the
   files themselves including Trash moves), the settings that describe the
-  library, and syncing without being asked.
+  library, syncing without being asked, and Trash on both sides.
+- **Files has multi-selection** on the phone: long-press to start, and the
+  navigation island trades places with an actions island offering Share, Copy,
+  Move, Tags, Favorites and Trash (or Restore in Trash).
+- **Trash is one idea in three places** — see SYNC_PLAN phase 6h. Photos has a
+  Trash system collection on both apps; the Files `Drive/Trash/` folder is no
+  longer listed as a folder on either.
 - **Renamed to Tetra** with the new black icon on both apps. The Android
   package, the desktop data dir and the vault's `local-drive-vault-v1` marker
   deliberately keep the old name — renaming any of them orphans the real
@@ -84,5 +68,9 @@ the real library, except the two marked **unchecked**.
   the very end of a backup leaves no card behind. The desktop now logs any
   request it refuses without telling the phone why; check the desktop console
   before assuming the phone is at fault.
+- **A guard that refuses quietly is worse than one that fails.** "Wi-Fi only"
+  asked the active network, a VPN answered "no idea", and every automatic sync
+  was off for a night without a word. When a rule can be wrong about the
+  network, log it or show it.
 - `mistakes.md` (`Drive/`) — the document-detection lesson; read before
   touching `desktop/documents.js`.
