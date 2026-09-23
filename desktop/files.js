@@ -303,6 +303,13 @@ class Files {
       const from = theirs.find(other => mineBefore.get(other) === sha && !minePaths.has(other))
       if (from && !offered.has(rel)) moveTo.push({ from, to: rel })
     }
+    // A path the device is being told to *move* must not also be asked for. Both answers are true on their own
+    // — this computer does not hold those bytes at that path, and it moved them itself — and sending both made
+    // the device upload the old path while renaming its copy, so the computer ended up with two of everything.
+    // The move is the better answer, so it wins, and the next sync sees the device where this computer is.
+    const following = new Set(moveTo.map(m => m.from))
+    const wanted = want.filter(rel => !following.has(rel))
+
     this.db.exec('BEGIN')
     try {
       this.db.prepare('DELETE FROM sync_manifest WHERE device_id = ?').run(deviceId)
@@ -312,7 +319,7 @@ class Files {
       for (const [rel, sha] of minePaths) put.run('self', rel, sha)
       this.db.exec('COMMIT')
     } catch (e) { this.db.exec('ROLLBACK'); throw e }
-    return { want, moved, have, moveTo }
+    return { want: wanted, moved, have, moveTo }
   }
 
   async sizeOf(rel) { return (await fsp.stat(path.join(this.root, rel)).catch(() => null))?.size ?? 0 }

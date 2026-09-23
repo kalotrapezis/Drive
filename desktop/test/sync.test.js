@@ -404,6 +404,7 @@ test('the other direction: what this computer offers, and a connection that says
     r = await call('POST', '/files/manifest', { token, json: { files: [{ path: 'Notes/computer.txt', sha256: noteHash, size: note.length }] } })
     assert.deepEqual(r.body.moveTo, [{ from: 'Notes/computer.txt', to: 'Notes/renamed.txt' }])
     assert.deepEqual(r.body.have, [], 'a move is not also a copy')
+    assert.deepEqual(r.body.want, [], 'and it is not also a request for the path being moved away from')
 
     // A file the device deleted is not offered back to it: that would undo the deletion.
     const bin = Buffer.from('a file the phone will delete'), binHash = sha(bin)

@@ -964,5 +964,23 @@ and the nudge: that it carries nothing but the ask, that a certificate which is 
 the paired one is refused whatever answers at that address, and that a send-only
 device is never told. Phone unit tests: direction and its sentence, the defaults an
 old computer is read as, and `DriveRules.newFile` keeping both files and refusing a
-path that leaves Drive. **Not yet done: a real run between this phone and this
-computer** — it moves real photos onto a real phone, so it is the user's to start.
+path that leaves Drive.
+
+**The real run (2026-09-23, this phone against this computer).** Files, both ways,
+with photos deliberately set to `send` for the run so a first test could not empty
+the computer's library onto a phone. A file written on the computer arrived on the
+phone byte for byte; no photo was pulled, which is the connection row being obeyed;
+the nudge was answered with the phone's own certificate matching what pairing
+pinned; a file renamed on the computer was **followed** rather than downloaded; and
+a new file in a folder the phone did not have arrived with the folder.
+
+It also found the one bug the unit tests could not. The computer was answering
+`want` and `moveTo` for the same file: both true on their own — it does not hold
+those bytes at that path, and it moved them itself — so the phone dutifully
+uploaded the old path *and* renamed its copy, and the computer ended up with two.
+A move is the better answer, so it now wins: a path the device is told to move is
+taken out of `want`. Re-run after the fix, both sides held exactly the same two
+files.
+
+**Still not run: photos, computer → phone.** 42 photos here are not on that phone,
+and putting them into someone's gallery is their decision, not a test.
