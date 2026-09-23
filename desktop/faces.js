@@ -17,11 +17,14 @@ const ANALYSIS_VERSION = 'yunet2023mar-2pass+' + EMBEDDING_MODEL
 //     0.60          36.7% / 27.4%                    0.22% / 0.00%
 //     0.50          59.4% / 38.6%                    1.73% / 0.44%
 //
-// 0.60 is where the curve turns: it joins three times as much as before while different people still
-// essentially never meet (the highest cosine between two different people in the whole library is 0.73 on the
-// phone, 0.58 here). Review moves down to where the answer is genuinely uncertain, 0.45–0.60, instead of
-// sitting above the join line where everything is already obvious.
-const SAME_PERSON = 0.60, REVIEW_FROM = 0.45, UNRELIABLE_JOIN = 0.45, ANCHOR_QUALITY = 0.68
+// 0.60 was tried and made visible mistakes on a real library: a toddler in sunglasses, a black-and-white frame
+// and a stranger all landed on the same child. A join the classifier makes on its own is not recorded anywhere
+// and so cannot be taken back from History — the rule is that the irreversible line stays strict and the
+// uncertain band goes to review, which is reversible by construction. 0.68 sits under the 0.73 where the two
+// closest different people meet and above where the model's mistakes were coming from; review is 0.45–0.68.
+// The same rule removed the loose join for unreliable faces (tiny, blurred, turned away), which used to join at
+// 0.45 with no review and no way back: they now clear the same line as everyone else or wait for a better shot.
+const SAME_PERSON = 0.68, REVIEW_FROM = 0.45, ANCHOR_QUALITY = 0.68
 // Two boxes this far into each other, on the same photo, are the same face found twice (sync, SYNC_PLAN.md 6c).
 const SAME_FACE_OVERLAP = 0.4
 const DETECT_SIZE = 640, DETECT_SCORE = 0.8, NMS_IOU = 0.3
@@ -291,7 +294,7 @@ class People {
         let best = null, similarity = -1
         for (const c of candidates) { const s = cosine(face.embedding, c.embedding); if (s > similarity) { similarity = s; best = c } }
         const reliable = isReliableFace(face.quality, face.yaw, face.roll)
-        const person = similarity >= SAME_PERSON ? best.person : !reliable && similarity >= UNRELIABLE_JOIN ? best.person : !reliable ? null : this.createPerson(now)
+        const person = similarity >= SAME_PERSON ? best.person : !reliable ? null : this.createPerson(now)
         if (!person) continue
         const id = crypto.randomUUID()
         const b = face.box
@@ -480,6 +483,28 @@ class People {
       this.db.prepare('INSERT INTO people_merges(target_id, source_id, source_name, face_ids, merged_at) VALUES(?,?,?,?,?)')
         .run(targetId, sourceId, sourceName, faceIds.join(','), now)
       return { sourceId, faceIds }
+    })
+  }
+
+  /**
+   * Phone: detachPhotosFromGroup — take these photos' faces out of a person and give them a person of their own.
+   * The classifier's own joins leave no history, so this is the only way out of one; the faces are not lost, they
+   * stand as a new person that Combine can put back.
+   */
+  detach(personId, shas) {
+    this.live(personId)
+    const now = Date.now()
+    return this.tx(() => {
+      const marks = shas.map(() => '?').join(',')
+      const ids = this.db.prepare(`SELECT id FROM faces WHERE person_id = ? AND deleted = 0 AND sha256 IN (${marks})`).all(personId, ...shas).map(r => r.id)
+      if (!ids.length) throw new Error('Nothing to take out of this person.')
+      const left = this.db.prepare(`SELECT COUNT(*) AS n FROM faces WHERE person_id = ? AND deleted = 0 AND id NOT IN (${ids.map(() => '?').join(',')})`).get(personId, ...ids).n
+      if (!left) throw new Error('Taking every photo out would leave nobody here. Leave one behind, or combine this person into another.')
+      const person = this.createPerson(now)
+      this.db.prepare(`DELETE FROM face_reviews WHERE face_id IN (${ids.map(() => '?').join(',')})`).run(...ids)
+      const move = this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?')
+      for (const id of ids) move.run(person, now, id)
+      return { person, faces: ids.length }
     })
   }
 

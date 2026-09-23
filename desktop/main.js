@@ -167,6 +167,7 @@ app.whenReady().then(() => {
   ipcMain.handle('people:names', () => people.namesBySha())
   ipcMain.handle('people:rename', (_, id, name) => people.rename(id, name))
   ipcMain.handle('people:merge', (_, source, target) => people.merge(source, target))
+  ipcMain.handle('people:detach', (_, id, shas) => people.detach(id, shas))
   ipcMain.handle('people:undoMerge', (_, undo) => people.undoMerge(undo))
   ipcMain.handle('people:mergeHistory', (_, id) => people.mergeHistory(id))
   ipcMain.handle('people:restoreMerge', (_, id) => people.restoreMerge(id))

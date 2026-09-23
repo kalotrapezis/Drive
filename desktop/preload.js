@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('drive', {
     names: () => ipcRenderer.invoke('people:names'),
     rename: (id, name) => ipcRenderer.invoke('people:rename', id, name),
     merge: (source, target) => ipcRenderer.invoke('people:merge', source, target),
+    detach: (id, shas) => ipcRenderer.invoke('people:detach', id, shas),
     undoMerge: undo => ipcRenderer.invoke('people:undoMerge', undo),
     mergeHistory: id => ipcRenderer.invoke('people:mergeHistory', id),
     restoreMerge: id => ipcRenderer.invoke('people:restoreMerge', id),

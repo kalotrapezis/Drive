@@ -319,6 +319,13 @@ export function App() {
               : <button className="round flat" title="Add to collection" onClick={() => collect(picked)}><Icon name="collect" /></button>}
             <button className="round flat" title="Move to Hidden" onClick={() => hide(picked)}><Icon name="lock" /></button>
             <button className="round flat" title="Move to Trash (Delete)" onClick={() => trash(picked)}><Icon name="trash" /></button>
+            {page.kind === 'person' && person && (
+              <button className="text-button" title="These are not this person" onClick={() => run(async () => {
+                const r = await window.drive.people.detach(person.id, picked.map(m => m.sha256))
+                setSelected(new Set())
+                say(`${r.faces === 1 ? 'One face' : `${r.faces} faces`} taken out of ${person.name}`)
+              })}><Icon name="uncollect" size={20} />Not this person</button>
+            )}
           </div>
         )}
       </main>

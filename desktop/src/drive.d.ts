@@ -76,6 +76,7 @@ declare global {
         names(): Promise<Record<string, string[]>>
         rename(id: string, name: string): Promise<string>
         merge(source: string, target: string): Promise<MergeUndo>
+        detach(id: string, shas: string[]): Promise<{ person: string; faces: number }>
         undoMerge(undo: MergeUndo): Promise<void>
         mergeHistory(id: string): Promise<PersonMerge[]>
         restoreMerge(id: number): Promise<void>

@@ -34,7 +34,7 @@ test('alignment puts the eyes at (38,44) and (74,44)', () => {
   assert.equal(at(56, 44), -1) // between the eyes stays dark
 })
 
-test('grouping follows the phone: join ≥ 0.60, new person below, review 0.45–0.60, merge and undo keep ids', () => {
+test('grouping follows the phone: join ≥ 0.68, new person below, review 0.45–0.68, merge and undo keep ids', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-faces-'))
   const db = library.open(tmp)
   const people = new F.People(db, tmp)
@@ -43,7 +43,7 @@ test('grouping follows the phone: join ≥ 0.60, new person below, review 0.45�
 
   people.record(sha(1), [face(base)], size)
   people.record(sha(2), [face(withCosine(0.80, third))], size) // same person
-  people.record(sha(3), [face(withCosine(0.52, fourth))], size) // new person + review against the first
+  people.record(sha(3), [face(withCosine(0.52, fourth))], size) // below the line: new person + review against the first
   people.record(sha(4), [face(other)], size) // clearly someone else
   let list = people.list()
   assert.deepEqual(list.map(p => [p.name, p.count]), [['Person 1', 2], ['Person 2', 1], ['Person 3', 1]])
@@ -178,6 +178,26 @@ test('history keeps every combine, with the head and number it had, until it is 
   assert.equal(people.mergeHistory(keep.id).length, 0, 'and stops being offered twice')
   assert.throws(() => people.restoreMerge(history[0].id), /already been undone/)
   assert.equal(undo.sourceId, gone.id)
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})
+
+test('a face the classifier put in the wrong person can be taken back out', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-faces-detach-'))
+  const db = library.open(tmp)
+  const people = new F.People(db, tmp)
+  const sha = n => String(n).repeat(64).slice(0, 64)
+  for (const n of [1, 2]) db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb) VALUES(?,?,'image/jpeg',0,1,1,?,1)").run(`${n}.jpg`, sha(n), n)
+  people.record(sha(1), [face(base)], size)
+  people.record(sha(2), [face(withCosine(0.9))], size) // close enough that the classifier joined them on its own
+  const [person] = people.list()
+  assert.deepEqual(people.shas(person.id).sort(), [sha(1), sha(2)].sort(), 'one person, two photos')
+
+  assert.throws(() => people.detach(person.id, [sha(1), sha(2)]), /leave nobody here/)
+  const out = people.detach(person.id, [sha(2)])
+  assert.equal(out.faces, 1)
+  assert.deepEqual(people.shas(person.id), [sha(1)])
+  assert.deepEqual(people.shas(out.person), [sha(2)], 'it stands as its own person, which Combine can put back')
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })
