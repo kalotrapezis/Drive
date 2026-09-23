@@ -1301,3 +1301,34 @@ already reading; the computer had `media.taken_at` all along and was not using i
 Tested: `faces.test.js` and `IncomingFaceDeviceTest` — two photos eight seconds
 apart joining where the pixels alone would not, the same likeness a week later
 staying apart, and a stranger on the same day staying a stranger.
+
+### 6y. A name travels with its person, and old ones have to be asked for again (2026-09-24)
+
+Checked against the real pair rather than assumed, and it found two things.
+
+**What was already true:** 47 of the phone's 48 named people existed on the
+computer under the **same uuid with the same name**. The naming work does cross,
+and it has been crossing. That is the question that actually mattered.
+
+**What was not:** 35 people named *on the computer* existed nowhere on the phone.
+6r said an incoming face whose person is unknown here should be grouped by this
+phone's own rules — right for a guess, wrong for a name. A name is a decision, and
+a decision travels **including the person it is about**; otherwise the faces behind
+it land in a nameless group and the naming has to be done a second time, by hand,
+which is the whole thing this is supposed to prevent. So `applyIncomingPerson` now
+creates a person it has never seen **when the name is a real one**, and drops it
+when it is "Person 41". A person with no faces is never shown, so the ones whose
+faces have not arrived cost nothing.
+
+**And the reason that fix would have done nothing on its own.** `?since=` is an
+efficiency that quietly assumes what we skipped before we would skip again. The
+moment this app learns to accept something it used to drop, everything it dropped
+sits outside every future window — those 35 names were written long ago and would
+never have been sent again. So the rules now carry a number: **when the way
+metadata is accepted changes, the number moves and the next sync asks from the
+beginning, once.**
+
+Measured, on the real pair: before, 48 named people on the phone and 35 stranded
+on the computer. After, **83 named people on the phone and none stranded** — 50
+showing with faces here, 33 waiting for theirs. No name was overwritten, and no
+grouping was lost.
