@@ -189,9 +189,14 @@ export function App() {
     setDialog(<RenamePerson person={p} onClose={close} onDone={name => { setPage({ kind: 'person', id: p.id, name }); reload() }} />)
   }
   function combine(p: Person) {
-    setDialog(<CombinePicker person={p} people={people} onClose={close} onPick={other => run(async () => {
-      const undo: MergeUndo = await window.drive.people.merge(other.id, p.id)
-      say(`Combined ${other.name} into ${p.name}`, () => run(() => window.drive.people.undoMerge(undo), 'Combine undone'))
+    // Undo takes them back in the order they went in, so a face never lands in the wrong group on the way out.
+    setDialog(<CombinePicker person={p} people={people} onClose={close} onPick={others => run(async () => {
+      const undos: MergeUndo[] = []
+      for (const other of others) undos.push(await window.drive.people.merge(other.id, p.id))
+      const what = others.length === 1 ? others[0].name : `${others.length} people`
+      say(`Combined ${what} into ${p.name}`, () => run(async () => {
+        for (const undo of undos.reverse()) await window.drive.people.undoMerge(undo)
+      }, 'Combine undone'))
     })} />)
   }
 

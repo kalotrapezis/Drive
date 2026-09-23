@@ -366,3 +366,6 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .file.selected { background: var(--island-2); }
 .file.selected .check { color: var(--accent); }
 .files .selection-bar { position: fixed; }
+.picker-row.on { background: var(--island-2); }
+.picker-row > svg:last-child { margin-left: auto; color: var(--muted); }
+.picker-row.on > svg:last-child { color: var(--accent); }

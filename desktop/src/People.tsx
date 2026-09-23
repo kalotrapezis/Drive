@@ -68,20 +68,36 @@ export function RenamePerson({ person, onClose, onDone }: { person: Person; onCl
   )
 }
 
-/** Phone: combine keeps the open person and moves the chosen duplicate into it. */
-export function CombinePicker({ person, people, onClose, onPick }: { person: Person; people: Person[]; onClose: () => void; onPick: (other: Person) => void }) {
+/**
+ * Phone: combine keeps the open person and moves the chosen duplicates into it. One face group is rarely the
+ * only duplicate of a person, so this takes as many as are picked — searchable, because a library has hundreds.
+ */
+export function CombinePicker({ person, people, onClose, onPick }: { person: Person; people: Person[]; onClose: () => void; onPick: (others: Person[]) => void }) {
+  const [chosen, setChosen] = useState<Set<string>>(new Set())
+  const [query, setQuery] = useState('')
+  const choices = people.filter(p => p.id !== person.id && p.name.toLowerCase().includes(query.trim().toLowerCase()))
+  const toggle = (id: string) => setChosen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const picked = people.filter(p => chosen.has(p.id))
   return (
     <Modal onClose={onClose}>
       <h3>Combine with {person.name}</h3>
-      <p>Pick the same person shown twice. Their photos move into {person.name}.</p>
+      <p>Pick the same person shown more than once. Their photos move into {person.name}.</p>
+      <input className="field" autoFocus placeholder="Find a person" value={query} onChange={e => setQuery(e.target.value)} />
       <div className="picker">
-        {people.filter(p => p.id !== person.id).map(p => (
-          <button key={p.id} className="picker-row" onClick={() => { onClose(); onPick(p) }}>
+        {choices.length === 0 && <p className="hint">{people.length > 1 ? 'No people match this name.' : 'There are no other people yet.'}</p>}
+        {choices.map(p => (
+          <button key={p.id} className={`picker-row ${chosen.has(p.id) ? 'on' : ''}`} onClick={() => toggle(p.id)}>
             <FaceCircle face={p.cover} size={44} /><span>{p.name}<small>{p.count}</small></span>
+            <Icon name={chosen.has(p.id) ? 'checked' : 'unchecked'} size={22} />
           </button>
         ))}
       </div>
-      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button></div>
+      <div className="dialog-actions">
+        <button className="text-button" onClick={onClose}>Cancel</button>
+        <button className="filled-button" disabled={picked.length === 0} onClick={() => { onClose(); onPick(picked) }}>
+          {picked.length > 1 ? `Combine ${picked.length} people` : 'Combine'}
+        </button>
+      </div>
     </Modal>
   )
 }
