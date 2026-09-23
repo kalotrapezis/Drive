@@ -695,3 +695,43 @@ phone is looking for, and a computer answers *only* if that is its own — so it
 tells the asker something it already knew, and a stranger listening learns
 nothing about who is on this network or what they hold. The token never travels
 over UDP.
+
+### 6l. Android ↔ Android: every device shows a code and scans one (2026-09-23)
+
+**Status: pairing done, on both sides.** Two phones have no computer between them,
+so the phone stopped being only a client: it can now be *found*, not just look.
+
+- **The certificate comes from the Android keystore**, which issues a self-signed
+  one along with the key it generates, so no certificate library is needed and the
+  private half never leaves the keystore (`SyncServer.identity`). One catch cost a
+  real device run: TLS hands the key an already-hashed value to sign, which the
+  keystore calls the **NONE digest**, and a key not allowed it cannot complete a
+  handshake at all. Such a key is replaced rather than kept — nothing can have
+  paired with a certificate that never worked.
+- **The server is small because the protocol is ours**: an `SSLServerSocket`, a
+  request line, headers, and exactly Content-Length bytes. No HTTP library, and
+  nothing to unpick later when photos need to stream through it.
+- **It runs only while the QR code is on screen.** Something that listens all day
+  is a decision to make out loud, not by leaving a screen open.
+- **Pairing now hands over both halves at once.** The scanner proves it saw the
+  code *and* says who it is: its own fingerprint, port, addresses and a token the
+  other side sends when it calls. Between two phones neither is the client, so a
+  pairing that travelled one way would leave one of them unable to ever start a
+  sync. The computer stores the same fields (`sync_devices.peer_*`) and hands back
+  its own, which is what will let a computer start a sync instead of only
+  answering one.
+- **Many pairings, not one.** `sync.db` v2 keeps a `peers` table keyed by
+  fingerprint, because a phone and a tablet pair with each other *and* with the
+  same computer.
+- The phone answers the beacon of 6k too, so a paired device finds it again after
+  its address changes.
+
+Tested on the real phone (`SyncServerDeviceTest`, instrumented — only a device
+can run it, the certificate comes from its keystore): the code it shows is a code
+it could scan, a scan returns a token, both halves are stored, and a code works
+once.
+
+**Next, in order:** the phone answering `/have`, `/metadata` and the file
+manifest — the endpoints the desktop already serves — so that a pairing between
+two Androids can actually carry something. Until then a scan between two phones
+completes and shows up as a paired device, and nothing moves yet.

@@ -46,6 +46,12 @@ class SyncServer {
       CREATE TABLE IF NOT EXISTS sync_receipts (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256));`)
     // Drive files are received too now, and the Devices page counts them apart from photos.
     if (!db.prepare('PRAGMA table_info(sync_receipts)').all().some(c => c.name === 'kind')) db.exec("ALTER TABLE sync_receipts ADD COLUMN kind TEXT NOT NULL DEFAULT 'photo'")
+    // A phone now says who it is when it pairs — its own certificate, port and a token to send it — so that this
+    // computer can one day start a sync instead of only answering one. Older pairings simply leave these null.
+    const columns = db.prepare('PRAGMA table_info(sync_devices)').all().map(c => c.name)
+    for (const [name, type] of [['peer_fp', 'TEXT'], ['peer_hosts', 'TEXT'], ['peer_port', 'INTEGER'], ['peer_token', 'TEXT']]) {
+      if (!columns.includes(name)) db.exec(`ALTER TABLE sync_devices ADD COLUMN ${name} ${type}`)
+    }
   }
 
   async start() {
@@ -141,8 +147,12 @@ class SyncServer {
       }
       this.codes.delete(code) // one use
       const token = crypto.randomBytes(32).toString('base64url'), id = crypto.randomUUID()
-      this.db.prepare('INSERT INTO sync_devices(id, name, token_hash, paired_at) VALUES(?,?,?,?)').run(id, String(body.name ?? 'Phone').slice(0, 80), sha(token), Date.now())
-      return this.send(res, 200, { deviceId: id, token, name: os.hostname() })
+      const peerFp = typeof body.fp === 'string' && isHash(body.fp) ? body.fp : null
+      const peerHosts = Array.isArray(body.hosts) ? body.hosts.filter(h => typeof h === 'string').slice(0, 8).join(',') : null
+      this.db.prepare(`INSERT INTO sync_devices(id, name, token_hash, paired_at, peer_fp, peer_hosts, peer_port, peer_token)
+        VALUES(?,?,?,?,?,?,?,?)`).run(id, String(body.name ?? 'Phone').slice(0, 80), sha(token), Date.now(),
+        peerFp, peerHosts, Number(body.port) || null, typeof body.token === 'string' ? body.token.slice(0, 128) : null)
+      return this.send(res, 200, { deviceId: id, token, name: os.hostname(), fp: this.fingerprint, port: this.port })
     }
     const device = this.device(req)
     if (req.method === 'POST' && url.pathname === '/have') {
