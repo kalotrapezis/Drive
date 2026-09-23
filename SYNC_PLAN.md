@@ -773,3 +773,33 @@ result** — including faces its own detector could never have found.
 
 Still not done: a face the computer found on a photo the *phone does not have* is
 skipped, because there is nothing to attach it to. It arrives with the photo.
+
+### 6n. The cover face, and people with nothing left (2026-09-23)
+
+Two consequences of 6m, both asked for as soon as faces started crossing.
+
+**The portrait is now the best face, not the first one found.** Both apps score a
+face by the same formula (sharpness × size), and the computer's faces arrive with
+their score, so the two compete on one scale: whichever device took the better
+look at someone is the one whose face represents them. This is usually the
+computer, which detects at a larger size — which is also why it finds faces the
+phone misses.
+
+**A person with no photos left stops being shown.**
+
+- **Computer:** when a scan sees photos leave the library, their faces go with
+  them and a person left with no faces at all is removed. Only the photos *this
+  scan saw disappear* count, so a face the phone sent for a photo not yet
+  transferred — no media row, and never had one — is left alone. The person's row
+  is deleted rather than tombstoned on purpose: the phone may still hold that
+  person's photos, and a tombstone would travel there and delete someone
+  perfectly alive. The next sync simply brings them back.
+- **Phone:** a group is only as alive as its photos — People lists only those
+  with at least one photo still on the device. The rows stay, because Android's
+  own Trash holds a deleted photo for thirty days and restoring it should bring
+  the person back, name and all. Rows are actually removed where it is already
+  safe: when the photos themselves are forgotten (`forgetPhotos`).
+
+The asymmetry is deliberate. The computer's library is a folder it can see the
+whole of, so "gone" means gone; on the phone, gone often means "in a trash that
+empties itself in a month", and a name the user typed is not worth losing to that.

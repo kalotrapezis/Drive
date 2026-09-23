@@ -70,3 +70,38 @@ test('grouping follows the phone: join â‰¥ 0.74, new person below, review 0.66â€
   assert.equal(db.prepare('SELECT COUNT(*) n FROM faces WHERE sha256 = ?').get(sha(1)).n, 1)
   fs.rmSync(tmp, { recursive: true })
 })
+
+test('a person whose photos all left goes, the best face is the cover, and the phone\'s own people are left alone', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-faces-gone-'))
+  const photos = path.join(tmp, 'Photos')
+  fs.mkdirSync(photos)
+  const db = library.open(tmp)
+  const people = new F.People(db, tmp)
+  // Two real files, so a scan can see them leave.
+  const files = ['a.jpg', 'b.jpg'].map(n => path.join(photos, n))
+  files.forEach((f, i) => fs.writeFileSync(f, Buffer.concat([Buffer.from('\xff\xd8\xff'), Buffer.alloc(64, i + 1)])))
+  await library.scan(db, photos, tmp, () => {})
+  const [first, second] = db.prepare('SELECT sha256 FROM media ORDER BY path').all().map(r => r.sha256)
+
+  people.record(first, [face(base, 0.7)], size)
+  people.record(second, [face(withCosine(0.9), 0.95)], size) // the same person, seen better
+  const person = people.list()[0]
+  assert.equal(person.count, 2)
+  const best = db.prepare('SELECT id FROM faces WHERE quality = 0.95').get().id
+  assert.equal(person.cover, best, 'the better face is the portrait, wherever it was found')
+
+  // A face the phone sent for a photo this computer has not been given: it must survive a scan untouched.
+  people.applyPerson('phone-person', 'Elsewhere', Date.now())
+  people.applyFace({ uuid: 'phone-face', sha256: 'f'.repeat(64), box: [0.1, 0.1, 0.4, 0.4],
+    embedding: Buffer.from(new Float32Array(other).buffer), model: F.EMBEDDING_MODEL, quality: 0.8,
+    person: 'phone-person', updatedAt: Date.now() })
+
+  fs.rmSync(files[0]); fs.rmSync(files[1])
+  await library.scan(db, photos, tmp, () => {})
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM faces WHERE sha256 IN (?,?)').get(first, second).n, 0, 'their faces went with them')
+  assert.equal(people.list().length, 0, 'and the person nobody has a photo of is gone')
+  assert.ok(db.prepare("SELECT 1 FROM faces WHERE id = 'phone-face'").get(), "the phone's face is not this computer's to delete")
+  assert.ok(db.prepare("SELECT 1 FROM people WHERE id = 'phone-person'").get(), 'nor its person')
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})

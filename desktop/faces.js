@@ -305,7 +305,8 @@ class People {
   /** Live people with photos present in the library. Named people first, like the phone. */
   list() {
     return this.db.prepare(`SELECT p.id, p.name, COUNT(DISTINCT f.sha256) AS count,
-        (SELECT f2.id FROM faces f2 WHERE f2.person_id = p.id AND f2.deleted = 0 ORDER BY f2.quality DESC LIMIT 1) AS cover
+        (SELECT f2.id FROM faces f2 JOIN media m2 ON m2.sha256 = f2.sha256
+          WHERE f2.person_id = p.id AND f2.deleted = 0 ORDER BY f2.quality DESC LIMIT 1) AS cover
       FROM people p JOIN faces f ON f.person_id = p.id AND f.deleted = 0 JOIN media m ON m.sha256 = f.sha256
       WHERE p.deleted = 0 GROUP BY p.id`).all()
       .sort((a, b) => Number(isGeneratedName(a.name)) - Number(isGeneratedName(b.name))

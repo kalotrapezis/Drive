@@ -165,8 +165,18 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
     onProgress(++done, ++changed)
   }
   const del = db.prepare('DELETE FROM media WHERE path = ?')
+  const byPath = db.prepare('SELECT sha256 FROM media WHERE path = ?')
+  const gone = []
   let removed = 0
-  for (const rel of known.keys()) if (!seen.has(rel)) { del.run(rel); removed++ }
+  for (const rel of known.keys()) if (!seen.has(rel)) {
+    const row = byPath.get(rel)
+    del.run(rel)
+    if (row) gone.push(row.sha256)
+    removed++
+  }
+  // Removals run after every file on disk has been seen, so a photo that merely moved is already back in the
+  // table under its new path and is not treated as gone.
+  if (gone.length) forgetFacesOfGonePhotos(db, gone)
   return { total: seen.size, changed, removed }
 }
 
@@ -368,6 +378,26 @@ function applyCollectionItem(db, collection, sha, deleted, updatedAt) {
   db.prepare(`INSERT INTO collection_items(collection_id, sha256, updated_at, deleted) VALUES(?,?,?,?) ON CONFLICT(collection_id, sha256)
     DO UPDATE SET deleted = excluded.deleted, updated_at = excluded.updated_at WHERE collection_items.updated_at < excluded.updated_at`)
     .run(collection, sha, updatedAt, deleted ? 1 : 0)
+}
+
+/**
+ * A face belongs to a photo, so when the photo leaves this library the face goes with it, and a person left with
+ * no faces at all stops existing here. Only the photos this scan saw disappear are considered, so a face the
+ * phone sent for a photo that has not been transferred yet — which has no media row and never had one — is left
+ * alone.
+ *
+ * The person's row is removed rather than tombstoned, on purpose: the phone may still hold that person's photos,
+ * and a tombstone would travel there and delete someone who is perfectly alive. This way the next sync simply
+ * brings them back.
+ */
+function forgetFacesOfGonePhotos(db, sha256s) {
+  // People is a separate module and may never have run here, in which case there is nothing to clean up.
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'faces'").get()) return
+  const stillHere = db.prepare('SELECT 1 FROM media WHERE sha256 = ?')
+  const forget = db.prepare('DELETE FROM faces WHERE sha256 = ?')
+  for (const sha of sha256s) if (!stillHere.get(sha)) forget.run(sha)
+  db.prepare(`DELETE FROM people WHERE deleted = 0
+    AND id NOT IN (SELECT person_id FROM faces WHERE person_id IS NOT NULL AND deleted = 0)`).run()
 }
 
 /** Search labels only ever merge: they are produced by analysis, never removed by hand. */
