@@ -599,3 +599,59 @@ Three things this design has to get right, in the order they can hurt:
    step, before the metadata pass runs.
 3. **Hidden stays hidden.** Vault items are not part of a pull; they cross only
    through the encrypted path of phase 6, which is its own piece of work.
+
+### 6j. Connection cards (from the old app, 2026-09-23)
+
+The tree in 6i assumes one hardwired answer — the phone pushes, the phone pulls.
+The old desktop app had already answered this better, and the answer survives in
+`Drive` on `codex/live-ui-audit` (`SPEC.md` §5, `design/audits/global-sync-map-2026-08-22/audit.md`):
+**an interactive map is the wrong editor. A connection is a card.**
+
+Its own audit of the map said why: the loose `+` diamonds never revealed whether
+they added a device, a storage or a route, and Send/Receive/Move/Copy as four
+checkboxes let the user state a contradiction. So the map became a picture drawn
+*after* the fact — the whole network at a glance, read-only — and the editing
+happens on a card that holds two devices and the rules between them. One set of
+cards for Files, one for Photos, because the two libraries genuinely want
+different answers (every photo everywhere; the working folder only on the laptop).
+
+**The vocabulary is already decided, and it is worth keeping word for word:**
+
+| On the card | Means |
+|---|---|
+| **Send** / **Receive** / **Send & receive** | Direction, and nothing else |
+| **Keep Everything … Keep Last month / week / day … Keep Nothing** | What the *source* keeps after a verified transfer |
+| Keep Everything = Copy, Keep Nothing = verified Move | The only two the phone has today |
+| **Send & receive forces Keep Everything** | Two-way and "delete after sending" cannot both be true |
+| Use as cache for transfer (staging maximum) | The laptop passing things through without keeping them |
+| When the drive is connected | Timing, separate from direction |
+
+Direction and retention stay separate concepts. That separation is the whole
+lesson: the old UI's contradictions all came from one control trying to say both.
+
+**How it lands on what exists now:**
+
+```
+connections (the computer owns the table; it is the only device every other one reaches)
+├── row = (deviceA, deviceB, content: files|photos, direction, keep, staging, timing)
+├── the phone reads its own rows at sync time and obeys them
+│   ├── Send            → today's push                      (already built)
+│   ├── Receive         → the pull of 6i                    (to build)
+│   └── Send & receive  → both, and Keep Everything forced
+├── the phone does not edit them at first — the computer configures, the phone
+│   shows the sentence ("Phone Photos → Server: Copy") and that is enough to test
+└── the map is a diagram of these rows, drawn after they exist, never the editor
+```
+
+**Keep Nothing is not a sync deletion.** The protocol's rule is that sync never
+deletes; a Move is the user asking for one, and the old spec's invariants are the
+ones that make it safe: nothing is removed until the destination's independently
+read SHA-256 and size match and the catalog commit succeeds, a filename match is
+never verification, and an offline device is never read as deletion. The phone
+already has the receipt half of this (`SyncStore.receipts`). Keep Last week is
+the same machinery with a date, and can wait.
+
+**Order of work:** Receive (6i) first with the direction hardcoded to
+Send & receive, because that is what the tablet needs and it cannot delete
+anything. The card model, and with it Keep, lands on top once bytes provably move
+both ways.
