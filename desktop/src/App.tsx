@@ -195,7 +195,7 @@ export function App() {
   const nav = (target: Page, active: boolean, icon: IconName, label: string) => (
     <button className={`nav-item ${active ? 'active' : ''}`} onClick={() => setPage(target)}><Icon name={icon} />{label}</button>
   )
-  const filesMode = page.kind === 'files' ? page.mode : null
+  const filesMode = page.kind === 'files' && !(page.mode === 'browse' && page.folder.startsWith('Trash')) ? page.mode : null
 
   const loading = !media || (media.length === 0 && scan)
   let content: ReactNode
@@ -268,6 +268,7 @@ export function App() {
         {nav({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
         {nav({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
         {nav({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', 'Recent')}
+        {nav({ kind: 'files', mode: 'browse', folder: 'Trash' }, filesMode === 'browse' && page.kind === 'files' && page.folder.startsWith('Trash'), 'trash', 'Trash')}
         <small className="rail-head">Sync</small>
         {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Devices')}
         {analysis?.running && (
