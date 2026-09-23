@@ -984,3 +984,23 @@ files.
 
 **Still not run: photos, computer → phone.** 42 photos here are not on that phone,
 and putting them into someone's gallery is their decision, not a test.
+
+**What happens when the network goes (tested 2026-09-23, on the real pair).** Wi-Fi
+switched off with 90 MB of a 400 MB file already written: the phone kept **nothing**
+— the `.part` went with the failure, no half file was left wearing the real name —
+the sync ended, the app stayed up, and the computer stayed up. Wi-Fi back, one
+nudge, and the same file arrived whole and byte-identical.
+
+That test found the failure that mattered. Once a file has started streaming the
+answer is already on the wire, so the error handler's `send(res, 500, …)` threw
+`ERR_HTTP_HEADERS_SENT` in a `.catch` nobody was behind — an unhandled rejection,
+which in an Electron main process is the whole window closing. **A phone walking
+out of Wi-Fi could have taken the desktop app down with it.** `send` now closes the
+connection instead of writing a second answer, and `sendFile` treats a dropped
+connection as the ordinary end of a transfer: the phone keeps nothing it cannot
+verify and asks again next time, so there is nothing to report.
+
+Pause and Stop now reach the receiving half too — they only ever interrupted
+sending — and they land between files, never inside one. A photo half received when
+the app was killed is a pending MediaStore item: invisible, but ours, so a sync
+clears its own after an hour (Android clears them itself after a week).

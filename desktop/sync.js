@@ -162,7 +162,13 @@ class SyncServer {
     })
   }
 
+  /**
+   * Once a file has started streaming the answer is already on the wire, so there is no status left to send: a
+   * phone that walks out of Wi-Fi mid-photo must close the connection here, not throw where nothing catches it.
+   * That throw used to reach the top as an unhandled rejection, which on this app is the whole window closing.
+   */
   send(res, status, body) {
+    if (res.headersSent || res.writableEnded) return void res.destroy()
     res.writeHead(status, { 'content-type': 'application/json' })
     res.end(JSON.stringify(body))
   }
@@ -220,12 +226,23 @@ class SyncServer {
     return out
   }
 
-  /** Streams a file out, once its hash is confirmed to be what was asked for. Nothing else may be read. */
+  /**
+   * Streams a file out, once its hash is confirmed to be what was asked for. Nothing else may be read.
+   *
+   * A transfer that stops half way is not an error worth reporting: the phone keeps nothing it cannot verify,
+   * and it will ask again on its next sync. So a dropped connection closes both ends and says nothing.
+   */
   async sendFile(res, absolute, expected) {
     const st = await fsp.stat(absolute).catch(() => null)
     if (!st?.isFile()) throw Object.assign(new Error('Not here any more.'), { status: 404, expose: true })
     res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': String(st.size) })
-    await new Promise((resolve, reject) => fs.createReadStream(absolute).on('error', reject).on('end', resolve).pipe(res, { end: true }))
+    const file = fs.createReadStream(absolute)
+    await new Promise(resolve => {
+      const done = () => { file.destroy(); resolve() }
+      file.on('error', done).on('end', done)
+      res.on('close', done).on('error', done)
+      file.pipe(res, { end: true })
+    })
   }
 
   have(hash) {

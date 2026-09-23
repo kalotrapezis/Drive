@@ -474,3 +474,53 @@ test('the computer can only say "there is something new"; the phone it says it t
     fs.rmSync(tmp, { recursive: true })
   }
 })
+
+test('a transfer that is cut off leaves the computer running and the phone holding nothing', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-cut-'))
+  const photos = path.join(tmp, 'Photos')
+  fs.mkdirSync(path.join(photos, 'DCIM'), { recursive: true })
+  const db = library.open(path.join(tmp, 'data'))
+  const server = await new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: photos, port: 0 }).start()
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex')
+  const unhandled = []
+  const watch = e => unhandled.push(e)
+  process.on('unhandledRejection', watch)
+  try {
+    const { token } = (await request(server.port, server.fingerprint, 'POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    const big = crypto.randomBytes(4 << 20) // large enough that it cannot all be in flight at once
+    fs.writeFileSync(path.join(photos, 'DCIM/big.jpg'), big)
+    db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb) VALUES(?,?,'image/jpeg',0,?,1,1,1)")
+      .run('DCIM/big.jpg', sha(big), big.length)
+
+    // The phone walks out of Wi-Fi with the photo half sent.
+    const got = await new Promise((resolve, reject) => {
+      const req = https.request({ host: '127.0.0.1', port: server.port, method: 'GET', path: `/blob/${sha(big)}`,
+        rejectUnauthorized: false, headers: { authorization: `Bearer ${token}` } }, res => {
+        let seen = 0
+        res.on('data', c => { seen += c.length; if (seen > 0) { req.destroy(); resolve(seen) } })
+        res.on('error', () => resolve(seen))
+      })
+      req.on('error', () => resolve(0))
+      req.end()
+    })
+    assert.ok(got < big.length, 'the photo did not arrive whole')
+    await new Promise(r => setTimeout(r, 150))
+    assert.deepEqual(unhandled, [], 'and nothing was thrown where nobody was listening')
+
+    // The computer is still answering, and the same photo comes whole the next time it is asked for.
+    const again = await new Promise((resolve, reject) => {
+      const req = https.request({ host: '127.0.0.1', port: server.port, method: 'GET', path: `/blob/${sha(big)}`,
+        rejectUnauthorized: false, headers: { authorization: `Bearer ${token}` } }, res => {
+        const parts = []
+        res.on('data', c => parts.push(c)).on('end', () => resolve(Buffer.concat(parts)))
+      })
+      req.on('error', reject)
+      req.end()
+    })
+    assert.equal(sha(again), sha(big), 'and it is the same photo, byte for byte')
+  } finally {
+    process.off('unhandledRejection', watch)
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
