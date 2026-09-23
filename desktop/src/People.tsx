@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Analysis, Person, PersonMerge, Review } from './drive'
+import type { Analysis, Person, PersonFace, PersonMerge, Review } from './drive'
 import { Icon } from './Icon'
 import { Modal, errorText } from './Dialogs'
 
@@ -30,7 +30,37 @@ export function AnalysisBar({ status, kind = 'people' }: { status: Analysis | nu
   )
 }
 
-export function PeoplePage({ people, status, onOpen, onBack }: { people: Person[]; status: Analysis | null; onOpen: (p: Person) => void; onBack: () => void }) {
+/**
+ * Which face a person is shown by. The best face the scores can find is a guess, and it is often not the one
+ * you would have picked — a good photo of someone is not the sharpest crop of them. Hold a person to open this;
+ * the choice is kept and travels to the phone, like their name.
+ */
+export function ChooseCover({ person, onClose, onDone }: { person: Person; onClose: () => void; onDone: () => void }) {
+  const [faces, setFaces] = useState<PersonFace[] | null>(null)
+  useEffect(() => { window.drive.people.faces(person.id).then(setFaces, () => setFaces([])) }, [person.id])
+  const choose = async (faceId: string | null) => { await window.drive.people.setCover(person.id, faceId); onDone(); onClose() }
+  return (
+    <Modal onClose={onClose}>
+      <h3>Show {person.name} by</h3>
+      {faces === null && <p className="hint">Looking…</p>}
+      {faces?.length === 0 && <p className="hint">No faces to choose from yet.</p>}
+      {!!faces?.length && <p>Pick the face this person is shown by, here and on your phone.</p>}
+      <div className="cover-choices">
+        {faces?.map(f => (
+          <button key={f.id} className={`cover-choice${f.chosen ? ' on' : ''}`} onClick={() => choose(f.id)} title={new Date(f.takenAt).toLocaleDateString()}>
+            <FaceCircle face={f.id} size={84} />
+          </button>
+        ))}
+      </div>
+      <div className="dialog-actions">
+        {faces?.some(f => f.chosen) && <button className="text-button" onClick={() => choose(null)}>Use the best one instead</button>}
+        <button className="filled-button" onClick={onClose}>Done</button>
+      </div>
+    </Modal>
+  )
+}
+
+export function PeoplePage({ people, status, onOpen, onChooseCover, onBack }: { people: Person[]; status: Analysis | null; onOpen: (p: Person) => void; onChooseCover: (p: Person) => void; onBack: () => void }) {
   return (
     <div className="timeline">
       <header className="topbar">
@@ -40,7 +70,9 @@ export function PeoplePage({ people, status, onOpen, onBack }: { people: Person[
       {people.length === 0 && <p className="hint">{status?.enabled ? 'No people found yet.' : 'Start Find people to group the faces in your photos.'}</p>}
       <div className="people-grid">
         {people.map(p => (
-          <button key={p.id} className="person" onClick={() => onOpen(p)}>
+          <button key={p.id} className="person" onClick={() => onOpen(p)}
+            onContextMenu={e => { e.preventDefault(); onChooseCover(p) }}
+            title={`${p.name} — right-click to choose the face they are shown by`}>
             <FaceCircle face={p.cover} />
             <strong>{p.name}</strong><small>{p.count}</small>
           </button>

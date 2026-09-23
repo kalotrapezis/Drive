@@ -338,7 +338,7 @@ class SyncServer {
     each('collections', c => library.applyCollection(this.db, String(c.uuid), String(c.name ?? ''), !!c.deleted, at(c), !!c.hidden))
     each('collectionItems', forPhoto(i => library.applyCollectionItem(this.db, String(i.collection), i.sha256, !!i.deleted, at(i))))
     each('labels', forPhoto(l => library.applyLabels(this.db, l.sha256, Array.isArray(l.labels) ? l.labels : [])))
-    each('people', p => this.people.applyPerson(String(p.uuid), library.collectionName(p.name), at(p)))
+    each('people', p => this.people.applyPerson(String(p.uuid), library.collectionName(p.name), at(p), p.cover ? String(p.cover) : null))
     each('reviews', r => this.people.applyReview(String(r.face), String(r.person), String(r.state), at(r)))
     each('files', f => this.files?.applyMetadata({ ...f, path: String(f.path), updatedAt: at(f) }))
     if (body?.viewSettings) try { this.applyViewSettings(body.viewSettings) } catch (e) { skipped.push(`viewSettings: ${e.message}`) }

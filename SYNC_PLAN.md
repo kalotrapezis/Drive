@@ -1332,3 +1332,40 @@ Measured, on the real pair: before, 48 named people on the phone and 35 stranded
 on the computer. After, **83 named people on the phone and none stranded** — 50
 showing with faces here, 33 waiting for theirs. No name was overwritten, and no
 grouping was lost.
+
+### 6z. A name is not something the app may throw away (2026-09-24)
+
+Stated by the user as the rule, and it turned out not to hold in three places:
+*"don't behave the same way for 'Person 12' and 'Anna'. One is the system default,
+the other is a curated result after the user took all the steps to get there. It's
+ok to add to it, but not to destroy it from a scan or a sync."*
+
+1. **An empty person was deleted.** Both a rescan and photos leaving the gallery
+   swept up every group with no faces left — including a person you had named whose
+   photos had just gone to the Trash, and including a name that had arrived from
+   another device a moment before its faces (6y). The name was gone for good, and
+   the faces came back to nobody. Only `Person 41` is swept up now; an empty named
+   person is kept and simply not shown, which costs a row.
+2. **A named person's faces were deleted with their photos.** A photo going to the
+   Trash does not un-recognise the person in it. Her faces stay — invisible, since
+   People only draws what is still in the gallery — so a photo restored from the
+   Trash, or arriving from another device, comes back **to her** instead of starting
+   a stranger. A guess about a photo that no longer exists goes with it.
+3. **Choosing the face a person is shown by** did not exist at all, so the portrait
+   was always whatever scored best. The best crop is not the photo you would have
+   picked.
+
+**The picker.** Hold a person on the phone, right-click one on the computer: every
+face of theirs, newest first, and the one you choose is the one they are shown by —
+on both devices, because a choice is a decision and decisions travel, with the same
+newest-wins and never-overwritten-by-a-guess rules as the name itself. "Use the
+best one instead" puts it back. A chosen face that is later deleted falls back to
+the best one rather than leaving a blank.
+
+Phone schema v20 (`face_groups.cover_uuid`), desktop `people.cover_face_id`, and
+`cover` on the person record in both directions.
+
+Tested on the device: choosing beats the score, the choice survives and is
+readable back, clearing it restores the best, and — the rule above — a named person
+whose photos all leave is still there when one comes back, with the same id and the
+same name.

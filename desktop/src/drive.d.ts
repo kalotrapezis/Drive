@@ -14,6 +14,7 @@ export interface MergeUndo { sourceId: string; faceIds: string[] }
 export interface VaultStatus { configured: boolean; unlocked: boolean; count: number }
 export interface VaultItem { id: string; sha256: string; name: string; rel_path: string; mime: string; is_video: number; size: number; taken_at: number; has_thumb: number }
 
+export interface PersonFace { id: string; sha256: string; quality: number; chosen: boolean; takenAt: number }
 export interface SyncConnection { content: 'photos' | 'files'; direction: 'off' | 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing' }
 export interface SyncDevice { id: string; name: string; paired_at: number; last_seen: number | null; received: number; filesReceived: number; connections: SyncConnection[] }
 export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[] }
@@ -77,6 +78,8 @@ declare global {
         shas(id: string): Promise<string[]>
         names(): Promise<Record<string, string[]>>
         rename(id: string, name: string): Promise<string>
+        faces(id: string): Promise<PersonFace[]>
+        setCover(id: string, faceId: string | null): Promise<void>
         merge(source: string, target: string): Promise<MergeUndo>
         detach(id: string, shas: string[]): Promise<{ person: string; faces: number }>
         undoMerge(undo: MergeUndo): Promise<void>

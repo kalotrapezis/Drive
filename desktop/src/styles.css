@@ -379,3 +379,9 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .connection-rules .segmented { flex-wrap: wrap; justify-content: center; background: var(--island-2); border-radius: 999px; }
 .connection-rules .segmented button { padding: 6px 12px; font-size: 12px; }
 .connection-rules small { color: var(--muted); font-size: 12px; }
+
+/* Choosing the face a person is shown by. */
+.cover-choices { display: flex; flex-wrap: wrap; gap: 10px; max-height: 340px; overflow-y: auto; padding: 4px 0; }
+.cover-choice { border-radius: 999px; padding: 3px; border: 3px solid transparent; }
+.cover-choice:hover { background: var(--hover); }
+.cover-choice.on { border-color: var(--accent); }

@@ -237,6 +237,8 @@ class People {
       CREATE INDEX IF NOT EXISTS faces_person ON faces(person_id);
       CREATE TABLE IF NOT EXISTS face_reviews (face_id TEXT NOT NULL, person_id TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', updated_at INTEGER NOT NULL, PRIMARY KEY(face_id, person_id));
       CREATE TABLE IF NOT EXISTS face_analysis (sha256 TEXT PRIMARY KEY, version TEXT NOT NULL, faces INTEGER NOT NULL, analyzed_at INTEGER NOT NULL);`)
+    // The face a person is shown by, when somebody has chosen one. Null means "the best one we can find".
+    if (!db.prepare('PRAGMA table_info(people)').all().some(c => c.name === 'cover_face_id')) db.exec('ALTER TABLE people ADD COLUMN cover_face_id TEXT')
   }
 
   tx(fn) { this.db.exec('BEGIN'); try { const r = fn(); this.db.exec('COMMIT'); return r } catch (e) { this.db.exec('ROLLBACK'); throw e } }
@@ -363,12 +365,34 @@ class People {
   /** Live people with photos present in the library. Named people first, like the phone. */
   list() {
     return this.db.prepare(`SELECT p.id, p.name, COUNT(DISTINCT f.sha256) AS count,
+        (SELECT f3.id FROM faces f3 WHERE f3.id = p.cover_face_id AND f3.deleted = 0) AS chosenFace,
         (SELECT f2.id FROM faces f2 JOIN media m2 ON m2.sha256 = f2.sha256
-          WHERE f2.person_id = p.id AND f2.deleted = 0 ORDER BY f2.quality DESC LIMIT 1) AS cover
+          WHERE f2.person_id = p.id AND f2.deleted = 0 ORDER BY f2.quality DESC LIMIT 1) AS best
       FROM people p JOIN faces f ON f.person_id = p.id AND f.deleted = 0 JOIN media m ON m.sha256 = f.sha256
       WHERE p.deleted = 0 GROUP BY p.id`).all()
+      // The face somebody chose, if it is still here; otherwise the best one. (SQLite will not resolve an outer
+      // column inside a subquery's ORDER BY, so the choice is applied out here rather than in the query.)
+      .map(r => ({ ...r, cover: (r.chosenFace && r.chosenFace !== r.best ? r.chosenFace : r.best) ?? r.best }))
       .sort((a, b) => Number(isGeneratedName(a.name)) - Number(isGeneratedName(b.name))
         || (isGeneratedName(a.name) ? Number(a.name.slice(7)) - Number(b.name.slice(7)) : a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })))
+  }
+
+  /** The face a person is shown by, when somebody has chosen one, and every face there is to choose from. */
+  facesOf(personId) {
+    return this.db.prepare(`SELECT f.id, f.sha256, f.quality, f.box_left, f.box_top, f.box_right, f.box_bottom,
+        CASE WHEN p.cover_face_id = f.id THEN 1 ELSE 0 END AS chosen, m.taken_at AS takenAt
+      FROM faces f JOIN people p ON p.id = f.person_id JOIN media m ON m.sha256 = f.sha256
+      WHERE f.person_id = ? AND f.deleted = 0 ORDER BY m.taken_at DESC`).all(String(personId))
+      .map(r => ({ ...r, chosen: !!r.chosen }))
+  }
+
+  /** Choosing it is a decision, so it is kept and it travels like one. */
+  setCover(personId, faceId) {
+    this.live(personId)
+    if (faceId && !this.db.prepare('SELECT 1 FROM faces WHERE id = ? AND person_id = ? AND deleted = 0').get(faceId, String(personId))) {
+      throw new Error('That face does not belong to this person.')
+    }
+    this.db.prepare('UPDATE people SET cover_face_id = ?, updated_at = ? WHERE id = ?').run(faceId ?? null, Date.now(), String(personId))
   }
 
   shas(personId) {
@@ -399,16 +423,18 @@ class People {
   }
 
   /** A person named on the phone. Its UUID becomes this person's id, so the name stays attached across syncs. */
-  applyPerson(uuid, name, updatedAt) {
+  applyPerson(uuid, name, updatedAt, cover = null) {
     const local = this.db.prepare('SELECT updated_at, name FROM people WHERE id = ?').get(uuid)
     if (local) {
       if (local.updated_at >= updatedAt) return
       // The rule faces already had, and people did not: "Person 41" is what an algorithm called someone it had
       // not been told about, and it never replaces what a human typed, however recently it was written.
       if (isGeneratedName(name) && !isGeneratedName(local.name)) return
-      return void this.db.prepare('UPDATE people SET name = ?, updated_at = ? WHERE id = ?').run(name, updatedAt, uuid)
+      // The face somebody chose to show this person by is a decision too, and travels with the name.
+      return void this.db.prepare(`UPDATE people SET name = ?, updated_at = ?${cover ? ', cover_face_id = ?' : ''} WHERE id = ?`)
+        .run(...(cover ? [name, updatedAt, cover, uuid] : [name, updatedAt, uuid]))
     }
-    this.db.prepare('INSERT INTO people(id, name, created_at, updated_at) VALUES(?,?,?,?)').run(uuid, name, updatedAt, updatedAt)
+    this.db.prepare('INSERT INTO people(id, name, created_at, updated_at, cover_face_id) VALUES(?,?,?,?,?)').run(uuid, name, updatedAt, updatedAt, cover)
   }
 
   /**
@@ -480,7 +506,7 @@ class People {
   /** People and their faces for the phone's GET /metadata?since= pull. */
   changedSince(since) {
     return {
-      people: this.db.prepare('SELECT id AS uuid, name, updated_at AS updatedAt FROM people WHERE deleted = 0 AND updated_at > ?').all(since),
+      people: this.db.prepare('SELECT id AS uuid, name, updated_at AS updatedAt, cover_face_id AS cover FROM people WHERE deleted = 0 AND updated_at > ?').all(since),
       // The whole face, not only who it belongs to: this computer finds faces the phone's detector misses, and a
       // face it has never seen is only usable there if the box, the embedding and the model travel with it. The
       // box is already in the protocol's own units — fractions of the upright photo — so it needs no translating.
