@@ -548,3 +548,54 @@ storage layer hard-assumes exactly one active pairing:
 - A preview or sync never deletes anything by itself.
 - Test with disposable files and a copy of the databases, never the real
   library.
+
+### 6i. Two-way: bringing the bytes back (designed 2026-09-23)
+
+Metadata already crosses in both directions. **Only the bytes are one-way**: the
+phone pushes photos and files, and nothing ever comes back. Two-way is therefore
+one idea applied twice — the phone asks for what the computer holds and it does
+not — plus the rule that a second Android device (the tablet) is not a peer but a
+second client of the same computer.
+
+```
+two-way sync
+├── metadata ............................ done, both ways
+│   POST /metadata  ⇄  GET /metadata?since=<cursor>
+│
+├── photo bytes ......................... phone → computer only
+│   └── pull
+│       ├── desktop  POST /library/manifest {hashes}     → {send:[{sha256,path,name,modified,size}]}
+│       ├── desktop  GET  /blob/<sha256>                  (the route exists for PUT only)
+│       └── phone    SyncClient.pullPhotos
+│                    ├── .part in cache → hash while writing → keep only on a match
+│                    ├── MediaStore insert under the computer's own relative path
+│                    └── SyncStore.identity gets photoKey ↔ sha256, so metadata lands at once
+│
+├── file bytes .......................... phone → computer only
+│   └── pull — no new endpoint: POST /files/manifest already carries both sides' manifests
+│       ├── desktop  files.reconcile → also answer `have` (paths the phone lacks) and mirrored `moved`
+│       ├── desktop  GET  /file/<sha256>?path=            (the route exists for PUT only)
+│       └── phone    DriveRules-verified write under /sdcard/Drive/<path>
+│                    (.part → hash → rename, never overwrite, path re-checked per level)
+│
+├── deletions ........................... out of scope, by the rule the protocol rests on
+│   sync copies and moves; it never deletes on either side
+│
+└── phone ⇄ tablet ...................... through the computer, not directly
+    ├── desktop is already multi-device: sync_devices, per-device receipts, per-device sync_manifest
+    ├── phone keeps one pairing (SyncStore) — enough: each device pairs with the computer
+    └── so the tablet gets the phone's library on its first sync, and vice versa
+```
+
+Three things this design has to get right, in the order they can hurt:
+
+1. **A pull must not undo a move.** The manifest memory that makes "the phone
+   moved it" legible (6e) has to work in reverse too, or the first pull will
+   re-create every file the phone deliberately moved into Trash. Same rule: the
+   first sync with a device moves nothing, and only a path the *other* side held
+   last time and does not now counts as a move.
+2. **Identity on arrival.** A pulled photo is only useful if its metadata finds
+   it, so the hash the phone verified is written into `identity` in the same
+   step, before the metadata pass runs.
+3. **Hidden stays hidden.** Vault items are not part of a pull; they cross only
+   through the encrypted path of phase 6, which is its own piece of work.
