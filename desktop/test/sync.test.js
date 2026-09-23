@@ -405,6 +405,14 @@ test('the other direction: what this computer offers, and a connection that says
     assert.deepEqual(r.body.moveTo, [{ from: 'Notes/computer.txt', to: 'Notes/renamed.txt' }])
     assert.deepEqual(r.body.have, [], 'a move is not also a copy')
 
+    // A file the device deleted is not offered back to it: that would undo the deletion.
+    const bin = Buffer.from('a file the phone will delete'), binHash = sha(bin)
+    fs.writeFileSync(path.join(root, 'Notes/shared.txt'), bin)
+    await call('POST', '/files/manifest', { token, json: { files: [{ path: 'Notes/shared.txt', sha256: binHash, size: bin.length }] } })
+    r = await call('POST', '/files/manifest', { token, json: { files: [] } }) // the phone no longer has it
+    assert.equal(r.body.have.some(h => h.sha256 === binHash), false, 'what the phone deleted stays deleted')
+    assert.equal(fs.existsSync(path.join(root, 'Notes/shared.txt')), true, 'and this computer keeps its own copy')
+
     // Send-only: the device may give, and receives nothing back.
     server.setConnection(device, 'photos', { direction: 'send', keep: 'everything' })
     server.setConnection(device, 'files', { direction: 'send', keep: 'everything' })

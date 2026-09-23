@@ -949,6 +949,14 @@ sync copies and moves, it never deletes — in either direction. A file that arr
 never replaces one that is there; `DriveRules.newFile` keeps both, as Drive does
 everywhere else.
 
+**And the same rule read backwards: nothing is resurrected.** A two-way sync has a
+failure the one-way one could not have — bringing back what the user deleted. Both
+sides now refuse it, each from what it already remembers. The phone skips any photo
+it holds a **receipt** for: a receipt says "I gave the computer this", so a copy
+coming back is one that was deleted here on purpose. The computer skips any file
+the device's **last manifest** held and its current one holds nowhere. Neither is a
+deletion — both sides keep their own copy — they simply stop offering it.
+
 Tested: `desktop/test/sync.test.js` — the computer's offer and its refusal when the
 row says send-only, a blob fetched byte for byte, a file offered and fetched by
 hash at its path, a move mirrored instead of resent, Keep forced back by two-way,

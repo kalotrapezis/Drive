@@ -290,12 +290,15 @@ class Files {
     // The same question asked the other way round.
     const offeredShas = new Map() // sha256 → the paths the device holds
     for (const [rel, sha] of offered) offeredShas.set(sha, (offeredShas.get(sha) ?? []).concat(rel))
+    // What the device held last time and holds nowhere now, it deleted. Offering it back would undo that, which
+    // is the same sin as deleting, read backwards — so it is never offered again.
+    const gone = new Set([...before.values()].filter(sha => !offeredShas.has(sha)))
     const have = [], moveTo = []
     for (const [rel, sha] of minePaths) {
       if (offered.get(rel) === sha) continue // the device has these bytes at this very path
       const theirs = offeredShas.get(sha) ?? []
       // Offering a copy is safe on any sync, including the first: it adds, it never rearranges.
-      if (!theirs.length) { have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel) }); continue }
+      if (!theirs.length) { if (gone.has(sha)) continue; have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel) }); continue }
       // This computer moved it, and the device still has it where it was: mirror the move rather than send it.
       const from = theirs.find(other => mineBefore.get(other) === sha && !minePaths.has(other))
       if (from && !offered.has(rel)) moveTo.push({ from, to: rel })
