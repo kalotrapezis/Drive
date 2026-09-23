@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Analysis, Person, Review } from './drive'
+import type { Analysis, Person, PersonMerge, Review } from './drive'
 import { Icon } from './Icon'
 import { Modal, errorText } from './Dialogs'
 
@@ -150,5 +150,34 @@ export function ReviewPage({ onBack, onChanged }: { onBack: () => void; onChange
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Every group combined into this person, with the head and the number it had at the time. Combining is the one
+ * action here that throws a grouping away, and the person it was wrong about cannot be reached afterwards — so
+ * they are kept, and putting one back is a click rather than an undo you had to catch.
+ */
+export function MergeHistory({ person, onClose, onRestore }: { person: Person; onClose: () => void; onRestore: (m: PersonMerge) => void }) {
+  const [merges, setMerges] = useState<PersonMerge[] | null>(null)
+  useEffect(() => { window.drive.people.mergeHistory(person.id).then(setMerges, () => setMerges([])) }, [person.id])
+  const when = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  return (
+    <Modal onClose={onClose}>
+      <h3>Combined into {person.name}</h3>
+      {merges === null && <p className="hint">Looking…</p>}
+      {merges?.length === 0 && <p className="hint">Nothing has been combined into this person yet.</p>}
+      {!!merges?.length && <p>Restore puts a group back the way it was, with the same faces.</p>}
+      <div className="picker">
+        {merges?.map(m => (
+          <div key={m.id} className="picker-row">
+            <FaceCircle face={m.cover} size={44} />
+            <span>{m.name}<small>{m.count} {m.count === 1 ? 'face' : 'faces'} · {when.format(m.mergedAt)}</small></span>
+            <button className="filled-button" onClick={() => { onClose(); onRestore(m) }}>Restore</button>
+          </div>
+        ))}
+      </div>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Close</button></div>
+    </Modal>
   )
 }

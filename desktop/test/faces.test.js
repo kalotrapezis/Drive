@@ -10,6 +10,7 @@ const F = require('../faces')
 const base = F.l2(Float32Array.from({ length: 192 }, (_, i) => (i % 2 ? 1 : 0)))
 const other = F.l2(Float32Array.from({ length: 192 }, (_, i) => (i % 2 ? 0 : 1)))
 const third = F.l2(Float32Array.from({ length: 192 }, (_, i) => (i % 2 ? (i % 4 === 1 ? 1 : -1) : 0))) // orthogonal to base and other
+const fourth = F.l2(Float32Array.from({ length: 192 }, (_, i) => (i % 2 ? 0 : (i % 4 === 0 ? 1 : -1)))) // orthogonal to all three
 const withCosine = (c, away = other) => F.l2(Float32Array.from(base, (v, i) => c * v + Math.sqrt(1 - c * c) * away[i]))
 const face = (embedding, quality = 0.9) => ({ embedding, quality, yaw: 0, roll: 0, box: { left: 10, top: 10, right: 60, bottom: 60 } })
 const size = { width: 100, height: 100 }
@@ -33,7 +34,7 @@ test('alignment puts the eyes at (38,44) and (74,44)', () => {
   assert.equal(at(56, 44), -1) // between the eyes stays dark
 })
 
-test('grouping follows the phone: join ≥ 0.74, new person below, review 0.66–0.74, merge and undo keep ids', () => {
+test('grouping follows the phone: join ≥ 0.60, new person below, review 0.45–0.60, merge and undo keep ids', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-faces-'))
   const db = library.open(tmp)
   const people = new F.People(db, tmp)
@@ -41,8 +42,8 @@ test('grouping follows the phone: join ≥ 0.74, new person below, review 0.66�
   for (const n of [1, 2, 3, 4]) db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb) VALUES(?,?,'image/jpeg',0,1,1,?,1)").run(`${n}.jpg`, sha(n), n)
 
   people.record(sha(1), [face(base)], size)
-  people.record(sha(2), [face(withCosine(0.80))], size) // same person
-  people.record(sha(3), [face(withCosine(0.70, third))], size) // new person + review against the first
+  people.record(sha(2), [face(withCosine(0.80, third))], size) // same person
+  people.record(sha(3), [face(withCosine(0.52, fourth))], size) // new person + review against the first
   people.record(sha(4), [face(other)], size) // clearly someone else
   let list = people.list()
   assert.deepEqual(list.map(p => [p.name, p.count]), [['Person 1', 2], ['Person 2', 1], ['Person 3', 1]])
@@ -150,6 +151,33 @@ test('a device that re-analysed from scratch cannot un-name a person', async () 
     embedding: Buffer.from(new Float32Array(base).buffer), model: F.EMBEDDING_MODEL, quality: 0.9,
     person: 'named-elsewhere', updatedAt: Date.now() + 2000 })
   assert.equal(people.list().find(p => p.count > 0)?.name, 'Μαρία', 'a human decision still travels')
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})
+
+test('history keeps every combine, with the head and number it had, until it is put back', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-faces-history-'))
+  const db = library.open(tmp)
+  const people = new F.People(db, tmp)
+  const sha = n => String(n).repeat(64).slice(0, 64)
+  for (const n of [1, 2]) db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb) VALUES(?,?,'image/jpeg',0,1,1,?,1)").run(`${n}.jpg`, sha(n), n)
+  people.record(sha(1), [face(base)], size)
+  people.record(sha(2), [face(other)], size) // someone else
+  const [keep, gone] = people.list()
+  people.rename(keep.id, 'Άννα')
+
+  const undo = people.merge(gone.id, keep.id)
+  const history = people.mergeHistory(keep.id)
+  assert.equal(history.length, 1)
+  assert.equal(history[0].name, gone.name, 'the number it had is what you will recognise it by')
+  assert.equal(history[0].count, 1)
+  assert.ok(history[0].cover, 'and a head to see')
+
+  people.restoreMerge(history[0].id)
+  assert.deepEqual(people.shas(gone.id), [sha(2)], 'the same person comes back, not a copy')
+  assert.equal(people.mergeHistory(keep.id).length, 0, 'and stops being offered twice')
+  assert.throws(() => people.restoreMerge(history[0].id), /already been undone/)
+  assert.equal(undo.sourceId, gone.id)
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })

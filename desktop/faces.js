@@ -7,7 +7,21 @@ const crypto = require('node:crypto')
 
 const EMBEDDING_MODEL = 'mobilefacenet-192-eyes38x44-74x44' // phone: PhotoClassifier.embed
 const ANALYSIS_VERSION = 'yunet2023mar-2pass+' + EMBEDDING_MODEL
-const SAME_PERSON = 0.74, REVIEW_FROM = 0.66, UNRELIABLE_JOIN = 0.55, ANCHOR_QUALITY = 0.68
+// Measured on this library's own named people (2026-09-23, 69 computer faces / 277 phone faces, 13 and 34 people):
+// at 0.74 only 10–14% of pairs that really are the same person ever reach the line, while **no** pair of
+// different people does — the grouping was so cautious it split one person into a dozen groups and sent
+// certainties to Help organize, which is why nine answers in ten were "yes, obviously".
+//
+//   threshold   same-person pairs joined        different people wrongly joined
+//     0.74          10.7% phone / 14.1% computer     0.00% / 0.00%
+//     0.60          36.7% / 27.4%                    0.22% / 0.00%
+//     0.50          59.4% / 38.6%                    1.73% / 0.44%
+//
+// 0.60 is where the curve turns: it joins three times as much as before while different people still
+// essentially never meet (the highest cosine between two different people in the whole library is 0.73 on the
+// phone, 0.58 here). Review moves down to where the answer is genuinely uncertain, 0.45–0.60, instead of
+// sitting above the join line where everything is already obvious.
+const SAME_PERSON = 0.60, REVIEW_FROM = 0.45, UNRELIABLE_JOIN = 0.45, ANCHOR_QUALITY = 0.68
 // Two boxes this far into each other, on the same photo, are the same face found twice (sync, SYNC_PLAN.md 6c).
 const SAME_FACE_OVERLAP = 0.4
 const DETECT_SIZE = 640, DETECT_SCORE = 0.8, NMS_IOU = 0.3
@@ -209,6 +223,8 @@ class People {
       CREATE TABLE IF NOT EXISTS faces (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL,
         box_left REAL NOT NULL, box_top REAL NOT NULL, box_right REAL NOT NULL, box_bottom REAL NOT NULL, -- fractions of the upright image
         embedding BLOB NOT NULL, model TEXT NOT NULL, quality REAL NOT NULL, person_id TEXT, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS people_merges (id INTEGER PRIMARY KEY AUTOINCREMENT, target_id TEXT NOT NULL,
+        source_id TEXT NOT NULL, source_name TEXT NOT NULL, face_ids TEXT NOT NULL, merged_at INTEGER NOT NULL);
       CREATE INDEX IF NOT EXISTS faces_sha ON faces(sha256);
       CREATE INDEX IF NOT EXISTS faces_person ON faces(person_id);
       CREATE TABLE IF NOT EXISTS face_reviews (face_id TEXT NOT NULL, person_id TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', updated_at INTEGER NOT NULL, PRIMARY KEY(face_id, person_id));
@@ -392,6 +408,26 @@ class People {
     }
   }
 
+  /**
+   * Every group combined into this person, newest first, still showing the head and the name it had at the time
+   * — usually a bare "Person 41". A combine that was wrong can be taken back long after the moment it was made.
+   */
+  mergeHistory(targetId) {
+    return this.db.prepare('SELECT id, source_id, source_name, face_ids, merged_at FROM people_merges WHERE target_id = ? ORDER BY merged_at DESC')
+      .all(String(targetId)).map(row => {
+        const ids = row.face_ids.split(',').filter(Boolean)
+        const cover = ids.length ? this.db.prepare(`SELECT f.id FROM faces f JOIN media m ON m.sha256 = f.sha256
+          WHERE f.id IN (${ids.map(() => '?').join(',')}) AND f.deleted = 0 ORDER BY f.quality DESC LIMIT 1`).get(...ids) : null
+        return { id: row.id, sourceId: row.source_id, name: row.source_name, count: ids.length, mergedAt: row.merged_at, cover: cover?.id ?? null }
+      })
+  }
+
+  restoreMerge(id) {
+    const row = this.db.prepare('SELECT source_id, face_ids FROM people_merges WHERE id = ?').get(Number(id))
+    if (!row) throw new Error('This combine has already been undone.')
+    this.undoMerge({ sourceId: row.source_id, faceIds: row.face_ids.split(',').filter(Boolean) })
+  }
+
   live(id) { if (!this.db.prepare('SELECT 1 FROM people WHERE id = ? AND deleted = 0').get(String(id))) throw new Error('This person no longer exists.') }
 
   rename(id, raw) {
@@ -411,7 +447,12 @@ class People {
       this.db.prepare(`UPDATE face_reviews SET state = 'resolved', updated_at = ? WHERE face_id IN (SELECT id FROM faces WHERE person_id = ?)`).run(now, sourceId)
       this.db.prepare('UPDATE face_reviews SET person_id = ?, updated_at = ? WHERE person_id = ? AND NOT EXISTS (SELECT 1 FROM face_reviews r2 WHERE r2.face_id = face_reviews.face_id AND r2.person_id = ?)').run(targetId, now, sourceId, targetId)
       this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE person_id = ?').run(targetId, now, sourceId)
+      const sourceName = this.db.prepare('SELECT name FROM people WHERE id = ?').get(sourceId)?.name ?? 'Person'
       this.db.prepare('UPDATE people SET deleted = 1, updated_at = ? WHERE id = ?').run(now, sourceId)
+      // Kept, not just offered for as long as a toast lives: combining is the one action that throws a grouping
+      // away, and the person it was wrong about cannot be reached afterwards unless we remember them.
+      this.db.prepare('INSERT INTO people_merges(target_id, source_id, source_name, face_ids, merged_at) VALUES(?,?,?,?,?)')
+        .run(targetId, sourceId, sourceName, faceIds.join(','), now)
       return { sourceId, faceIds }
     })
   }
@@ -423,6 +464,7 @@ class People {
       this.db.prepare('UPDATE people SET deleted = 0, updated_at = ? WHERE id = ?').run(now, sourceId)
       const move = this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?')
       for (const id of faceIds) move.run(sourceId, now, id)
+      this.db.prepare('DELETE FROM people_merges WHERE source_id = ?').run(sourceId)
     })
   }
 

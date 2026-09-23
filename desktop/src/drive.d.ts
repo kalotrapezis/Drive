@@ -75,6 +75,8 @@ declare global {
         rename(id: string, name: string): Promise<string>
         merge(source: string, target: string): Promise<MergeUndo>
         undoMerge(undo: MergeUndo): Promise<void>
+        mergeHistory(id: string): Promise<PersonMerge[]>
+        restoreMerge(id: number): Promise<void>
         nextReview(): Promise<Review | null>
         answer(faceId: string, personId: string, answer: 'yes' | 'no' | 'skip'): Promise<void>
         onProgress(fn: (a: Analysis) => void): () => void
@@ -87,4 +89,13 @@ declare global {
       }
     }
   }
+}
+
+export interface PersonMerge {
+  id: number
+  sourceId: string
+  name: string
+  count: number
+  mergedAt: number
+  cover: string | null
 }

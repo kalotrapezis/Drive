@@ -369,3 +369,6 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .picker-row.on { background: var(--island-2); }
 .picker-row > svg:last-child { margin-left: auto; color: var(--muted); }
 .picker-row.on > svg:last-child { color: var(--accent); }
+.person-bar { gap: 2px; padding: 6px; }
+.person-bar .text-button { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; }
+.person-bar .text-button:hover { background: var(--hover); }

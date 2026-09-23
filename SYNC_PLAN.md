@@ -811,3 +811,54 @@ asymmetry left is what happens after that: the computer's library is a folder it
 can see the whole of, so once a photo is emptied from the Trash its faces go;
 Android's trash empties itself after thirty days, so the phone keeps the rows and
 simply stops listing a person with nothing to show.
+
+### 6o. Where the grouping was actually going wrong (measured 2026-09-23)
+
+Asked after a day of Help organize answering "yes, obviously" nine times out of
+ten, and of one person appearing as a dozen groups. Both had the same cause, and
+it was not the model.
+
+Measured on this library's own named people — 277 phone faces across 34 people,
+69 computer faces across 13:
+
+| line | same-person pairs joined (phone / computer) | different people wrongly joined |
+|---|---|---|
+| **0.74** (was) | 10.7% / 14.1% | 0.00% / 0.00% |
+| 0.60 (now) | 36.7% / 27.4% | 0.22% / 0.00% |
+| 0.50 | 59.4% / 38.6% | 1.73% / 0.44% |
+
+At 0.74 the grouping was so cautious that **three quarters of pairs that really
+are the same person were treated as strangers**, while no pair of different
+people ever came close — the highest similarity between two different people
+anywhere in this library is 0.73, and that is one pair out of 34,109. Help
+organize asks about the band *just under* the join line, so it was asking about
+near-certainties: hence "yes" nine times in ten.
+
+Now: **join at 0.60, review 0.45–0.60**, on both devices. Three times the joining,
+and different people still essentially never meet. Review sits where the answer is
+genuinely uncertain, which is the only place a question is worth asking.
+
+**The computer's embeddings are the weaker pair.** Same-person median is 0.445
+here against the phone's 0.542, on the same model — so the difference is the crop,
+not the network. Detection runs on a 640-px downscale, so YuNet's landmarks are
+coarse, and `refine()` averages a sharp second-pass estimate with that coarse one.
+Worth trying next, in order of effort: trust the refined landmarks rather than
+averaging them; detect at a larger size; and only then a stronger recognition
+model (AppLocker's SFace + OpenCV `alignCrop` is the working example, but it would
+break the shared-embedding contract with the phone unless both sides move, so it
+belongs as a second, computer-only embedding used for grouping alone).
+
+### 6p. Taking a combine back, long after the moment
+
+Combining is the one action in People that throws a grouping away: afterwards the
+person it was wrong about does not exist to be found again. An eight-second undo
+is not enough for a decision made in a list of a hundred faces.
+
+Both apps now keep every combine — the group's name ("Person 41"), its head, its
+faces and when it happened — and offer Restore whenever. Restoring brings back the
+**same person id**, so the other device sees one continuous identity rather than a
+new arrival. Undoing within the window and restoring from History are the same
+operation, so a combine cannot be taken back twice.
+
+People also gained an island on both apps, where the phone already puts the
+actions for a thing you have open: **Combine · Rename · History**.

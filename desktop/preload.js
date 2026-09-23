@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld('drive', {
     rename: (id, name) => ipcRenderer.invoke('people:rename', id, name),
     merge: (source, target) => ipcRenderer.invoke('people:merge', source, target),
     undoMerge: undo => ipcRenderer.invoke('people:undoMerge', undo),
+    mergeHistory: id => ipcRenderer.invoke('people:mergeHistory', id),
+    restoreMerge: id => ipcRenderer.invoke('people:restoreMerge', id),
     nextReview: () => ipcRenderer.invoke('people:nextReview'),
     answer: (faceId, personId, answer) => ipcRenderer.invoke('people:answer', faceId, personId, answer),
     onProgress: fn => { const l = (_, p) => fn(p); ipcRenderer.on('people-progress', l); return () => ipcRenderer.off('people-progress', l) },

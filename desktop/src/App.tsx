@@ -8,7 +8,7 @@ import { Collections } from './Collections'
 import { CollectionPicker, Confirm, NewCollection, errorText } from './Dialogs'
 import { Files, type FilesMode } from './Files'
 import { TrashPage } from './TrashPage'
-import { AnalysisBar, CombinePicker, PeoplePage, RenamePerson, ReviewPage } from './People'
+import { AnalysisBar, CombinePicker, MergeHistory, PeoplePage, RenamePerson, ReviewPage } from './People'
 import { MapView } from './MapView'
 import { HiddenPage, VaultGate } from './Hidden'
 import { Editor } from './Editor'
@@ -233,9 +233,7 @@ export function App() {
     content = (
       <Timeline items={items} level={level} setLevel={setLevel} selected={selected} setSelected={setSelected} onOpen={setOpen}
         title={page.kind === 'person'
-          ? <><button className="round flat" title="Back to People" onClick={() => setPage({ kind: 'people' })}><Icon name="back" /></button><h1>{page.name}</h1>
-              {person && <><button className="round flat" title="Rename" onClick={() => renamePerson(person)}><Icon name="rename" size={20} /></button>
-                <button className="round flat" title="Combine with another person" onClick={() => combine(person)}><Icon name="merge" size={20} /></button></>}</>
+          ? <><button className="round flat" title="Back to People" onClick={() => setPage({ kind: 'people' })}><Icon name="back" /></button><h1>{page.name}</h1></>
           : inCollection
           ? <><button className="round flat" title="Back to Collections" onClick={() => setPage({ kind: 'collections' })}><Icon name="back" /></button><h1>{page.name}</h1></>
           : <h1>Photos</h1>}
@@ -294,6 +292,15 @@ export function App() {
       </nav>
       <main className="content">
         {content}
+        {page.kind === 'person' && person && picked.length === 0 && (
+          <div className="island selection-bar person-bar">
+            <button className="text-button" onClick={() => combine(person)}><Icon name="merge" size={20} />Combine</button>
+            <button className="text-button" onClick={() => renamePerson(person)}><Icon name="rename" size={20} />Rename</button>
+            <button className="text-button" onClick={() => setDialog(
+              <MergeHistory person={person} onClose={close} onRestore={m => run(() => window.drive.people.restoreMerge(m.id), `${m.name} is back`)} />,
+            )}><Icon name="undo" size={20} />History</button>
+          </div>
+        )}
         {picked.length > 0 && (
           <div className="island selection-bar">
             <button className="round flat" title="Clear selection (Esc)" onClick={() => setSelected(new Set())}><Icon name="close" /></button>
