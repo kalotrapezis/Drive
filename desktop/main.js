@@ -112,6 +112,8 @@ app.whenReady().then(() => {
       if (row && library.isHeic(row.path)) file = await library.preview(file, row.sha256, DATA_DIR).catch(() => null)
     }
     if (url.host === 'face' && /^[0-9a-f-]{36}$/.test(key)) file = await people.crop(key, PHOTOS_ROOT).catch(() => null)
+    // A trashed photo is no longer in the library, so it is served from the trash by the name it has there.
+    if (url.host === 'trash') file = (await library.trashedPhotos(PHOTOS_ROOT)).find(t => t.id === key)?.file ?? null
     // Hidden: decrypted in memory only while unlocked; never written to disk in plaintext.
     if ((url.host === 'vault' || url.host === 'vault-thumb') && /^[0-9a-f-]{36}$/.test(key)) {
       if (!vault.status().unlocked) return new Response('Locked', { status: 403 })
@@ -137,6 +139,10 @@ app.whenReady().then(() => {
   ipcMain.handle('collections:members', (_, id) => library.members(db, id))
   ipcMain.handle('collections:set', (_, id, shas, member) => library.setMembership(db, id, shas, member))
   ipcMain.handle('collections:hide', (_, id, hidden) => library.setCollectionHidden(db, id, hidden))
+  // Photos Trash is the system's own trash, filtered to what came out of this library.
+  ipcMain.handle('trash:list', () => library.trashedPhotos(PHOTOS_ROOT))
+  ipcMain.handle('trash:restore', async (_, ids) => { const r = await library.restoreTrashed(PHOTOS_ROOT, ids); startScan(); return r })
+  ipcMain.handle('trash:empty', () => library.emptyPhotoTrash(PHOTOS_ROOT))
   // These two describe the library, not this computer, so they live in the database and sync (SYNC_PLAN.md).
   ipcMain.handle('settings:view', () => ({ hideScreenshots: setting('hideScreenshots') === '1', hideDocuments: setting('hideDocuments') === '1' }))
   ipcMain.handle('settings:setView', (_, key, on) => {

@@ -7,13 +7,14 @@ import { Viewer } from './Viewer'
 import { Collections } from './Collections'
 import { CollectionPicker, Confirm, NewCollection, errorText } from './Dialogs'
 import { Files, type FilesMode } from './Files'
+import { TrashPage } from './TrashPage'
 import { AnalysisBar, CombinePicker, PeoplePage, RenamePerson, ReviewPage } from './People'
 import { MapView } from './MapView'
 import { HiddenPage, VaultGate } from './Hidden'
 import { Editor } from './Editor'
 import { SyncPage } from './Sync'
 
-type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string }
+type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
   | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' }
 
 const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
@@ -40,6 +41,7 @@ export function App() {
   const [hideDocuments, setHideDocuments] = useState(false)
   const hiddenAlbums = collections.filter(c => c.hidden).map(c => c.id)
   const [hiddenAlbumShas, setHiddenAlbumShas] = useState<Set<string>>(new Set())
+  const [trashCount, setTrashCount] = useState(0)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [open, setOpen] = useState<number | null>(null)
   const [dialog, setDialog] = useState<ReactNode>(null)
@@ -86,6 +88,7 @@ export function App() {
   reloadRef.current = reload
   useEffect(() => { store('level', level) }, [level])
   useEffect(() => { window.drive.viewSettings().then(v => { setHideScreenshots(v.hideScreenshots); setHideDocuments(v.hideDocuments) }) }, [])
+  useEffect(() => { window.drive.trashList().then(t => setTrashCount(t.length)).catch(() => {}) }, [page])
   useEffect(() => {
     Promise.all(hiddenAlbums.map(id => window.drive.members(id).catch(() => []))).then(lists => setHiddenAlbumShas(new Set(lists.flat())))
   }, [collections])
@@ -202,6 +205,7 @@ export function App() {
   // Pages that do not depend on the photo library come first: an empty library must not hide Devices, Files or Hidden.
   if (page.kind === 'files') content = <Files mode={page.mode} folder={page.folder} go={(mode, folder) => setPage({ kind: 'files', mode, folder })} setDialog={setDialog} say={say} />
   else if (page.kind === 'sync') content = <SyncPage setDialog={setDialog} />
+  else if (page.kind === 'photoTrash') content = <TrashPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (page.kind === 'hidden') content = <HiddenPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (loading) content = <div className="empty">Loading…</div>
   else if (media.length === 0) content = <div className="empty"><p>No photos or videos in <code>{root}</code> yet. Pair your phone in <b>Devices</b> to back it up here.</p></div>
@@ -216,8 +220,9 @@ export function App() {
         { id: 'hidden', name: 'Hidden', icon: 'lock' as IconName, count: vault?.count ?? 0 },
         { id: 'map', name: 'Map', icon: 'map' as IconName, count: media.filter(m => m.latitude != null).length },
         { id: 'review', name: 'Help organize', icon: 'tag' as IconName, count: analysis?.reviews ?? 0 },
+        { id: 'photoTrash', name: 'Trash', icon: 'trash' as IconName, count: trashCount },
       ]}
-      onOpen={(id, name) => setPage(id === 'people' ? { kind: 'people' } : id === 'review' ? { kind: 'review' } : id === 'map' ? { kind: 'map' } : id === 'hidden' ? { kind: 'hidden' } : { kind: 'collection', id, name })} />
+      onOpen={(id, name) => setPage(id === 'people' ? { kind: 'people' } : id === 'review' ? { kind: 'review' } : id === 'map' ? { kind: 'map' } : id === 'hidden' ? { kind: 'hidden' } : id === 'photoTrash' ? { kind: 'photoTrash' } : { kind: 'collection', id, name })} />
   } else {
     const inCollection = page.kind === 'collection' || page.kind === 'person'
     content = (

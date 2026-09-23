@@ -17,6 +17,7 @@ export interface VaultItem { id: string; sha256: string; name: string; rel_path:
 export interface SyncDevice { id: string; name: string; paired_at: number; last_seen: number | null; received: number; filesReceived: number }
 export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[] }
 
+export interface TrashedPhoto { id: string; name: string; path: string; size: number; deletedAt: number }
 export interface Collection { id: string; name: string; count: number; cover: string | null; hidden: boolean }
 
 declare global {
@@ -36,6 +37,9 @@ declare global {
       createCollection(name: string): Promise<Collection>
       deleteCollection(id: string): Promise<void>
       setCollectionHidden(id: string, hidden: boolean): Promise<void>
+      trashList(): Promise<TrashedPhoto[]>
+      trashRestore(ids: string[]): Promise<{ restored: string[]; failed: string[] }>
+      trashEmpty(): Promise<number>
       viewSettings(): Promise<{ hideScreenshots: boolean; hideDocuments: boolean }>
       setViewSetting(key: 'hideScreenshots' | 'hideDocuments', on: boolean): Promise<void>
       members(id: string): Promise<string[]>

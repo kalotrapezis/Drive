@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const crypto = require('node:crypto')
+const os = require('node:os')
 const { execFile } = require('node:child_process')
 const { DatabaseSync } = require('node:sqlite')
 
@@ -261,6 +262,74 @@ async function trash(db, root, ids, trashItem) {
   return result
 }
 
+/**
+ * The desktop's Trash is the system's own: `shell.trashItem` moves a photo into the freedesktop trash, which
+ * records where it came from in a .trashinfo file beside it. Reading those back is what lets Photos show a
+ * Trash of its own, with the same two answers the phone gives — put it back, or finish the delete.
+ *
+ * Only items whose recorded origin was inside the library are listed: the rest of the user's trash is theirs.
+ */
+function trashDir() {
+  return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'Trash')
+}
+
+async function trashedPhotos(photosRoot) {
+  const dir = trashDir()
+  let names
+  try { names = await fsp.readdir(path.join(dir, 'info')) } catch { return [] }
+  const root = path.resolve(photosRoot) + path.sep
+  const out = []
+  for (const info of names) {
+    if (!info.endsWith('.trashinfo')) continue
+    let text
+    try { text = await fsp.readFile(path.join(dir, 'info', info), 'utf8') } catch { continue }
+    const origin = /^Path=(.*)$/m.exec(text)?.[1]
+    const deleted = /^DeletionDate=(.*)$/m.exec(text)?.[1]
+    if (!origin) continue
+    const full = decodeURIComponent(origin)
+    if (!path.resolve(full).startsWith(root)) continue
+    const id = info.slice(0, -'.trashinfo'.length)
+    const file = path.join(dir, 'files', id)
+    let size = 0
+    try { size = (await fsp.stat(file)).size } catch { continue } // the info outlived the file: not ours to show
+    out.push({ id, name: path.basename(full), path: path.relative(photosRoot, full), size, deletedAt: Date.parse(deleted ?? '') || 0, file })
+  }
+  return out.sort((a, b) => b.deletedAt - a.deletedAt)
+}
+
+/** Back to exactly where it came from, and never over something that has taken the name since. */
+async function restoreTrashed(photosRoot, ids) {
+  const dir = trashDir()
+  const wanted = new Set((ids ?? []).map(String))
+  const restored = [], failed = []
+  for (const item of await trashedPhotos(photosRoot)) {
+    if (!wanted.has(item.id)) continue
+    const target = path.join(photosRoot, item.path)
+    try {
+      if (fs.existsSync(target)) throw new Error('Something else is already there.')
+      await fsp.mkdir(path.dirname(target), { recursive: true })
+      await fsp.rename(item.file, target)
+      await fsp.rm(path.join(dir, 'info', item.id + '.trashinfo'), { force: true })
+      restored.push(item.path)
+    } catch (e) { failed.push(`${item.name}: ${e.message}`) }
+  }
+  return { restored, failed }
+}
+
+/** Permanent, and only for the library's own items — the rest of the user's trash is left alone. */
+async function emptyPhotoTrash(photosRoot) {
+  const dir = trashDir()
+  let removed = 0
+  for (const item of await trashedPhotos(photosRoot)) {
+    try {
+      await fsp.rm(item.file, { recursive: true, force: true })
+      await fsp.rm(path.join(dir, 'info', item.id + '.trashinfo'), { force: true })
+      removed++
+    } catch {}
+  }
+  return removed
+}
+
 // --- Sync (SYNC_PLAN.md phase 6b). Every record carries updated_at and removals are tombstones, so the two
 // libraries converge without either side guessing: the newest write of a record wins, in both directions.
 
@@ -316,4 +385,4 @@ function metadataSince(db, since) {
   }
 }
 
-module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
+module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }

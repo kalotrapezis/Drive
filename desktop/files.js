@@ -69,6 +69,7 @@ class Files {
     const out = []
     for (const e of await fsp.readdir(dir, { withFileTypes: true })) {
       if (e.isSymbolicLink() || e.name.startsWith('.')) continue // never follow links out of Drive; dotfiles stay hidden like in file managers
+      if (rel === '' && e.name === TRASH) continue // Trash has its own place in the sidebar, not a folder to open by accident
       const full = path.join(dir, e.name)
       out.push(this.item(full, await fsp.stat(full)))
     }
