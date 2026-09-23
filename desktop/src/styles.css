@@ -360,7 +360,7 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 /* Files selection: the same check circle and island the timeline uses. */
 .file { position: relative; }
 .file .check { left: 6px; top: 50%; translate: 0 -50%; color: var(--muted); filter: none; }
-.file-list .file { padding-left: 34px; } /* the circle sits beside the icon, never on it */
+.file-list .file { padding-left: 46px; } /* the circle sits beside the icon, never on it */
 .file-grid .file .check { top: 10px; left: 10px; translate: none; }
 .file:hover .check, .selecting .check { opacity: 1; }
 .file.selected { background: var(--island-2); }
