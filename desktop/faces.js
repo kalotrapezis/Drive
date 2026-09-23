@@ -7,24 +7,21 @@ const crypto = require('node:crypto')
 
 const EMBEDDING_MODEL = 'mobilefacenet-192-eyes38x44-74x44' // phone: PhotoClassifier.embed
 const ANALYSIS_VERSION = 'yunet2023mar-2pass+' + EMBEDDING_MODEL
-// Measured on this library's own named people (2026-09-23, 69 computer faces / 277 phone faces, 13 and 34 people):
-// at 0.74 only 10–14% of pairs that really are the same person ever reach the line, while **no** pair of
-// different people does — the grouping was so cautious it split one person into a dozen groups and sent
-// certainties to Help organize, which is why nine answers in ten were "yes, obviously".
+// Where a face counts as someone this library already knows. Measured twice, and the second one is the one to
+// trust: the first compared random pairs of faces, which is not what the app does. This measures the comparison
+// it actually makes — a new face against each known person, taking that person's closest face — on this
+// library's own named people, 304 faces across 27–28 people on each device:
 //
-//   threshold   same-person pairs joined        different people wrongly joined
-//     0.74          10.7% phone / 14.1% computer     0.00% / 0.00%
-//     0.60          36.7% / 27.4%                    0.22% / 0.00%
-//     0.50          59.4% / 38.6%                    1.73% / 0.44%
+//   line   joins of the same person (computer / phone)   different people wrongly joined
+//   0.60            85.2% / 90.1%                              1.58% / 1.61%
+//   0.68            76.6% / 80.6%                              0.33% / 0.31%
+//   0.75            63.2% / 68.4%                              0.00% / 0.02%
 //
-// 0.60 was tried and made visible mistakes on a real library: a toddler in sunglasses, a black-and-white frame
-// and a stranger all landed on the same child. A join the classifier makes on its own is not recorded anywhere
-// and so cannot be taken back from History — the rule is that the irreversible line stays strict and the
-// uncertain band goes to review, which is reversible by construction. 0.68 sits under the 0.73 where the two
-// closest different people meet and above where the model's mistakes were coming from; review is 0.45–0.68.
-// The same rule removed the loose join for unreliable faces (tiny, blurred, turned away), which used to join at
-// 0.45 with no review and no way back: they now clear the same line as everyone else or wait for a better shot.
-const SAME_PERSON = 0.68, REVIEW_FROM = 0.45, ANCHOR_QUALITY = 0.68
+// 0.60 joined wrongly on one comparison in sixty, which is what it looked like in the library. The line is 0.75,
+// where different people essentially never meet, and everything below it down to 0.45 becomes a question rather
+// than a silent join. The two mistakes are not equal: a wrong join has to be picked apart by hand, a missed one
+// is a Combine or one answer to a card.
+const SAME_PERSON = 0.75, REVIEW_FROM = 0.45, ANCHOR_QUALITY = 0.68
 // Two boxes this far into each other, on the same photo, are the same face found twice (sync, SYNC_PLAN.md 6c).
 const SAME_FACE_OVERLAP = 0.4
 const DETECT_SIZE = 640, DETECT_SCORE = 0.8, NMS_IOU = 0.3

@@ -34,7 +34,7 @@ test('alignment puts the eyes at (38,44) and (74,44)', () => {
   assert.equal(at(56, 44), -1) // between the eyes stays dark
 })
 
-test('grouping follows the phone: join ≥ 0.68, new person below, review 0.45–0.68, merge and undo keep ids', () => {
+test('grouping follows the phone: join ≥ 0.75, new person below, review 0.45–0.75, merge and undo keep ids', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-faces-'))
   const db = library.open(tmp)
   const people = new F.People(db, tmp)

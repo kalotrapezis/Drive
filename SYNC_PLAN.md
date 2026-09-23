@@ -1131,3 +1131,69 @@ Tested: `faces.test.js` (one card for a pair rather than one per face, nothing
 moving until it is answered, the guess rules still applying underneath) and
 `IncomingFaceDeviceTest` on the phone for the same, including that answering the
 card is what moves the faces.
+
+### 6u. Could the cards train a model? (measured 2026-09-23)
+
+Asked because a computer has power to spare. It does — but power was never the
+thing in short supply. **Labels are**, and the answer is a measurement, not an
+opinion.
+
+**What there is to learn from:** 322 faces across 45 named people on the computer,
+321 across 47 on the phone, plus 26 answered cards. The cards are the smallest part
+of it: the *grouping itself* is already the label set, and it is a hundred times
+larger than the answers will be for months.
+
+**Fine-tuning the network is out**, and not for want of a GPU: `onnxruntime-node`
+runs models, it does not train them, and fine-tuning a face network on a few
+hundred crops of forty-five people is how a model that works becomes one that
+works on those forty-five and nobody else.
+
+**A learned metric on top of the frozen embedding** is the version that does fit —
+closed form, 192×192, milliseconds, no framework. So it was tried: within-class
+whitening (WCCN), held out **by identity**, so the test is always on people the
+metric has never seen.
+
+| | same-person links joined, at a line different people reach once in a thousand |
+|---|---|
+| plain embedding, computer | 34.8% |
+| learned metric, computer | 36.0% |
+| plain embedding, phone | 43.2% |
+| learned metric, phone | **33.8%** |
+
+A point and a bit on one device, nine points **worse** on the other. With this many
+labels a learned metric is noise wearing a lab coat. Worth trying again at a few
+thousand labelled faces; not worth shipping at three hundred.
+
+**What the same labels did pay for**, immediately and for free:
+
+- **Matching a person by their closest face beats matching their average** (89–91%
+  against 86%), so the design already had that right and centroids would have been
+  a downgrade.
+- **The threshold was measurable**, and had been measured against the wrong thing.
+  §6o compared random pairs of faces; the app compares *a new face against each
+  known person*, taking that person's closest face. On that measurement:
+
+| line | joins of the same person (phone / computer) | different people wrongly joined |
+|---|---|---|
+| 0.60 | 90.1% / 85.2% | 1.61% / 1.58% |
+| 0.68 | 80.6% / 76.6% | 0.31% / 0.33% |
+| 0.72 | 74.0% / 70.1% | 0.15% / 0.10% |
+| **0.75** | 68.4% / 63.2% | **0.02% / 0.00%** |
+
+0.60 was joining wrongly on one comparison in sixty — which is exactly what it
+looked like in the library. The line is now **0.75**, where different people
+essentially never meet, and everything from 0.45 up to it becomes a question
+instead of a silent join. Going from 0.68 to 0.75 gives up about a sixth of the
+joins to remove nine tenths of the wrong ones, which is worth it only because the
+two mistakes are not equal: a wrong join has to be found and picked apart by hand,
+a missed one is one Combine or one answer to a card.
+
+The labels are the user's own grouping, so a high-scoring "different people" pair
+may be two groups that are really one person — which makes the wrong-join column,
+if anything, pessimistic.
+
+**So the honest answer to "can we train on the cards": not yet, and the cards are
+the wrong data to wait for.** What a growing library actually earns is a threshold
+that is re-measured rather than inherited, and that can be done from the grouping
+alone, on either device, whenever the library has changed enough to be worth
+asking again.
