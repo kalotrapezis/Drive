@@ -356,3 +356,12 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .trash-grid .cell.picked img { opacity: 1; }
 .trash-grid .tick { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--text); color: var(--bg); }
 .round.danger { background: #5b1f1f; color: #ffd9d6; }
+
+/* Files selection: the same check circle and island the timeline uses. */
+.file { position: relative; }
+.file .check { left: 8px; top: 50%; translate: 0 -50%; color: var(--muted); filter: none; }
+.file-grid .file .check { top: 10px; left: 10px; translate: none; }
+.file:hover .check, .selecting .check { opacity: 1; }
+.file.selected { background: var(--island-2); }
+.file.selected .check { color: var(--accent); }
+.files .selection-bar { position: fixed; }

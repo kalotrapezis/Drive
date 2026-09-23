@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DriveItem } from './drive'
 import { Icon, type IconName } from './Icon'
 import { Confirm, Modal, errorText } from './Dialogs'
@@ -37,8 +37,21 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
   const [version, setVersion] = useState(0)
   const refresh = () => setVersion(v => v + 1)
   const close = () => setDialog(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const drag = useRef<{ add: boolean } | null>(null)
+  const anchor = useRef<number | null>(null)
+  const handled = useRef(false)
+  const selecting = selected.size > 0
 
   useEffect(() => { setQuery(''); setTag(null) }, [mode, folder])
+  useEffect(() => { setSelected(new Set()) }, [mode, folder, query, tag]) // leaving the list ends the selection
+  useEffect(() => {
+    const up = () => { drag.current = null }
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelected(new Set()) }
+    window.addEventListener('pointerup', up)
+    window.addEventListener('keydown', key)
+    return () => { window.removeEventListener('pointerup', up); window.removeEventListener('keydown', key) }
+  }, [])
   useEffect(() => { store('filesView', view) }, [view])
   useEffect(() => { store('filesSort', sort) }, [sort])
 
@@ -63,6 +76,45 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
     refresh()
   }
 
+  const picked = useMemo(() => sorted.filter(i => selected.has(i.path)), [sorted, selected])
+
+  function apply(paths: string[], add: boolean) {
+    const next = new Set(selected)
+    for (const p of paths) add ? next.add(p) : next.delete(p)
+    setSelected(next)
+  }
+  // The same gesture as the timeline: the check circle (or Ctrl+click) starts a selection, then click or drag
+  // across rows; Shift+click takes the range.
+  function pointerDown(e: React.PointerEvent, item: DriveItem) {
+    if (e.button !== 0) return
+    const i = sorted.indexOf(item)
+    if (e.shiftKey && anchor.current !== null) {
+      const [a, b] = [anchor.current, i].sort((x, y) => x - y)
+      apply(sorted.slice(a, b + 1).map(x => x.path), true)
+    } else if (selecting || e.ctrlKey || e.metaKey || (e.target as Element).closest('.check')) {
+      const add = !selected.has(item.path)
+      apply([item.path], add)
+      drag.current = { add }
+      anchor.current = i
+    } else return
+    handled.current = true
+    e.preventDefault()
+  }
+  function pointerEnter(item: DriveItem) {
+    if (drag.current && selected.has(item.path) !== drag.current.add) apply([item.path], drag.current.add)
+  }
+
+  /** One action over everything picked, in one pass, with one refresh and the failures named. */
+  async function actAll(items: DriveItem[], fn: (i: DriveItem) => Promise<unknown>, done: (n: number) => string) {
+    const failures: string[] = []
+    for (const item of items) {
+      try { await fn(item) } catch (e) { failures.push(`${item.name}: ${errorText(e)}`) }
+    }
+    setSelected(new Set())
+    say(failures.length ? failures.join(' · ') : done(items.length - failures.length))
+    refresh()
+  }
+
   function open(item: DriveItem) {
     if (item.dir) setFolder(item.path) // from Favorites, Recent or search this opens the folder in the browser
     else act(() => window.drive.files.open(item.path))
@@ -76,15 +128,15 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
       <Modal onClose={close}>
         <div className="sheet-head"><ItemIcon item={item} size={40} /><div><h3>{item.name}</h3><small>{parentOf(item.path) || 'Drive'}</small></div></div>
         <div className="sheet-actions">
-          <button onClick={() => { close(); pickDestination(item, 'copy') }}><span className="round"><Icon name="copy" /></span>Copy</button>
-          <button onClick={() => { close(); pickDestination(item, 'move') }}><span className="round"><Icon name="moveTo" /></span>{trashed ? 'Restore' : 'Move'}</button>
+          <button onClick={() => { close(); pickDestination([item], 'copy') }}><span className="round"><Icon name="copy" /></span>Copy</button>
+          <button onClick={() => { close(); pickDestination([item], 'move') }}><span className="round"><Icon name="moveTo" /></span>{trashed ? 'Restore' : 'Move'}</button>
           <button onClick={() => { close(); rename(item) }}><span className="round"><Icon name="rename" /></span>Rename</button>
         </div>
         {row(item.dir ? 'drive' : 'open', item.dir ? 'Open folder' : 'Open', () => open(item))}
         {row('folder', 'Show in file manager', () => act(() => window.drive.files.reveal(item.path)))}
         {!trashed && row(item.favorite ? 'heartFill' : 'heart', item.favorite ? 'Remove from Favorites' : 'Add to Favorites',
           () => act(() => call('setFavorite', item.path, !item.favorite)))}
-        {!trashed && row('tag', 'Tags', () => editTags(item))}
+        {!trashed && row('tag', 'Tags', () => editTags([item]))}
         {item.dir && !trashed && row('palette', 'Change folder colour', () => pickColor(item))}
         {row('info', 'Properties', () => properties(item))}
         {!trashed && row('trash', 'Move to Trash', () => act(() => call('trash', item.path), `Moved “${item.name}” to Trash`), true)}
@@ -92,16 +144,17 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
     )
   }
 
-  async function pickDestination(item: DriveItem, kind: 'copy' | 'move') {
+  async function pickDestination(items: DriveItem[], kind: 'copy' | 'move') {
     const all = await call<string[]>('destinations')
-    const choices = all.filter(d => kind === 'copy' || !item.dir || (d !== item.path && !d.startsWith(item.path + '/')))
+    const choices = all.filter(d => kind === 'copy' || items.every(it => !it.dir || (d !== it.path && !d.startsWith(it.path + '/'))))
+    const what = items.length === 1 ? `\u201c${items[0].name}\u201d` : `${items.length} items`
     setDialog(
       <Modal onClose={close}>
-        <h3>{kind === 'copy' ? 'Copy' : 'Move'} “{item.name}” to…</h3>
+        <h3>{kind === 'copy' ? 'Copy' : 'Move'} {what} to\u2026</h3>
         <div className="picker">
           {choices.map(d => (
             <button key={d} className="picker-row" style={{ paddingLeft: 8 + (d ? d.split('/').length : 0) * 18 }}
-              onClick={() => { close(); act(() => call(kind, item.path, d), `${kind === 'copy' ? 'Copied' : 'Moved'} to ${d || 'Drive'}`) }}>
+              onClick={() => { close(); actAll(items, i => call(kind, i.path, d), n => `${kind === 'copy' ? 'Copied' : 'Moved'} ${n === 1 ? items[0].name : `${n} items`} to ${d || 'Drive'}`) }}>
               <Icon name={d ? 'folder' : 'drive'} />{d ? d.split('/').pop() : 'Drive'}
             </button>
           ))}
@@ -115,8 +168,9 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
   function rename(item: DriveItem) {
     setDialog(<RenameDialog item={item} onClose={close} onRename={async name => { await call('rename', item.path, name); refresh() }} />)
   }
-  function editTags(item: DriveItem) {
-    setDialog(<TagsDialog item={item} known={tags} onClose={close} onSave={async names => { await call('setTags', item.path, names); refresh() }} />)
+  function editTags(items: DriveItem[]) {
+    setDialog(<TagsDialog items={items} known={tags} onClose={close}
+      onSave={async names => { await actAll(items, i => call('setTags', i.path, names), n => n === 1 ? 'Tags saved' : `Tags saved on ${n} items`) }} />)
   }
   function pickColor(item: DriveItem) {
     setDialog(
@@ -166,7 +220,7 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
   const title = mode === 'favorites' ? 'Favorites' : mode === 'recent' ? 'Recent' : null
 
   return (
-    <div className="timeline files" onContextMenu={e => e.preventDefault()}>
+    <div className={`timeline files ${selecting ? 'selecting' : ''}`} onContextMenu={e => e.preventDefault()}>
       <header className="topbar">
         <div className="island title-island crumbs">
           {mode === 'browse' && folder && <button className="round flat" title="Up" onClick={() => setFolder(parentOf(folder))}><Icon name="back" /></button>}
@@ -210,10 +264,13 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
       )}
       <div className={view === 'grid' ? 'file-grid' : 'file-list'}>
         {sorted.map(item => (
-          <div key={item.path} className="file" role="button" tabIndex={0}
-            onClick={() => open(item)} onKeyDown={e => { if (e.key === 'Enter') open(item) }}
+          <div key={item.path} className={`file ${selected.has(item.path) ? 'selected' : ''}`} role="button" tabIndex={0}
+            onPointerDown={e => pointerDown(e, item)} onPointerEnter={() => pointerEnter(item)}
+            onClick={() => { if (handled.current) handled.current = false; else open(item) }}
+            onKeyDown={e => { if (e.key === 'Enter') open(item) }}
             onContextMenu={e => { e.preventDefault(); sheet(item) }}>
             <ItemIcon item={item} size={view === 'grid' ? 56 : 28} />
+            <span className="check" title="Select"><Icon name={selected.has(item.path) ? 'checked' : 'unchecked'} size={22} /></span>
             <div className="file-name">
               <span>{item.name}{item.favorite && <Icon name="heartFill" size={14} />}</span>
               {(searching || mode !== 'browse') && <small>{parentOf(item.path) || 'Drive'}</small>}
@@ -225,6 +282,26 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
           </div>
         ))}
       </div>
+
+      {picked.length > 0 && (
+        <div className="island selection-bar">
+          <button className="round flat" title="Clear selection (Esc)" onClick={() => setSelected(new Set())}><Icon name="close" /></button>
+          <strong>{picked.length} selected</strong>
+          {inTrash ? (
+            <button className="round flat" title="Restore from Trash"
+              onClick={() => actAll(picked, i => call('move', i.path, ''), n => `Restored ${n} ${n === 1 ? 'item' : 'items'}`)}><Icon name="undo" /></button>
+          ) : <>
+            <button className="round flat" title="Copy to…" onClick={() => pickDestination(picked, 'copy')}><Icon name="copy" /></button>
+            <button className="round flat" title="Move to…" onClick={() => pickDestination(picked, 'move')}><Icon name="moveTo" /></button>
+            <button className="round flat" title="Tags" onClick={() => editTags(picked)}><Icon name="tag" /></button>
+            <button className="round flat" title={picked.every(i => i.favorite) ? 'Remove from Favorites' : 'Add to Favorites'}
+              onClick={() => { const on = !picked.every(i => i.favorite); actAll(picked, i => call('setFavorite', i.path, on), n => `${on ? 'Added' : 'Removed'} ${n} ${n === 1 ? 'item' : 'items'}`) }}>
+              <Icon name={picked.every(i => i.favorite) ? 'heartFill' : 'heart'} /></button>
+            <button className="round flat" title="Move to Trash"
+              onClick={() => actAll(picked, i => call('trash', i.path), n => `Moved ${n} ${n === 1 ? 'item' : 'items'} to Trash`)}><Icon name="trash" /></button>
+          </>}
+        </div>
+      )}
     </div>
   )
 }
@@ -266,23 +343,25 @@ function RenameDialog({ item, onRename, onClose }: { item: DriveItem; onRename: 
   )
 }
 
-function TagsDialog({ item, known, onSave, onClose }: { item: DriveItem; known: string[]; onSave: (t: string[]) => Promise<void>; onClose: () => void }) {
-  const [chosen, setChosen] = useState(new Set(item.tags))
-  const [all, setAll] = useState([...new Set([...known, ...item.tags])])
+function TagsDialog({ items, known, onSave, onClose }: { items: DriveItem[]; known: string[]; onSave: (t: string[]) => Promise<void>; onClose: () => void }) {
+  const many = items.length > 1
+  const [chosen, setChosen] = useState(new Set(many ? [] : items[0].tags)) // a set chosen for many replaces what each had
+  const [all, setAll] = useState([...new Set([...known, ...items.flatMap(i => i.tags)])])
   const [draft, setDraft] = useState('')
   const [error, setError] = useState('')
   const toggle = (t: string) => setChosen(s => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n })
   function add(e: React.FormEvent) {
     e.preventDefault()
     const t = draft.trim()
-    if (!t || t.length > 32 || t.includes(',')) return setError('Tags must be 1–32 characters and cannot contain commas.')
+    if (!t || t.length > 32 || t.includes(',')) return setError('Tags must be 1\u201332 characters and cannot contain commas.')
     const existing = all.find(x => x.toLowerCase() === t.toLowerCase())
     if (!existing) setAll(a => [...a, t])
     setChosen(s => new Set(s).add(existing ?? t)); setDraft(''); setError('')
   }
   return (
     <Modal onClose={onClose}>
-      <h3>Tags for “{item.name}”</h3>
+      <h3>{many ? `Tags for ${items.length} items` : `Tags for \u201c${items[0].name}\u201d`}</h3>
+      {many && <p className="hint">These tags replace the tags on every selected item.</p>}
       <div className="chips wrap">{all.map(t => <button key={t} className={`chip ${chosen.has(t) ? 'on' : ''}`} onClick={() => toggle(t)}>{t}</button>)}</div>
       <form onSubmit={add} className="tag-add">
         <input className="field" placeholder="New tag" maxLength={32} value={draft} onChange={e => { setDraft(e.target.value); setError('') }} />
