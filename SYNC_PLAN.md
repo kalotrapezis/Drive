@@ -788,11 +788,14 @@ phone misses.
 **A person with no photos left stops being shown.**
 
 - **Computer:** when a scan sees photos leave the library, their faces go with
-  them and a person left with no faces at all is removed. Only the photos *this
-  scan saw disappear* count, so a face the phone sent for a photo not yet
-  transferred — no media row, and never had one — is left alone. The person's row
-  is deleted rather than tombstoned on purpose: the phone may still hold that
-  person's photos, and a tombstone would travel there and delete someone
+  them and a person left with no faces at all is removed. "Gone" is narrower than
+  it sounds, and each exclusion is a way this could have lost a name:
+  a photo that merely **moved** is already back in the table under its new path
+  (removals run after every file on disk has been seen); a photo sitting in the
+  **Trash** can be put back, so its faces wait for it; and a face the phone sent
+  for a photo **not yet transferred** has no media row and never had one. The
+  person's row is deleted rather than tombstoned on purpose: the phone may still
+  hold that person's photos, and a tombstone would travel there and delete someone
   perfectly alive. The next sync simply brings them back.
 - **Phone:** a group is only as alive as its photos — People lists only those
   with at least one photo still on the device. The rows stay, because Android's
@@ -800,6 +803,11 @@ phone misses.
   the person back, name and all. Rows are actually removed where it is already
   safe: when the photos themselves are forgotten (`forgetPhotos`).
 
-The asymmetry is deliberate. The computer's library is a folder it can see the
-whole of, so "gone" means gone; on the phone, gone often means "in a trash that
-empties itself in a month", and a name the user typed is not worth losing to that.
+Both trashes are respected, for the same reason: a deletion you can undo is not a
+deletion, and a name the user typed is not worth losing to one. What differs is
+only how each device is *told* — the computer reads the freedesktop `.trashinfo`
+files beside the trashed photo (6h), the phone asks Android. The one real
+asymmetry left is what happens after that: the computer's library is a folder it
+can see the whole of, so once a photo is emptied from the Trash its faces go;
+Android's trash empties itself after thirty days, so the phone keeps the rows and
+simply stops listing a person with nothing to show.

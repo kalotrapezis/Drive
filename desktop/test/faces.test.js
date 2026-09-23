@@ -96,8 +96,28 @@ test('a person whose photos all left goes, the best face is the cover, and the p
     embedding: Buffer.from(new Float32Array(other).buffer), model: F.EMBEDDING_MODEL, quality: 0.8,
     person: 'phone-person', updatedAt: Date.now() })
 
-  fs.rmSync(files[0]); fs.rmSync(files[1])
+  // The first photo goes to the Trash, from where it can be put back: its person must survive, name and all.
+  const trash = path.join(tmp, 'xdg', 'Trash')
+  fs.mkdirSync(path.join(trash, 'files'), { recursive: true }); fs.mkdirSync(path.join(trash, 'info'), { recursive: true })
+  fs.renameSync(files[0], path.join(trash, 'files', 'a.jpg'))
+  fs.writeFileSync(path.join(trash, 'info', 'a.jpg.trashinfo'), `[Trash Info]\nPath=${files[0]}\nDeletionDate=2026-09-23T09:00:00\n`)
+  fs.rmSync(files[1]) // the other one is deleted outright, so this person has nothing left on show
+  const xdg = process.env.XDG_DATA_HOME
+  process.env.XDG_DATA_HOME = path.join(tmp, 'xdg')
   await library.scan(db, photos, tmp, () => {})
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM faces WHERE sha256 = ?').get(second).n, 0, 'the deleted photo took its face')
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM faces WHERE sha256 = ?').get(first).n, 1, 'a photo in the Trash can come back, so its face waits')
+  assert.equal(people.list().length, 0, 'but nobody is listed while no photo of them is here')
+  assert.ok(db.prepare('SELECT 1 FROM people').get(), 'the name typed for them is not thrown away')
+
+  fs.renameSync(path.join(trash, 'files', 'a.jpg'), files[0]) // put it back, as the Trash would
+  await library.scan(db, photos, tmp, () => {})
+  assert.equal(people.list()[0].count, 1, 'and they are whole again when it returns')
+
+  fs.rmSync(files[0]) // emptied from the Trash for real
+  fs.rmSync(path.join(trash, 'info', 'a.jpg.trashinfo'))
+  await library.scan(db, photos, tmp, () => {})
+  process.env.XDG_DATA_HOME = xdg
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM faces WHERE sha256 IN (?,?)').get(first, second).n, 0, 'their faces went with them')
   assert.equal(people.list().length, 0, 'and the person nobody has a photo of is gone')
   assert.ok(db.prepare("SELECT 1 FROM faces WHERE id = 'phone-face'").get(), "the phone's face is not this computer's to delete")

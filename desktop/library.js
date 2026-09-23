@@ -171,12 +171,16 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
   for (const rel of known.keys()) if (!seen.has(rel)) {
     const row = byPath.get(rel)
     del.run(rel)
-    if (row) gone.push(row.sha256)
+    if (row) gone.push({ rel, sha256: row.sha256 })
     removed++
   }
   // Removals run after every file on disk has been seen, so a photo that merely moved is already back in the
-  // table under its new path and is not treated as gone.
-  if (gone.length) forgetFacesOfGonePhotos(db, gone)
+  // table under its new path and is not treated as gone. A photo sitting in the Trash is not gone either — it
+  // can be put back, and it should come back to the person it belongs to, so its faces are left alone.
+  if (gone.length) {
+    const trashed = new Set((await trashedPhotos(root).catch(() => [])).map(t => t.path))
+    forgetFacesOfGonePhotos(db, gone.filter(g => !trashed.has(g.rel)).map(g => g.sha256))
+  }
   return { total: seen.size, changed, removed }
 }
 
@@ -382,9 +386,9 @@ function applyCollectionItem(db, collection, sha, deleted, updatedAt) {
 
 /**
  * A face belongs to a photo, so when the photo leaves this library the face goes with it, and a person left with
- * no faces at all stops existing here. Only the photos this scan saw disappear are considered, so a face the
- * phone sent for a photo that has not been transferred yet — which has no media row and never had one — is left
- * alone.
+ * no faces at all stops existing here. Only photos that are really gone count: not one that merely moved, not
+ * one waiting in the Trash to be put back, and not a photo the phone has told us about but never sent — that one
+ * has no media row and never had one.
  *
  * The person's row is removed rather than tombstoned, on purpose: the phone may still hold that person's photos,
  * and a tombstone would travel there and delete someone who is perfectly alive. This way the next sync simply
