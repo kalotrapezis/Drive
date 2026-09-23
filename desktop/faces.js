@@ -330,6 +330,16 @@ class People {
   // phone sends is therefore usable as-is — no translation between two face models is needed, only a way to tell
   // that a face the phone found and a face this app found are the same face, which is what overlap does below.
 
+  /** Was this person's name given by a human, or made up by the grouping? */
+  isNamed(id) {
+    const row = id && this.db.prepare('SELECT name FROM people WHERE id = ?').get(id)
+    return !!row && !isGeneratedName(row.name)
+  }
+  isAutoNamed(id) {
+    const row = id && this.db.prepare('SELECT name FROM people WHERE id = ?').get(id)
+    return !row || isGeneratedName(row.name)
+  }
+
   /** A person named on the phone. Its UUID becomes this person's id, so the name stays attached across syncs. */
   applyPerson(uuid, name, updatedAt) {
     const local = this.db.prepare('SELECT updated_at FROM people WHERE id = ?').get(uuid)
@@ -347,12 +357,17 @@ class People {
    */
   applyFace({ uuid, sha256, box, embedding, model, quality, person, updatedAt }) {
     if (person && !this.db.prepare('SELECT 1 FROM people WHERE id = ?').get(person)) return // its person has not arrived
-    const mine = this.db.prepare('SELECT id, updated_at FROM faces WHERE id = ?').get(uuid)
-      ?? (box && this.db.prepare('SELECT id, updated_at, box_left, box_top, box_right, box_bottom FROM faces WHERE sha256 = ? AND deleted = 0').all(sha256)
+    const mine = this.db.prepare('SELECT id, updated_at, person_id FROM faces WHERE id = ?').get(uuid)
+      ?? (box && this.db.prepare('SELECT id, updated_at, person_id, box_left, box_top, box_right, box_bottom FROM faces WHERE sha256 = ? AND deleted = 0').all(sha256)
         .map(f => ({ ...f, overlap: iou(box, [f.box_left, f.box_top, f.box_right, f.box_bottom]) }))
         .filter(f => f.overlap >= SAME_FACE_OVERLAP).sort((a, b) => b.overlap - a.overlap)[0])
     if (mine) {
       if (mine.updated_at >= updatedAt || !person) return
+      // A guess never overwrites a decision. "Person 41" is what an algorithm called someone it had not been
+      // told about; a name is what a human typed. Newest-wins decides between two of the same kind, never
+      // between those two — or a device that has just re-analysed from scratch can un-name a whole library,
+      // which is exactly what happened on 2026-09-23.
+      if (this.isAutoNamed(person) && this.isNamed(mine.person_id)) return
       return void this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?').run(person, updatedAt, mine.id)
     }
     if (!box || !person || !embedding) return // without a box there is nothing to show and nothing to match later

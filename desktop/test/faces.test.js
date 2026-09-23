@@ -125,3 +125,31 @@ test('a person whose photos all left goes, the best face is the cover, and the p
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })
+
+test('a device that re-analysed from scratch cannot un-name a person', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-faces-name-'))
+  const db = library.open(tmp)
+  const people = new F.People(db, tmp)
+  const sha = 'a'.repeat(64)
+  db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb) VALUES('1.jpg',?,'image/jpeg',0,1,1,1,1)").run(sha)
+  people.record(sha, [face(base)], size)
+  const mine = people.list()[0]
+  people.rename(mine.id, 'Γιάννης')
+
+  // The other device sends the same face — same photo, same place — belonging to a group it just invented.
+  people.applyPerson('fresh-person', 'Person 7', Date.now() + 1000)
+  people.applyFace({ uuid: 'their-face', sha256: sha, box: [0.1, 0.1, 0.6, 0.6],
+    embedding: Buffer.from(new Float32Array(base).buffer), model: F.EMBEDDING_MODEL, quality: 0.9,
+    person: 'fresh-person', updatedAt: Date.now() + 1000 })
+  assert.equal(people.list().find(p => p.id === mine.id)?.name, 'Γιάννης')
+  assert.equal(people.list().find(p => p.id === mine.id)?.count, 1, 'the face stays with the person who has a name')
+
+  // But a name the user typed over there does win, however old this one is.
+  people.applyPerson('named-elsewhere', 'Μαρία', Date.now() + 2000)
+  people.applyFace({ uuid: 'their-face-2', sha256: sha, box: [0.1, 0.1, 0.6, 0.6],
+    embedding: Buffer.from(new Float32Array(base).buffer), model: F.EMBEDDING_MODEL, quality: 0.9,
+    person: 'named-elsewhere', updatedAt: Date.now() + 2000 })
+  assert.equal(people.list().find(p => p.count > 0)?.name, 'Μαρία', 'a human decision still travels')
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})
