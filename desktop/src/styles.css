@@ -372,3 +372,10 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .person-bar { gap: 2px; padding: 6px; }
 .person-bar .text-button { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; }
 .person-bar .text-button:hover { background: var(--hover); }
+
+/* The rules between this computer and one device, on the device's own card (SYNC_PLAN.md 6j). */
+.connection-rules { display: grid; justify-items: center; gap: 4px; width: 100%; margin-top: 10px; }
+.connection-rules .rules-what { font-size: 13px; font-weight: 600; }
+.connection-rules .segmented { flex-wrap: wrap; justify-content: center; background: var(--island-2); border-radius: 999px; }
+.connection-rules .segmented button { padding: 6px 12px; font-size: 12px; }
+.connection-rules small { color: var(--muted); font-size: 12px; }

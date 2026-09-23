@@ -656,6 +656,8 @@ Send & receive, because that is what the tablet needs and it cannot delete
 anything. The card model, and with it Keep, lands on top once bytes provably move
 both ways.
 
+**Status 2026-09-23: both are built — see 6q.**
+
 ### 6k. Finding the other device when the address changes (2026-09-23)
 
 The question: without a MAC address — Android randomises it per network and
@@ -875,3 +877,84 @@ operation, so a combine cannot be taken back twice.
 
 People also gained an island on both apps, where the phone already puts the
 actions for a thing you have open: **Combine · Rename · History**.
+
+### 6q. Two-way, and the rules that say which way (built 2026-09-23)
+
+**Status: built on both apps, branch `bidirectional-sync`.** Bytes now move in
+both directions, and which directions are allowed is a row the computer keeps and
+the phone obeys.
+
+**The rules (6j).** `sync_connections` on the computer: one row per
+(device, content), where content is `photos` or `files`. It carries `direction`
+and `keep`, and it is created with the plan's defaults — **Send & receive, Keep
+Everything** — the first time a device needs one, so pairing gained no extra step.
+
+Direction is written from the **device's** point of view, because the device is
+the one that reads the row and obeys it: `send` is phone → computer, `receive` is
+computer → phone, `both` is both. Keep is stored and shown but not yet offered:
+Keep Everything — a Copy — is the only one built, and two-way forces it anyway
+(`setConnection` rewrites `keep` to `everything` whenever direction is `both`),
+because two-way and "delete after sending" cannot both be true. A Move needs the
+receipt-checked deletion of the old spec and is still its own piece of work; an
+editable control for it now would be a promise nothing keeps.
+
+The computer edits them on each device's card in Devices — three buttons, no map,
+exactly as the old app's own audit concluded. The phone shows the sentence it was
+told ("Photos ⇄ Desk · Copy") on its Sync page and nothing more. `GET /connections`
+is how it learns them; a computer too old to answer is read as Send & receive,
+which is what every pairing before this did.
+
+**Photos, the other way (6i).** `POST /library/manifest {hashes}` is `/have` read
+backwards: the phone says what it holds, the computer answers with up to 2000
+photos it has and the phone does not (the next sync continues where this one
+stopped), and `GET /blob/<sha256>` streams one. The phone's `.part` is MediaStore's
+own **pending item**: invisible to the gallery, hashed as it is written, published
+only if the hash is the one that was asked for, deleted otherwise. The hash is
+saved against the new photo's key immediately, so the metadata pass in the same
+sync already places its favourites, its people and its collections. The key is
+read back from MediaStore rather than guessed, because a name can gain a "(1)" on
+the way in.
+
+**Files, the other way.** No new endpoint: `/files/manifest` now answers four
+lists instead of two — `want` and `moved` (what the computer does) plus **`have`**
+and **`moveTo`** (what it offers the device). A move is still only ever read from
+*memory*, never from two devices filing the same bytes differently, and that
+memory is now symmetric: `sync_manifest` keeps the computer's own layout under
+`self` beside each device's. So a file the computer renamed is mirrored as a move
+the phone follows, not as a second copy — and on a first sync, when neither side
+remembers anything, nothing moves on either side. `GET /file/<sha256>?path=` only
+answers when that hash is what is at that path right now.
+
+**Automatic, in both directions.** The phone already synced by itself; a sync now
+does both halves, so opening the app catches up in both directions, and the
+analysis service reads whatever arrived.
+
+The other half needed an honest answer to "the computer cannot reach the phone".
+It cannot *push*: the phone decides what it accepts, and nothing of ours listens
+on a phone nobody is using. So the computer **says there is something new** — a
+`POST /sync` carrying nothing, to which the phone answers by running its own sync,
+under its own rules. The computer sends it after a library scan that changed
+something, to every paired device, pinning that device's certificate from pairing
+exactly as the phone pins the computer's. A device set to `send` only is not told:
+there is nothing here for it. The phone listens for as long as Tetra is open —
+one shared listener, since the pairing screen and the app are two reasons for the
+same socket and two of them cannot hold one port.
+
+**What still cannot happen:** a photo cannot reach a phone whose app is closed.
+That is a foreground service that listens all day, and it is a decision to make
+out loud rather than by leaving a process behind.
+
+**Deletions are still out of scope**, by the rule the whole protocol rests on:
+sync copies and moves, it never deletes — in either direction. A file that arrives
+never replaces one that is there; `DriveRules.newFile` keeps both, as Drive does
+everywhere else.
+
+Tested: `desktop/test/sync.test.js` — the computer's offer and its refusal when the
+row says send-only, a blob fetched byte for byte, a file offered and fetched by
+hash at its path, a move mirrored instead of resent, Keep forced back by two-way,
+and the nudge: that it carries nothing but the ask, that a certificate which is not
+the paired one is refused whatever answers at that address, and that a send-only
+device is never told. Phone unit tests: direction and its sentence, the defaults an
+old computer is read as, and `DriveRules.newFile` keeping both files and refusing a
+path that leaves Drive. **Not yet done: a real run between this phone and this
+computer** — it moves real photos onto a real phone, so it is the user's to start.

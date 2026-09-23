@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('drive', {
     status: () => ipcRenderer.invoke('sync:status'),
     pair: () => ipcRenderer.invoke('sync:pair'),
     forget: id => ipcRenderer.invoke('sync:forget', id),
+    setConnection: (id, content, rules) => ipcRenderer.invoke('sync:setConnection', id, content, rules),
     onReceived: fn => { const l = () => fn(); ipcRenderer.on('sync-received', l); return () => ipcRenderer.off('sync-received', l) },
   },
   documents: {

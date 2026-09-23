@@ -15,6 +15,11 @@ const PORT = 43180
 const BEACON_PORT = 43181
 const PAIRING_MS = 10 * 60 * 1000
 const MAX_HAVE = 5000
+const MAX_KNOWN = 50000 // the phone's whole library in one question; chunking it would change the answer
+const MAX_SEND = 2000 // one answer's worth; the next sync continues where this one stopped
+const CONTENTS = ['photos', 'files']
+const DIRECTIONS = ['send', 'receive', 'both']
+const KEEPS = ['everything', 'nothing']
 const sha = s => crypto.createHash('sha256').update(s).digest('hex')
 const isHash = h => typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)
 const safeRel = rel => typeof rel === 'string' && rel.length < 512 && !rel.startsWith('/') && rel.split('/').every(p => p !== '.' && p !== '..') && !/[\\\0]/.test(rel)
@@ -46,6 +51,13 @@ class SyncServer {
       CREATE TABLE IF NOT EXISTS sync_receipts (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256));`)
     // Drive files are received too now, and the Devices page counts them apart from photos.
     if (!db.prepare('PRAGMA table_info(sync_receipts)').all().some(c => c.name === 'kind')) db.exec("ALTER TABLE sync_receipts ADD COLUMN kind TEXT NOT NULL DEFAULT 'photo'")
+    // What each device does with each kind of content, and in which direction (SYNC_PLAN.md 6j). The computer
+    // owns this table because it is the one device every other one reaches; a phone reads its rows at sync time
+    // and obeys them. Direction is written from the *device's* point of view, because the device is the reader:
+    // 'send' is phone → computer, 'receive' is computer → phone, 'both' is both.
+    db.exec(`CREATE TABLE IF NOT EXISTS sync_connections (device_id TEXT NOT NULL, content TEXT NOT NULL,
+      direction TEXT NOT NULL DEFAULT 'both', keep TEXT NOT NULL DEFAULT 'everything', updated_at INTEGER NOT NULL,
+      PRIMARY KEY(device_id, content));`)
     // A phone now says who it is when it pairs — its own certificate, port and a token to send it — so that this
     // computer can one day start a sync instead of only answering one. Older pairings simply leave these null.
     const columns = db.prepare('PRAGMA table_info(sync_devices)').all().map(c => c.name)
@@ -107,9 +119,48 @@ class SyncServer {
     return this.db.prepare(`SELECT d.id, d.name, d.paired_at, d.last_seen,
         (SELECT COUNT(*) FROM sync_receipts r WHERE r.device_id = d.id AND r.kind = 'photo') AS received,
         (SELECT COUNT(*) FROM sync_receipts r WHERE r.device_id = d.id AND r.kind = 'file') AS filesReceived
-      FROM sync_devices d ORDER BY d.paired_at`).all()
+      FROM sync_devices d ORDER BY d.paired_at`).all().map(d => ({ ...d, connections: this.connections(d.id) }))
   }
   forget(id) { this.db.prepare('DELETE FROM sync_devices WHERE id = ?').run(String(id)) }
+
+  /**
+   * "There is something new here." (SYNC_PLAN.md 6i.)
+   *
+   * This computer cannot put a photo on a phone by itself — the phone is the one that decides what it accepts,
+   * and it is not listening when nobody is using it. So the other direction is made automatic the only honest
+   * way: when this library gains something, every paired device that *is* listening is told, and it then runs
+   * its own sync, under its own rules. It carries nothing and proves nothing, so a device that does not answer
+   * costs one refused connection and nothing else.
+   *
+   * The device's own certificate, from pairing, is pinned exactly as the phone pins ours.
+   */
+  async nudge() {
+    const devices = this.db.prepare('SELECT id, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL').all()
+    await Promise.all(devices.map(async d => {
+      if (this.connection(d.id, 'photos').direction === 'send' && this.connection(d.id, 'files').direction === 'send') return
+      for (const host of String(d.peer_hosts ?? '').split(',').filter(Boolean)) {
+        const reached = await this.ask(host, d).catch(() => false)
+        if (reached) return
+      }
+    }))
+  }
+
+  ask(host, device) {
+    return new Promise((resolve, reject) => {
+      const req = https.request({
+        host, port: device.peer_port || PORT, method: 'POST', path: '/sync', timeout: 3000, rejectUnauthorized: false,
+        headers: { authorization: `Bearer ${device.peer_token}`, 'content-length': 0 },
+      }, res => {
+        const got = res.socket.getPeerCertificate().fingerprint256?.replace(/:/g, '').toLowerCase()
+        res.resume()
+        if (got !== device.peer_fp) return reject(new Error('That is not the paired device.'))
+        resolve(res.statusCode === 200)
+      })
+      req.on('timeout', () => req.destroy(new Error('No answer.')))
+      req.on('error', reject)
+      req.end()
+    })
+  }
 
   send(res, status, body) {
     res.writeHead(status, { 'content-type': 'application/json' })
@@ -129,6 +180,52 @@ class SyncServer {
     if (!d) throw Object.assign(new Error('Not paired.'), { status: 401, expose: true })
     this.db.prepare('UPDATE sync_devices SET last_seen = ? WHERE id = ?').run(Date.now(), d.id)
     return d
+  }
+
+  /**
+   * The rules for one device and one kind of content, created with the defaults the plan asks for the first
+   * time they are needed: **Send & receive, Keep Everything**. Two-way and "delete after sending" cannot both
+   * be true, so Keep is forced back to everything whenever the direction is 'both' (SYNC_PLAN.md 6j).
+   */
+  connection(deviceId, content) {
+    const row = this.db.prepare('SELECT direction, keep FROM sync_connections WHERE device_id = ? AND content = ?').get(deviceId, content)
+    if (row) return { content, direction: row.direction, keep: row.direction === 'both' ? 'everything' : row.keep }
+    this.db.prepare('INSERT INTO sync_connections(device_id, content, direction, keep, updated_at) VALUES(?,?,?,?,?)')
+      .run(deviceId, content, 'both', 'everything', Date.now())
+    return { content, direction: 'both', keep: 'everything' }
+  }
+
+  connections(deviceId) { return CONTENTS.map(c => this.connection(deviceId, c)) }
+
+  setConnection(deviceId, content, { direction, keep }) {
+    if (!CONTENTS.includes(content)) throw new Error('Unknown content.')
+    if (!DIRECTIONS.includes(direction)) throw new Error('Unknown direction.')
+    const kept = direction === 'both' ? 'everything' : (KEEPS.includes(keep) ? keep : 'everything')
+    this.db.prepare(`INSERT INTO sync_connections(device_id, content, direction, keep, updated_at) VALUES(?,?,?,?,?)
+      ON CONFLICT(device_id, content) DO UPDATE SET direction = excluded.direction, keep = excluded.keep, updated_at = excluded.updated_at`)
+      .run(String(deviceId), content, direction, kept, Date.now())
+    return { content, direction, keep: kept }
+  }
+
+  /** Photos this computer holds that the device says it has not got: the other half of /have. */
+  toSend(hashes, limit = MAX_SEND) {
+    const known = new Set(hashes)
+    const out = []
+    for (const m of this.db.prepare('SELECT sha256, path, size, taken_at FROM media ORDER BY taken_at DESC').all()) {
+      if (known.has(m.sha256) || out.length >= limit) continue
+      const parsed = path.parse(m.path)
+      out.push({ sha256: m.sha256, path: parsed.dir.split(path.sep).join('/'), name: parsed.base, size: m.size, modified: m.taken_at })
+      known.add(m.sha256) // two copies of one photo are one photo to send
+    }
+    return out
+  }
+
+  /** Streams a file out, once its hash is confirmed to be what was asked for. Nothing else may be read. */
+  async sendFile(res, absolute, expected) {
+    const st = await fsp.stat(absolute).catch(() => null)
+    if (!st?.isFile()) throw Object.assign(new Error('Not here any more.'), { status: 404, expose: true })
+    res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': String(st.size) })
+    await new Promise((resolve, reject) => fs.createReadStream(absolute).on('error', reject).on('end', resolve).pipe(res, { end: true }))
   }
 
   have(hash) {
@@ -160,14 +257,39 @@ class SyncServer {
       if (!Array.isArray(hashes) || hashes.length > MAX_HAVE || !hashes.every(isHash)) return this.send(res, 400, { error: `Send up to ${MAX_HAVE} SHA-256 hashes.` })
       return this.send(res, 200, { missing: hashes.filter(h => !this.have(h)) })
     }
+    if (req.method === 'GET' && url.pathname === '/connections') {
+      return this.send(res, 200, { name: os.hostname(), connections: this.connections(device.id) })
+    }
+    // The other direction of /have: the phone says what it holds, the computer answers with what it could send.
+    if (req.method === 'POST' && url.pathname === '/library/manifest') {
+      const { hashes } = await this.json(req, 1 << 23)
+      if (!Array.isArray(hashes) || hashes.length > MAX_KNOWN || !hashes.every(isHash)) return this.send(res, 400, { error: `Send up to ${MAX_KNOWN} SHA-256 hashes.` })
+      if (this.connection(device.id, 'photos').direction === 'send') return this.send(res, 200, { send: [] }) // this device only sends
+      return this.send(res, 200, { send: this.toSend(hashes) })
+    }
     const blob = /^\/blob\/([0-9a-f]{64})$/.exec(url.pathname)
+    if (req.method === 'GET' && blob) {
+      const row = this.db.prepare('SELECT path FROM media WHERE sha256 = ?').get(blob[1])
+      if (!row) return this.send(res, 404, { error: 'No such photo here.' })
+      return this.sendFile(res, path.join(this.photosRoot, row.path), blob[1])
+    }
     if (req.method === 'PUT' && blob) return this.send(res, 200, await this.receive(req, device, blob[1], url.searchParams))
     if (req.method === 'POST' && url.pathname === '/files/manifest') {
-      if (!this.files) return this.send(res, 200, { want: [], moved: [] })
+      if (!this.files) return this.send(res, 200, { want: [], moved: [], have: [], moveTo: [] })
       const { files: offered } = await this.json(req, 1 << 24)
-      return this.send(res, 200, await this.files.reconcile(Array.isArray(offered) ? offered : [], device.id))
+      const answer = await this.files.reconcile(Array.isArray(offered) ? offered : [], device.id)
+      // 'want' and 'moved' are what this computer does; 'have' and 'moveTo' are what it offers the device.
+      const direction = this.connection(device.id, 'files').direction
+      return this.send(res, 200, direction === 'send' ? { ...answer, have: [], moveTo: [] } : answer)
     }
     const file = /^\/file\/([0-9a-f]{64})$/.exec(url.pathname)
+    if (req.method === 'GET' && file) {
+      const rel = url.searchParams.get('path') ?? ''
+      if (!this.files || !safeRel(rel) || rel === '') return this.send(res, 400, { error: 'Invalid path.' })
+      const absolute = this.files.resolve(rel, false)
+      if (await this.files.hash(rel) !== file[1]) return this.send(res, 404, { error: 'That is not what is here any more.' })
+      return this.sendFile(res, absolute, file[1])
+    }
     if (req.method === 'PUT' && file) return this.send(res, 200, await this.receiveFile(req, device, file[1], url.searchParams))
     if (req.method === 'POST' && url.pathname === '/metadata') return this.send(res, 200, this.applyMetadata(await this.json(req, 1 << 24)))
     if (req.method === 'GET' && url.pathname === '/metadata') {

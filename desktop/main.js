@@ -25,7 +25,12 @@ const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move',
 
 function startScan() {
   scanning ??= library.scan(db, PHOTOS_ROOT, DATA_DIR, (done, changed) => win?.webContents.send('scan-progress', { done, changed }))
-    .then(r => { places.fill(db); return r })
+    .then(r => {
+      places.fill(db)
+      // Something new here is something a paired phone has not got: tell it, and it will come and fetch it.
+      if (r?.changed) sync?.nudge().catch(() => {})
+      return r
+    })
     .finally(() => { scanning = null; analyzeLibrary() })
   return scanning
 }
@@ -231,6 +236,7 @@ app.whenReady().then(() => {
     return { payload, qr: await require('qrcode').toDataURL(JSON.stringify(payload), { margin: 1, width: 360, errorCorrectionLevel: 'M' }) }
   })
   ipcMain.handle('sync:forget', (_, id) => sync.forget(id))
+  ipcMain.handle('sync:setConnection', (_, id, content, rules) => sync.setConnection(id, content, rules))
   ipcMain.handle('open-map', (_, lat, lon) => {
     if (![lat, lon].every(Number.isFinite) || Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error('Invalid location.')
     return shell.openExternal(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`)

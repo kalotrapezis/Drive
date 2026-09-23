@@ -7,20 +7,22 @@ const https = require('node:https')
 const crypto = require('node:crypto')
 const dgram = require('node:dgram')
 const library = require('../library')
-const { SyncServer } = require('../sync')
+const { SyncServer, identity } = require('../sync')
 const { Documents } = require('../documents')
 const { People } = require('../faces')
 const { Files } = require('../files')
 
 // A client like the phone's: trusts exactly the certificate whose SHA-256 came in the QR code.
-function request(port, fp, method, url, { token, json, body } = {}) {
+function request(port, fp, method, url, { token, json, body, raw } = {}) {
   return new Promise((resolve, reject) => {
     const req = https.request({ host: '127.0.0.1', port, method, path: url, rejectUnauthorized: false,
       headers: { ...(token && { authorization: `Bearer ${token}` }), ...(json && { 'content-type': 'application/json' }) } }, res => {
       const got = res.socket.getPeerCertificate().fingerprint256.replace(/:/g, '').toLowerCase()
       if (got !== fp) return reject(new Error('certificate does not match the QR fingerprint'))
       const parts = []
-      res.on('data', c => parts.push(c)).on('end', () => resolve({ status: res.statusCode, body: JSON.parse(Buffer.concat(parts).toString() || '{}') }))
+      res.on('data', c => parts.push(c)).on('end', () => resolve(raw
+        ? { status: res.statusCode, body: Buffer.concat(parts) }
+        : { status: res.statusCode, body: JSON.parse(Buffer.concat(parts).toString() || '{}') }))
     })
     req.on('error', reject)
     req.end(json ? JSON.stringify(json) : body)
@@ -245,14 +247,14 @@ test('drive files: the computer asks only for what it lacks, and follows a move 
 
     // Nothing here yet: the computer asks for it, and only keeps a verified copy.
     let r = await manifest({ files: [{ path: 'Notes/receipt.pdf', sha256: pdfHash, size: pdf.length }] })
-    assert.deepEqual(r.body, { want: ['Notes/receipt.pdf'], moved: [] })
+    assert.deepEqual(r.body, { want: ['Notes/receipt.pdf'], moved: [], have: [], moveTo: [] })
     assert.equal((await call('PUT', `/file/${sha(Buffer.from('other'))}?path=Notes/receipt.pdf`, { token, body: pdf })).status, 422, 'wrong hash keeps nothing')
     assert.equal(fs.existsSync(path.join(root, 'Notes/receipt.pdf')), false)
     r = await call('PUT', `/file/${pdfHash}?path=Notes/receipt.pdf`, { token, body: pdf })
     assert.deepEqual(r.body, { sha256: pdfHash, path: 'Notes/receipt.pdf', verified: true })
 
     // Second run: it is here now, so nothing is asked for again.
-    assert.deepEqual((await manifest({ files: [{ path: 'Notes/receipt.pdf', sha256: pdfHash, size: pdf.length }] })).body, { want: [], moved: [] })
+    assert.deepEqual((await manifest({ files: [{ path: 'Notes/receipt.pdf', sha256: pdfHash, size: pdf.length }] })).body, { want: [], moved: [], have: [], moveTo: [] })
 
     // Bytes this computer keeps somewhere the phone never had them is NOT a move: the two devices simply file the
     // same document differently, and Drive is not quietly reorganised to match the phone.
@@ -269,7 +271,7 @@ test('drive files: the computer asks only for what it lacks, and follows a move 
 
     // The phone renamed it: same bytes, new path — the computer moves its copy rather than fetching it again.
     r = await manifest({ files: [{ path: 'Notes/receipt-2026.pdf', sha256: pdfHash, size: pdf.length }] })
-    assert.deepEqual(r.body, { want: [], moved: [{ from: 'Notes/receipt.pdf', to: 'Notes/receipt-2026.pdf' }] })
+    assert.deepEqual({ want: r.body.want, moved: r.body.moved }, { want: [], moved: [{ from: 'Notes/receipt.pdf', to: 'Notes/receipt-2026.pdf' }] })
     assert.equal(fs.existsSync(path.join(root, 'Notes/receipt.pdf')), false)
     assert.equal(fs.readFileSync(path.join(root, 'Notes/receipt-2026.pdf')).toString(), pdf.toString())
 
@@ -350,5 +352,116 @@ test('the beacon answers the phone that already knows this computer, and no one 
     await server.stop()
     db.close()
     fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('the other direction: what this computer offers, and a connection that says it may not', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-back-'))
+  const photos = path.join(tmp, 'Photos'), root = path.join(tmp, 'Drive')
+  fs.mkdirSync(path.join(photos, 'DCIM/Camera'), { recursive: true })
+  fs.mkdirSync(path.join(root, 'Notes'), { recursive: true })
+  const db = library.open(path.join(tmp, 'data'))
+  const files = new Files(db, root)
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
+    dataDir: path.join(tmp, 'data'), photosRoot: photos, port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex')
+  try {
+    const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    const token = paired.token, device = paired.deviceId
+
+    // A photo only this computer has.
+    const jpg = Buffer.from('a photo taken on the computer'), jpgHash = sha(jpg)
+    fs.writeFileSync(path.join(photos, 'DCIM/Camera/computer.jpg'), jpg)
+    db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb) VALUES(?,?,'image/jpeg',0,?,1,1,1)")
+      .run('DCIM/Camera/computer.jpg', jpgHash, jpg.length)
+
+    // Out of the box a pairing is Send & receive, so it is offered.
+    assert.deepEqual(server.connections(device), [
+      { content: 'photos', direction: 'both', keep: 'everything' },
+      { content: 'files', direction: 'both', keep: 'everything' },
+    ])
+    let r = await call('POST', '/library/manifest', { token, json: { hashes: [] } })
+    assert.deepEqual(r.body.send, [{ sha256: jpgHash, path: 'DCIM/Camera', name: 'computer.jpg', size: jpg.length, modified: 1 }])
+    assert.deepEqual((await call('POST', '/library/manifest', { token, json: { hashes: [jpgHash] } })).body.send, [], 'nothing it already holds')
+
+    // And the bytes come back byte for byte.
+    r = await call('GET', `/blob/${jpgHash}`, { token, raw: true })
+    assert.equal(sha(r.body), jpgHash)
+    assert.equal((await call('GET', `/blob/${sha(Buffer.from('nothing'))}`, { token })).status, 404)
+
+    // A file only this computer has is offered too, and can be fetched by hash at that path.
+    const note = Buffer.from('written on the computer'), noteHash = sha(note)
+    fs.writeFileSync(path.join(root, 'Notes/computer.txt'), note)
+    r = await call('POST', '/files/manifest', { token, json: { files: [] } })
+    assert.deepEqual(r.body.have.map(h => [h.path, h.sha256]), [['Notes/computer.txt', noteHash]])
+    assert.deepEqual(r.body.moveTo, [], 'nothing moved on the first look')
+    assert.equal(sha((await call('GET', `/file/${noteHash}?path=Notes/computer.txt`, { token, raw: true })).body), noteHash)
+    assert.equal((await call('GET', `/file/${noteHash}?path=Notes/missing.txt`, { token })).status, 404, 'the hash must be what is at that path')
+
+    // This computer moves its own copy while the phone still has it where it was: the move is mirrored, not resent.
+    fs.renameSync(path.join(root, 'Notes/computer.txt'), path.join(root, 'Notes/renamed.txt'))
+    r = await call('POST', '/files/manifest', { token, json: { files: [{ path: 'Notes/computer.txt', sha256: noteHash, size: note.length }] } })
+    assert.deepEqual(r.body.moveTo, [{ from: 'Notes/computer.txt', to: 'Notes/renamed.txt' }])
+    assert.deepEqual(r.body.have, [], 'a move is not also a copy')
+
+    // Send-only: the device may give, and receives nothing back.
+    server.setConnection(device, 'photos', { direction: 'send', keep: 'everything' })
+    server.setConnection(device, 'files', { direction: 'send', keep: 'everything' })
+    assert.deepEqual((await call('POST', '/library/manifest', { token, json: { hashes: [] } })).body.send, [])
+    r = await call('POST', '/files/manifest', { token, json: { files: [] } })
+    assert.deepEqual([r.body.have, r.body.moveTo], [[], []])
+
+    // Two-way and "keep nothing after sending" cannot both be true.
+    assert.deepEqual(server.setConnection(device, 'photos', { direction: 'both', keep: 'nothing' }),
+      { content: 'photos', direction: 'both', keep: 'everything' })
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('the computer can only say "there is something new"; the phone it says it to must be the paired one', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-nudge-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = await new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  // A stand-in for the phone: its own certificate, which this computer pins exactly as the phone pins ours.
+  const phoneId = await identity(path.join(tmp, 'phone'))
+  const asked = []
+  const phone = https.createServer({ key: phoneId.key, cert: phoneId.cert }, (req, res) => {
+    asked.push({ method: req.method, url: req.url, auth: req.headers.authorization })
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ok":true}')
+  })
+  await new Promise(r => phone.listen(0, '127.0.0.1', r))
+  try {
+    const token = crypto.randomBytes(16).toString('hex')
+    const row = (fp) => db.prepare(`INSERT INTO sync_devices(id, name, token_hash, paired_at, peer_fp, peer_hosts, peer_port, peer_token)
+      VALUES(?,?,?,?,?,?,?,?)`).run(crypto.randomUUID(), 'Xiaomi 15', crypto.randomUUID(), Date.now(), fp, '127.0.0.1', phone.address().port, token)
+
+    row(phoneId.fingerprint)
+    await server.nudge()
+    assert.deepEqual(asked, [{ method: 'POST', url: '/sync', auth: `Bearer ${token}` }], 'it asks, and carries nothing else')
+
+    // A device whose certificate is not the one from pairing is not this phone, whatever answers at its address.
+    asked.length = 0
+    db.prepare('DELETE FROM sync_devices').run()
+    row('f'.repeat(64))
+    await server.nudge()
+    assert.deepEqual(asked.length, 1, 'the request is made…')
+    assert.equal((await new Promise(resolve => {
+      server.ask('127.0.0.1', { peer_fp: 'f'.repeat(64), peer_port: phone.address().port, peer_token: token }).then(resolve, e => resolve(e.message))
+    })), 'That is not the paired device.', '…and its answer is refused')
+
+    // A device that only ever sends is not told anything: there is nothing here for it.
+    asked.length = 0
+    const only = db.prepare('SELECT id FROM sync_devices').get().id
+    server.setConnection(only, 'photos', { direction: 'send', keep: 'everything' })
+    server.setConnection(only, 'files', { direction: 'send', keep: 'everything' })
+    await server.nudge()
+    assert.deepEqual(asked, [])
+  } finally {
+    await new Promise(r => phone.close(r))
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
   }
 })

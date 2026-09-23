@@ -14,7 +14,8 @@ export interface MergeUndo { sourceId: string; faceIds: string[] }
 export interface VaultStatus { configured: boolean; unlocked: boolean; count: number }
 export interface VaultItem { id: string; sha256: string; name: string; rel_path: string; mime: string; is_video: number; size: number; taken_at: number; has_thumb: number }
 
-export interface SyncDevice { id: string; name: string; paired_at: number; last_seen: number | null; received: number; filesReceived: number }
+export interface SyncConnection { content: 'photos' | 'files'; direction: 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing' }
+export interface SyncDevice { id: string; name: string; paired_at: number; last_seen: number | null; received: number; filesReceived: number; connections: SyncConnection[] }
 export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[] }
 
 export interface TrashedPhoto { id: string; name: string; path: string; size: number; deletedAt: number }
@@ -57,6 +58,7 @@ declare global {
         status(): Promise<SyncStatus>
         pair(): Promise<{ payload: { hosts: string[]; port: number }; qr: string }>
         forget(id: string): Promise<void>
+        setConnection(id: string, content: string, rules: { direction: string; keep: string }): Promise<SyncConnection>
         onReceived(fn: () => void): () => void
       }
       documents: {

@@ -243,17 +243,33 @@ class Files {
    * Copy, never delete: a path the phone no longer has is left alone, and a path this device already holds with
    * other bytes is never overwritten — the newer file arrives beside it, both kept, as everywhere else.
    */
+  /**
+   * What each side should do about the other's files (SYNC_PLAN.md 6e and 6i), in one answer:
+   *
+   *   want   — paths this computer is missing and would like sent
+   *   moved  — what this computer moved itself, because the device moved it first
+   *   have   — bytes this computer holds and the device does not: send them the other way
+   *   moveTo — a move this computer made, mirrored, so the device follows instead of downloading a copy
+   *
+   * A move is only ever read from *memory*, never from the fact that two devices file the same bytes
+   * differently: `sync_manifest` remembers what each side held last time, including this computer's own
+   * layout under 'self'. The first sync with a device therefore moves nothing on either side, which is the
+   * rule that stops one device quietly reorganising the other's Drive.
+   */
   async reconcile(entries, deviceId = 'phone') {
     this.db.exec('CREATE TABLE IF NOT EXISTS sync_manifest (device_id TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, PRIMARY KEY(device_id, path))')
     const offered = new Map()
     for (const e of entries ?? []) if (isSafeRel(e?.path) && /^[0-9a-f]{64}$/.test(e?.sha256 ?? '')) offered.set(e.path, e.sha256)
     const before = new Map(this.db.prepare('SELECT path, sha256 FROM sync_manifest WHERE device_id = ?').all(deviceId).map(r => [r.path, r.sha256]))
+    const mineBefore = new Map(this.db.prepare("SELECT path, sha256 FROM sync_manifest WHERE device_id = 'self'").all().map(r => [r.path, r.sha256]))
     const mine = new Map() // sha256 → the paths this device holds
+    const minePaths = new Map() // path → sha256, as this computer holds it now
     for (const rel of await this.walk('')) {
       const sha = await this.hash(rel)
       if (!sha) continue
       if (!mine.has(sha)) mine.set(sha, [])
       mine.get(sha).push(rel)
+      minePaths.set(rel, sha)
     }
     const want = [], moved = []
     for (const [rel, sha] of offered) {
@@ -266,18 +282,38 @@ class Files {
         await fsp.mkdir(path.dirname(target), { recursive: true })
         await this.moveTo(this.resolve(elsewhere), target)
         mine.set(sha, mine.get(sha).filter(p => p !== elsewhere).concat(rel))
+        minePaths.delete(elsewhere)
+        minePaths.set(rel, sha)
         moved.push({ from: elsewhere, to: rel })
       } else want.push(rel)
+    }
+    // The same question asked the other way round.
+    const offeredShas = new Map() // sha256 → the paths the device holds
+    for (const [rel, sha] of offered) offeredShas.set(sha, (offeredShas.get(sha) ?? []).concat(rel))
+    const have = [], moveTo = []
+    for (const [rel, sha] of minePaths) {
+      if (offered.get(rel) === sha) continue // the device has these bytes at this very path
+      const theirs = offeredShas.get(sha) ?? []
+      // Offering a copy is safe on any sync, including the first: it adds, it never rearranges.
+      if (!theirs.length) { have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel) }); continue }
+      // This computer moved it, and the device still has it where it was: mirror the move rather than send it.
+      const from = theirs.find(other => mineBefore.get(other) === sha && !minePaths.has(other))
+      if (from && !offered.has(rel)) moveTo.push({ from, to: rel })
     }
     this.db.exec('BEGIN')
     try {
       this.db.prepare('DELETE FROM sync_manifest WHERE device_id = ?').run(deviceId)
+      this.db.prepare("DELETE FROM sync_manifest WHERE device_id = 'self'").run()
       const put = this.db.prepare('INSERT INTO sync_manifest(device_id, path, sha256) VALUES(?,?,?)')
       for (const [rel, sha] of offered) put.run(deviceId, rel, sha)
+      for (const [rel, sha] of minePaths) put.run('self', rel, sha)
       this.db.exec('COMMIT')
     } catch (e) { this.db.exec('ROLLBACK'); throw e }
-    return { want, moved }
+    return { want, moved, have, moveTo }
   }
+
+  async sizeOf(rel) { return (await fsp.stat(path.join(this.root, rel)).catch(() => null))?.size ?? 0 }
+  async mtimeOf(rel) { return Math.round((await fsp.stat(path.join(this.root, rel)).catch(() => null))?.mtimeMs ?? 0) }
 
   /** Every file under Drive, as Drive-relative paths. Dotfiles and links are skipped, as everywhere else. */
   async walk(rel) {

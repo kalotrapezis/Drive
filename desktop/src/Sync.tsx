@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { SyncDevice, SyncStatus } from './drive'
+import type { SyncConnection, SyncDevice, SyncStatus } from './drive'
 import { Icon } from './Icon'
 import { Confirm, Modal } from './Dialogs'
 
@@ -22,6 +22,36 @@ function PairingCode() {
       </ol>
       <p className="hint">{left ? `This code works once, for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}.` : 'The code expired.'}
         {pair && ` Computer: ${pair.payload.hosts.join(', ') || 'no network'} · port ${pair.payload.port}`}</p>
+    </div>
+  )
+}
+
+/**
+ * The rules between this computer and one device, for one kind of content (SYNC_PLAN.md 6j).
+ *
+ * Direction and retention are deliberately two separate controls: the old app's map let a user state a
+ * contradiction by making one control say both, and that is the mistake this card exists to avoid. Direction is
+ * written from the *device's* side, because the device is the one that reads the row and obeys it.
+ *
+ * Retention is shown, not offered: Keep Everything — a Copy — is the only one built. A Move deletes on the
+ * source after a verified receipt, and until that is implemented an editable control here would be a promise
+ * nothing keeps.
+ */
+function Rules({ device, connection, onChange }: { device: SyncDevice; connection: SyncConnection; onChange: () => void }) {
+  const what = connection.content === 'files' ? 'Files' : 'Photos'
+  const set = async (direction: string) => {
+    await window.drive.sync.setConnection(device.id, connection.content, { direction, keep: connection.keep })
+    onChange()
+  }
+  return (
+    <div className="connection-rules">
+      <span className="rules-what">{what}</span>
+      <div className="segmented">
+        {([['send', `${device.name} → here`], ['receive', `here → ${device.name}`], ['both', 'Both ways']] as const).map(([value, label]) => (
+          <button key={value} className={connection.direction === value ? 'on' : ''} onClick={() => set(value)}>{label}</button>
+        ))}
+      </div>
+      <small>Keep everything (Copy){connection.direction === 'both' ? ' — two-way is always a copy' : ''}</small>
     </div>
   )
 }
@@ -61,6 +91,7 @@ export function SyncPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
                 <small>{d.received.toLocaleString()} photos received</small>
                 {d.filesReceived > 0 && <small>{d.filesReceived.toLocaleString()} Drive files received</small>}
                 <small>Paired {when.format(d.paired_at)}</small>
+                {d.connections?.map(c => <Rules key={c.content} device={d} connection={c} onChange={load} />)}
                 <button className="text-button" onClick={() => forget(d)}>Forget</button>
               </div>
             )
@@ -72,7 +103,7 @@ export function SyncPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
           </button>
         </div>
       )}
-      {status && !status.error && <p className="hint">Listening on {status.addresses.join(', ') || 'this computer'} · port {status.port}. Only paired devices can send; every file is checked by SHA-256 before it is kept, nothing is overwritten, and nothing is deleted from the phone.</p>}
+      {status && !status.error && <p className="hint">Listening on {status.addresses.join(', ') || 'this computer'} · port {status.port}. Only paired devices can reach it. Every file is checked by SHA-256 on the side that receives it before it is kept, nothing is overwritten, and a sync never deletes anything on either device.</p>}
     </div>
   )
 }
