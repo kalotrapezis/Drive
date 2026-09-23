@@ -655,3 +655,43 @@ the same machinery with a date, and can wait.
 Send & receive, because that is what the tablet needs and it cannot delete
 anything. The card model, and with it Keep, lands on top once bytes provably move
 both ways.
+
+### 6k. Finding the other device when the address changes (2026-09-23)
+
+The question: without a MAC address — Android randomises it per network and
+anything on the wire can claim any MAC anyway — how does a device find the one it
+is paired with after the IP changes, the router is replaced, or the network is
+renamed?
+
+**Identity is already solved, and was from the first pairing.** The computer's
+TLS certificate fingerprint (`fp` in the QR, pinned by the phone) plus the device
+UUID and bearer token it issues back *are* the identity. They survive every
+address change, and they cannot be spoofed: a different device fails the
+handshake rather than fooling anyone. There is nothing to invent here.
+
+What is missing is only **address lookup** — which IP that identity is at today.
+Three steps, cheapest first:
+
+1. **The addresses already known.** Built: the QR carries every LAN address and
+   `anyHost` tries each in turn, the one that answered last time first.
+2. **A beacon** (built 2026-09-23). One UDP datagram to every broadcast address
+   the phone can reach, on port 43181; the paired computer answers with the port
+   to knock on, and the phone remembers the address that worked
+   (`SyncDiscovery.find`, `SyncClient.reach`, `SyncServer.listenForProbes`). No
+   dependency, no mDNS quirks. (mDNS — `NsdManager`, `bonjour-service` — is the
+   standard version of the same idea, worth it only when the OS and other apps
+   should see the service too.)
+3. **Sweep the subnet**, for networks where broadcast is filtered (guest Wi-Fi,
+   client isolation): the phone's own /24 on the known port, in parallel, short
+   timeout. Not built — worth it only if step 2 is seen to fail on a real
+   network.
+
+**Discovery is a hint, never trust.** Any answer may be a lie; the pinned
+certificate alone decides whether a sync happens. That is what makes it safe to
+be careless about how an address is found.
+
+**The beacon does not announce anything.** The probe carries the fingerprint the
+phone is looking for, and a computer answers *only* if that is its own — so it
+tells the asker something it already knew, and a stranger listening learns
+nothing about who is on this network or what they hold. The token never travels
+over UDP.

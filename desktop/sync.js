@@ -7,10 +7,12 @@ const fsp = require('node:fs/promises')
 const path = require('node:path')
 const os = require('node:os')
 const https = require('node:https')
+const dgram = require('node:dgram')
 const crypto = require('node:crypto')
 const library = require('./library')
 
 const PORT = 43180
+const BEACON_PORT = 43181
 const PAIRING_MS = 10 * 60 * 1000
 const MAX_HAVE = 5000
 const sha = s => crypto.createHash('sha256').update(s).digest('hex')
@@ -36,8 +38,8 @@ function lanAddresses() {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan). */
-  constructor({ db, documents, people, files, dataDir, photosRoot, onReceived = () => {}, port = PORT }) {
-    Object.assign(this, { db, documents, people, files, dataDir, photosRoot, onReceived, port })
+  constructor({ db, documents, people, files, dataDir, photosRoot, onReceived = () => {}, port = PORT, beaconPort = BEACON_PORT }) {
+    Object.assign(this, { db, documents, people, files, dataDir, photosRoot, onReceived, port, beaconPort })
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS sync_devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, paired_at INTEGER NOT NULL, last_seen INTEGER);
@@ -57,10 +59,36 @@ class SyncServer {
     }))
     await new Promise((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.port, '0.0.0.0', resolve) })
     this.port = this.server.address().port
+    await this.listenForProbes(this.beaconPort)
     return this
   }
 
-  stop() { return new Promise(r => this.server ? this.server.close(r) : r()) }
+  /**
+   * The paired phone finds this computer again after its address changes by asking out loud (SYNC_PLAN.md 6k).
+   * The probe names the fingerprint it is looking for and we answer only if it is ours, so the datagram tells
+   * the asker what it already knew and a stranger on the network learns nothing. No token ever rides on UDP,
+   * and an answer is only a hint: the pinned certificate still decides whether a sync happens.
+   */
+  async listenForProbes(port = BEACON_PORT) {
+    const beacon = dgram.createSocket({ type: 'udp4', reuseAddr: true })
+    beacon.on('error', e => console.warn('[sync] beacon:', e.message)) // a busy port costs discovery, not syncing
+    beacon.on('message', (msg, from) => {
+      if (msg.length > 256) return
+      let ask
+      try { ask = JSON.parse(msg.toString('utf8')) } catch { return }
+      if (ask?.v !== 1 || ask.fp !== this.fingerprint) return
+      beacon.send(Buffer.from(JSON.stringify({ v: 1, name: os.hostname(), port: this.port })), from.port, from.address)
+    })
+    await new Promise(resolve => { beacon.once('error', resolve); beacon.bind(port, '0.0.0.0', resolve) })
+    this.beacon = beacon
+    this.beaconPort = beacon.address?.()?.port ?? port
+  }
+
+  stop() {
+    this.beacon?.close()
+    this.beacon = null
+    return new Promise(r => this.server ? this.server.close(r) : r())
+  }
 
   /** A fresh one-time code for the QR; valid 10 minutes or until used. */
   startPairing() {

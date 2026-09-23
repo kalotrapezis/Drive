@@ -5,6 +5,7 @@ const os = require('node:os')
 const path = require('node:path')
 const https = require('node:https')
 const crypto = require('node:crypto')
+const dgram = require('node:dgram')
 const library = require('../library')
 const { SyncServer } = require('../sync')
 const { Documents } = require('../documents')
@@ -324,5 +325,30 @@ test('settings: only what describes the library crosses; a hidden album travels 
   } finally {
     await server.stop()
     fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('the beacon answers the phone that already knows this computer, and no one else', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-beacon-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = await new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0, beaconPort: 0 }).start()
+  const sock = dgram.createSocket('udp4')
+  const ask = probe => new Promise(resolve => {
+    const timer = setTimeout(() => resolve(null), 500)
+    sock.once('message', msg => { clearTimeout(timer); resolve(JSON.parse(msg.toString())) })
+    sock.send(Buffer.from(probe), server.beaconPort, '127.0.0.1')
+  })
+  try {
+    const answer = await ask(JSON.stringify({ v: 1, fp: server.fingerprint }))
+    assert.equal(answer.port, server.port, 'it says where to knock')
+    assert.ok(!('fp' in answer) && !('token' in answer), 'and nothing a stranger could use')
+    const wrong = crypto.randomBytes(32).toString('hex')
+    assert.equal(await ask(JSON.stringify({ v: 1, fp: wrong })), null, 'another computer is not this one')
+    assert.equal(await ask('not json at all'), null)
+  } finally {
+    sock.close()
+    await server.stop()
+    db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
   }
 })
