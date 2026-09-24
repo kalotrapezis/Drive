@@ -11,6 +11,7 @@ const { Vault } = require('./vault')
 const editor = require('./editor')
 const docs = require('./documents')
 const { SyncServer } = require('./sync')
+const { Folders } = require('./folders')
 
 // Override both for testing with disposable files.
 const PHOTOS_ROOT = process.env.DRIVE_PHOTOS || path.join(os.homedir(), 'Drive', 'Photos')
@@ -19,7 +20,7 @@ const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME |
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
-let db, files, people, documents, vault, sync, win, scanning = null
+let db, files, people, documents, folders, vault, sync, win, scanning = null
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage']
 
@@ -27,8 +28,9 @@ function startScan() {
   scanning ??= library.scan(db, PHOTOS_ROOT, DATA_DIR, (done, changed) => win?.webContents.send('scan-progress', { done, changed }))
     .then(r => {
       places.fill(db)
+      const filled = folders.fill() // new photos in an included folder join its collection
       // Something new here is something a paired phone has not got: tell it, and it will come and fetch it.
-      if (r?.changed) sync?.nudge().catch(() => {})
+      if (r?.changed || filled) sync?.nudge().catch(() => {})
       return r
     })
     .finally(() => { scanning = null; analyzeLibrary() })
@@ -98,6 +100,7 @@ app.whenReady().then(() => {
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
+  folders = new Folders(db)
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
   sync = new SyncServer({ db, documents, people, files, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, onReceived: () => {
@@ -136,7 +139,10 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('library:info', () => ({ photosRoot: PHOTOS_ROOT }))
-  ipcMain.handle('library:list', () => library.list(db))
+  // The Photos view shows the default folders and the ones you said yes to (folders.js); the library keeps all.
+  ipcMain.handle('library:list', () => { const c = folders.choices(); return library.list(db).filter(m => folders.isShown(m.path, c)) })
+  ipcMain.handle('folders:list', () => folders.list().map(({ shas, ...f }) => f))
+  ipcMain.handle('folders:set', (_, name, included) => { folders.set(name, included); sync.nudge().catch(() => {}) })
   ipcMain.handle('library:scan', () => startScan())
   ipcMain.handle('photos:favorite', (_, shas, on) => library.setFavorite(db, shas, on))
   ipcMain.handle('photos:trash', (_, ids) => library.trash(db, PHOTOS_ROOT, ids, f => shell.trashItem(f)))
@@ -158,7 +164,7 @@ app.whenReady().then(() => {
     setSetting('viewSettingsUpdatedAt', String(Date.now()))
   })
   ipcMain.handle('people:status', () => ({ ...analysis, enabled: setting('people_enabled') === '1', documentsEnabled: setting('documents_enabled') === '1',
-    reviews: people.reviewCount() + documents.reviewCount() }))
+    reviews: people.reviewCount() + documents.reviewCount() + folders.questions() }))
   ipcMain.handle('people:start', () => { setSetting('people_enabled', '1'); analyzeLibrary() })
   ipcMain.handle('documents:start', () => { setSetting('documents_enabled', '1'); analyzeLibrary() })
   ipcMain.handle('documents:nextReview', () => documents.nextReview())

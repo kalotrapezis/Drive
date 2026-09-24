@@ -257,6 +257,8 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .review-photo { max-height: 220px; max-width: 100%; border-radius: 16px; }
 .dialog-actions.center { justify-content: center; }
 .hint.center { text-align: center; }
+.folder-samples { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+.folder-samples img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 14px; }
 .filled-button.secondary { background: var(--island-2); color: var(--text); }
 .toast { display: flex; align-items: center; gap: 12px; }
 .toast .text-button { padding: 6px 14px; }

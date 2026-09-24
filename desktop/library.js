@@ -442,4 +442,4 @@ function metadataSince(db, since) {
   }
 }
 
-module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
+module.exports = { open, scan, list, transaction, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }

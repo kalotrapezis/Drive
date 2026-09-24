@@ -1850,12 +1850,14 @@ listing goes through (Gallery, backup, analysis, trash, Home photo):
   Help organize card until answered; answers live in `device_folders` (db v22, not
   synced — a folder is this device's). Settings › Gallery › Folders lists every
   answered folder the phone can still see, with a switch.
-- Yes → the folder is listed, backed up, analysed, and kept as an album of its name
+- Yes → the folder is listed, backed up, analysed, and kept as a user collection of its name
   (`fillFolderAlbum`, which never re-adds a photo you took out). The album syncs.
 - Sync counts photos in excluded folders as already here (their cached hashes), so the
   computer never sends back what is merely not shown.
-- Desktop: nothing yet — included folders arrive through backup and their albums through
-  collection sync. Later: USB as a backup target ("back up everything now").
+- Desktop (`folders.js`), same rule and wording: folders under the Photos root are asked
+  about in Help organize and listed in Photos tools › Folders; any top-level folder counts
+  there, and a loose file in the root is always shown. A collection that arrived from a
+  device with the folder's name answers it, so a folder is never asked about twice. Later: USB as a backup target ("back up everything now").
 
 ### D2. A tablet is not a big phone (asked 2026-09-24)
 

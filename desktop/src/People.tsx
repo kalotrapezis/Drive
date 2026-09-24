@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Analysis, Person, PersonFace, PersonMerge, Review } from './drive'
+import type { Analysis, DeviceFolder, Person, PersonFace, PersonMerge, Review } from './drive'
 import { Icon } from './Icon'
 import { Modal, errorText } from './Dialogs'
 
@@ -195,8 +195,10 @@ export function CombinePicker({ person, people, onClose, onPick }: { person: Per
 export function ReviewPage({ left, onBack, onChanged }: { left: number; onBack: () => void; onChanged: () => void }) {
   const [review, setReview] = useState<Review | null | undefined>(undefined)
   const [doc, setDoc] = useState<{ sha256: string } | null>(null)
-  // Phone order: document questions first, then faces.
+  const [folders, setFolders] = useState<DeviceFolder[]>([])
+  // Phone order: folders first, then documents, then faces.
   async function load() {
+    setFolders((await window.drive.folders.list()).filter(f => f.included === null))
     const d = await window.drive.documents.nextReview()
     setDoc(d)
     setReview(d ? undefined : await window.drive.people.nextReview())
@@ -212,7 +214,19 @@ export function ReviewPage({ left, onBack, onChanged }: { left: number; onBack: 
       <header className="topbar">
         <div className="island title-island"><button className="round flat" title="Back to Collections" onClick={onBack}><Icon name="back" /></button><h1>Help organize</h1></div>
       </header>
-      {review === null && !doc && <div className="empty">Thanks, no more questions for now! That's it.</div>}
+      {folders.map(f => (
+        <div key={f.name} className="island review">
+          <h2>Include {f.name} in Tetra?</h2>
+          <p className="hint center">{f.count} {f.count === 1 ? 'photo or video' : 'photos and videos'}. Yes shows them in Photos and keeps them as a
+            collection named {f.name}. Nothing is moved or copied.</p>
+          <div className="folder-samples">{f.samples.map(s => <img key={s} src={`media://thumb/${s}`} alt="" />)}</div>
+          <div className="dialog-actions center">
+            <button className="filled-button secondary" onClick={() => window.drive.folders.set(f.name, false).then(() => { onChanged(); load() })}>No</button>
+            <button className="filled-button" onClick={() => window.drive.folders.set(f.name, true).then(() => { onChanged(); load() })}>Yes</button>
+          </div>
+        </div>
+      ))}
+      {review === null && !doc && folders.length === 0 && <div className="empty">Thanks, no more questions for now! That's it.</div>}
       {doc && (
         <div className="island review">
           <h2>Is this a document?</h2>
@@ -239,7 +253,7 @@ export function ReviewPage({ left, onBack, onChanged }: { left: number; onBack: 
           </div>
         </div>
       )}
-      {(doc || review) && left > 0 && <p className="hint center">{left} {left === 1 ? 'question' : 'questions'} left</p>}
+      {(doc || review || folders.length > 0) && left > 0 && <p className="hint center">{left} {left === 1 ? 'question' : 'questions'} left</p>}
     </div>
   )
 }

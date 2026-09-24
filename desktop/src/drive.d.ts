@@ -6,6 +6,8 @@ export interface DriveItem {
   favorite: boolean; color: string | null; tags: string[]; openedAt?: number
 }
 
+/** A folder under the Photos root; included null = never asked. */
+export interface DeviceFolder { name: string; count: number; samples: string[]; included: boolean | null }
 export interface Person { id: string; name: string; count: number; cover: string | null }
 export interface Review { faceId: string; personId: string; sha256: string; name: string; personFace: string | null }
 export interface Analysis { running: boolean; paused: boolean; done: number; total: number; error: string; enabled?: boolean; documentsEnabled?: boolean; reviews?: number }
@@ -45,6 +47,10 @@ declare global {
     drive: {
       info(): Promise<{ photosRoot: string }>
       list(): Promise<Media[]>
+      folders: {
+        list(): Promise<DeviceFolder[]>
+        set(name: string, included: boolean): Promise<void>
+      }
       scan(): Promise<{ total: number; changed: number; removed: number }>
       show(id: number): Promise<void>
       openMap(lat: number, lon: number): Promise<void>

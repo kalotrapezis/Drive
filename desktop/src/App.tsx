@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { isScreenshot, matches, type Level, type Media } from './timeline'
-import type { Analysis, Collection, MergeUndo, Person, VaultStatus } from './drive'
+import type { Analysis, Collection, DeviceFolder, MergeUndo, Person, VaultStatus } from './drive'
 import { Icon, type IconName } from './Icon'
 import { Timeline } from './Timeline'
 import { Viewer } from './Viewer'
@@ -30,6 +30,7 @@ const store = (key: string, value: string) => { try { localStorage.setItem(key, 
 export function App() {
   const [media, setMedia] = useState<Media[] | null>(null)
   const [collections, setCollections] = useState<Collection[]>([])
+  const [folders, setFolders] = useState<DeviceFolder[]>([])
   const [members, setMembers] = useState<Set<string> | null>(null)
   const [root, setRoot] = useState('')
   const [scan, setScan] = useState<string | null>('Looking for photos…')
@@ -56,8 +57,8 @@ export function App() {
   const memberSource = custom ? () => window.drive.members(custom) : page.kind === 'person' ? () => window.drive.people.shas(page.id) : null
 
   async function reload() {
-    const [m, c, p, n, a, v] = await Promise.all([window.drive.list(), window.drive.collections(), window.drive.people.list(), window.drive.people.names(), window.drive.people.status(), window.drive.vault.status()])
-    setMedia(m); setCollections(c); setPeople(p); setNames(n); setAnalysis(a); setVault(v)
+    const [m, c, p, n, a, v, f] = await Promise.all([window.drive.list(), window.drive.collections(), window.drive.people.list(), window.drive.people.names(), window.drive.people.status(), window.drive.vault.status(), window.drive.folders.list()])
+    setMedia(m); setCollections(c); setPeople(p); setNames(n); setAnalysis(a); setVault(v); setFolders(f)
     if (memberSource) setMembers(new Set(await memberSource()))
   }
 
@@ -263,6 +264,12 @@ export function App() {
               {collections.map(c => (
                 <label key={c.id}><input type="checkbox" checked={c.hidden}
                   onChange={e => window.drive.setCollectionHidden(c.id, e.target.checked).then(reload)} /> {c.name}<small className="count">{c.count}</small></label>
+              ))}
+              <span className="menu-head">Folders</span>
+              <small>Camera, Screenshots and loose photos are always shown. An included folder shows here and is kept as a collection; new ones are asked about in Help organize.</small>
+              {folders.filter(f => f.included !== null).map(f => (
+                <label key={f.name}><input type="checkbox" checked={!!f.included}
+                  onChange={e => window.drive.folders.set(f.name, e.target.checked).then(reload)} /> {f.name}<small className="count">{f.count}</small></label>
               ))}
               <span className="menu-head">Look again</span>
               <small>Reads every photo again with the rules as they are now. People you have named keep their faces;
