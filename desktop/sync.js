@@ -10,9 +10,15 @@ const https = require('node:https')
 const dgram = require('node:dgram')
 const crypto = require('node:crypto')
 const library = require('./library')
+const drives = require('./drives')
 
 const PORT = 43180
 const BEACON_PORT = 43181
+/** The pictures a device may be drawn with. `device` is a phone; the rest are for what this app will meet later. */
+const DEVICE_KINDS = ['device', 'tablet', 'computer', 'server', 'database']
+/** What to call this machine in a sentence, once it has said what it is. */
+const SELF_LABEL = { device: 'this phone', tablet: 'this tablet', computer: 'this PC', server: 'this server', database: 'this storage' }
+
 const PAIRING_MS = 10 * 60 * 1000
 const MAX_HAVE = 5000
 const MAX_KNOWN = 50000 // the phone's whole library in one question; chunking it would change the answer
@@ -48,6 +54,12 @@ class SyncServer {
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS sync_devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, paired_at INTEGER NOT NULL, last_seen INTEGER);
+      -- Who still HOLDS what, as opposed to who once sent it (sync_receipts). Every sync already tells this
+      -- computer the answer — /have and /library/manifest are a device listing what it has — and until now it
+      -- was read once and thrown away. Without it there is no way to ask "how many copies of this exist",
+      -- which is the whole safety of releasing a file (SYNC_PLAN.md 6ac condition 2).
+      CREATE TABLE IF NOT EXISTS device_holdings (device_id TEXT NOT NULL, kind TEXT NOT NULL, sha256 TEXT NOT NULL,
+        seen_at INTEGER NOT NULL, PRIMARY KEY(device_id, kind, sha256));
       CREATE TABLE IF NOT EXISTS sync_receipts (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256));`)
     // Drive files are received too now, and the Devices page counts them apart from photos.
     if (!db.prepare('PRAGMA table_info(sync_receipts)').all().some(c => c.name === 'kind')) db.exec("ALTER TABLE sync_receipts ADD COLUMN kind TEXT NOT NULL DEFAULT 'photo'")
@@ -63,6 +75,26 @@ class SyncServer {
     const columns = db.prepare('PRAGMA table_info(sync_devices)').all().map(c => c.name)
     for (const [name, type] of [['peer_fp', 'TEXT'], ['peer_hosts', 'TEXT'], ['peer_port', 'INTEGER'], ['peer_token', 'TEXT']]) {
       if (!columns.includes(name)) db.exec(`ALTER TABLE sync_devices ADD COLUMN ${name} ${type}`)
+    }
+    // What a device says about the files it holds. A hash cannot be read, sized or drawn on a chart, and for a
+    // file this computer has never been given the hash is all it had (SYNC_PLAN.md 6ae). Null for an older
+    // device, or for one that has not synced since this arrived.
+    // What picture to draw for a device, and what to call it. Both are the person's to change (6af); `kind`
+    // starts from the width the device reported when it paired, because Android already answers phone-or-tablet.
+    if (!columns.includes('kind')) db.exec('ALTER TABLE sync_devices ADD COLUMN kind TEXT')
+    // A drive is not reached over a network, so it has none of the peer columns: it is known by the UUID of
+    // its filesystem, because a mount point moves and a disk does not (SYNC_PLAN.md D5).
+    if (!columns.includes('volume_uuid')) db.exec('ALTER TABLE sync_devices ADD COLUMN volume_uuid TEXT')
+    // Nothing crosses until someone has said what should cross. A device paired straight into "Send & receive"
+    // and started uploading its whole camera roll before anyone could stop it (24 September, the tablet), so a
+    // new device now waits here, with every row Off, until the rules are answered (SYNC_PLAN.md 6aj).
+    if (!columns.includes('set_up_at')) {
+      db.exec('ALTER TABLE sync_devices ADD COLUMN set_up_at INTEGER')
+      db.exec('UPDATE sync_devices SET set_up_at = paired_at')  // everything paired before this was set up by hand
+    }
+    const held = db.prepare('PRAGMA table_info(device_holdings)').all().map(c => c.name)
+    for (const [name, type] of [['name', 'TEXT'], ['size', 'INTEGER'], ['is_video', 'INTEGER'], ['taken_at', 'INTEGER']]) {
+      if (!held.includes(name)) db.exec(`ALTER TABLE device_holdings ADD COLUMN ${name} ${type}`)
     }
   }
 
@@ -115,8 +147,122 @@ class SyncServer {
     return { v: 1, name: os.hostname(), hosts: lanAddresses(), port: this.port, fp: this.fingerprint, code }
   }
 
+  /**
+   * Every drive plugged in right now, and whether this app already knows it. A drive already added is shown
+   * with the name it was given here, because that is the one the person chose.
+   */
+  async drives() {
+    const known = this.db.prepare('SELECT id, name, volume_uuid FROM sync_devices WHERE volume_uuid IS NOT NULL').all()
+    const plugged = await drives.list()
+    return plugged.map(d => ({ ...d, device: known.find(k => k.volume_uuid === d.uuid) ?? null }))
+  }
+
+  /**
+   * Add a drive as a device. It starts as a **backup target** — this machine sends, the drive receives —
+   * because that is what a drive plugged in for the evening is for; the same card can be turned round
+   * afterwards if the drive has something of its own to contribute.
+   */
+  addDrive({ uuid, label }) {
+    if (!/^[A-Za-z0-9-]{4,64}$/.test(String(uuid ?? ''))) throw new Error('That is not a drive this app can name.')
+    const already = this.db.prepare('SELECT id FROM sync_devices WHERE volume_uuid = ?').get(uuid)
+    if (already) return this.devices().find(d => d.id === already.id)
+    const id = crypto.randomUUID()
+    this.db.prepare(`INSERT INTO sync_devices(id, name, token_hash, paired_at, kind, volume_uuid)
+      VALUES(?,?,?,?,'database',?)`).run(id, String(label || 'Drive').slice(0, 80), 'drive:' + uuid, Date.now(), uuid)
+    const put = this.db.prepare('INSERT INTO sync_connections(device_id, content, direction, keep, updated_at) VALUES(?,?,?,?,?)')
+    // A drive is a backup target by default, but still nothing happens until the guide is finished.
+    for (const content of CONTENTS) put.run(id, content, 'receive', 'everything', Date.now())
+    return this.devices().find(d => d.id === id)
+  }
+
+  /**
+   * Look at a drive and say what would happen, before anything does (asked 2026-09-24: select, scan, copy).
+   *
+   * It counts what is already on the drive by **looking at the drive**, not by trusting the ledger — a drive
+   * that was backed up on another machine, or by an older version of this one, is recognised and not copied
+   * again. It also answers the two questions that stop a copy dead: is there room, and may this app write here.
+   */
+  async inspectDrive(uuid) {
+    const found = (await drives.list()).find(d => d.uuid === uuid)
+    if (!found) return { plugged: false }
+    const root = path.join(found.mount, 'Tetra', 'Photos')
+    const rows = this.db.prepare('SELECT path, sha256, size FROM media').all()
+    let have = 0, haveBytes = 0, need = 0, needBytes = 0
+    for (const r of rows) {
+      const target = path.join(root, r.path)
+      let there = false
+      try { there = fs.statSync(target).size === r.size } catch { there = false }
+      if (there) { have++; haveBytes += r.size } else { need++; needBytes += r.size }
+    }
+    let writable = true
+    try { await fsp.mkdir(path.join(found.mount, 'Tetra'), { recursive: true }) } catch { writable = false }
+    return {
+      plugged: true, mount: found.mount, label: found.label, fstype: found.fstype,
+      free: found.freeBytes, size: found.sizeBytes,
+      total: rows.length, have, haveBytes, need, needBytes,
+      writable, enough: found.freeBytes >= needBytes + 64 * 1024 * 1024,
+    }
+  }
+
+  /**
+   * Copy to a drive what it does not already hold. The same rules as everything else in this file: written to
+   * a `.part`, hashed as it is written, kept only if the hash is the one that was asked for, never overwriting
+   * anything, and never deleting anything on either side. Everything goes under one folder — `Tetra/` — so a
+   * drive full of someone's own files is never rearranged around it.
+   *
+   * ponytail: photos only, and no resume of a half-copied huge file (it restarts). Drive files next.
+   */
+  async backUpToDrive(deviceId, onProgress = () => {}) {
+    const device = this.db.prepare('SELECT id, name, volume_uuid FROM sync_devices WHERE id = ?').get(String(deviceId))
+    if (!device?.volume_uuid) throw new Error('That device is not a drive.')
+    const mount = await drives.mountOf(device.volume_uuid)
+    if (!mount) throw new Error(`${device.name} is not plugged in.`)
+    const root = path.join(mount, 'Tetra', 'Photos')
+    const rows = this.db.prepare('SELECT path, sha256, size FROM media ORDER BY size').all()
+    const held = this.db.prepare("SELECT 1 FROM device_holdings WHERE device_id = ? AND kind = 'photo' AND sha256 = ?")
+    let copied = 0, already = 0, failed = []
+    for (const [i, row] of rows.entries()) {
+      onProgress({ done: i, total: rows.length, copied, already })
+      const target = path.join(root, row.path)
+      // Already there is two questions, not one: the ledger says so *and* the file is still that size. The
+      // lesson of 6ag, applied before it can happen here.
+      if (held.get(device.id, row.sha256) && fs.existsSync(target) && fs.statSync(target).size === row.size) { already++; continue }
+      try {
+        await fsp.mkdir(path.dirname(target), { recursive: true })
+        const part = target + '.part'
+        const hash = crypto.createHash('sha256')
+        await new Promise((resolve, reject) => {
+          const read = fs.createReadStream(path.join(this.photosRoot, row.path))
+          const write = fs.createWriteStream(part)
+          read.on('data', chunk => hash.update(chunk))
+          read.on('error', reject); write.on('error', reject); write.on('finish', resolve)
+          read.pipe(write)
+        })
+        if (hash.digest('hex') !== row.sha256) { await fsp.rm(part, { force: true }); throw new Error('It changed on the way; nothing was kept.') }
+        await fsp.rename(part, target)
+        this.db.prepare(`INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at, kind)
+          VALUES(?,?,?,?,?,'photo')`).run(device.id, row.sha256, row.path, row.size, Date.now())
+        this.holds(device.id, 'photo', [row.sha256])
+        copied++
+      } catch (e) {
+        failed.push(`${row.path}: ${e.message}`)
+        if (failed.length > 50) break
+      }
+    }
+    this.db.prepare('UPDATE sync_devices SET last_seen = ? WHERE id = ?').run(Date.now(), device.id)
+    onProgress({ done: rows.length, total: rows.length, copied, already })
+    return { copied, already, failed, total: rows.length }
+  }
+
+  /** Rename a device, or change the picture it is drawn with. Both are the person's choice and nothing else reads them. */
+  setDevice(id, { name, kind } = {}) {
+    if (typeof name === 'string' && name.trim()) this.db.prepare('UPDATE sync_devices SET name = ? WHERE id = ?').run(name.trim().slice(0, 80), String(id))
+    if (typeof kind === 'string' && DEVICE_KINDS.includes(kind)) this.db.prepare('UPDATE sync_devices SET kind = ? WHERE id = ?').run(kind, String(id))
+    return this.devices().find(d => d.id === String(id)) ?? null
+  }
+
   devices() {
-    return this.db.prepare(`SELECT d.id, d.name, d.paired_at, d.last_seen,
+    return this.db.prepare(`SELECT d.id, d.name, d.paired_at, d.last_seen, d.kind, d.volume_uuid, d.set_up_at,
         (SELECT COUNT(*) FROM sync_receipts r WHERE r.device_id = d.id AND r.kind = 'photo') AS received,
         (SELECT COUNT(*) FROM sync_receipts r WHERE r.device_id = d.id AND r.kind = 'file') AS filesReceived
       FROM sync_devices d ORDER BY d.paired_at`).all().map(d => ({ ...d, connections: this.connections(d.id) }))
@@ -183,9 +329,19 @@ class SyncServer {
 
   device(req) {
     const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1]
-    const d = token && this.db.prepare('SELECT id, name FROM sync_devices WHERE token_hash = ?').get(sha(token))
+    const d = token && this.db.prepare('SELECT id, name, peer_hosts FROM sync_devices WHERE token_hash = ?').get(sha(token))
     if (!d) throw Object.assign(new Error('Not paired.'), { status: 401, expose: true })
-    this.db.prepare('UPDATE sync_devices SET last_seen = ? WHERE id = ?').run(Date.now(), d.id)
+    // The address a device calls from is the address it can be called back on, and it is the only reliable one:
+    // the phone finds this computer again by beacon (6k), but nothing told this computer that the phone had
+    // moved. "There is something new" (6f) then went to an address nobody was on — which is what an extender
+    // handing over to the main router did on 24 September. Newest first, the old ones kept behind it.
+    const from = d.peer_hosts != null ? req.socket?.remoteAddress?.replace(/^::ffff:/, '') : null
+    if (from && /^[0-9]+(\.[0-9]+){3}$/.test(from)) {
+      const hosts = [...new Set([from, ...String(d.peer_hosts).split(',').filter(Boolean)])].slice(0, 4).join(',')
+      this.db.prepare('UPDATE sync_devices SET last_seen = ?, peer_hosts = ? WHERE id = ?').run(Date.now(), hosts, d.id)
+    } else {
+      this.db.prepare('UPDATE sync_devices SET last_seen = ? WHERE id = ?').run(Date.now(), d.id)
+    }
     return d
   }
 
@@ -197,9 +353,19 @@ class SyncServer {
   connection(deviceId, content) {
     const row = this.db.prepare('SELECT direction, keep FROM sync_connections WHERE device_id = ? AND content = ?').get(deviceId, content)
     if (row) return { content, direction: row.direction, keep: row.direction === 'both' ? 'everything' : row.keep }
+    // A device that has not been set up yet gets Off, not Send & receive: the answer to "what should cross"
+    // is the person's, and until it is given the honest default is "nothing".
+    const setUp = this.db.prepare('SELECT set_up_at FROM sync_devices WHERE id = ?').get(deviceId)?.set_up_at
+    const direction = setUp ? 'both' : 'off'
     this.db.prepare('INSERT INTO sync_connections(device_id, content, direction, keep, updated_at) VALUES(?,?,?,?,?)')
-      .run(deviceId, content, 'both', 'everything', Date.now())
-    return { content, direction: 'both', keep: 'everything' }
+      .run(deviceId, content, direction, 'everything', Date.now())
+    return { content, direction, keep: 'everything' }
+  }
+
+  /** The rules have been answered: the device may sync from now on. */
+  completeSetup(deviceId) {
+    this.db.prepare('UPDATE sync_devices SET set_up_at = ? WHERE id = ? AND set_up_at IS NULL').run(Date.now(), String(deviceId))
+    return this.devices().find(d => d.id === String(deviceId)) ?? null
   }
 
   connections(deviceId) { return CONTENTS.map(c => this.connection(deviceId, c)) }
@@ -246,8 +412,170 @@ class SyncServer {
     })
   }
 
+  /**
+   * A hash is not an answer to "what is it". For a file this computer has never been given, the hash was all it
+   * had — so the device says, once per sync, what each of its files is called, how big it is and what kind of
+   * thing it is (SYNC_PLAN.md 6ae). Every field is optional: a device that only sends hashes still syncs, it
+   * just cannot be asked what its files are.
+   */
+  describes(deviceId, items) {
+    const set = this.db.prepare(`UPDATE device_holdings SET name = ?, size = ?, is_video = ?, taken_at = ?
+      WHERE device_id = ? AND kind = 'photo' AND sha256 = ?`)
+    this.db.exec('BEGIN')
+    try {
+      for (const it of items) {
+        if (!it || !isHash(it.sha256)) continue
+        set.run(String(it.name ?? '').slice(0, 300) || null, Number(it.size) || null,
+          it.video ? 1 : 0, Number(it.takenAt) || null, deviceId, it.sha256)
+      }
+      this.db.exec('COMMIT')
+    } catch (e) { this.db.exec('ROLLBACK'); throw e }
+  }
+
+  /**
+   * What a device just said it holds. Additive, because a phone lists its photos 500 at a time; anything not
+   * mentioned for a day is dropped, so a device that keeps syncing keeps an accurate picture and one that has
+   * been away keeps its last, next to the date it was last seen.
+   *
+   * ponytail: a day is a guess, and a stale row overcounts copies. Good enough to *show* — each device's
+   * numbers are displayed "as of" its last sync — but a release (6ac) must demand a sweep newer than itself.
+   */
+  holds(deviceId, kind, hashes) {
+    if (!hashes.length) return
+    const now = Date.now()
+    const add = this.db.prepare('INSERT INTO device_holdings(device_id, kind, sha256, seen_at) VALUES(?,?,?,?) ON CONFLICT(device_id, kind, sha256) DO UPDATE SET seen_at = excluded.seen_at')
+    this.db.exec('BEGIN')
+    try {
+      for (const h of hashes) add.run(deviceId, kind, h, now)
+      this.db.prepare('DELETE FROM device_holdings WHERE device_id = ? AND kind = ? AND seen_at < ?').run(deviceId, kind, now - 86_400_000)
+      this.db.exec('COMMIT')
+    } catch (e) { this.db.exec('ROLLBACK'); throw e }
+  }
+
+  /**
+   * What this computer really holds, which is not the same as what its library lists (SYNC_PLAN.md 6ag).
+   *
+   * Two things turned out to be true the first time anyone counted: a photo can be here, verified, and absent
+   * from `media` — the scanner does not index raw files, so 83 .NEF sat on disk while every count called them
+   * missing — and a receipt can outlive its file, which 7 had. A receipt is the permission to offer a Move, so
+   * "I issued one once" is not good enough: the file has to still be there. Refreshed at most once a minute,
+   * and it only stats the receipts the library does not already account for.
+   */
+  refreshHere() {
+    this.db.exec('CREATE TEMP TABLE IF NOT EXISTS here_now (sha256 TEXT PRIMARY KEY)')
+    if (this.hereAt && Date.now() - this.hereAt < 60_000) return
+    const add = this.db.prepare('INSERT OR IGNORE INTO here_now(sha256) VALUES(?)')
+    const known = this.db.prepare('SELECT 1 FROM here_now WHERE sha256 = ?')
+    this.db.exec('BEGIN')
+    try {
+      this.db.exec('DELETE FROM here_now')
+      for (const r of this.db.prepare('SELECT DISTINCT sha256 FROM media').all()) add.run(r.sha256)
+      let stale = 0
+      for (const r of this.db.prepare("SELECT sha256, path FROM sync_receipts WHERE kind = 'photo'").all()) {
+        if (known.get(r.sha256)) continue
+        if (this.photosRoot && fs.existsSync(path.join(this.photosRoot, r.path))) add.run(r.sha256)
+        else stale++
+      }
+      this.staleReceipts = stale
+      this.db.exec('COMMIT')
+    } catch (e) { this.db.exec('ROLLBACK'); throw e }
+    this.hereAt = Date.now()
+  }
+
+  /**
+   * The library, and where it actually is (SYNC_PLAN.md 6ad). **Photos**: the Drive folder is a second library
+   * with its own manifest and its own idea of what "here" means, and counting the two together made every
+   * number ambiguous — a Drive file the computer holds is not in `media`, so it looked missing.
+   *
+   * Counted over **everything known anywhere** — this computer's library and every file a device has said it
+   * holds — because the first version counted only what was here, and a photo that exists on one phone and
+   * nowhere else was therefore missing from the very picture meant to warn about it (24 September).
+   *
+   * "Copies" is how many machines hold the bytes, this computer included. One copy is one copy whether it is
+   * here or on a phone. Sizes are only known for what is here, so a file that is only on a device is counted
+   * and never weighed.
+   */
+  overview() {
+    this.refreshHere()
+    const mine = this.db.prepare('SELECT COUNT(*) n, COALESCE(SUM(size), 0) bytes FROM media').get()
+    const copies = this.db.prepare(`SELECT copies, COUNT(*) AS files, COALESCE(SUM(bytes), 0) AS bytes, SUM(here) AS here FROM (
+        SELECT s.sha AS sha,
+          (CASE WHEN EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = s.sha) THEN 1 ELSE 0 END)
+            + (SELECT COUNT(DISTINCT h.device_id) FROM device_holdings h WHERE h.sha256 = s.sha AND h.kind = 'photo') AS copies,
+          (CASE WHEN EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = s.sha) THEN 1 ELSE 0 END) AS here,
+          (SELECT MIN(m.size) FROM media m WHERE m.sha256 = s.sha) AS bytes
+        FROM (SELECT sha256 AS sha FROM here_now UNION SELECT sha256 FROM device_holdings WHERE kind = 'photo') s
+      ) GROUP BY copies ORDER BY copies`).all()
+    const devices = this.db.prepare(`SELECT d.id, d.name, d.last_seen,
+        (SELECT COUNT(*) FROM device_holdings h WHERE h.device_id = d.id AND h.kind = 'photo') AS holds,
+        (SELECT COUNT(*) FROM device_holdings h WHERE h.device_id = d.id AND h.kind = 'photo'
+           AND EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = h.sha256)) AS alsoHere,
+        (SELECT COALESCE(SUM(m.size), 0) FROM device_holdings h JOIN media m ON m.sha256 = h.sha256
+           WHERE h.device_id = d.id AND h.kind = 'photo') AS freeable
+      FROM sync_devices d ORDER BY d.paired_at`).all()
+    const known = copies.reduce((a, c) => a + c.files, 0)
+    return {
+      here: { files: mine.n, bytes: mine.bytes },
+      known,
+      /** One row per number of machines holding it, this computer included. `here` is how many of them are here. */
+      copies: copies.map(c => ({ copies: c.copies, files: c.files, bytes: c.bytes, here: c.here })),
+      devices: devices.map(d => ({ ...d, onlyThere: d.holds - d.alsoHere })),
+      kinds: this.kinds(),
+      /** Receipts whose file is no longer on disk: this computer once promised to hold these and does not. */
+      staleReceipts: this.staleReceipts ?? 0,
+    }
+  }
+
+  /** What the library is made of, by weight rather than by count: videos are 6% of the files and most of the disk. */
+  kinds() {
+    const rows = this.db.prepare(`SELECT CASE WHEN m.is_video = 1 THEN 'video'
+        WHEN EXISTS(SELECT 1 FROM photo_ai a WHERE a.sha256 = m.sha256 AND a.type = 'document') THEN 'document'
+        ELSE 'image' END AS kind, COUNT(*) AS files, COALESCE(SUM(m.size), 0) AS bytes
+      FROM media m GROUP BY kind ORDER BY bytes DESC`).all()
+    return rows
+  }
+
+  /**
+   * The files behind one number on the overview, so it can be clicked (SYNC_PLAN.md 6ae).
+   *
+   * `what` is 'onlyThere' (a device holds it and this computer never got it — with `deviceId` to narrow it),
+   * 'alone' (one copy in the world, wherever that is) or 'largest' (this computer's biggest files). What a
+   * device could tell us about its own files it did; what it never said comes back null and is shown as such.
+   */
+  fileList(what, { deviceId = null, limit = 200 } = {}) {
+    this.refreshHere()
+    const mine = `SELECT m.path AS name, m.size, m.is_video AS isVideo, m.taken_at AS takenAt, m.sha256, NULL AS device, 1 AS here`
+    if (what === 'largest') {
+      return this.db.prepare(`${mine} FROM media m ORDER BY m.size DESC LIMIT ?`).all(limit)
+    }
+    const theirs = `SELECT h.name, h.size, h.is_video AS isVideo, h.taken_at AS takenAt, h.sha256, d.name AS device, 0 AS here
+      FROM device_holdings h JOIN sync_devices d ON d.id = h.device_id
+      WHERE h.kind = 'photo' AND NOT EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = h.sha256)`
+    if (what === 'onlyThere') {
+      return this.db.prepare(`${theirs} ${deviceId ? 'AND h.device_id = ?' : ''} ORDER BY h.size DESC NULLS LAST, h.name LIMIT ?`)
+        .all(...(deviceId ? [deviceId, limit] : [limit]))
+    }
+    if (what === 'alone') {
+      // One copy in the world: either only here, or on exactly one device and nowhere else.
+      const here = this.db.prepare(`${mine} FROM media m WHERE NOT EXISTS(SELECT 1 FROM device_holdings h WHERE h.sha256 = m.sha256 AND h.kind = 'photo')
+        ORDER BY m.size DESC LIMIT ?`).all(limit)
+      const away = this.db.prepare(`${theirs} AND (SELECT COUNT(DISTINCT h2.device_id) FROM device_holdings h2 WHERE h2.sha256 = h.sha256) = 1
+        ORDER BY h.size DESC NULLS LAST, h.name LIMIT ?`).all(limit)
+      return [...here, ...away].slice(0, limit)
+    }
+    return []
+  }
+
+  /**
+   * "Do not send me that, I have it." A receipt used to be enough on its own, and that turned a lost file into
+   * a permanent hole: seven photos were received, verified, receipted and then went missing from disk, and
+   * because the receipt remained this computer never asked for them again (SYNC_PLAN.md 6ag). It now asks the
+   * same question the rest of the overview asks — is it actually here — so a file that went missing comes back
+   * on the next sync.
+   */
   have(hash) {
-    return !!this.db.prepare('SELECT 1 FROM media WHERE sha256 = ?').get(hash) || !!this.db.prepare('SELECT 1 FROM sync_receipts WHERE sha256 = ?').get(hash)
+    this.refreshHere()
+    return !!this.db.prepare('SELECT 1 FROM here_now WHERE sha256 = ?').get(hash)
   }
 
   async handle(req, res) {
@@ -264,16 +592,27 @@ class SyncServer {
       const token = crypto.randomBytes(32).toString('base64url'), id = crypto.randomUUID()
       const peerFp = typeof body.fp === 'string' && isHash(body.fp) ? body.fp : null
       const peerHosts = Array.isArray(body.hosts) ? body.hosts.filter(h => typeof h === 'string').slice(0, 8).join(',') : null
-      this.db.prepare(`INSERT INTO sync_devices(id, name, token_hash, paired_at, peer_fp, peer_hosts, peer_port, peer_token)
-        VALUES(?,?,?,?,?,?,?,?)`).run(id, String(body.name ?? 'Phone').slice(0, 80), sha(token), Date.now(),
-        peerFp, peerHosts, Number(body.port) || null, typeof body.token === 'string' ? body.token.slice(0, 128) : null)
+      // 600dp is where Android itself draws the line between a phone and a tablet, so nobody has to be asked.
+      const width = Number(body.widthDp) || 0
+      const kind = width >= 600 ? 'tablet' : width > 0 ? 'device' : null
+      this.db.prepare(`INSERT INTO sync_devices(id, name, token_hash, paired_at, peer_fp, peer_hosts, peer_port, peer_token, kind)
+        VALUES(?,?,?,?,?,?,?,?,?)`).run(id, String(body.name ?? 'Phone').slice(0, 80), sha(token), Date.now(),
+        peerFp, peerHosts, Number(body.port) || null, typeof body.token === 'string' ? body.token.slice(0, 128) : null, kind)
       return this.send(res, 200, { deviceId: id, token, name: os.hostname(), fp: this.fingerprint, port: this.port })
     }
     const device = this.device(req)
     if (req.method === 'POST' && url.pathname === '/have') {
       const { hashes } = await this.json(req, 1 << 22)
       if (!Array.isArray(hashes) || hashes.length > MAX_HAVE || !hashes.every(isHash)) return this.send(res, 400, { error: `Send up to ${MAX_HAVE} SHA-256 hashes.` })
+      this.holds(device.id, 'photo', hashes)
       return this.send(res, 200, { missing: hashes.filter(h => !this.have(h)) })
+    }
+    if (req.method === 'POST' && url.pathname === '/inventory') {
+      const { items } = await this.json(req, 1 << 23)
+      if (!Array.isArray(items)) return this.send(res, 400, { error: 'Send a list of items.' })
+      this.holds(device.id, 'photo', items.map(i => i && i.sha256).filter(isHash))
+      this.describes(device.id, items)
+      return this.send(res, 200, { ok: true, described: items.length })
     }
     if (req.method === 'GET' && url.pathname === '/connections') {
       return this.send(res, 200, { name: os.hostname(), connections: this.connections(device.id) })
@@ -282,6 +621,7 @@ class SyncServer {
     if (req.method === 'POST' && url.pathname === '/library/manifest') {
       const { hashes } = await this.json(req, 1 << 23)
       if (!Array.isArray(hashes) || hashes.length > MAX_KNOWN || !hashes.every(isHash)) return this.send(res, 400, { error: `Send up to ${MAX_KNOWN} SHA-256 hashes.` })
+      this.holds(device.id, 'photo', hashes)
       const photos = this.connection(device.id, 'photos').direction
       if (photos === 'send' || photos === 'off') return this.send(res, 200, { send: [] }) // nothing goes that way
       return this.send(res, 200, { send: this.toSend(hashes) })
@@ -296,7 +636,9 @@ class SyncServer {
     if (req.method === 'POST' && url.pathname === '/files/manifest') {
       if (!this.files) return this.send(res, 200, { want: [], moved: [], have: [], moveTo: [] })
       const { files: offered } = await this.json(req, 1 << 24)
-      const answer = await this.files.reconcile(Array.isArray(offered) ? offered : [], device.id)
+      const list = Array.isArray(offered) ? offered : []
+      this.holds(device.id, 'file', list.map(f => f && f.sha256).filter(isHash))
+      const answer = await this.files.reconcile(list, device.id)
       // 'want' and 'moved' are what this computer does; 'have' and 'moveTo' are what it offers the device.
       const direction = this.connection(device.id, 'files').direction
       return this.send(res, 200, direction === 'send' || direction === 'off' ? { ...answer, have: [], moveTo: [] } : answer)
@@ -390,6 +732,24 @@ class SyncServer {
    */
   setting(key) { return this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value }
 
+  /**
+   * What this machine is, in its own words. Every other device points at this one — it is the hub, and the
+   * only thing every device is paired with — so "here" appears all over the cards, and "here" is a word about
+   * the screen rather than about the machine. Saying *this PC* or *this server* is the difference between a
+   * rule you read and a rule you have to decode (SYNC_PLAN.md 6ai).
+   */
+  self() {
+    const kind = DEVICE_KINDS.includes(this.setting('selfKind')) ? this.setting('selfKind') : 'computer'
+    return { kind, name: this.setting('selfName') || os.hostname(), label: SELF_LABEL[kind] }
+  }
+
+  setSelf({ kind, name } = {}) {
+    const put = this.db.prepare('INSERT INTO settings(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    if (DEVICE_KINDS.includes(kind)) put.run('selfKind', kind)
+    if (typeof name === 'string' && name.trim()) put.run('selfName', name.trim().slice(0, 80))
+    return this.self()
+  }
+
   viewSettings() {
     return {
       hideScreenshots: this.setting('hideScreenshots') === '1',
@@ -445,6 +805,10 @@ class SyncServer {
 
   receipt(device, hash, rel, size) {
     this.db.prepare('INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at) VALUES(?,?,?,?,?)').run(device.id, hash, rel, size, Date.now())
+    // It is here now, and the next question about it comes before the minute is up — a device sends in parallel
+    // and asks again in the same run, so a photo that has just landed must not still look missing.
+    this.db.exec('CREATE TEMP TABLE IF NOT EXISTS here_now (sha256 TEXT PRIMARY KEY)')
+    this.db.prepare('INSERT OR IGNORE INTO here_now(sha256) VALUES(?)').run(hash)
     return { sha256: hash, path: rel, verified: true }
   }
 }

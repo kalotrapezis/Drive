@@ -116,7 +116,7 @@ app.whenReady().then(() => {
     if (url.host === 'file') {
       const row = db.prepare('SELECT path, sha256 FROM media WHERE id = ?').get(Number(key))
       if (row) file = path.join(PHOTOS_ROOT, row.path)
-      if (row && library.isHeic(row.path)) file = await library.preview(file, row.sha256, DATA_DIR).catch(() => null)
+      if (row && library.needsPreview(row.path)) file = await library.preview(file, row.sha256, DATA_DIR).catch(() => null)
     }
     if (url.host === 'face' && /^[0-9a-f-]{36}$/.test(key)) file = await people.crop(key, PHOTOS_ROOT).catch(() => null)
     // A trashed photo is no longer in the library, so it is served from the trash by the name it has there.
@@ -212,7 +212,7 @@ app.whenReady().then(() => {
     const row = db.prepare('SELECT path, sha256 FROM media WHERE id = ?').get(Number(id))
     if (!row) throw new Error('This photo is no longer in the library.')
     const full = path.join(PHOTOS_ROOT, row.path)
-    return fs.promises.readFile(library.isHeic(row.path) ? await library.preview(full, row.sha256, DATA_DIR) : full)
+    return fs.promises.readFile(library.needsPreview(row.path) ? await library.preview(full, row.sha256, DATA_DIR) : full)
   })
   ipcMain.handle('editor:save', async (_, id, bytes, mode) => {
     const row = db.prepare('SELECT * FROM media WHERE id = ?').get(Number(id))
@@ -232,11 +232,19 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('sync:status', () => ({ port: sync.port, fingerprint: sync.fingerprint, error: sync.error ?? null,
     addresses: require('node:os').networkInterfaces && Object.values(require('node:os').networkInterfaces()).flat().filter(a => a?.family === 'IPv4' && !a.internal).map(a => a.address),
-    devices: sync.devices() }))
+    devices: sync.devices(), overview: sync.overview(), self: sync.self() }))
   ipcMain.handle('sync:pair', async () => {
     const payload = sync.startPairing()
     return { payload, qr: await require('qrcode').toDataURL(JSON.stringify(payload), { margin: 1, width: 360, errorCorrectionLevel: 'M' }) }
   })
+  ipcMain.handle('sync:files', (_, what, options) => sync.fileList(what, options ?? {}))
+  ipcMain.handle('sync:setDevice', (_, id, changes) => sync.setDevice(id, changes ?? {}))
+  ipcMain.handle('sync:setSelf', (_, changes) => sync.setSelf(changes ?? {}))
+  ipcMain.handle('sync:completeSetup', (_, id) => sync.completeSetup(id))
+  ipcMain.handle('sync:drives', () => sync.drives())
+  ipcMain.handle('sync:inspectDrive', (_, uuid) => sync.inspectDrive(uuid))
+  ipcMain.handle('sync:addDrive', (_, drive) => sync.addDrive(drive ?? {}))
+  ipcMain.handle('sync:backUpToDrive', (_, id) => sync.backUpToDrive(id, p => win?.webContents.send('drive-progress', p)))
   ipcMain.handle('sync:forget', (_, id) => sync.forget(id))
   ipcMain.handle('sync:setConnection', (_, id, content, rules) => sync.setConnection(id, content, rules))
   ipcMain.handle('open-map', (_, lat, lon) => {

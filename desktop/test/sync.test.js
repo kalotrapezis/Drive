@@ -86,8 +86,13 @@ test('metadata sync: phone rows are authoritative, last-write-wins, and never re
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
   try {
     const qr = server.startPairing()
-    const { token } = (await call('POST', '/pair', { json: { code: qr.code, name: 'Xiaomi 15' } })).body
+    const { token } = (await call('POST', '/pair', { json: { code: qr.code, name: 'Xiaomi 15', hosts: ['10.9.9.9'], port: 43180, token: 'x' } })).body
     const sha = crypto.randomBytes(32).toString('hex')
+
+    // A device that moved to another network is found again by the address it calls from, newest first, so the
+    // computer's "there is something new" does not keep going to where it used to be (24 September).
+    await call('POST', '/have', { token, json: { hashes: [] } })
+    assert.equal(db.prepare('SELECT peer_hosts FROM sync_devices').get().peer_hosts, '127.0.0.1,10.9.9.9')
 
     // A stale phone push loses to what's already stored (last-write-wins by updated_at).
     documents.applyFromPhone(sha, 'document', 0.95, false, 1000)
@@ -173,10 +178,114 @@ test('metadata sync: favorites, collections, labels, people and faces cross over
     // What the desktop changed comes back on the phone's pull, after its cursor only.
     library.setFavorite(db, [sha], true)
     people.rename(person, 'Αντιγόνη Κ')
+    library.applyLabels(db, sha, ['Scene: harbour'], 5000)
     const pulled = (await call('GET', '/metadata?since=4000', { token })).body
     assert.deepEqual(pulled.favorites, [{ sha256: sha, favorite: true, updatedAt: pulled.favorites[0].updatedAt }])
     assert.deepEqual(pulled.people.map(p => p.name), ['Αντιγόνη Κ'])
+    // A label this computer worked out goes back to the phone, whole set per photo (SYNC_PLAN.md 6w 2). The
+    // two the phone pushed come with it, once: they were stamped when they arrived, and the cursor then moves
+    // past them. A merge that repeats itself is not a loop.
+    assert.deepEqual(pulled.labels.map(l => l.sha256), [sha])
+    assert.deepEqual([...pulled.labels[0].labels].sort(), ['Beach', 'Scene: harbour', 'Scene: seashore'])
+    assert.deepEqual((await call('GET', `/metadata?since=${Date.now() + 1000}`, { token })).body.labels, [], 'nothing after the cursor')
     assert.deepEqual((await call('GET', `/metadata?since=${Date.now() + 1000}`, { token })).body.people, [])
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('the ledger counts who still holds a file, not who once sent it', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-holds-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')),
+    files: new Files(db, path.join(tmp, 'Drive')), dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  try {
+    const shared = crypto.randomBytes(32).toString('hex')   // this computer and both devices
+    const lonely = crypto.randomBytes(32).toString('hex')   // this computer only
+    for (const [sha, size] of [[shared, 1000], [lonely, 2000]]) {
+      db.prepare('INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at) VALUES(?,?,?,0,?,0,0)').run(sha + '.jpg', sha, 'image/jpeg', size)
+    }
+    const pair = async name => (await call('POST', '/pair', { json: { code: server.startPairing().code, name } })).body.token
+    const phone = await pair('Phone'), tablet = await pair('Tablet')
+    // Each device lists what it holds; only the phone holds anything this computer also has.
+    await call('POST', '/have', { token: phone, json: { hashes: [shared] } })
+    await call('POST', '/have', { token: tablet, json: { hashes: [shared] } })
+
+    const o = server.overview()
+    assert.equal(o.here.files, 2)
+    assert.equal(o.known, 2)
+    assert.deepEqual(o.copies.find(c => c.copies === 1), { copies: 1, files: 1, bytes: 2000, here: 1 }, 'the lonely one is the only copy')
+    assert.deepEqual(o.copies.find(c => c.copies === 3), { copies: 3, files: 1, bytes: 1000, here: 1 }, 'the shared one is on this computer and both devices')
+    const row = o.devices.find(d => d.name === 'Phone')
+    assert.equal(row.holds, 1)
+    assert.equal(row.onlyThere, 0, 'nothing on the phone is missing here')
+    assert.equal(row.freeable, 1000, 'what it could give back is what was checked here')
+
+    // A device holding something this computer has never seen is the risky case, and it is counted as such.
+    const stray = crypto.randomBytes(32).toString('hex')
+    await call('POST', '/have', { token: phone, json: { hashes: [shared, stray] } })
+    // A hash cannot be read or charted, so the device says what its files are; the list behind the number then
+    // has names and sizes for the very files this computer has never been given.
+    await call('POST', '/inventory', { token: phone, json: { items: [
+      { sha256: stray, name: 'VID_0001.mp4', size: 5000, video: true, takenAt: 1234 },
+      { sha256: shared, name: 'IMG_0002.jpg', size: 1000, video: false, takenAt: 99 },
+    ] } })
+    // What a device is called here, and what it is drawn as, are the person's to change; the model number a
+    // phone reports is not what anyone calls it.
+    const phoneRow = server.devices().find(d => d.name === 'Phone')
+    const renamed = server.setDevice(phoneRow.id, { name: '  Teo\u2019s phone  ', kind: 'tablet' })
+    assert.equal(renamed.name, 'Teo\u2019s phone', 'trimmed, and kept')
+    assert.equal(renamed.kind, 'tablet')
+    server.setDevice(phoneRow.id, { name: '   ', kind: 'unicorn' })
+    const after2 = server.devices().find(d => d.id === phoneRow.id)
+    assert.equal(after2.name, 'Teo\u2019s phone', 'a blank name changes nothing')
+    assert.equal(after2.kind, 'tablet', 'a picture that does not exist changes nothing')
+    server.setDevice(phoneRow.id, { name: 'Phone', kind: 'device' })
+
+    // A receipt is not proof: a file that was received, verified and then went missing must stop counting as
+    // held, or the computer never asks for it again and the hole is permanent (SYNC_PLAN.md 6ag).
+    const lost = crypto.randomBytes(32).toString('hex')
+    fs.mkdirSync(path.join(tmp, 'Photos', 'DCIM'), { recursive: true })
+    db.prepare("INSERT INTO sync_receipts(device_id, sha256, path, size, received_at, kind) VALUES(?,?,?,?,?,'photo')")
+      .run(phoneRow.id, lost, 'DCIM/gone.jpg', 10, Date.now())
+    server.hereAt = 0
+    assert.equal((await call('POST', '/have', { token: phone, json: { hashes: [lost] } })).body.missing.length, 1, 'a receipt with no file is asked for again')
+    fs.writeFileSync(path.join(tmp, 'Photos', 'DCIM', 'gone.jpg'), 'x')
+    server.hereAt = 0
+    assert.equal((await call('POST', '/have', { token: phone, json: { hashes: [lost] } })).body.missing.length, 0, 'and not once it is back')
+
+    // A drive is a device too: known by the UUID of its filesystem, because a mount point moves and a disk
+    // does not, and starting with nothing crossing until the rules are answered.
+    // A UUID no disk has, on purpose: this test must never find a real drive and start writing to it.
+    const drive = server.addDrive({ uuid: '00000000-dead-4dea-8dea-000000000000', label: 'T7' })
+    assert.equal(drive.kind, 'database')
+    assert.equal(drive.set_up_at, null, 'a new drive waits for its rules')
+    assert.deepEqual(server.addDrive({ uuid: '00000000-dead-4dea-8dea-000000000000', label: 'again' }).id, drive.id, 'the same disk is the same device')
+    assert.throws(() => server.addDrive({ uuid: '../etc' }), /not a drive/)
+    await assert.rejects(server.backUpToDrive(drive.id), /not plugged in/, 'a drive that is not there is said so, not guessed at')
+    assert.equal((await server.inspectDrive('00000000-dead-4dea-8dea-000000000000')).plugged, false)
+
+    // What this machine is, in its own words: every rule on the page ends in it, so it is not "here".
+    assert.equal(server.self().label, 'this PC', 'a computer until it says otherwise')
+    assert.equal(server.setSelf({ kind: 'server', name: '  attic box ' }).label, 'this server')
+    assert.equal(server.self().name, 'attic box')
+    server.setSelf({ kind: 'nonsense' })
+    assert.equal(server.self().kind, 'server', 'a kind that does not exist changes nothing')
+
+    const onlyThere = server.fileList('onlyThere')
+    assert.deepEqual(onlyThere.map(f => [f.name, f.size, f.isVideo, f.device]), [['VID_0001.mp4', 5000, 1, 'Phone']])
+    assert.deepEqual(server.fileList('largest', { limit: 1 }).map(f => f.size), [2000], 'the biggest thing here')
+    const after = server.overview()
+    assert.equal(after.devices.find(d => d.name === 'Phone').onlyThere, 1)
+    // And it is *in the picture*: a file on one phone and nowhere else is the whole point of the warning, so
+    // it is counted among everything known, not only among what this computer happens to hold.
+    assert.equal(after.known, 4, 'the stray is known even though it is not here')
+    // Two things exist in one place: the lonely one here and the stray on the phone. (The recovered one is in
+    // two: here, and on the phone that asked about it.)
+    assert.equal(after.copies.find(c => c.copies === 1).files, 2)
+    assert.equal(after.copies.find(c => c.copies === 1).here, 1, 'only one of those two is on this computer')
   } finally {
     await server.stop()
     fs.rmSync(tmp, { recursive: true })
@@ -369,6 +478,9 @@ test('the other direction: what this computer offers, and a connection that says
   try {
     const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
     const token = paired.token, device = paired.deviceId
+    // A new device crosses nothing until someone has answered what should cross (SYNC_PLAN.md 6aj), so a test
+    // about what crosses says so first.
+    server.completeSetup(device)
 
     // A photo only this computer has.
     const jpg = Buffer.from('a photo taken on the computer'), jpgHash = sha(jpg)
@@ -457,8 +569,10 @@ test('the computer can only say "there is something new"; the phone it says it t
   await new Promise(r => phone.listen(0, '127.0.0.1', r))
   try {
     const token = crypto.randomBytes(16).toString('hex')
-    const row = (fp) => db.prepare(`INSERT INTO sync_devices(id, name, token_hash, paired_at, peer_fp, peer_hosts, peer_port, peer_token)
-      VALUES(?,?,?,?,?,?,?,?)`).run(crypto.randomUUID(), 'Xiaomi 15', crypto.randomUUID(), Date.now(), fp, '127.0.0.1', phone.address().port, token)
+    // set_up_at is filled in because a device that has not been set up has every row Off, and a nudge is only
+    // sent to a device that has something to cross (SYNC_PLAN.md 6aj).
+    const row = (fp) => db.prepare(`INSERT INTO sync_devices(id, name, token_hash, paired_at, peer_fp, peer_hosts, peer_port, peer_token, set_up_at)
+      VALUES(?,?,?,?,?,?,?,?,?)`).run(crypto.randomUUID(), 'Xiaomi 15', crypto.randomUUID(), Date.now(), fp, '127.0.0.1', phone.address().port, token, Date.now())
 
     row(phoneId.fingerprint)
     await server.nudge()
