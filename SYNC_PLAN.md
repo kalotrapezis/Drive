@@ -1859,6 +1859,73 @@ listing goes through (Gallery, backup, analysis, trash, Home photo):
   there, and a loose file in the root is always shown. A collection that arrived from a
   device with the folder's name answers it, so a folder is never asked about twice. Later: USB as a backup target ("back up everything now").
 
+### D3. Rules by content, and moving photos to a drive (agreed direction, 2026-09-24)
+
+What the user wants, in his words: *"move photos and videos automatically to the drive and keep a year or a
+month on it, and full copy my documents"* — documents are ~20 GB, photos and videos ~110 GB.
+
+So rules are **per kind of content**, not per device:
+
+- **Documents (Drive files): full copy everywhere.** Every device holds all of them, automatically, through the
+  computer (a full-copy device gets what any other device sends — it spreads down the line by itself).
+- **Photos & videos: their home is a storage drive (T7-TEO).** Each device keeps only a **window** (last month or
+  last year, per device) and releases what is older, automatically.
+
+Rules that make this safe and loop-free (worked out in conversation the same day):
+
+1. **The library is one thing; where a photo physically is, is a detail.** The computer answers "do you have
+   it?" for the *library*: on its disk **or on its storage drive**. Otherwise a phone re-sends every photo the
+   computer moved to the drive — the loop the user spotted.
+2. **Released is remembered.** A device that released a photo records it and tells the computer; full copy then
+   never sends it back, and the computer does not count it as missing there. It stays visible as a thumbnail and
+   can be fetched back one at a time.
+3. **Release only what is safe:** outside the window, not a favorite, and **verified by reading it back on the
+   drive(s)** — a receipt is not proof (6ag).
+4. **Automatic on the phone** via Android's one-time *Media management* permission (MANAGE_MEDIA, Android 12+),
+   which lets the app trash without a prompt each time. Released photos go to the system Trash (30 days), never a
+   permanent delete. The computer's copy goes to the system Trash the same way.
+5. **Unplugged drive:** a photo that lives only on the drive is skipped quietly when a device wants it, not
+   counted as missing and not retried in a loop; it goes out next time the drive is plugged in.
+
+**Open, must be decided before building:** with a window on every device, an old photo lives in **one place** —
+the storage drive. Options: (a) a second drive backed up from the first now and then (recommended; release only
+once verified on both), (b) one device keeps everything (the computer cannot: 57 GB free vs 110 GB), (c) accept one
+copy and show it plainly. Also: the window per device (month / year).
+
+**Nothing here is hard-coded (user, same day: "I give it to the world, somebody may need a full copy of
+everything").** Every choice is a setting, per device and per kind of content, and the default is the simplest,
+safest one — full copy of everything, nothing released:
+
+| Setting | Choices | Default |
+|---|---|---|
+| What a device holds, per content (photos & videos / documents) | Full copy · Keep a window · Send only · Off | Full copy |
+| The window | any number of days, months or years | — (only when chosen) |
+| A drive's role | Backup (a full copy) · Storage (the home of what devices release) | Backup |
+| Copies required before anything is released | 1, 2, 3… verified places | 2 |
+| Keep favorites on every device regardless of the window | on / off | on |
+
+**Offload (user's design, same day).** On a *sender* — the computer here, never on the drive itself — once a
+drive or a server is connected as Storage, its card on the Devices tab gets:
+
+- **Offload on** → a slider: *keep this disk under N % full* (e.g. 80 %). When the disk goes over, the oldest
+  photos and videos that are safe (the copies rule above) are released until it is back under — oldest first, so
+  what goes is always what has been looked at least.
+- **Offload off** → a window instead: *keep a year / a month / a week* (the same choice phones and tablets get).
+- **Auto backup** toggle on the same card (on = copy to it whenever it is plugged in, which is built).
+
+And, independent of Offload, **a full disk is always said out loud** (nothing does this today — the only space
+check is the Add-a-drive guide's "enough room"): a tray / system notification on the computer and a notification
+on a phone when a disk passes the threshold or a copy fails for lack of space, saying how much and what would
+help ("Offload is off — 31 GB of photos could go to T7-TEO"). A sync never fails silently because a disk filled.
+
+His own setup is one combination of these (documents full copy everywhere; photos & videos stored on T7, a
+window on the computer and phone). Context: the computer had ~80 GB free before syncing began and 57 GB now, so
+releasing from the computer is what makes it fit — but that is his case, not a rule.
+
+Needed in code: a storage role for a drive next to backup; per-content rules (photos vs files) instead of one
+rule per device; a released ledger per device that syncs; photos known to the library but not on this disk
+(thumbnail kept, "plug in T7-TEO" to open); Drive files to a drive (backUpToDrive is photos only today).
+
 ### D2. A tablet is not a big phone (asked 2026-09-24)
 
 The tablet is 1164dp across in landscape, 777dp in portrait — nearly three phones

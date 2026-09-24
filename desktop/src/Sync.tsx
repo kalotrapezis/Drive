@@ -371,6 +371,8 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
   }
   // The rules are answered before anything is written, not after: a device that started at "Send & receive"
   // uploaded its whole camera roll before anyone could stop it (24 September).
+  // Only what a drive backup actually does: photos and Drive files, one way. "Both ways" was offered here and
+  // then quietly did nothing, which is worse than not offering it (asked 2026-09-24).
   const [rules, setRules] = useState<Record<string, string>>({ photos: 'receive', files: 'receive' })
   const start = async () => {
     if (!picked) return
@@ -381,7 +383,7 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
         await window.drive.sync.setConnection(device.id, content, { direction, keep: 'everything' })
       }
       await window.drive.sync.completeSetup(device.id)
-      const result = rules.photos === 'off' ? { copied: 0, already: 0, failed: [], total: 0 }
+      const result = rules.photos === 'off' && rules.files === 'off' ? { copied: 0, already: 0, failed: [], total: 0 }
         : await window.drive.sync.backUpToDrive(device.id)
       setDone(result)
       onDone()
@@ -421,9 +423,10 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
       {scan?.plugged && (
         <>
           <div className="file-row head" style={{ marginTop: 14 }}><span>What would happen</span><span>Files</span><span>Size</span></div>
-          <div className="file-row"><span>Already on {picked?.label}</span><span>{scan.have?.toLocaleString()}</span><span>{formatBytes(scan.haveBytes ?? 0)}</span></div>
-          <div className="file-row"><span>To copy</span><span>{scan.need?.toLocaleString()}</span><span>{formatBytes(scan.needBytes ?? 0)}</span></div>
-          <div className="file-row"><span>Free afterwards</span><span /><span>{formatBytes(Math.max(0, (scan.free ?? 0) - (scan.needBytes ?? 0)))}</span></div>
+          <div className="file-row"><span>Already on {picked?.label}</span><span>{((scan.have ?? 0) + (scan.files?.have ?? 0)).toLocaleString()}</span><span>{formatBytes(scan.haveBytes ?? 0)}</span></div>
+          <div className="file-row"><span>Photos to copy</span><span>{scan.need?.toLocaleString()}</span><span>{formatBytes(scan.needBytes ?? 0)}</span></div>
+          <div className="file-row"><span>Drive files to copy</span><span>{scan.files?.need.toLocaleString()}</span><span>{formatBytes(scan.files?.needBytes ?? 0)}</span></div>
+          <div className="file-row"><span>Free afterwards</span><span /><span>{formatBytes(Math.max(0, (scan.free ?? 0) - (scan.needBytes ?? 0) - (scan.files?.needBytes ?? 0)))}</span></div>
           {!scan.writable && <p className="error">This app cannot write to {scan.mount}. Nothing was changed.</p>}
           {scan.writable && !scan.enough && <p className="error">There is not enough room: {formatBytes(scan.needBytes ?? 0)} to copy, {formatBytes(scan.free ?? 0)} free.</p>}
           {scan.writable && scan.enough && (
@@ -431,8 +434,8 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
               <h4 className="library-sub" style={{ marginTop: 16 }}>And the rules</h4>
               {(['photos', 'files'] as const).map(content => (
                 <div key={content} className="rule-options" style={{ marginBottom: 6 }}>
-                  {([['off', 'block', `No ${content}`], ['receive', 'arrowRight', `Copy ${content} to ${picked?.label}`],
-                     ['both', 'swap', `Both ways`]] as const).map(([value, icon, label]) => (
+                  {([['off', 'block', content === 'photos' ? 'No photos' : 'No Drive files'],
+                     ['receive', 'arrowRight', `Copy ${content === 'photos' ? 'photos' : 'Drive files'} to ${picked?.label}`]] as const).map(([value, icon, label]) => (
                     <button key={value} className={rules[content] === value ? 'on' : ''}
                       onClick={() => setRules(r => ({ ...r, [content]: value }))}>
                       <span className="glyph"><Icon name={icon} size={18} /></span>
@@ -441,9 +444,11 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
                   ))}
                 </div>
               ))}
+              <p className="rule-hint">A Drive file that changed replaces the drive's copy, and the older one is kept in
+                Tetra/Files history. Moving photos off this PC (Offload) is not built yet.</p>
               <p className="rule-hint">Everything goes under <b>{scan.mount}/Tetra</b> and nothing else on the drive is
-                touched. Each file is checked after it is written, nothing is overwritten, and nothing is ever
-                deleted — on the drive or here. Nothing crosses until you press Start.</p>
+                touched. Each file is read back and checked after it is written, and nothing is ever deleted or lost —
+                on the drive or here. Nothing crosses until you press Start.</p>
             </>
           )}
         </>

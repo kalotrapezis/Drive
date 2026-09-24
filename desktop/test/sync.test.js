@@ -673,3 +673,108 @@ test('a number never replaces a name, whichever device sends it', async () => {
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })
+
+test('a drive backup copies what the drive lacks, checks every byte, and never deletes', async () => {
+  const drives = require('../drives')
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-backup-'))
+  const mount = path.join(tmp, 'T7')
+  fs.mkdirSync(mount)
+  const uuid = '00000000-dead-4dea-8dea-000000000000' // never a real drive: a test must not write to one
+  const [list, mountOf] = [drives.list, drives.mountOf]
+  drives.list = async () => [{ uuid, label: 'Test', fstype: 'ext4', mount, sizeBytes: 1e9, freeBytes: 1e9, hotplug: true }]
+  drives.mountOf = async id => id === uuid ? mount : null
+  const db = library.open(path.join(tmp, 'data'))
+  const photos = path.join(tmp, 'Photos')
+  fs.mkdirSync(path.join(photos, 'DCIM', 'Camera'), { recursive: true })
+  for (const [name, body] of [['a.jpg', 'alpha'], ['b.jpg', 'beta']]) {
+    const bytes = Buffer.from(body)
+    db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at) VALUES(?,?,'image/jpeg',0,?,1,1)`)
+      .run(`DCIM/Camera/${name}`, crypto.createHash('sha256').update(bytes).digest('hex'), bytes.length)
+    fs.writeFileSync(path.join(photos, 'DCIM', 'Camera', name), bytes)
+  }
+  const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: photos, port: 0 })
+  try {
+    const before = await server.inspectDrive(uuid)
+    assert.equal(before.need, 2)
+    assert.ok(before.writable && before.enough)
+    const device = server.addDrive({ uuid, label: 'Test' })
+    assert.deepEqual(await server.backUpToDrive(device.id), { copied: 2, already: 0, failed: [], total: 2 })
+    assert.equal(fs.readFileSync(path.join(mount, 'Tetra', 'Photos', 'DCIM', 'Camera', 'a.jpg'), 'utf8'), 'alpha')
+    assert.deepEqual(await server.backUpToDrive(device.id), { copied: 0, already: 2, failed: [], total: 2 }, 'nothing twice')
+
+    // A copy that went missing on the drive is noticed by looking, not by trusting the ledger.
+    fs.rmSync(path.join(mount, 'Tetra', 'Photos', 'DCIM', 'Camera', 'b.jpg'))
+    assert.equal((await server.backUpToDrive(device.id)).copied, 1)
+
+    // A photo that changed since it was read is refused, and nothing half-written is left behind.
+    fs.writeFileSync(path.join(photos, 'DCIM', 'Camera', 'a.jpg'), 'tampered')
+    fs.rmSync(path.join(mount, 'Tetra', 'Photos', 'DCIM', 'Camera', 'a.jpg'))
+    const r = await server.backUpToDrive(device.id)
+    assert.equal(r.failed.length, 1)
+    assert.ok(!fs.existsSync(path.join(mount, 'Tetra', 'Photos', 'DCIM', 'Camera', 'a.jpg.part')))
+    assert.ok(fs.existsSync(path.join(photos, 'DCIM', 'Camera', 'b.jpg')), 'the library is never touched')
+  } finally {
+    Object.assign(drives, { list, mountOf })
+    db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('the Devices overview stays fast at library scale', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-overview-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 })
+  const media = db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at) VALUES(?,?,'image/jpeg',0,1,1,1)`)
+  const hold = db.prepare(`INSERT INTO device_holdings(device_id, kind, sha256, seen_at) VALUES(?, 'photo', ?, 1)`)
+  db.exec('BEGIN')
+  for (let i = 0; i < 6000; i++) {
+    const sha = crypto.createHash('sha256').update(String(i)).digest('hex')
+    if (i < 4000) media.run(`p/${i}.jpg`, sha)
+    hold.run('phone', sha); if (i % 2) hold.run('tablet', sha)
+  }
+  db.exec('COMMIT')
+  const t = performance.now()
+  server.overview()
+  assert.ok(performance.now() - t < 300, `overview took ${Math.round(performance.now() - t)} ms`)
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})
+
+test('Drive files go to a drive too: a changed file replaces the copy, and the old version is kept, never lost', async () => {
+  const drives = require('../drives')
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-files-backup-'))
+  const mount = path.join(tmp, 'T7'); fs.mkdirSync(mount)
+  const uuid = '00000000-dead-4dea-8dea-000000000000'
+  const [list, mountOf] = [drives.list, drives.mountOf]
+  drives.list = async () => [{ uuid, label: 'Test', fstype: 'ext4', mount, sizeBytes: 1e9, freeBytes: 1e9, hotplug: true }]
+  drives.mountOf = async id => id === uuid ? mount : null
+  const db = library.open(path.join(tmp, 'data'))
+  const files = new Files(db, path.join(tmp, 'Drive'))
+  fs.mkdirSync(path.join(tmp, 'Drive', 'Work'), { recursive: true })
+  fs.writeFileSync(path.join(tmp, 'Drive', 'Work', 'plan.txt'), 'version one')
+  const server = new SyncServer({ db, files, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 })
+  try {
+    assert.equal((await server.inspectDrive(uuid)).files.need, 1)
+    const device = server.addDrive({ uuid, label: 'Test' })
+    assert.equal((await server.backUpToDrive(device.id)).copied, 1)
+    const copy = path.join(mount, 'Tetra', 'Files', 'Work', 'plan.txt')
+    assert.equal(fs.readFileSync(copy, 'utf8'), 'version one')
+    assert.equal((await server.inspectDrive(uuid)).files.need, 0, 'the same version is not copied again')
+
+    fs.writeFileSync(path.join(tmp, 'Drive', 'Work', 'plan.txt'), 'version two, longer')
+    assert.equal((await server.backUpToDrive(device.id)).copied, 1)
+    assert.equal(fs.readFileSync(copy, 'utf8'), 'version two, longer')
+    const history = path.join(mount, 'Tetra', 'Files history')
+    const [stamp] = fs.readdirSync(history)
+    assert.equal(fs.readFileSync(path.join(history, stamp, 'Work', 'plan.txt'), 'utf8'), 'version one', 'the old version is kept')
+
+    // Files Off on this drive: nothing goes.
+    server.setConnection(device.id, 'files', { direction: 'off', keep: 'everything' })
+    fs.writeFileSync(path.join(tmp, 'Drive', 'Work', 'new.txt'), 'x')
+    assert.equal((await server.backUpToDrive(device.id)).copied, 0)
+  } finally {
+    Object.assign(drives, { list, mountOf })
+    db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
