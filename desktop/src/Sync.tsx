@@ -371,7 +371,9 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
   }
   // The rules are answered before anything is written, not after: a device that started at "Send & receive"
   // uploaded its whole camera roll before anyone could stop it (24 September).
-  const [rules, setRules] = useState<Record<string, string>>({ photos: 'receive', files: 'receive' })
+  // Only what a drive backup actually does today: photos, one way. Files and "both ways" were offered here and
+  // then quietly did nothing, which is worse than not offering them (asked 2026-09-24).
+  const [rules, setRules] = useState<Record<string, string>>({ photos: 'receive', files: 'off' })
   const start = async () => {
     if (!picked) return
     setBusy({ done: 0, total: scan?.total ?? 0, copied: 0 })
@@ -429,18 +431,17 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
           {scan.writable && scan.enough && (
             <>
               <h4 className="library-sub" style={{ marginTop: 16 }}>And the rules</h4>
-              {(['photos', 'files'] as const).map(content => (
-                <div key={content} className="rule-options" style={{ marginBottom: 6 }}>
-                  {([['off', 'block', `No ${content}`], ['receive', 'arrowRight', `Copy ${content} to ${picked?.label}`],
-                     ['both', 'swap', `Both ways`]] as const).map(([value, icon, label]) => (
-                    <button key={value} className={rules[content] === value ? 'on' : ''}
-                      onClick={() => setRules(r => ({ ...r, [content]: value }))}>
-                      <span className="glyph"><Icon name={icon} size={18} /></span>
-                      <span className="rule-label">{label}</span>
-                    </button>
-                  ))}
-                </div>
-              ))}
+              <div className="rule-options" style={{ marginBottom: 6 }}>
+                {([['off', 'block', 'No photos'], ['receive', 'arrowRight', `Copy photos to ${picked?.label}`]] as const).map(([value, icon, label]) => (
+                  <button key={value} className={rules.photos === value ? 'on' : ''}
+                    onClick={() => setRules(r => ({ ...r, photos: value }))}>
+                    <span className="glyph"><Icon name={icon} size={18} /></span>
+                    <span className="rule-label">{label}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="rule-hint">Drive files, moving photos off this PC, and bringing a drive's own photos in are not
+                built yet — only a copy of the photos goes to a drive for now.</p>
               <p className="rule-hint">Everything goes under <b>{scan.mount}/Tetra</b> and nothing else on the drive is
                 touched. Each file is checked after it is written, nothing is overwritten, and nothing is ever
                 deleted — on the drive or here. Nothing crosses until you press Start.</p>
