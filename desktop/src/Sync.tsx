@@ -445,7 +445,7 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
                 </div>
               ))}
               <p className="rule-hint">A Drive file that changed replaces the drive's copy, and the older one is kept in
-                Tetra/Drive history. Moving photos off this PC (Offload) is not built yet.</p>
+                Tetra/Files history. Moving photos off this PC (Offload) is not built yet.</p>
               <p className="rule-hint">Everything goes under <b>{scan.mount}/Tetra</b> and nothing else on the drive is
                 touched. Each file is read back and checked after it is written, and nothing is ever deleted or lost —
                 on the drive or here. Nothing crosses until you press Start.</p>

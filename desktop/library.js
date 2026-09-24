@@ -156,6 +156,9 @@ async function makeThumb(file, isVideo, target) {
 /** Brings the database in line with the folder. Unchanged files (same size + mtime) are not re-read. */
 async function scan(db, root, dataDir, onProgress = () => {}) {
   const known = new Map(db.prepare('SELECT path, size, mtime, sha256, thumb, meta_v FROM media').all().map(r => [r.path, r]))
+  // A folder that is not there is not a library that was emptied: a renamed folder or an unmounted disk must never
+  // read as "every photo was deleted", which would drop every face and every place with them.
+  if (known.size && !fs.existsSync(root)) throw new Error(`The Photos folder is missing (${root}); nothing was changed.`)
   const seen = new Set()
   const insert = db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, width, height, latitude, longitude, camera, thumb, meta_v)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,${META_VERSION}) ON CONFLICT(path) DO UPDATE SET sha256=excluded.sha256, mime=excluded.mime, is_video=excluded.is_video,
@@ -182,6 +185,9 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
       info.width ?? null, info.height ?? null, info.latitude ?? null, info.longitude ?? null, info.camera ?? null, thumb ? 1 : 0)
     onProgress(++done, ++changed)
   }
+  // An empty mount point looks exactly like this. A handful of photos all deleted on purpose is allowed through.
+  // ponytail: a count, not a mount check; switch to comparing the folder's device id if it ever misfires.
+  if (known.size >= 20 && seen.size === 0) throw new Error(`The Photos folder is empty (${root}); nothing was changed.`)
   const del = db.prepare('DELETE FROM media WHERE path = ?')
   const byPath = db.prepare('SELECT sha256 FROM media WHERE path = ?')
   const gone = []

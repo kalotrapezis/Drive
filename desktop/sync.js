@@ -275,23 +275,25 @@ class SyncServer {
    */
   async driveFiles(mount) {
     if (!this.files) return []
-    const root = path.join(mount, 'Tetra', 'Drive')
+    const root = path.join(mount, 'Tetra', 'Files')
     return (await this.files.all()).filter(i => !i.dir).map(i => {
       const st = fs.statSync(path.join(this.files.root, i.path))
       let there = false
-      try { const d = fs.statSync(path.join(root, i.path)); there = d.size === st.size && Math.trunc(d.mtimeMs) === Math.trunc(st.mtimeMs) } catch {}
+      try { const d = fs.statSync(path.join(root, i.path)); there = d.size === st.size && Math.abs(d.mtimeMs - st.mtimeMs) < 2 } catch {}
+      // (within 2 ms: the stamp goes through floating-point seconds and can come back a hair early, which made the
+      // same file look changed on some runs and would have copied it again on every backup)
       return { path: i.path, size: st.size, mtimeMs: st.mtimeMs, there }
     })
   }
 
   /**
    * One Drive file to a drive. Unlike a photo, a document changes — so a newer version does replace the drive's
-   * copy, but the one it replaces is never lost: it moves to Tetra/Drive history/<time>/, and nothing on the drive
+   * copy, but the one it replaces is never lost: it moves to Tetra/Files history/<time>/, and nothing on the drive
    * is ever deleted. Hashed while it is read, then read back from the drive and hashed again before it counts.
    */
   async copyFileToDrive(f, mount) {
     const src = path.join(this.files.root, f.path)
-    const target = path.join(mount, 'Tetra', 'Drive', f.path)
+    const target = path.join(mount, 'Tetra', 'Files', f.path)
     await fsp.mkdir(path.dirname(target), { recursive: true })
     const part = target + '.part'
     const read = crypto.createHash('sha256')
@@ -304,7 +306,7 @@ class SyncServer {
     for await (const c of fs.createReadStream(part)) back.update(c)
     if (read.digest('hex') !== back.digest('hex')) { await fsp.rm(part, { force: true }); throw new Error('The copy on the drive did not read back the same; nothing was kept.') }
     if (fs.existsSync(target)) {
-      const history = path.join(mount, 'Tetra', 'Drive history', new Date().toISOString().replace(/[:.]/g, '-'), f.path)
+      const history = path.join(mount, 'Tetra', 'Files history', new Date().toISOString().replace(/[:.]/g, '-'), f.path)
       await fsp.mkdir(path.dirname(history), { recursive: true })
       await fsp.rename(target, history)
     }

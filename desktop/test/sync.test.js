@@ -757,14 +757,14 @@ test('Drive files go to a drive too: a changed file replaces the copy, and the o
     assert.equal((await server.inspectDrive(uuid)).files.need, 1)
     const device = server.addDrive({ uuid, label: 'Test' })
     assert.equal((await server.backUpToDrive(device.id)).copied, 1)
-    const copy = path.join(mount, 'Tetra', 'Drive', 'Work', 'plan.txt')
+    const copy = path.join(mount, 'Tetra', 'Files', 'Work', 'plan.txt')
     assert.equal(fs.readFileSync(copy, 'utf8'), 'version one')
     assert.equal((await server.inspectDrive(uuid)).files.need, 0, 'the same version is not copied again')
 
     fs.writeFileSync(path.join(tmp, 'Drive', 'Work', 'plan.txt'), 'version two, longer')
     assert.equal((await server.backUpToDrive(device.id)).copied, 1)
     assert.equal(fs.readFileSync(copy, 'utf8'), 'version two, longer')
-    const history = path.join(mount, 'Tetra', 'Drive history')
+    const history = path.join(mount, 'Tetra', 'Files history')
     const [stamp] = fs.readdirSync(history)
     assert.equal(fs.readFileSync(path.join(history, stamp, 'Work', 'plan.txt'), 'utf8'), 'version one', 'the old version is kept')
 

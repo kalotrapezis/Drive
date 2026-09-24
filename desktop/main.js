@@ -13,10 +13,18 @@ const docs = require('./documents')
 const { SyncServer } = require('./sync')
 const { Folders } = require('./folders')
 
-// Override both for testing with disposable files.
-const PHOTOS_ROOT = process.env.DRIVE_PHOTOS || path.join(os.homedir(), 'Drive', 'Photos')
-const FILES_ROOT = process.env.DRIVE_FILES || path.join(os.homedir(), 'Drive', 'Drive')
 const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'local-drive-desktop')
+// ~/Tetra/Photos and ~/Tetra/Files, moved from ~/Drive once (home.js). Never from a hidden QA copy (scripts/shot.js),
+// which must not rename the real folders. Both can be overridden for testing with disposable files.
+const home = require('./home')
+const HOME = home.roots(os.homedir(), { migrate: !process.env.DRIVE_HIDDEN })
+if (HOME.moved.length) {
+  console.log('[home] moved', HOME.moved.join('; '))
+  try { fs.copyFileSync(path.join(DATA_DIR, 'library.db'), path.join(DATA_DIR, 'library.db.before-tetra-folder')) } catch {}
+}
+if (HOME.note) console.warn('[home]', HOME.note)
+const PHOTOS_ROOT = process.env.DRIVE_PHOTOS || HOME.photos
+const FILES_ROOT = process.env.DRIVE_FILES || HOME.files
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
@@ -312,6 +320,7 @@ app.whenReady().then(() => {
     if (row) shell.showItemInFolder(path.join(PHOTOS_ROOT, row.path))
   })
 
+  if (!process.env.DRIVE_HIDDEN && HOME.root.endsWith('Tetra')) home.markFolder(HOME.root, path.join(__dirname, 'public', 'icon.png'), DATA_DIR)
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 720, minHeight: 500,
     backgroundColor: '#121416', title: 'Tetra',
