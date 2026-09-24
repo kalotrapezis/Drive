@@ -197,13 +197,17 @@ class SyncServer {
       try { there = fs.statSync(target).size === r.size } catch { there = false }
       if (there) { have++; haveBytes += r.size } else { need++; needBytes += r.size }
     }
+    const files = await this.driveFiles(found.mount)
+    const filesNeed = files.filter(f => !f.there)
     let writable = true
     try { await fsp.mkdir(path.join(found.mount, 'Tetra'), { recursive: true }) } catch { writable = false }
+    const filesNeedBytes = filesNeed.reduce((a, f) => a + f.size, 0)
     return {
       plugged: true, mount: found.mount, label: found.label, fstype: found.fstype,
       free: found.freeBytes, size: found.sizeBytes,
       total: rows.length, have, haveBytes, need, needBytes,
-      writable, enough: found.freeBytes >= needBytes + 64 * 1024 * 1024,
+      files: { total: files.length, have: files.length - filesNeed.length, need: filesNeed.length, needBytes: filesNeedBytes },
+      writable, enough: found.freeBytes >= needBytes + filesNeedBytes + 64 * 1024 * 1024,
     }
   }
 
@@ -221,11 +225,15 @@ class SyncServer {
     const mount = await drives.mountOf(device.volume_uuid)
     if (!mount) throw new Error(`${device.name} is not plugged in.`)
     const root = path.join(mount, 'Tetra', 'Photos')
-    const rows = this.db.prepare('SELECT path, sha256, size FROM media ORDER BY size').all()
+    // The drive's own rules decide what goes: photos, Drive files, or both (the Add-a-drive guide sets them).
+    const on = content => ['receive', 'both'].includes(this.db.prepare('SELECT direction FROM sync_connections WHERE device_id = ? AND content = ?').get(device.id, content)?.direction)
+    const rows = on('photos') ? this.db.prepare('SELECT path, sha256, size FROM media ORDER BY size').all() : []
+    const files = on('files') ? (await this.driveFiles(mount)).filter(f => !f.there) : []
+    const total = rows.length + files.length
     const held = this.db.prepare("SELECT 1 FROM device_holdings WHERE device_id = ? AND kind = 'photo' AND sha256 = ?")
     let copied = 0, already = 0, failed = []
     for (const [i, row] of rows.entries()) {
-      onProgress({ done: i, total: rows.length, copied, already })
+      onProgress({ done: i, total, copied, already })
       const target = path.join(root, row.path)
       // Already there is two questions, not one: the ledger says so *and* the file is still that size. The
       // lesson of 6ag, applied before it can happen here.
@@ -252,9 +260,56 @@ class SyncServer {
         if (failed.length > 50) break
       }
     }
+    for (const [i, f] of files.entries()) {
+      onProgress({ done: rows.length + i, total, copied, already })
+      try { await this.copyFileToDrive(f, mount); copied++ } catch (e) { failed.push(`${f.path}: ${e.message}`); if (failed.length > 50) break }
+    }
     this.db.prepare('UPDATE sync_devices SET last_seen = ? WHERE id = ?').run(Date.now(), device.id)
-    onProgress({ done: rows.length, total: rows.length, copied, already })
-    return { copied, already, failed, total: rows.length }
+    onProgress({ done: total, total, copied, already })
+    return { copied, already, failed, total }
+  }
+
+  /**
+   * Drive files as they stand on a drive: each with whether the drive's copy is this version (same size and
+   * modification time — the copy is stamped with the original's time, so that is enough to tell).
+   */
+  async driveFiles(mount) {
+    if (!this.files) return []
+    const root = path.join(mount, 'Tetra', 'Drive')
+    return (await this.files.all()).filter(i => !i.dir).map(i => {
+      const st = fs.statSync(path.join(this.files.root, i.path))
+      let there = false
+      try { const d = fs.statSync(path.join(root, i.path)); there = d.size === st.size && Math.trunc(d.mtimeMs) === Math.trunc(st.mtimeMs) } catch {}
+      return { path: i.path, size: st.size, mtimeMs: st.mtimeMs, there }
+    })
+  }
+
+  /**
+   * One Drive file to a drive. Unlike a photo, a document changes — so a newer version does replace the drive's
+   * copy, but the one it replaces is never lost: it moves to Tetra/Drive history/<time>/, and nothing on the drive
+   * is ever deleted. Hashed while it is read, then read back from the drive and hashed again before it counts.
+   */
+  async copyFileToDrive(f, mount) {
+    const src = path.join(this.files.root, f.path)
+    const target = path.join(mount, 'Tetra', 'Drive', f.path)
+    await fsp.mkdir(path.dirname(target), { recursive: true })
+    const part = target + '.part'
+    const read = crypto.createHash('sha256')
+    await new Promise((resolve, reject) => {
+      const r = fs.createReadStream(src), w = fs.createWriteStream(part)
+      r.on('data', c => read.update(c)); r.on('error', reject); w.on('error', reject); w.on('finish', resolve)
+      r.pipe(w)
+    })
+    const back = crypto.createHash('sha256')
+    for await (const c of fs.createReadStream(part)) back.update(c)
+    if (read.digest('hex') !== back.digest('hex')) { await fsp.rm(part, { force: true }); throw new Error('The copy on the drive did not read back the same; nothing was kept.') }
+    if (fs.existsSync(target)) {
+      const history = path.join(mount, 'Tetra', 'Drive history', new Date().toISOString().replace(/[:.]/g, '-'), f.path)
+      await fsp.mkdir(path.dirname(history), { recursive: true })
+      await fsp.rename(target, history)
+    }
+    await fsp.rename(part, target)
+    await fsp.utimes(target, new Date(), new Date(f.mtimeMs))
   }
 
   /** Rename a device, or change the picture it is drawn with. Both are the person's choice and nothing else reads them. */

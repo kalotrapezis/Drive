@@ -739,3 +739,42 @@ test('the Devices overview stays fast at library scale', () => {
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })
+
+test('Drive files go to a drive too: a changed file replaces the copy, and the old version is kept, never lost', async () => {
+  const drives = require('../drives')
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-files-backup-'))
+  const mount = path.join(tmp, 'T7'); fs.mkdirSync(mount)
+  const uuid = '00000000-dead-4dea-8dea-000000000000'
+  const [list, mountOf] = [drives.list, drives.mountOf]
+  drives.list = async () => [{ uuid, label: 'Test', fstype: 'ext4', mount, sizeBytes: 1e9, freeBytes: 1e9, hotplug: true }]
+  drives.mountOf = async id => id === uuid ? mount : null
+  const db = library.open(path.join(tmp, 'data'))
+  const files = new Files(db, path.join(tmp, 'Drive'))
+  fs.mkdirSync(path.join(tmp, 'Drive', 'Work'), { recursive: true })
+  fs.writeFileSync(path.join(tmp, 'Drive', 'Work', 'plan.txt'), 'version one')
+  const server = new SyncServer({ db, files, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 })
+  try {
+    assert.equal((await server.inspectDrive(uuid)).files.need, 1)
+    const device = server.addDrive({ uuid, label: 'Test' })
+    assert.equal((await server.backUpToDrive(device.id)).copied, 1)
+    const copy = path.join(mount, 'Tetra', 'Drive', 'Work', 'plan.txt')
+    assert.equal(fs.readFileSync(copy, 'utf8'), 'version one')
+    assert.equal((await server.inspectDrive(uuid)).files.need, 0, 'the same version is not copied again')
+
+    fs.writeFileSync(path.join(tmp, 'Drive', 'Work', 'plan.txt'), 'version two, longer')
+    assert.equal((await server.backUpToDrive(device.id)).copied, 1)
+    assert.equal(fs.readFileSync(copy, 'utf8'), 'version two, longer')
+    const history = path.join(mount, 'Tetra', 'Drive history')
+    const [stamp] = fs.readdirSync(history)
+    assert.equal(fs.readFileSync(path.join(history, stamp, 'Work', 'plan.txt'), 'utf8'), 'version one', 'the old version is kept')
+
+    // Files Off on this drive: nothing goes.
+    server.setConnection(device.id, 'files', { direction: 'off', keep: 'everything' })
+    fs.writeFileSync(path.join(tmp, 'Drive', 'Work', 'new.txt'), 'x')
+    assert.equal((await server.backUpToDrive(device.id)).copied, 0)
+  } finally {
+    Object.assign(drives, { list, mountOf })
+    db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})

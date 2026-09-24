@@ -36,6 +36,7 @@ export interface Drive { uuid: string; label: string; fstype: string; mount: str
 export interface DriveScan {
   plugged: boolean; mount?: string; label?: string; fstype?: string; free?: number; size?: number
   total?: number; have?: number; haveBytes?: number; need?: number; needBytes?: number; writable?: boolean; enough?: boolean
+  files?: { total: number; have: number; need: number; needBytes: number }
 }
 export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[]; overview: SyncOverview; self: SyncSelf }
 

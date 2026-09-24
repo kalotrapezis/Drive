@@ -91,8 +91,9 @@ async function backUpPluggedDrives() {
   if (driveBackup) return
   for (const d of await sync.drives().catch(() => [])) {
     const rule = d.device && db.prepare(`SELECT s.set_up_at, c.direction FROM sync_devices s
-      LEFT JOIN sync_connections c ON c.device_id = s.id AND c.content = 'photos' WHERE s.id = ?`).get(d.device.id)
-    if (!rule?.set_up_at || !['receive', 'both'].includes(rule.direction)) continue // not set up, or photos are Off
+      LEFT JOIN sync_connections c ON c.device_id = s.id AND c.content IN ('photos', 'files') AND c.direction IN ('receive', 'both')
+      WHERE s.id = ?`).get(d.device.id)
+    if (!rule?.set_up_at || !rule.direction) continue // not set up, or both photos and files are Off
     await backUpToDrive(d.device.id).catch(e => console.warn('[drive]', e.message))
   }
 }
