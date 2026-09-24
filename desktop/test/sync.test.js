@@ -156,16 +156,17 @@ test('metadata sync: favorites, collections, labels, people and faces cross over
     await push({ favorites: [{ sha256: sha, favorite: false, updatedAt: 2000 }] })
     assert.equal(db.prepare('SELECT favorite FROM photo_state WHERE sha256 = ?').get(sha).favorite, 0, 'newer push wins')
 
-    // A photo this app analysed on its own: the phone's face lands on the same spot, so it is the same face and
-    // joins the phone's person instead of being added beside it.
+    // A photo this app analysed on its own: the phone's face lands on the same spot, so it is the same face, and
+    // the phone's name beats this app's guess without a question.
     const analysed = crypto.randomBytes(32).toString('hex')
     const mine = crypto.randomUUID(), other = crypto.randomUUID()
     people.applyPerson(other, 'Person 9', 1)
     db.prepare(`INSERT INTO faces(id, sha256, box_left, box_top, box_right, box_bottom, embedding, model, quality, person_id, updated_at)
       VALUES(?,?,0.11,0.11,0.31,0.41,?,'m',0.9,?,1000)`).run(mine, analysed, Buffer.from(embedding, 'base64'), other)
     await push({ faces: [{ uuid: crypto.randomUUID(), sha256: analysed, box: [0.1, 0.1, 0.3, 0.4], embedding, quality: 0.9, person, updatedAt: 3000 }] })
-    assert.equal(db.prepare('SELECT person_id FROM faces WHERE id = ?').get(mine).person_id, person, 'overlapping face regrouped, not duplicated')
+    assert.equal(db.prepare('SELECT person_id FROM faces WHERE id = ?').get(mine).person_id, person, 'the name wins over a guess')
     assert.equal(db.prepare('SELECT COUNT(*) n FROM faces WHERE sha256 = ?').get(analysed).n, 1, 'no second face added')
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM face_reviews WHERE face_id = ? AND state = ?').get(mine, 'pending').n, 0)
 
     // A face somewhere else on the same photo is a different face and is kept whole, embedding included.
     await push({ faces: [{ uuid: crypto.randomUUID(), sha256: analysed, box: [0.6, 0.6, 0.8, 0.9], embedding, quality: 0.9, person, updatedAt: 3000 }] })

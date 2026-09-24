@@ -154,8 +154,9 @@ test('a device that re-analysed from scratch cannot un-name a person', async () 
     embedding: Buffer.from(new Float32Array(base).buffer), model: F.EMBEDDING_MODEL, quality: 0.9,
     person: 'named-elsewhere', updatedAt: Date.now() + 2000 })
   assert.equal(people.list().find(p => p.count > 0)?.name, 'Γιάννης', 'the face stays where it is')
-  assert.equal(people.reviewCount(), 1, 'and the difference is asked about instead')
+  assert.equal(people.reviewCount(), 1, 'only the named difference is asked about')
   assert.equal(people.nextReview()?.name, 'Μαρία')
+  assert.equal(people.reviewsSince(0).filter(r => r.state === 'pending').length, 1, 'and the card travels')
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })
@@ -221,8 +222,8 @@ test('a question answered on the phone stops being asked here — including "no"
 
   // The phone answered that one — "no", which changes nothing about where the face sits, so without this the
   // answer would leave no trace at all and this computer would ask again forever.
-  assert.deepEqual(people.reviewsSince(0), [], 'nothing has been answered here yet')
-  people.applyReview(first.faceId, first.personId, 'resolved', Date.now())
+  assert.equal(people.reviewsSince(0).length, 2, 'pending cards travel too')
+  people.applyReview(first.faceId, first.personId, 'rejected', Date.now())
   assert.equal(people.reviewCount(), 1, 'it is not asked here any more')
   assert.notEqual(people.nextReview()?.faceId, first.faceId)
 
@@ -231,14 +232,14 @@ test('a question answered on the phone stops being asked here — including "no"
   people.answer(second.faceId, second.personId, 'no')
   const out = people.reviewsSince(0)
   assert.deepEqual(out.map(r => [r.face, r.person, r.state]), [
-    [first.faceId, first.personId, 'resolved'],
-    [second.faceId, second.personId, 'resolved'],
+    [first.faceId, first.personId, 'rejected'],
+    [second.faceId, second.personId, 'rejected'],
   ])
   assert.deepEqual(people.reviewsSince(Date.now() + 1000), [], 'and not offered again after it has been sent')
 
   // An older answer never overrules a newer one, whichever device it comes from.
   people.applyReview(second.faceId, second.personId, 'skipped', 1)
-  assert.equal(db.prepare('SELECT state FROM face_reviews WHERE face_id = ?').get(second.faceId).state, 'resolved')
+  assert.equal(db.prepare('SELECT state FROM face_reviews WHERE face_id = ?').get(second.faceId).state, 'rejected')
 
   // A question about a face or a person this computer does not have is simply not a question here.
   people.applyReview('no-such-face', second.personId, 'resolved', Date.now())
@@ -276,12 +277,12 @@ test('two devices that disagree about who someone is ask, instead of taking turn
   assert.deepEqual(people.shas(maria), [sha(1)])
   assert.equal(people.reviewCount(), 0)
 
-  // A guess still never wins against a name, and two guesses still settle by who wrote last.
+  // A guess still never wins against a name, and a guess is never a question.
   const guess = crypto.randomUUID()
   people.applyPerson(guess, 'Person 9', Date.now())
   people.applyFace({ uuid: faces[1], sha256: sha(2), person: guess, updatedAt: Date.now() + 5000 })
   assert.deepEqual(people.shas(anna.id), [sha(2)], 'Άννα keeps the face a number tried to take')
-  assert.equal(people.reviewCount(), 0, 'and that is not a question, it is a rule')
+  assert.equal(people.reviewCount(), 0, 'that is not a question, it is a rule')
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })
@@ -312,6 +313,48 @@ test('two photos of one moment are read as one moment: the day is evidence, not 
   people.record(sha(4), [face(other)], size)
   assert.equal(people.list().length, 3, 'a stranger on the same day is still a stranger')
   assert.ok(F.SAME_DAY_BONUS <= 0.05)
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})
+
+test('a face sent under a person combined away here lands on the person it was combined into', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-merge-'))
+  const db = library.open(tmp)
+  const people = new F.People(db, tmp)
+  people.applyPerson('old-me', 'Εγώ', 1)
+  people.applyPerson('new-me', 'Εγώ', 1)
+  const face = (uuid, person, x) => people.applyFace({ uuid, sha256: 'a'.repeat(64), box: [x, 0.1, x + 0.1, 0.2],
+    embedding: Buffer.from(new Float32Array(128).buffer), model: F.EMBEDDING_MODEL, quality: 0.9, person, updatedAt: 5 })
+  face('f1', 'old-me', 0.1)
+  people.merge('old-me', 'new-me')
+  face('f2', 'old-me', 0.5) // the phone never heard of the merge
+  const row = db.prepare('SELECT person_id, updated_at FROM faces WHERE id = ?').get('f2')
+  assert.equal(row.person_id, 'new-me')
+  assert.ok(row.updated_at > 5, 'and it is sent back, so the phone moves it too')
+  db.prepare('UPDATE faces SET updated_at = 5 WHERE id = ?').run('f1')
+  face('f1', 'old-me', 0.1) // already right here, still wrong over there
+  assert.ok(db.prepare('SELECT updated_at FROM faces WHERE id = ?').get('f1').updated_at > 5, 'so it is sent again')
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})
+
+test('a forgotten person is not shown or asked about, keeps their faces, and the choice travels', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-forget-'))
+  const db = library.open(tmp)
+  const people = new F.People(db, tmp)
+  const sha = 'b'.repeat(64)
+  db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at) VALUES('a.jpg', ?, 'image/jpeg', 0, 1, 1, 1)`).run(sha)
+  people.applyPerson('tv', 'Παρουσιαστής', 1)
+  people.applyFace({ uuid: 'f1', sha256: sha, box: [0.1, 0.1, 0.2, 0.2], embedding: Buffer.from(new Float32Array(128).buffer),
+    model: F.EMBEDDING_MODEL, quality: 0.9, person: 'tv', updatedAt: 1 })
+  assert.equal(people.list().length, 1)
+  people.setHidden('tv', true)
+  assert.equal(people.list().length, 0, 'not in People')
+  assert.deepEqual(people.list(true).map(p => p.id), ['tv'], 'but in History')
+  assert.deepEqual(people.namesBySha(), {}, 'and not searchable')
+  assert.equal(people.changedSince(0).people.find(p => p.uuid === 'tv').hidden, true, 'it travels')
+  people.applyPerson('tv', 'Παρουσιαστής', Date.now() + 1000, null, false) // brought back on the phone
+  assert.equal(people.list().length, 1)
   db.close()
   fs.rmSync(tmp, { recursive: true, force: true })
 })

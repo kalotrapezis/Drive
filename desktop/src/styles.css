@@ -237,6 +237,11 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 18px 10px; margin-top: 16px; }
 .person { display: grid; justify-items: center; gap: 4px; padding: 12px 6px; border-radius: 22px; }
 .person:hover { background: var(--hover); }
+.person-wrap { position: relative; display: grid; }
+.person-edit { position: absolute; top: 6px; left: 6px; }
+.person-edit summary { width: 34px; height: 34px; display: grid; place-items: center; background: var(--island); opacity: 0; transition: opacity .15s; }
+.person-wrap:hover .person-edit summary, .person-edit[open] summary { opacity: 1; }
+.person-edit .menu-body { left: 0; right: auto; top: 40px; width: 230px; padding: 8px; }
 .person strong { font-weight: 600; margin-top: 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person small { color: var(--muted); }
 .analysis { display: flex; align-items: center; gap: 14px; padding: 12px 12px 12px 20px; }
@@ -251,6 +256,7 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .review-faces small { color: var(--muted); }
 .review-photo { max-height: 220px; max-width: 100%; border-radius: 16px; }
 .dialog-actions.center { justify-content: center; }
+.hint.center { text-align: center; }
 .filled-button.secondary { background: var(--island-2); color: var(--text); }
 .toast { display: flex; align-items: center; gap: 12px; }
 .toast .text-button { padding: 6px 14px; }

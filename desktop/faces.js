@@ -222,6 +222,9 @@ class FaceEngine {
 
 const isGeneratedName = name => /^Person \d+$/.test(name)
 
+/** A face card about someone forgotten is not worth asking: the face's own person must be visible too. */
+const NOT_FORGOTTEN = 'NOT EXISTS (SELECT 1 FROM people h WHERE h.id = f.person_id AND h.hidden = 1)'
+
 class People {
   constructor(db, dataDir) {
     this.db = db
@@ -239,6 +242,9 @@ class People {
       CREATE TABLE IF NOT EXISTS face_analysis (sha256 TEXT PRIMARY KEY, version TEXT NOT NULL, faces INTEGER NOT NULL, analyzed_at INTEGER NOT NULL);`)
     // The face a person is shown by, when somebody has chosen one. Null means "the best one we can find".
     if (!db.prepare('PRAGMA table_info(people)').all().some(c => c.name === 'cover_face_id')) db.exec('ALTER TABLE people ADD COLUMN cover_face_id TEXT')
+    // Forgotten: a TV presenter, a stranger in the background. Kept, so their next photo still finds them and
+    // does not come back as a new person — just never shown, searched or asked about.
+    if (!db.prepare('PRAGMA table_info(people)').all().some(c => c.name === 'hidden')) db.exec('ALTER TABLE people ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0')
   }
 
   tx(fn) { this.db.exec('BEGIN'); try { const r = fn(); this.db.exec('COMMIT'); return r } catch (e) { this.db.exec('ROLLBACK'); throw e } }
@@ -363,13 +369,13 @@ class People {
   }
 
   /** Live people with photos present in the library. Named people first, like the phone. */
-  list() {
+  list(hidden = false) {
     return this.db.prepare(`SELECT p.id, p.name, COUNT(DISTINCT f.sha256) AS count,
         (SELECT f3.id FROM faces f3 WHERE f3.id = p.cover_face_id AND f3.deleted = 0) AS chosenFace,
         (SELECT f2.id FROM faces f2 JOIN media m2 ON m2.sha256 = f2.sha256
           WHERE f2.person_id = p.id AND f2.deleted = 0 ORDER BY f2.quality DESC LIMIT 1) AS best
       FROM people p JOIN faces f ON f.person_id = p.id AND f.deleted = 0 JOIN media m ON m.sha256 = f.sha256
-      WHERE p.deleted = 0 GROUP BY p.id`).all()
+      WHERE p.deleted = 0 AND p.hidden = ? GROUP BY p.id`).all(hidden ? 1 : 0)
       // The face somebody chose, if it is still here; otherwise the best one. (SQLite will not resolve an outer
       // column inside a subquery's ORDER BY, so the choice is applied out here rather than in the query.)
       .map(r => ({ ...r, cover: (r.chosenFace && r.chosenFace !== r.best ? r.chosenFace : r.best) ?? r.best }))
@@ -401,7 +407,7 @@ class People {
 
   namesBySha() {
     const out = {}
-    for (const r of this.db.prepare(`SELECT DISTINCT f.sha256, p.name FROM faces f JOIN people p ON p.id = f.person_id AND p.deleted = 0 WHERE f.deleted = 0 ORDER BY p.name`).all()) {
+    for (const r of this.db.prepare(`SELECT DISTINCT f.sha256, p.name FROM faces f JOIN people p ON p.id = f.person_id AND p.deleted = 0 AND p.hidden = 0 WHERE f.deleted = 0 ORDER BY p.name`).all()) {
       if (!isGeneratedName(r.name)) (out[r.sha256] ??= []).push(r.name)
     }
     return out
@@ -423,10 +429,11 @@ class People {
   }
 
   /** A person named on the phone. Its UUID becomes this person's id, so the name stays attached across syncs. */
-  applyPerson(uuid, name, updatedAt, cover = null) {
+  applyPerson(uuid, name, updatedAt, cover = null, hidden = false) {
     const local = this.db.prepare('SELECT updated_at, name FROM people WHERE id = ?').get(uuid)
     if (local) {
       if (local.updated_at >= updatedAt) return
+      this.db.prepare('UPDATE people SET hidden = ? WHERE id = ?').run(hidden ? 1 : 0, uuid)
       // The rule faces already had, and people did not: "Person 41" is what an algorithm called someone it had
       // not been told about, and it never replaces what a human typed, however recently it was written.
       if (isGeneratedName(name) && !isGeneratedName(local.name)) return
@@ -434,7 +441,7 @@ class People {
       return void this.db.prepare(`UPDATE people SET name = ?, updated_at = ?${cover ? ', cover_face_id = ?' : ''} WHERE id = ?`)
         .run(...(cover ? [name, updatedAt, cover, uuid] : [name, updatedAt, uuid]))
     }
-    this.db.prepare('INSERT INTO people(id, name, created_at, updated_at, cover_face_id) VALUES(?,?,?,?,?)').run(uuid, name, updatedAt, updatedAt, cover)
+    this.db.prepare('INSERT INTO people(id, name, created_at, updated_at, cover_face_id, hidden) VALUES(?,?,?,?,?,?)').run(uuid, name, updatedAt, updatedAt, cover, hidden ? 1 : 0)
   }
 
   /**
@@ -443,38 +450,55 @@ class People {
    * kept whole — embedding included — so People works here even before any local analysis has run.
    */
   applyFace({ uuid, sha256, box, embedding, model, quality, person, updatedAt }) {
+    const sent = person
+    person = this.resolve(person)
     if (person && !this.db.prepare('SELECT 1 FROM people WHERE id = ?').get(person)) return // its person has not arrived
     const mine = this.db.prepare('SELECT id, updated_at, person_id FROM faces WHERE id = ?').get(uuid)
       ?? (box && this.db.prepare('SELECT id, updated_at, person_id, box_left, box_top, box_right, box_bottom FROM faces WHERE sha256 = ? AND deleted = 0').all(sha256)
         .map(f => ({ ...f, overlap: iou(box, [f.box_left, f.box_top, f.box_right, f.box_bottom]) }))
         .filter(f => f.overlap >= SAME_FACE_OVERLAP).sort((a, b) => b.overlap - a.overlap)[0])
     if (mine) {
-      if (mine.updated_at >= updatedAt || !person) return
-      // A guess never overwrites a decision. "Person 41" is what an algorithm called someone it had not been
-      // told about; a name is what a human typed. Newest-wins decides between two of the same kind, never
-      // between those two — or a device that has just re-analysed from scratch can un-name a whole library,
-      // which is exactly what happened on 2026-09-23.
-      if (this.isAutoNamed(person) && this.isNamed(mine.person_id)) return
-      // Two devices that both named this face, and disagree. Neither is wrong: grouping is order-dependent, so
-      // two devices starting from the same library reach different people. Newest-wins here meant the face was
-      // torn from one person and given to the other silently — and torn back on the next sync. A disagreement
-      // between two decisions is a question, so the face stays where it is and the difference becomes a card.
-      if (this.isNamed(person) && this.isNamed(mine.person_id) && person !== mine.person_id) return void this.ask(mine.id, mine.person_id, person, updatedAt)
-      return void this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?').run(person, updatedAt, mine.id)
+      if (!person || person === mine.person_id) {
+        // Right here, but the sender still has it under a person combined away: send it back so it moves there too.
+        if (person && person !== sent) this.db.prepare('UPDATE faces SET updated_at = ? WHERE id = ?').run(Date.now(), mine.id)
+        return
+      }
+      // A name beats a guess, whichever side it is on, and needs no question.
+      if (!mine.person_id || (this.isNamed(person) && !this.isNamed(mine.person_id)))
+        return void this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?').run(person, Math.max(updatedAt, Date.now()), mine.id)
+      // Two names that disagree are a question, asked on every device. Anything involving a guess is not:
+      // "Person 41 or Person 87?" is noise, and this computer's grouping is the one the devices adopt.
+      if (this.isNamed(person) && this.isNamed(mine.person_id)) this.ask(mine.id, mine.person_id, person, updatedAt)
+      return
     }
     if (!box || !person || !embedding) return // without a box there is nothing to show and nothing to match later
     this.db.prepare(`INSERT INTO faces(id, sha256, box_left, box_top, box_right, box_bottom, embedding, model, quality, person_id, updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(uuid, sha256, box[0], box[1], box[2], box[3], embedding, model || EMBEDDING_MODEL, quality ?? 1, person, updatedAt)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(uuid, sha256, box[0], box[1], box[2], box[3], embedding, model || EMBEDDING_MODEL, quality ?? 1, person,
+      person === sent ? updatedAt : Math.max(updatedAt, Date.now())) // redirected: send it back so the sender moves it too
+  }
+
+  /**
+   * Where a person went. Combining deletes the source here, but other devices never hear of it and keep sending
+   * faces under the old uuid — which is how six faces of "Εγώ" ended up on a deleted person, invisible.
+   */
+  resolve(id) {
+    for (let hops = 0; id && hops < 20; hops++) {
+      const next = this.db.prepare(`SELECT m.target_id FROM people p JOIN people_merges m ON m.source_id = p.id
+        WHERE p.id = ? AND p.deleted = 1 ORDER BY m.merged_at DESC LIMIT 1`).get(id)
+      if (!next) return id
+      id = next.target_id
+    }
+    return id
   }
 
   /**
    * An answer to Help organize, as the other device can recognise it: the face and the person it was asked
    * about, both by uuids that already cross, so the question needed no id of its own. Answers travel; a pending
-   * question does not, because it is this device's own uncertainty rather than news.
+   * question does too, because this computer distributes one card to every device.
    */
   reviewsSince(since) {
     return this.db.prepare(`SELECT face_id AS face, person_id AS person, state, updated_at AS updatedAt
-      FROM face_reviews WHERE state != 'pending' AND updated_at > ?`).all(since)
+      FROM face_reviews WHERE updated_at > ?`).all(since)
   }
 
   /**
@@ -487,26 +511,35 @@ class People {
     const already = this.db.prepare(`SELECT 1 FROM face_reviews r JOIN faces f ON f.id = r.face_id AND f.deleted = 0
       WHERE f.person_id = ? AND r.person_id = ? AND r.state = 'pending'`).get(mine, theirs)
     if (already) return
-    this.db.prepare(`INSERT INTO face_reviews(face_id, person_id, state, updated_at) VALUES(?,?, 'pending', ?)
-      ON CONFLICT(face_id, person_id) DO NOTHING`).run(faceId, theirs, updatedAt)
+    const now = Date.now()
+    const added = this.db.prepare(`INSERT INTO face_reviews(face_id, person_id, state, updated_at) VALUES(?,?, 'pending', ?)
+      ON CONFLICT(face_id, person_id) DO NOTHING`).run(faceId, theirs, now).changes
+    if (added) this.db.prepare('UPDATE faces SET updated_at = ? WHERE id = ?').run(now, faceId)
   }
 
   /** A question answered elsewhere stops being asked here. Only the state travels; where the face went is the face's own record. */
   applyReview(faceId, personId, state, updatedAt) {
-    if (!['resolved', 'skipped'].includes(state)) return
-    if (!this.db.prepare('SELECT 1 FROM faces WHERE id = ?').get(faceId)) return
-    if (!this.db.prepare('SELECT 1 FROM people WHERE id = ?').get(personId)) return
+    if (!['pending', 'accepted', 'rejected', 'resolved', 'skipped'].includes(state)) return false
+    personId = this.resolve(personId)
+    if (!this.db.prepare('SELECT 1 FROM faces WHERE id = ?').get(faceId)) return false
+    if (!this.db.prepare('SELECT 1 FROM people WHERE id = ?').get(personId)) return false
     const mine = this.db.prepare('SELECT state, updated_at FROM face_reviews WHERE face_id = ? AND person_id = ?').get(faceId, personId)
-    if (mine && mine.state !== 'pending' && mine.updated_at >= updatedAt) return
+    if (mine && mine.state !== 'pending' && state === 'pending') return false
+    if (mine && mine.state !== 'pending' && mine.updated_at >= updatedAt) return false
+    if (mine && mine.state === 'pending' && state === 'pending' && mine.updated_at >= updatedAt) return false
+    const when = mine?.state === 'pending' && state !== 'pending' ? Math.max(updatedAt, mine.updated_at + 1, Date.now()) : updatedAt
+    if (state === 'accepted') this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?').run(personId, when, faceId)
     this.db.prepare(`INSERT INTO face_reviews(face_id, person_id, state, updated_at) VALUES(?,?,?,?)
       ON CONFLICT(face_id, person_id) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at`)
-      .run(faceId, personId, state, updatedAt)
+      .run(faceId, personId, state, when)
+    return true
   }
 
   /** People and their faces for the phone's GET /metadata?since= pull. */
   changedSince(since) {
     return {
-      people: this.db.prepare('SELECT id AS uuid, name, updated_at AS updatedAt, cover_face_id AS cover FROM people WHERE deleted = 0 AND updated_at > ?').all(since),
+      people: this.db.prepare('SELECT id AS uuid, name, updated_at AS updatedAt, cover_face_id AS cover, hidden FROM people WHERE deleted = 0 AND updated_at > ?').all(since)
+        .map(p => ({ ...p, hidden: !!p.hidden })),
       // The whole face, not only who it belongs to: this computer finds faces the phone's detector misses, and a
       // face it has never seen is only usable there if the box, the embedding and the model travel with it. The
       // box is already in the protocol's own units — fractions of the upright photo — so it needs no translating.
@@ -525,9 +558,10 @@ class People {
    * Every group combined into this person, newest first, still showing the head and the name it had at the time
    * — usually a bare "Person 41". A combine that was wrong can be taken back long after the moment it was made.
    */
-  mergeHistory(targetId) {
-    return this.db.prepare('SELECT id, source_id, source_name, face_ids, merged_at FROM people_merges WHERE target_id = ? ORDER BY merged_at DESC')
-      .all(String(targetId)).map(row => {
+  /** Everything combined into this person — or, with no person, everything combined anywhere. */
+  mergeHistory(targetId = null) {
+    return this.db.prepare(`SELECT id, source_id, source_name, face_ids, merged_at FROM people_merges ${targetId == null ? '' : 'WHERE target_id = ?'} ORDER BY merged_at DESC`)
+      .all(...(targetId == null ? [] : [String(targetId)])).map(row => {
         const ids = row.face_ids.split(',').filter(Boolean)
         const cover = ids.length ? this.db.prepare(`SELECT f.id FROM faces f JOIN media m ON m.sha256 = f.sha256
           WHERE f.id IN (${ids.map(() => '?').join(',')}) AND f.deleted = 0 ORDER BY f.quality DESC LIMIT 1`).get(...ids) : null
@@ -592,6 +626,11 @@ class People {
     })
   }
 
+  /** Forget, or bring back. It is a decision about the person, so it travels like their name. */
+  setHidden(id, hidden) {
+    this.db.prepare('UPDATE people SET hidden = ?, updated_at = ? WHERE id = ?').run(hidden ? 1 : 0, Date.now(), String(id))
+  }
+
   /** Restores the same person id (not a copy), so sync sees one continuous identity. */
   undoMerge({ sourceId, faceIds }) {
     const now = Date.now()
@@ -606,12 +645,12 @@ class People {
   nextReview() {
     return this.db.prepare(`SELECT r.face_id AS faceId, r.person_id AS personId, f.sha256, p.name,
         (SELECT f2.id FROM faces f2 WHERE f2.person_id = p.id AND f2.deleted = 0 AND f2.id != r.face_id ORDER BY f2.quality DESC LIMIT 1) AS personFace
-      FROM face_reviews r JOIN faces f ON f.id = r.face_id AND f.deleted = 0 JOIN people p ON p.id = r.person_id AND p.deleted = 0
-      JOIN media m ON m.sha256 = f.sha256 WHERE r.state = 'pending' LIMIT 1`).get() ?? null
+      FROM face_reviews r JOIN faces f ON f.id = r.face_id AND f.deleted = 0 JOIN people p ON p.id = r.person_id AND p.deleted = 0 AND p.hidden = 0
+      JOIN media m ON m.sha256 = f.sha256 WHERE r.state = 'pending' AND ${NOT_FORGOTTEN} LIMIT 1`).get() ?? null
   }
 
   reviewCount() {
-    return this.db.prepare(`SELECT COUNT(*) AS n FROM face_reviews r JOIN faces f ON f.id = r.face_id AND f.deleted = 0 JOIN people p ON p.id = r.person_id AND p.deleted = 0 WHERE r.state = 'pending'`).get().n
+    return this.db.prepare(`SELECT COUNT(*) AS n FROM face_reviews r JOIN faces f ON f.id = r.face_id AND f.deleted = 0 JOIN people p ON p.id = r.person_id AND p.deleted = 0 AND p.hidden = 0 WHERE r.state = 'pending' AND ${NOT_FORGOTTEN}`).get().n
   }
 
   /** Phone: resolveReview / skipReview. "Yes" moves the face into the candidate person. */
@@ -619,9 +658,9 @@ class People {
     const now = Date.now()
     this.tx(() => {
       if (answer === 'yes') this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?').run(personId, now, faceId)
-      const state = answer === 'skip' ? 'skipped' : 'resolved'
-      this.db.prepare(`UPDATE face_reviews SET state = ?, updated_at = ? WHERE face_id = ?${answer === 'skip' ? ' AND person_id = ?' : ''}`)
-        .run(...(answer === 'skip' ? [state, now, faceId, personId] : [state, now, faceId]))
+      const state = answer === 'skip' ? 'skipped' : answer === 'yes' ? 'accepted' : 'rejected'
+      this.db.prepare('UPDATE face_reviews SET state = ?, updated_at = ? WHERE face_id = ? AND person_id = ?')
+        .run(state, now, faceId, personId)
     })
   }
 }
