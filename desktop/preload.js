@@ -3,6 +3,10 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('drive', {
   info: () => ipcRenderer.invoke('library:info'),
   list: () => ipcRenderer.invoke('library:list'),
+  folders: {
+    list: () => ipcRenderer.invoke('folders:list'),
+    set: (name, included) => ipcRenderer.invoke('folders:set', name, included),
+  },
   scan: () => ipcRenderer.invoke('library:scan'),
   show: id => ipcRenderer.invoke('library:show', id),
   openMap: (lat, lon) => ipcRenderer.invoke('open-map', lat, lon),

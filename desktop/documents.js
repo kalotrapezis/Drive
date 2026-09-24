@@ -3,6 +3,8 @@
 // its characters, and the phone's own thresholds turn that into a document confidence.
 const fs = require('node:fs')
 const path = require('node:path')
+// Half the cores: analysis is background work, and the whole desktop crawled when it took all of them.
+const SESSION_OPTIONS = { intraOpNumThreads: Math.max(1, Math.floor(require('node:os').cpus().length / 2)), interOpNumThreads: 1 }
 
 const SIDE = 960 // long side fed to the detector (multiple of 32)
 const MEAN = [0.485, 0.456, 0.406], STD = [0.229, 0.224, 0.225]
@@ -77,7 +79,7 @@ class SceneEngine {
     const ort = require('onnxruntime-node')
     const e = new SceneEngine()
     e.ort = ort
-    e.session = await ort.InferenceSession.create(fs.readFileSync(path.join(modelDir, 'scene_efficientnet_lite0.onnx')))
+    e.session = await ort.InferenceSession.create(fs.readFileSync(path.join(modelDir, 'scene_efficientnet_lite0.onnx')), SESSION_OPTIONS)
     e.labels = fs.readFileSync(path.join(modelDir, 'scene_labels.txt'), 'utf8').split('\n').map(l => l.trim())
     return e
   }
@@ -94,7 +96,7 @@ class DocEngine {
     const ort = require('onnxruntime-node')
     const e = new DocEngine()
     e.ort = ort
-    e.session = await ort.InferenceSession.create(fs.readFileSync(path.join(modelDir, 'text_detection_ppocrv4.onnx')))
+    e.session = await ort.InferenceSession.create(fs.readFileSync(path.join(modelDir, 'text_detection_ppocrv4.onnx')), SESSION_OPTIONS)
     return e
   }
 

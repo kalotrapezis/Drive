@@ -6,6 +6,13 @@ const path = require('node:path')
 const { sha256 } = require('./library')
 
 const TRASH = 'Trash'
+/**
+ * Folders the apps rely on: the phone's scanner saves into Scanned Documents, and both sync by these paths. Always
+ * there, marked with an emblem, and never renamed, moved or put in the Trash — their contents can be.
+ */
+const SYSTEM_FOLDERS = ['Documents', 'Documents/Scanned Documents']
+const isSystem = rel => SYSTEM_FOLDERS.includes(rel)
+const systemFail = rel => fail(`${rel.split('/').pop()} is a system folder and stays where it is.`)
 const RECENTS_LIMIT = 50
 const COLORS = ['Blue', 'Green', 'Yellow', 'Red', 'Purple']
 
@@ -41,6 +48,7 @@ class Files {
     this.db = db
     fs.mkdirSync(root, { recursive: true }) // created only when absent, like the phone
     this.root = fs.realpathSync(root)
+    for (const f of SYSTEM_FOLDERS) fs.mkdirSync(path.join(this.root, f), { recursive: true })
     openMeta(db)
   }
 
@@ -141,6 +149,7 @@ class Files {
   async move(rel, destRel) {
     const src = this.resolve(rel)
     if (src === this.root) fail('Drive itself cannot be moved.')
+    if (isSystem(rel)) systemFail(rel)
     return this.moveTo(src, this.target(src, destRel))
   }
 
@@ -148,6 +157,7 @@ class Files {
     if (!isSafeName(name)) fail('Invalid name.')
     const src = this.resolve(rel)
     if (src === this.root) fail('Drive itself cannot be renamed.')
+    if (isSystem(rel)) systemFail(rel)
     const target = path.join(path.dirname(src), name)
     if (target === src) return rel
     return this.moveTo(src, target)
@@ -427,4 +437,4 @@ class Files {
   }
 }
 
-module.exports = { Files, TRASH, COLORS, typeGroup, isSafeRel, isSafeName }
+module.exports = { Files, TRASH, SYSTEM_FOLDERS, isSystem, COLORS, typeGroup, isSafeRel, isSafeName }

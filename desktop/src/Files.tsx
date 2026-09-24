@@ -68,7 +68,7 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
     if (!items) return []
     if (mode === 'recent' && !query && !tag) return items
     const byName = (a: DriveItem, b: DriveItem) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-    return [...items].sort((a, b) => Number(b.dir) - Number(a.dir) || (sort === 'date' ? b.mtime - a.mtime : byName(a, b)))
+    return [...items].sort((a, b) => Number(b.path in SYSTEM_ICON) - Number(a.path in SYSTEM_ICON) || Number(b.dir) - Number(a.dir) || (sort === 'date' ? b.mtime - a.mtime : byName(a, b)))
   }, [items, sort, mode, query, tag])
 
   async function act(fn: () => Promise<unknown>, done?: string) {
@@ -122,6 +122,7 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
 
   function sheet(item: DriveItem) {
     const trashed = item.path === TRASH || item.path.startsWith(TRASH + '/')
+    const system = SYSTEM_ICON[item.path] !== undefined
     const row = (icon: IconName, label: string, fn: () => void, danger = false) =>
       <button className={`sheet-row ${danger ? 'danger' : ''}`} onClick={() => { close(); fn() }}><Icon name={icon} />{label}</button>
     setDialog(
@@ -129,8 +130,8 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
         <div className="sheet-head"><ItemIcon item={item} size={40} /><div><h3>{item.name}</h3><small>{parentOf(item.path) || 'Drive'}</small></div></div>
         <div className="sheet-actions">
           <button onClick={() => { close(); pickDestination([item], 'copy') }}><span className="round"><Icon name="copy" /></span>Copy</button>
-          <button onClick={() => { close(); pickDestination([item], 'move') }}><span className="round"><Icon name="moveTo" /></span>{trashed ? 'Restore' : 'Move'}</button>
-          <button onClick={() => { close(); rename(item) }}><span className="round"><Icon name="rename" /></span>Rename</button>
+          {!system && <button onClick={() => { close(); pickDestination([item], 'move') }}><span className="round"><Icon name="moveTo" /></span>{trashed ? 'Restore' : 'Move'}</button>}
+          {!system && <button onClick={() => { close(); rename(item) }}><span className="round"><Icon name="rename" /></span>Rename</button>}
         </div>
         {row(item.dir ? 'drive' : 'open', item.dir ? 'Open folder' : 'Open', () => open(item))}
         {row('folder', 'Show in file manager', () => act(() => window.drive.files.reveal(item.path)))}
@@ -139,7 +140,8 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
         {!trashed && row('tag', 'Tags', () => editTags([item]))}
         {item.dir && !trashed && row('palette', 'Change folder colour', () => pickColor(item))}
         {row('info', 'Properties', () => properties(item))}
-        {!trashed && row('trash', 'Move to Trash', () => act(() => call('trash', item.path), `Moved “${item.name}” to Trash`), true)}
+        {system && <p className="hint">A system folder: Tetra keeps it, so it cannot be moved, renamed or deleted. Everything inside it can.</p>}
+        {!trashed && !system && row('trash', 'Move to Trash', () => act(() => call('trash', item.path), `Moved “${item.name}” to Trash`), true)}
       </Modal>,
     )
   }
@@ -306,9 +308,12 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
   )
 }
 
+/** Files' system folders (files.js SYSTEM_FOLDERS), each with its emblem drawn into the folder. */
+const SYSTEM_ICON: Record<string, IconName> = { Documents: 'folderDocuments', 'Documents/Scanned Documents': 'folderScans' }
+
 function ItemIcon({ item, size }: { item: DriveItem; size: number }) {
   return <span className="file-icon" style={{ color: item.dir ? (item.color ? FOLDER_COLORS[item.color] : undefined) : undefined }}>
-    <Icon name={item.path === TRASH ? 'trash' : TYPE_ICON[item.type] ?? 'file'} size={size} />
+    <Icon name={item.path === TRASH ? 'trash' : SYSTEM_ICON[item.path] ?? TYPE_ICON[item.type] ?? 'file'} size={size} />
   </span>
 }
 

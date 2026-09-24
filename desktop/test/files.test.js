@@ -23,7 +23,7 @@ test('paths cannot leave Drive', async () => {
   const { tmp, files } = setup()
   for (const bad of ['../secret.txt', '/etc/passwd', 'Docs/../../secret.txt', 'Docs//a.txt', './Docs']) assert.throws(() => files.resolve(bad), /Invalid/)
   assert.throws(() => files.resolve('link.txt'), /outside Drive/) // symlink escaping the root
-  assert.deepEqual((await files.list('')).map(i => i.name).sort(), ['Docs', 'Ελληνικά.pdf']) // links are not listed
+  assert.deepEqual((await files.list('')).map(i => i.name).sort(), ['Docs', 'Documents', 'Ελληνικά.pdf']) // links are not listed
   await assert.rejects(files.rename('Docs/a.txt', '../x.txt'), /Invalid name/)
   await assert.rejects(files.rename('Docs/a.txt', ' x.txt'), /Invalid name/)
   fs.rmSync(tmp, { recursive: true })
@@ -76,5 +76,19 @@ test('metadata follows rename, move and Trash; Empty Trash is the only delete', 
   assert.ok(!fs.existsSync(path.join(root, 'Ελληνικά.pdf')) && fs.readdirSync(path.join(root, 'Trash')).length === 0)
   assert.ok(fs.existsSync(path.join(root, 'Papers/a.txt')))
   assert.deepEqual(await files.usage(), { Text: 9, Other: 1 }) // hidden files still use space
+  fs.rmSync(tmp, { recursive: true })
+})
+
+test('the system folders are always there and stay put, while what is inside them moves', async () => {
+  const { tmp, root, files } = setup()
+  assert.ok(fs.statSync(path.join(root, 'Documents', 'Scanned Documents')).isDirectory())
+  for (const rel of ['Documents', 'Documents/Scanned Documents']) {
+    await assert.rejects(files.rename(rel, 'Other'), /system folder/)
+    await assert.rejects(files.move(rel, 'Docs'), /system folder/)
+    await assert.rejects(files.trash(rel), /system folder/)
+  }
+  fs.writeFileSync(path.join(root, 'Documents', 'Scanned Documents', 'scan.pdf'), 'x')
+  await files.trash('Documents/Scanned Documents/scan.pdf')
+  assert.ok(fs.existsSync(path.join(root, 'Trash', 'scan.pdf')))
   fs.rmSync(tmp, { recursive: true })
 })

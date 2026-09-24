@@ -24,7 +24,8 @@ const VIDEO = { '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.m4v': 'video/m
 function open(dataDir) {
   fs.mkdirSync(path.join(dataDir, 'thumbs'), { recursive: true })
   const db = new DatabaseSync(path.join(dataDir, 'library.db'))
-  db.exec(`PRAGMA journal_mode=WAL;
+  // The analyzer process writes to the same database; wait for its short transactions instead of failing.
+  db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS media (
       id INTEGER PRIMARY KEY,
       path TEXT NOT NULL UNIQUE,       -- relative to the Photos root
@@ -141,7 +142,9 @@ async function imageInfo(file) {
 
 async function makeThumb(file, isVideo, target) {
   if (!isVideo) {
-    await (await image(file)).resize(480, 480, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 78 }).toFile(target)
+    // Written aside and renamed: a crash mid-write must not leave a half thumbnail that looks finished.
+    await (await image(file)).resize(480, 480, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 78 }).toFile(target + '.part')
+    await fsp.rename(target + '.part', target)
     return
   }
   // ponytail: needs a system ffmpeg; bundle ffmpeg-static if packaged users lack it.
@@ -442,4 +445,4 @@ function metadataSince(db, since) {
   }
 }
 
-module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
+module.exports = { open, scan, list, transaction, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }

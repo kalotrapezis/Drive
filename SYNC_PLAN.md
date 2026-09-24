@@ -1840,6 +1840,25 @@ invisible to the app — so this is not a filter to relax, it is a feature to bu
    like every other album, including hide-from-gallery and syncing.
 5. Including never moves or copies anything; excluding only hides it here.
 
+**Built 2026-09-24 (phone).** `FolderRules` in `FolderAlbums.kt` is the one rule every
+listing goes through (Gallery, backup, analysis, trash, Home photo):
+- Only folders under DCIM, Pictures and Movies are offered, named by the folder under
+  them (Pictures/Viber, Movies/Viber and pictures/Viber are one "Viber"); all of
+  Download is one question. Drive, SyncThing, Documents, usb1, the storage root and
+  any other volume are files and are never offered.
+- Always in: Camera, Screenshots, Tetra. Everything else, DCIM/Creation included, is a
+  Help organize card until answered; answers live in `device_folders` (db v22, not
+  synced — a folder is this device's). Settings › Gallery › Folders lists every
+  answered folder the phone can still see, with a switch.
+- Yes → the folder is listed, backed up, analysed, and kept as a user collection of its name
+  (`fillFolderAlbum`, which never re-adds a photo you took out). The album syncs.
+- Sync counts photos in excluded folders as already here (their cached hashes), so the
+  computer never sends back what is merely not shown.
+- Desktop (`folders.js`), same rule and wording: folders under the Photos root are asked
+  about in Help organize and listed in Photos tools › Folders; any top-level folder counts
+  there, and a loose file in the root is always shown. A collection that arrived from a
+  device with the folder's name answers it, so a folder is never asked about twice. Later: USB as a backup target ("back up everything now").
+
 ### D2. A tablet is not a big phone (asked 2026-09-24)
 
 The tablet is 1164dp across in landscape, 777dp in portrait — nearly three phones

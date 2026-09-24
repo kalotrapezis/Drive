@@ -75,8 +75,15 @@ const PATHS = {
   key: 'M232-432q-20-20-20-48t20-48q20-20 48-20t48 20q20 20 20 48t-20 48q-20 20-48 20t-48-20Zm48 192q-100 0-170-70T40-480q0-100 70-170t170-70q72 0 126 34t85 103h356l113 113-167 153-88-64-88 64-75-60h-51q-25 60-78.5 98.5T280-240Zm0-60q58 0 107-38.5t63-98.5h114l54 45 88-63 82 62 85-79-51-51H450q-12-56-60-96.5T280-660q-75 0-127.5 52.5T100-480q0 75 52.5 127.5T280-300Z',
 }
 
-export type IconName = keyof typeof PATHS
+// The two system folders of Files, with their emblem drawn into the folder (Material "topic", and the same folder
+// with scan brackets cut into it — the phone's ic_folder_documents / ic_folder_scans).
+Object.assign(PATHS, {
+  folderDocuments: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140Zm110-180h300v-60H250v60Zm0-160h460v-60H250v60Z',
+  folderScans: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM325 -575L425 -575L425 -535L365 -535L365 -475L325 -475ZM635 -575L535 -575L535 -535L595 -535L595 -475L635 -475ZM325 -265L425 -265L425 -305L365 -305L365 -365L325 -365ZM635 -265L535 -265L535 -305L595 -305L595 -365L635 -365ZM290 -440H670V-400H290Z',
+})
+
+export type IconName = keyof typeof PATHS | 'folderDocuments' | 'folderScans'
 
 export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
-  return <svg width={size} height={size} viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d={PATHS[name]} /></svg>
+  return <svg width={size} height={size} viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path fillRule={name === 'folderScans' ? 'evenodd' : undefined} d={(PATHS as Record<string, string>)[name]} /></svg>
 }

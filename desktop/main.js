@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, net, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
@@ -11,6 +11,7 @@ const { Vault } = require('./vault')
 const editor = require('./editor')
 const docs = require('./documents')
 const { SyncServer } = require('./sync')
+const { Folders } = require('./folders')
 
 // Override both for testing with disposable files.
 const PHOTOS_ROOT = process.env.DRIVE_PHOTOS || path.join(os.homedir(), 'Drive', 'Photos')
@@ -19,77 +20,77 @@ const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME |
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
-let db, files, people, documents, vault, sync, win, scanning = null
+let db, files, people, documents, folders, vault, sync, win, scanning = null
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage']
 
+const setting = key => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value
+const setSetting = (key, value) => db.prepare('INSERT INTO settings(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
+
+// Local analysis (People, Documents): each starts only after an explicit request, like the phone; pausable; nothing
+// is uploaded. It runs in analyzer.js, its own low-priority process, so reading a library never holds this thread.
+const analysis = { running: false, paused: false, done: 0, total: 0, error: '' }
+const sendAnalysis = () => { win?.webContents.send('people-progress', { ...analysis }); updateTray() }
+let analyzer = null, scanDone = null
+
+/** The background thread (analyzer.js): scanning and analysis both run there, never on the window's thread. */
+function worker() {
+  if (analyzer) return analyzer
+  analyzer = new (require('node:worker_threads').Worker)(path.join(__dirname, 'analyzer.js'))
+  analyzer.postMessage({ type: 'init', dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, modelDir: path.join(__dirname, 'models') })
+  analyzer.on('message', m => {
+    if (m.type === 'progress') { Object.assign(analysis, m.analysis); sendAnalysis() }
+    else if (m.type === 'scan-progress') win?.webContents.send('scan-progress', { done: m.done, changed: m.changed })
+    else if (m.type === 'scanned') { const d = scanDone; scanDone = null; m.error ? d?.reject(new Error(m.error)) : d?.resolve(m.result) }
+  })
+  analyzer.on('error', e => console.error('[analyzer]', e))
+  analyzer.on('exit', code => {
+    analyzer = null
+    scanDone?.reject(new Error(`The background process stopped (${code}).`)); scanDone = null
+    if (analysis.running) Object.assign(analysis, { running: false, error: `Analysis stopped unexpectedly (${code}).` })
+    sendAnalysis()
+  })
+  return analyzer
+}
+
 function startScan() {
-  scanning ??= library.scan(db, PHOTOS_ROOT, DATA_DIR, (done, changed) => win?.webContents.send('scan-progress', { done, changed }))
+  scanning ??= new Promise((resolve, reject) => { scanDone = { resolve, reject }; worker().postMessage({ type: 'scan' }) })
     .then(r => {
-      places.fill(db)
+      const filled = folders.fill() // new photos in an included folder join its collection
       // Something new here is something a paired phone has not got: tell it, and it will come and fetch it.
-      if (r?.changed) sync?.nudge().catch(() => {})
+      if (r?.changed || filled) sync?.nudge().catch(() => {})
       return r
     })
     .finally(() => { scanning = null; analyzeLibrary() })
   return scanning
 }
 
-const setting = key => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value
-const setSetting = (key, value) => db.prepare('INSERT INTO settings(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
-
-// Local analysis (People, Documents): each starts only after an explicit request, like the phone; pausable; nothing
-// is uploaded. One pass decodes each photo once for whatever still needs it.
-const analysis = { running: false, paused: false, done: 0, total: 0, error: '' }
-const engines = {}
-const sendAnalysis = () => win?.webContents.send('people-progress', { ...analysis })
-const isScreenshot = p => /screenshot|στιγμιοτυπο|screen[ _-]?shot|scrnshot/.test(p.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase())
+// The tray: closing the window leaves Tetra running, because a phone that syncs at night needs something to sync
+// with. The window comes back from here; Quit is the only thing that stops it.
+let tray = null, quitting = false
+function showWindow() { if (win) { win.show(); win.focus() } }
+function updateTray() {
+  if (!tray) return
+  const status = analysis.running ? `Analysing ${analysis.done.toLocaleString()} / ${analysis.total.toLocaleString()}`
+    : analysis.paused ? 'Analysis paused' : 'Up to date'
+  tray.setToolTip(`Tetra — ${status}`)
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open Tetra', click: showWindow },
+    { label: status, enabled: false },
+    analysis.running ? { label: 'Pause analysis', click: () => { analysis.paused = true; analyzer?.postMessage({ type: 'pause' }) } }
+      : { label: 'Resume analysis', visible: analysis.paused, click: () => analyzeLibrary() },
+    { type: 'separator' },
+    { label: 'Quit Tetra', click: () => { quitting = true; app.quit() } },
+  ]))
+}
 
 /** `rescan` — 'faces' or 'documents' — reads photos that were read before, because the rules changed since. */
-async function analyzeLibrary(rescan = null) {
+function analyzeLibrary(rescan = null) {
   if (analysis.running) return
-  Object.assign(analysis, { running: true, paused: false, done: 0, error: '' })
-  try {
-    const wantFaces = setting('people_enabled') === '1' && rescan !== 'documents'
-    const wantDocs = setting('documents_enabled') === '1' && rescan !== 'faces'
-    const todo = new Map()
-    if (wantFaces) for (const r of people.pending(rescan === 'faces')) todo.set(r.sha256, { ...r, faces: true })
-    if (wantDocs) for (const r of documents.pending(rescan === 'documents')) todo.set(r.sha256, { ...(todo.get(r.sha256) ?? r), docs: true })
-    if (wantFaces) engines.faces ??= await faces.FaceEngine.load(path.join(__dirname, 'models'))
-    if (wantDocs) engines.docs ??= await docs.DocEngine.load(path.join(__dirname, 'models'))
-    if (wantDocs) engines.scene ??= await docs.SceneEngine.load(path.join(__dirname, 'models'))
-    analysis.total = todo.size
-    sendAnalysis()
-    for (const job of todo.values()) {
-      if (analysis.paused) break
-      if (isScreenshot(job.path)) { // screenshots have their own collection; the phone skips faces there too
-        if (job.faces) people.skip(job.sha256)
-        if (job.docs) documents.record(job.sha256, 0)
-      } else {
-        let img = null
-        try { img = await faces.FaceEngine.decode(path.join(PHOTOS_ROOT, job.path)) } catch {}
-        if (job.faces) {
-          try {
-            if (!img) throw new Error('unreadable')
-            const found = await engines.faces.analyze(img)
-            const ids = people.record(job.sha256, found, img)
-            for (const [i, id] of ids.entries()) await people.saveCrop(img, id, found[i].box).catch(() => {})
-          } catch { people.skip(job.sha256) } // unreadable image: analysed as "no faces", like a failed decode on the phone
-        }
-        if (job.docs) {
-          // Phone: one classification pass gives the document score and the search labels.
-          const row = img && db.prepare('SELECT MAX(taken_at) t FROM media WHERE sha256 = ?').get(job.sha256)
-          const labels = img ? [...await engines.scene.classify(img).catch(() => []), docs.likelyTimeOfDay(row.t, docs.averageLuminance(img))].filter(Boolean) : []
-          if (db.prepare('SELECT 1 FROM faces WHERE sha256 = ? AND deleted = 0').get(job.sha256)) labels.push('Portrait')
-          documents.record(job.sha256, img ? (await engines.docs.classify(img).catch(() => ({ confidence: 0 }))).confidence : 0, labels)
-        }
-      }
-      analysis.done++
-      if (analysis.done % 5 === 0 || analysis.done === analysis.total) sendAnalysis()
-    }
-  } catch (e) { analysis.error = String(e.message ?? e) }
-  analysis.running = false
-  sendAnalysis()
+  analysis.running = true // until the analyzer says otherwise, so a second request does not start a second pass
+  worker().postMessage({ type: 'start', rescan,
+    wantFaces: setting('people_enabled') === '1' && rescan !== 'documents',
+    wantDocs: setting('documents_enabled') === '1' && rescan !== 'faces' })
 }
 
 app.whenReady().then(() => {
@@ -98,6 +99,7 @@ app.whenReady().then(() => {
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
+  folders = new Folders(db)
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
   sync = new SyncServer({ db, documents, people, files, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, onReceived: () => {
@@ -136,7 +138,10 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('library:info', () => ({ photosRoot: PHOTOS_ROOT }))
-  ipcMain.handle('library:list', () => library.list(db))
+  // The Photos view shows the default folders and the ones you said yes to (folders.js); the library keeps all.
+  ipcMain.handle('library:list', () => { const c = folders.choices(); return library.list(db).filter(m => folders.isShown(m.path, c)) })
+  ipcMain.handle('folders:list', () => folders.list().map(({ shas, ...f }) => f))
+  ipcMain.handle('folders:set', (_, name, included) => { folders.set(name, included); sync.nudge().catch(() => {}) })
   ipcMain.handle('library:scan', () => startScan())
   ipcMain.handle('photos:favorite', (_, shas, on) => library.setFavorite(db, shas, on))
   ipcMain.handle('photos:trash', (_, ids) => library.trash(db, PHOTOS_ROOT, ids, f => shell.trashItem(f)))
@@ -158,7 +163,7 @@ app.whenReady().then(() => {
     setSetting('viewSettingsUpdatedAt', String(Date.now()))
   })
   ipcMain.handle('people:status', () => ({ ...analysis, enabled: setting('people_enabled') === '1', documentsEnabled: setting('documents_enabled') === '1',
-    reviews: people.reviewCount() + documents.reviewCount() }))
+    reviews: people.reviewCount() + documents.reviewCount() + folders.questions() }))
   ipcMain.handle('people:start', () => { setSetting('people_enabled', '1'); analyzeLibrary() })
   ipcMain.handle('documents:start', () => { setSetting('documents_enabled', '1'); analyzeLibrary() })
   ipcMain.handle('documents:nextReview', () => documents.nextReview())
@@ -169,7 +174,7 @@ app.whenReady().then(() => {
   ipcMain.handle('documents:set', (_, sha, on) => documents.set(sha, on))
   ipcMain.handle('people:rescan', () => { setSetting('people_enabled', '1'); people.forgetUnnamed(); analyzeLibrary('faces') })
   ipcMain.handle('documents:rescan', () => { setSetting('documents_enabled', '1'); analyzeLibrary('documents') })
-  ipcMain.handle('people:pause', () => { analysis.paused = true })
+  ipcMain.handle('people:pause', () => { analysis.paused = true; analyzer?.postMessage({ type: 'pause' }) })
   ipcMain.handle('people:list', () => people.list())
   ipcMain.handle('people:forgotten', () => people.list(true))
   ipcMain.handle('people:setHidden', (_, id, hidden) => people.setHidden(id, hidden))
@@ -286,7 +291,24 @@ app.whenReady().then(() => {
   })
   if (process.env.VITE_DEV_URL) win.loadURL(process.env.VITE_DEV_URL)
   else win.loadFile(path.join(__dirname, 'dist', 'index.html'))
+  if (!process.env.DRIVE_HIDDEN) {
+    tray = new Tray(path.join(__dirname, 'public', 'icon.png'))
+    tray.on('click', showWindow)
+    updateTray()
+    win.on('close', e => {
+      if (quitting) return
+      e.preventDefault() // to the tray, not away
+      win.hide()
+      // Hidden stays locked whenever nobody is looking: closing used to quit, and quitting locked it.
+      vault?.lock()
+      win.webContents.reload()
+    })
+  }
 })
 
+// One Tetra at a time: opening it again brings back the window that is already running in the tray. (Visual QA
+// renders a hidden second copy on purpose, and is left alone.)
+if (!process.env.DRIVE_HIDDEN && !app.requestSingleInstanceLock()) app.exit(0)
+app.on('second-instance', showWindow)
 app.on('window-all-closed', () => app.quit())
-app.on('before-quit', () => vault?.lock())
+app.on('before-quit', () => { quitting = true; vault?.lock(); analyzer?.terminate() })

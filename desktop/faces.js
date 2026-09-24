@@ -3,6 +3,8 @@
 // reliability and grouping thresholds are the phone's, so embeddings and groups are interchangeable.
 const fs = require('node:fs')
 const path = require('node:path')
+// Half the cores: analysis is background work, and the whole desktop crawled when it took all of them.
+const SESSION_OPTIONS = { intraOpNumThreads: Math.max(1, Math.floor(require('node:os').cpus().length / 2)), interOpNumThreads: 1 }
 const crypto = require('node:crypto')
 
 const EMBEDDING_MODEL = 'mobilefacenet-192-eyes38x44-74x44' // phone: PhotoClassifier.embed
@@ -142,8 +144,8 @@ class FaceEngine {
     const e = new FaceEngine()
     e.ort = ort
     // Loaded from buffers: works inside the packaged asar archive, where the runtime cannot open paths itself.
-    e.detector = await ort.InferenceSession.create(fs.readFileSync(path.join(modelDir, 'face_detection_yunet_2023mar.onnx')))
-    e.embedder = await ort.InferenceSession.create(fs.readFileSync(path.join(modelDir, 'mobilefacenet.onnx')))
+    e.detector = await ort.InferenceSession.create(fs.readFileSync(path.join(modelDir, 'face_detection_yunet_2023mar.onnx')), SESSION_OPTIONS)
+    e.embedder = await ort.InferenceSession.create(fs.readFileSync(path.join(modelDir, 'mobilefacenet.onnx')), SESSION_OPTIONS)
     return e
   }
 
