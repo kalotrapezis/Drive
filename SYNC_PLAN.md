@@ -1238,17 +1238,29 @@ Written down so it stops being a feeling:
    many (6l), and the computer is already multi-device — this is the phone's half,
    and it is what a second Android device needs before any of 6t matters in
    practice. **Biggest hole.**
-2. **Labels only travel phone → computer.** `photo_labels` has no `updated_at`, so
-   there is no cursor to send them by, and the computer's own scene tags never
-   reach the phone's search. A column and a line in `metadataSince`.
+2. ~~**Labels only travel phone → computer.**~~ **Done, 24 September.**
+   `photo_labels` has an `updated_at` (everything already there was stamped once at
+   migration), `applyLabels` and the desktop's own analysis set it, `metadataSince`
+   returns the whole label set per photo, and `METADATA_EPOCH` is 3 so every device
+   asks from the beginning once. The phone already knew how to accept them. A label
+   the phone pushed crosses back to it once, because it is stamped on arrival and
+   the cursor then moves past it — a merge that repeats itself once is not a loop.
 3. **Hidden never syncs.** Phase 6's encrypted path was never built: vault items
    exist only on the device that hid them.
-4. **Photos, computer → phone, has still not been run for real.** The code is
-   there and tested; 42 photos here are not on that phone, and putting them into
-   someone's gallery is their decision.
+4. ~~**Photos, computer → phone, has still not been run for real.**~~ **Run,
+   24 September 13:38.** The phone's Photos row was set to Both ways and **296
+   photos crossed into its gallery** in three minutes. Counted afterwards on the
+   phone: `identity` 1590 → 1886 (+296 exactly), no `IS_PENDING` wreckage left, no
+   named person lost or gained, `to_remove` still empty — a Copy adds and does
+   nothing else. They land in the folder they had on the computer when that is
+   `DCIM/`, `Pictures/` or `Movies/`, and in `Pictures/Tetra` otherwise: 114 into
+   DCIM/Camera, 107 into DCIM/Screenshots, the rest spread over their own folders.
 5. **A transfer does not resume, it restarts.** Fine for files, wasteful for a
    large photo on a bad link.
 6. **No backoff.** A computer that is up but broken is asked again every sync.
+   *Half-done 24 September:* a sync that dies is retried when a network comes back,
+   three times, then it stops (`SyncRules.retriesAfterNetworkLoss`). A computer that
+   answers and then misbehaves is still asked every time.
 7. **The phone only listens while the app is open**, so the computer's "something
    new" reaches it only then.
 8. **Staging and timing** from the card's vocabulary — "use as cache for transfer",
@@ -1370,6 +1382,382 @@ readable back, clearing it restores the best, and — the rule above — a named
 whose photos all leave is still there when one comes back, with the same id and the
 same name.
 
+### 6aa. The first tablet, and what it actually measured (2026-09-24)
+
+The tablet paired with the computer at 08:24 and became the second device. Its rows
+were left at the default — Photos **Both ways**, Files **Both ways** — rather than
+set to `receive` first, so it pushed its own camera roll into the library before it
+took anything back. Nothing was lost: a two-way row is always a Copy, and of the 285
+photos it sent only 10 were new to the library; the rest were already there from the
+phone and were recognised by their SHA-256.
+
+**What it moved, measured from `sync_receipts`:**
+
+| | |
+|---|---|
+| Photos the tablet sent | 285 files, 11.8 GB, in 31.2 minutes |
+| Throughput | **6.3 MB/s — about 50 Mbit/s** |
+| Median file | 1.16 MB; the average is 41 MB, so the time is in the videos |
+| Gap between files | 0.4 s median, 10 s at p90, **408 s once** — the Wi-Fi change |
+| Round trip to the tablet | 8–188 ms, 50 ms average, on a Wi-Fi extender |
+
+So "one or two files every five seconds" is a 200 MB video over a 50 Mbit link, not
+per-file overhead. A 120 GB library at this rate is **about five and a half hours**,
+not weeks, and the extender is the thing to remove before blaming the protocol.
+
+**The order is send-everything, then receive.** `backUp` sends, then pulls photos,
+then files, then metadata — so a fresh device with hundreds of photos of its own
+shows nothing arriving for half an hour, and the names arrive last of all. That is
+what "it only works one way" looked like from outside; at 09:00 the tablet was
+receiving 1437 photos back. Worth reversing one day, because the first thing a new
+device should show is the library it just joined.
+
+**Two things this changed:**
+
+1. **Stop now stops.** Every transfer copied with `copyTo`, which hands a whole video
+   to the socket before anything checks the coroutine again — so Stop did nothing
+   until the file in flight had finished, and four were in flight. All four copies
+   now check for cancellation every 256 KB (`SyncClient.pump`). Pause is still felt
+   between files, which is what it is for.
+2. **A lost network is retried, three times.** The Wi-Fi moved under the sync (the
+   extender handing over to the main router) and it ended there. The service now
+   stays up, says "Waiting for Wi-Fi", and starts again when a network is back —
+   `SyncRules.NETWORK_RETRIES` times, then it gives up rather than drain the battery,
+   and the next attempt waits for the app to be opened. A Stop is never retried.
+
+### 6ab. What the tablet test actually showed (2026-09-24, steps 1–4)
+
+Steps 1–4 of the tablet list, run for real and checked against both databases
+rather than against the screen.
+
+1. **Pair** — worked, first try. The tablet is the second device.
+2. **Set its rows first** — *missed.* They were left at Send & receive, so the
+   tablet uploaded its own 11.8 GB before taking anything back. Harmless, but this
+   is the step to do before the next new device, not after.
+3. **First sync moves nothing it should not** — **held.** Every one of the 1438
+   photos the computer had before the tablet existed still has the same path: 0
+   moved, 0 renamed, 0 disappeared, 287 added.
+4. **People arrive with their names** — **held.** All **82** of the computer's
+   really-named people are on the tablet with their names (the plan said 83; the
+   computer has 82 alive today). 57 bare "Person N" groups came with them, which is
+   the guess travelling as a guess. **Portraits did not travel, because there are
+   none:** `cover_face_id` is on nobody — the feature landed at 00:44 and has not
+   been used yet. Nothing to fix; nothing to test either until a face is chosen.
+
+**The trap of the day: a running app is not the code on disk.** The desktop had
+been up since 00:11 and was serving pre-00:44 code, so "choose the face a person is
+shown by" could not have crossed whatever the tablet did. Its migrations had not
+run either. Before believing anything about a feature added today, restart the app
+that is meant to have it — the stale APK's older sibling.
+
+**Two things that came out of it, both verified on the real pair:**
+
+- **Labels now cross both ways** (6w 2). After the restart and a nudge, the tablet
+  holds **6310 label rows** where it held none — the computer's own scene tags are
+  in the tablet's search for the first time.
+- **The computer learns where a device moved to.** `sync.js device()` now puts the
+  address a device calls from at the front of its `peer_hosts`. Before this, the
+  tablet changed network, the computer kept nudging 192.168.1.128, and "there is
+  something new" went nowhere; the phone's beacon (6k) only solves the other
+  direction. Confirmed: the row now reads `192.168.1.214,192.168.1.128`.
+
+**The phone, on the new build (13:30–13:41).** Backed up first and compared after:
+nothing moved by the upgrade. Its sync on the old build had only uploaded 6 photos.
+Then the epoch-3 pull brought it **621 labels it could never have had** (7175 →
+7796) and 173 document classifications, and 296 photos came down — 6w 4, above.
+
+Steps 5–7 (answering a card, two devices disagreeing on purpose, a rename against a
+rescan) still need both devices and the person whose library it is.
+
+### 6ac. Nothing is deleted remotely — a file is *released* (decided 2026-09-24)
+
+Android will not let a background service throw a photo away: `createTrashRequest`
+needs an Activity, because it needs the person. That was recorded as a limitation.
+It is not one. It is the design.
+
+**A device is never told to delete. It is told a file is free to go.** The hub sends
+a release — "these are safely elsewhere, you no longer need to hold them" — and the
+device shows it as an offer: *Free up space*. Android's own dialog does the rest,
+into Android's own Trash, which holds them 30 days. Nobody's photos vanish because
+two computers agreed something on a network.
+
+**The hub is the traffic control.** Today that is the computer, because every device
+pairs with it and nothing pairs with anything else; tomorrow it can be a machine
+that is always on, which is the same program with no screen (§D3). Whatever it runs
+on, one rule: **the hub is the only thing that may issue a release.** A device never
+works out for itself that a file is expendable. This is the opposite of today, where
+the phone applies Keep-nothing to everything it holds and queues what has a receipt.
+
+A release for file F on device D is allowed only when all of these hold:
+
+1. The hub **holds F itself**, and read it back byte for byte — the receipt already
+   in `sync_receipts`, not a promise made by the sender.
+2. The number of devices known to hold F, **not counting D**, is at least the
+   threshold. Default 2 — the hub and one other, or the hub alone if the hub's own
+   copy is backed up somewhere this app can see. A release that leaves one copy in
+   the world is a bug, not a policy.
+3. D's connection rules say so — Keep nothing, or an age rule (§D4), measured from
+   the photo's **taken** date and never from when it arrived.
+
+**Every device keeps the whole history.** Not every file — the whole *ledger*: what
+exists, who holds it, what was released and when. That is what makes the three
+guarantees hold at once: a released photo is not resurrected (the device remembers
+giving it away), it is not lost (the device remembers where it went), and it can be
+asked for again. The pieces exist — `receipts` and `identity` on the device,
+`sync_manifest` and `sync_receipts` on the hub — and none of them yet answers "how
+many devices hold this", which is what condition 2 needs.
+
+**The consequence to be honest about.** Once a device holds a ledger of photos it no
+longer has, the gallery can show them — greyed, "on the computer", tap to fetch.
+That is a real feature with a real cost (a timeline of things that are not there,
+and a fetch that can fail), and it is the difference between "free up space" and
+"where did my photos go". It is not built. Until it is, a release removes a photo
+from the gallery for good as far as the person can see, and that is the honest thing
+to say on the button.
+
+**What exists today:** the offer card (Sync page: "N photos are on <computer> …
+Move them off this phone"), the receipt rule behind it, the `to_remove` queue, and
+the trash request. What changes: the set comes from the hub instead of the phone,
+the card moves to where photos are, and it is worded as space rather than as loss.
+
+### 6ad. The library, and where it is (built 2026-09-24)
+
+A device card says what crossed *last time*. It cannot answer the question that
+actually matters — **how much is there, where is it, and how many copies exist** —
+and without that answer nothing may ever release a file (6ac condition 2).
+
+**The hub was already being told and was throwing it away.** Every sync, a device
+lists what it holds: `/have` for photos (500 at a time), `/library/manifest` for its
+whole gallery, `/files/manifest` for the Drive folder. Those lists were read for one
+question ("what am I missing?") and dropped. They are now kept in `device_holdings`
+— device, kind, sha256, when it was last mentioned — which is the difference between
+knowing who *sent* a file once (`sync_receipts`) and who still *has* it.
+
+`SyncServer.overview()` turns that into three things, shown on the Devices page
+above the cards:
+
+1. **How many places each photo lives** — a bar, and a line each for *here only*
+   (one copy in the world), *two places*, *three or more*.
+2. **Per device**: what it holds, how much of that is also here, how much is **only
+   there**, and how much it **could free**.
+3. Each row says *as of* that device's last sync, because that is exactly how fresh
+   the number is.
+
+**Counted over everything known anywhere, not over what is here.** The first
+version counted copies across this computer's library only, so a photo that exists
+on one phone and nowhere else was missing from the very picture meant to warn about
+it — the bar was entirely green while 150 files sat in one place. A file is now
+counted wherever it lives, and "copies" means how many machines hold the bytes, this
+computer included. One copy is one copy whether it is here or on a phone.
+
+**First reading, 24 September** — the first time these numbers have ever existed:
+
+| | |
+|---|---|
+| Known anywhere | 1,846 files |
+| On this computer | 1,726 · 29.08 GB |
+| **One copy in the world** | **90 files — none of them here** |
+| Two places | 33 files (3 of them here) |
+| Three or more | 1,723 files · 29.06 GB |
+| Only on the phone | 120 · only on the tablet | 30 |
+
+Nothing in the computer's own library is in a single place. But **90 files exist in
+exactly one place and that place is a phone** — never given to this computer, so a
+dropped phone takes them with it. **Why** they never crossed is not answered here,
+and is the first thing to look at.
+
+**It updates by itself.** The page re-reads the status every three seconds and
+whenever something arrives, so the table moves while a sync runs. The holdings
+behind it only change when a device actually syncs, which is why every row carries
+its own *as of*.
+
+**Honest limits.** A device's row is as old as its last sync, and a stale row
+*overcounts* copies — the dangerous direction. Fine for showing, with the date next
+to it; a release (6ac) must demand a sweep newer than itself. Sizes are only known
+for files this computer holds, so a file that is only on a device is counted and
+never weighed — which is why the red band shows a count and no size.
+
+**Not built: the same view on the phone.** Management belongs on the computer, but a
+phone should be able to see where it stands — one screen, read from the hub, no
+controls.
+
+### 6ae. Clicking a number, and what the files actually are (built 2026-09-24)
+
+Three questions the overview raised and could not answer: *which* files are those,
+*what* are they, and *why* did they never cross.
+
+**A hash is not an answer to "what is it".** For a photo this computer has never
+been given, the hash was all it had — no name, no size, no kind — which is exactly
+the photo worth warning about. So a device now says, once per sync, what each of
+its photos is called, how big it is, whether it is a video and when it was taken:
+`POST /inventory`, chunked, best-effort, and never fatal — an older build simply
+gets a 404 and everything else about the sync is unaffected. It lands in
+`device_holdings` (name, size, is_video, taken_at), null until a device says
+otherwise, and shown as *not named by the device yet* rather than guessed at.
+
+**Every number is a link.** *One copy* lists the files that exist in one place,
+wherever that is. A device's *only there* lists what that device holds and this
+computer never got. *The biggest files* lists this computer's largest. Each row is
+the name, the size, and which machine it is on.
+
+**Why it never crossed**, as far as this computer can honestly tell: if the device's
+Photos row says `receive` or `off`, it never offers anything and the answer is
+certain. If it says `send` or `both`, they *were* offered and did not make it — a
+failed transfer or a file Android would not let it read — and the device is the only
+one that knows which. **It does not say yet**: `BackupResult.failed` is collected on
+the phone, shown once, and never sent anywhere. Sending the last failure per file is
+the next piece, and it is what turns a good guess into an answer.
+
+**What it is made of**, by weight rather than by count — the first reading:
+
+| | | |
+|---|---|---|
+| Videos | 97 files | 22.2 GB — **82% of the disk** |
+| Photos | 1,609 files | 4.8 GB — 18% |
+| Documents | 20 files | 61 MB — 0% |
+
+97 files out of 1,726 are four fifths of the library. Any conversation about space
+is a conversation about videos.
+
+**Photos only.** The Drive folder is a second library with its own manifest and its
+own idea of what "here" means: a Drive file this computer holds is not in `media`,
+so counting the two together reported every Drive file as missing — the tablet
+showed "30 only there" that were nothing of the kind. The overview counts photos and
+says so; Drive gets its own line when it earns one.
+
+### 6af. A device has a name and a face, and both are the person's (2026-09-24)
+
+A phone reports its model number, which is not what anyone calls it, and the card
+drew every device as a phone. Now:
+
+- **A pencil** on each card opens *This device*: what to call it, and which of five
+  pictures it is drawn with — phone, tablet, computer, server, storage. Nothing else
+  in the app reads either; they are labels for the person, not identity.
+- **The picture starts from a fact, not a guess.** A device sends its
+  `smallestScreenWidthDp` when it pairs, and **600dp is where Android itself draws
+  the line** between a phone and a tablet: this phone reports 369, the tablet 777.
+  Nobody has to be asked, and the answer is right the first time.
+- Pairings made before today have no width, so their picture starts as a phone and
+  the pencil fixes it. The user renamed both within a minute of it shipping.
+
+### 6ag. A receipt is not proof, and the library is not the disk (found 2026-09-24)
+
+Clicking "only there" was supposed to list 90 photos the computer had never been
+given. It listed 83 raw `.NEF` files and 7 `MVIMG` motion-photo videos, and neither
+group was what the number claimed.
+
+**1. The library is not the disk.** The 83 `.NEF` files are on this computer, were
+verified on arrival, and are absent from `media` because the scanner does not index
+raw. Every count that asked "is it here?" by looking in `media` called them missing,
+and the safety warning was 92% false alarm. *The scanner not indexing raw is a
+separate gap, and those photos are invisible in the desktop gallery too.*
+
+**2. A receipt can outlive its file.** The other 7 were received, verified,
+receipted — and are not on disk. Their names (`MVIMG_…~2(1).MP4`) say duplicate
+resolution, but what matters is what it did: `have()` answered "I have that" from
+the receipt alone, so **this computer never asked for them again**. Seven photos
+existed on one phone and nothing would ever have fetched them. A permanent hole,
+created by the mechanism meant to prevent one.
+
+**What changed.** "Is it here" now means *the library has it, or a receipt has it
+and the file is still on disk* — computed once a minute, statting only the receipts
+the library does not already account for, and updated the instant a photo lands so a
+parallel upload is never asked for twice. `have()` asks the same question, so the
+seven come back on the next sync. The overview says how many receipts are stale.
+
+**And the rule this proves** (6ac condition 1): a release may never rest on a
+receipt alone. The file has to still be there when the question is asked.
+
+The numbers before and after, on the real library: *only on the phone* **90 → 7**,
+and those 7 are exactly the ones whose receipts were stale.
+
+### 6ah. Raw, and the formats a camera actually produces (2026-09-24)
+
+Asked, after the 83 invisible `.NEF` turned up: can the app take raw, and the HEIC
+a phone makes now? Measured rather than guessed:
+
+- **HEIC already works.** 146 of them are in this library, every one with a
+  thumbnail. The bundled libvips reads no HEVC, so `image()` goes through
+  `heic-decode` and a JPEG preview is made for showing and editing. Nothing to do.
+- **Raw needed one line.** Every raw file embeds a full-size JPEG preview, and
+  libvips reads it with no extra dependency — a Nikon `.NEF` opens as **4898×3265**.
+  Raw was never unsupported; it was simply not on the list of extensions the scanner
+  accepts. Added `.nef .dng .cr2 .cr3 .arw .raf .orf .rw2 .pef .srw`, and the gate
+  that serves HEIC as a JPEG (`needsPreview`) now covers raw too, because a browser
+  cannot open a `.NEF` any more than it can a `.heic`.
+
+**Result on the real library:** the 83 raws are in, all 83 have thumbnails, and
+81 of them decode at full size — two Nikon files embed only a 160px preview, so
+those two look small. Only `.NEF` is verified on this machine; the other nine
+extensions take exactly the same path and are untested here.
+
+### 6ai. "Here" is a word about a screen, not about a machine (2026-09-24)
+
+Every rule on the Devices page was written from the device's side and ended in
+**here** — `Xiaomi 15 → here`, "copied to this computer", "checked here". It is the
+one word on the page that only makes sense if you already know which window you are
+looking at.
+
+This machine now says what it is. A chip beside the page title — **This device**,
+with its own picture — opens the same editor a phone's card has: what to call it,
+and which of the five it is. The word follows the picture: a computer is **this PC**,
+and the same machine called a server is **this server**. It is stored in `settings`
+(`selfKind`, `selfName`), defaults to a computer named after the hostname, and every
+rule, hint, column and file list on the page reads from it.
+
+Next to the chip, an **(i)**, because the most important fact about this machine was
+nowhere on the page: *every device pairs with this one and with nothing else.* A
+phone and a tablet never talk to each other — they each talk to this machine, which
+is how anything gets from one to the other, and why it is the only place that can
+see what exists, how many copies there are and what is safe to free. Connect every
+device to it, and keep it running.
+
+### 6aj. Nothing crosses until someone says what should (2026-09-24)
+
+The tablet paired at 08:24 and started uploading 11.8 GB before anyone could set its
+rows, because pairing defaulted to **Send & receive**. Step 2 of the tablet list —
+*set its rows before the first sync* — was not a reminder, it was a missing feature.
+
+**A new device now waits.** `sync_devices.set_up_at` is null until the rules are
+answered, and `connection()` hands out **Off** for every row while it is. The card
+says so, and answering any row completes the setup and starts it. Everything paired
+before today was given `set_up_at = paired_at`, so nothing already working stopped.
+
+**Adding a device is a guide now** (asked for in this order: select, scan, copy):
+
+1. **Select** — a phone or tablet (a code to scan), or a drive that is plugged in.
+2. **Scan** — for a drive, what is already on it, what would be copied, how much
+   space that needs and how much is free, and whether this app may write there at
+   all. It counts what the drive already holds by *looking at the drive*, so a drive
+   backed up by another machine is recognised rather than copied again.
+3. **The rules** — per content, before anything is written.
+4. **Start** — and only then.
+
+### D5 (built, first half). A drive is a device
+
+`drives.js` asks `lsblk` for every mounted filesystem that is not the system's own,
+and a drive is known by its **filesystem UUID**, never by its mount point: `/mnt/T7`
+today is `/media/teo/T7` tomorrow and it is the same disk. A drive becomes an
+ordinary row in `sync_devices` — `kind = 'database'`, `volume_uuid` instead of the
+peer columns, no certificate and no token because there is no other end to
+authenticate. It defaults to a **backup target**: this machine sends, the drive
+receives.
+
+`backUpToDrive` copies what the drive does not have, under one folder — `Tetra/` —
+so a drive full of someone's own files is never rearranged around it. Same rules as
+the wire: written to a `.part`, hashed as it is written, kept only if the hash
+matches, never overwriting, never deleting. "Already there" is two questions, not
+one — the ledger says so *and* the file is still that size — which is 6ag applied
+before it could happen again. A drive that holds a copy then **counts as a copy**,
+which is the whole point: it is the cheapest second copy there is.
+
+**Measured on the real drive, 24 September:** the Samsung T7 (`T7-TEO`, ext4, 841 GB
+free) scans as *1,816 photos, 29.28 GB to copy, room for it, writable*.
+
+**Not built yet:** the copy has never been run for real; Drive files (photos only so
+far); starting by itself when the drive appears; and a drive as a *source*, which the
+card can already express but nothing reads.
+
 ## Roadmap (set 2026-09-24)
 
 The order is the user's: **nothing more is trusted to real sync until the things
@@ -1385,7 +1773,7 @@ all.
 | **Recents** | cross both ways as `fileRecents`, merged on newest open (6d) | nothing known |
 | **Collections** | both ways with membership and tombstones, hidden-from-gallery travels with the album (6a–6c, 6g) | albums made from folders do not exist yet (§7) |
 | **Favourites, tags, colours** | both ways (6d) | — |
-| **Labels** | phone → computer only | `photo_labels` has no `updated_at`, so there is no cursor; the computer's own scene tags never reach the phone's search (6w 2). **Cheapest real gap on the list.** |
+| **Labels** | **both ways** (24 Sept, 6w 2) | nothing known |
 | **Documents** | classification both ways, phone authoritative | the workflow, below |
 | **Hidden** | each device's own, never crosses | the encrypted path of phase 6, never built |
 | **People** | done, and now the model for the rest | — |
@@ -1452,19 +1840,133 @@ invisible to the app — so this is not a filter to relax, it is a feature to bu
    like every other album, including hide-from-gallery and syncing.
 5. Including never moves or copies anything; excluding only hides it here.
 
+### D2. A tablet is not a big phone (asked 2026-09-24)
+
+The tablet is 1164dp across in landscape, 777dp in portrait — nearly three phones
+wide. Everything sized for a phone is wrong there, and the gallery was the loudest
+case: the same two columns that make a Week comfortable on a phone made every
+thumbnail 582dp wide.
+
+**Done today:** `TimelineRules.columns(scale, widthDp)` — the scale now sets how big
+a thumbnail should *feel* and the screen decides how many fit, never fewer than the
+phone's count. The phone is unchanged at 2 / 3 / 6; the tablet gets 6 / 9 / 18 in
+landscape, 4 / 6 / 12 in portrait.
+
+The same rule then went to every other grid, as `gridColumns(phoneColumns)` — one
+number, the phone's, and the cell keeps its size everywhere: **Files** (2 → 5 on the
+tablet, checked), **People** (2 → 5), **a person's photos** (3 → 8) and the
+**scanner's pages** (3 → 8).
+
+**Still to do, the rest of the tablet:**
+
+- **The list views.** A row a metre wide with a folder icon at one end and a menu at
+  the other is the worst of it, and a grid fix does not touch it: a list needs a
+  maximum width, or columns of its own.
+- The single-column pages (Sync, Settings, a photo's details) are a phone column
+  stretched to a metre wide. Two panes, or a maximum width with the page centred.
+- The Drive home's category grid.
+- Landscape is the tablet's normal orientation and the phone's exception.
+- The floating islands are placed for a thumb at the bottom of a phone.
+
+### D3. Computer to computer, and a server (asked 2026-09-24)
+
+Android ↔ Android already works **through the computer** — both devices pair with it
+and it is the hub, which is how the tablet and the phone exchanged everything today
+without ever talking to each other. Two computers cannot do the same, because
+nothing pairs two desktops.
+
+The desktop already contains both halves: it runs `SyncServer` and it is a client
+for nothing. Making it a client of another computer is the smaller half of §I
+(multiple pairings) applied to the desktop, and it is what turns "my laptop and my
+desktop" into one library. A machine that is always on then becomes a **server** —
+the same protocol, no screen, nothing new in the wire format.
+
+Icons for it are in place: `database` and `server` in `Icon.tsx`, beside `computer`
+and `device`.
+
+### D4. Keep for a week, a month, a year (asked 2026-09-24)
+
+Keep the last week on the phone, or the last month, or the last year, and let the
+rest live on the computer. It is the feature that makes a 128 GB phone hold a
+120 GB library.
+
+**The shape is settled — it is a release, not a deletion (6ac).** The age rule does
+not delete anything and does not run on the device: it is one more condition the
+**hub** checks before it tells a device a file is free to go, and the person still
+presses the button. That answers what made it dangerous.
+
+**What it still waits on, in order:**
+
+1. **Move has never run for real.** The offer card, the receipt rule and the trash
+   request all exist and have never been used once. Run it on a handful of photos
+   and watch the receipts before anything issues releases automatically.
+2. **The hub cannot yet count copies.** Condition 2 of 6ac — how many devices hold
+   this file, not counting the one being released — has no answer in the schema.
+   `sync_receipts` knows who sent what; nothing knows who still *holds* it. That
+   count is the whole safety of the feature and it is the real work here.
+3. **Then the age rule itself**, which is a `WHERE taken_at < ?` on a hub that
+   already knows all three of the above.
+
+Steps 1 and 2 are worth doing whatever happens to the age rule: they are what make
+Keep-nothing safe, and it is already shipped.
+
+### D5. External storage as a device (asked 2026-09-24)
+
+"Add a device" should also offer **a drive that is plugged in right now** — pick it
+from a list of what is mounted, and it gets the same card as a phone: Photos and
+Files rows, directions, a Keep column. This is the `Plan.md` line about a USB drive
+that starts a backup as soon as a particular volume appears.
+
+It is a different kind of peer: no certificate, no token, no beacon — a path. What
+carries over unchanged is everything above the wire: the manifest, the SHA-256
+check before a file is kept, never overwriting, and a receipt before anything may
+be offered for removal. What has to be decided is how a drive is *recognised* again
+(volume UUID, not mount point, which moves) and what happens when it is missing.
+
+### D6. Pairing two computers needs a code you can read (asked 2026-09-24)
+
+A QR code assumes a camera, and two computers have none. The pairing dialog should
+show the **same code as text, with a copy button**, next to the QR — the QR for a
+phone, the text for the other machine, one code either way. The other side then
+needs somewhere to paste it, which is the half of §D3 that does not exist yet: the
+desktop has never been a client.
+
 ### E. Settings, as an island of categories
 
 The Settings screen is one list. It should be the island pattern the rest of the
 app uses: **Sync · Gallery · Files · Scanner · Notes · Appearance**, each its own
 page. This is also what makes D and F have somewhere to live.
 
+### E2. The device card, read like a card (asked 2026-09-24)
+
+**Done today.** Each device is one card: a portrait at the top with the device's
+own glyph, its name and whether it is connected, then what has actually crossed as
+two counts rather than two sentences. Below that, one block per kind of content —
+Photos, Files — each with its own glyph, its four choices **stacked one under the
+other** with a glyph apiece (⊘ off, → in, ← out, ⇄ both), and underneath, in plain
+words, what the choice you picked actually does. Paired-on and Forget sit in a
+footer behind a rule.
+
+The page had two ways to add a device — a round `+` in the title bar and the
+dashed card — so the round one is gone; the card is the one that explains itself.
+
+What is still only in words: a device's glyph does not yet say *which* kind of
+device it is (phone, tablet, computer, server) — the app never asks.
+
 ### F. Appearance: light as well as dark
 
-The app was built dark on purpose, with white text and controls, so the light
-theme is close to an inversion rather than a redesign — `islandColor()`,
-`driveNavigationSelectedColor()` and friends already branch on
-`isSystemInDarkTheme()`. What is missing is a **choice**: follow the system, or
-force one. The desktop has the same shape in `styles.css` variables.
+**Not started, and as of 24 September not half-started either.** Following the
+system's light theme and Android's dynamic colour was undone: on a tablet in light
+mode it gave a red Scanner card with dark text on it, and dynamic colour painted the
+same home screen blue on the phone and purple on the tablet, off each device's
+wallpaper. The app is now **one dark palette on every device**, set in one place in
+`MainActivity` — the phone's own colours, sampled off it (`tertiaryContainer`
+`#2B4A5E`, `primaryContainer` `#3A3A3A`, background `#0F1312`).
+
+Light, when it is built, is a **choice** — follow the system, or force one — and
+that one `darkColorScheme(...)` is where it goes. It is close to an inversion rather
+than a redesign, but the red group proves it is not free: a fixed colour needs a
+content colour picked for it, not inherited.
 
 ### G. Notes, in a simpler form
 
