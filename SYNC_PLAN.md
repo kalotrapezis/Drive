@@ -1892,6 +1892,22 @@ the storage drive. Options: (a) a second drive backed up from the first now and 
 once verified on both), (b) one device keeps everything (the computer cannot: 57 GB free vs 110 GB), (c) accept one
 copy and show it plainly. Also: the window per device (month / year).
 
+**Nothing here is hard-coded (user, same day: "I give it to the world, somebody may need a full copy of
+everything").** Every choice is a setting, per device and per kind of content, and the default is the simplest,
+safest one — full copy of everything, nothing released:
+
+| Setting | Choices | Default |
+|---|---|---|
+| What a device holds, per content (photos & videos / documents) | Full copy · Keep a window · Send only · Off | Full copy |
+| The window | any number of days, months or years | — (only when chosen) |
+| A drive's role | Backup (a full copy) · Storage (the home of what devices release) | Backup |
+| Copies required before anything is released | 1, 2, 3… verified places | 2 |
+| Keep favorites on every device regardless of the window | on / off | on |
+
+His own setup is one combination of these (documents full copy everywhere; photos & videos stored on T7, a
+window on the computer and phone). Context: the computer had ~80 GB free before syncing began and 57 GB now, so
+releasing from the computer is what makes it fit — but that is his case, not a rule.
+
 Needed in code: a storage role for a drive next to backup; per-content rules (photos vs files) instead of one
 rule per device; a released ledger per device that syncs; photos known to the library but not on this disk
 (thumbnail kept, "plug in T7-TEO" to open); Drive files to a drive (backUpToDrive is photos only today).
