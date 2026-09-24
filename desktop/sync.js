@@ -60,6 +60,9 @@ class SyncServer {
       -- which is the whole safety of releasing a file (SYNC_PLAN.md 6ac condition 2).
       CREATE TABLE IF NOT EXISTS device_holdings (device_id TEXT NOT NULL, kind TEXT NOT NULL, sha256 TEXT NOT NULL,
         seen_at INTEGER NOT NULL, PRIMARY KEY(device_id, kind, sha256));
+      -- "Who else holds this photo" is asked per photo by the Devices overview; without this it scanned every
+      -- holding for every photo, 1.2 s a call at 4,000 photos, and the page asks every 3 s — the window froze.
+      CREATE INDEX IF NOT EXISTS device_holdings_sha ON device_holdings(sha256, kind);
       CREATE TABLE IF NOT EXISTS sync_receipts (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, received_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256));`)
     // Drive files are received too now, and the Devices page counts them apart from photos.
     if (!db.prepare('PRAGMA table_info(sync_receipts)').all().some(c => c.name === 'kind')) db.exec("ALTER TABLE sync_receipts ADD COLUMN kind TEXT NOT NULL DEFAULT 'photo'")

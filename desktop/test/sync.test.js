@@ -719,3 +719,23 @@ test('a drive backup copies what the drive lacks, checks every byte, and never d
     fs.rmSync(tmp, { recursive: true, force: true })
   }
 })
+
+test('the Devices overview stays fast at library scale', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-overview-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 })
+  const media = db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at) VALUES(?,?,'image/jpeg',0,1,1,1)`)
+  const hold = db.prepare(`INSERT INTO device_holdings(device_id, kind, sha256, seen_at) VALUES(?, 'photo', ?, 1)`)
+  db.exec('BEGIN')
+  for (let i = 0; i < 6000; i++) {
+    const sha = crypto.createHash('sha256').update(String(i)).digest('hex')
+    if (i < 4000) media.run(`p/${i}.jpg`, sha)
+    hold.run('phone', sha); if (i % 2) hold.run('tablet', sha)
+  }
+  db.exec('COMMIT')
+  const t = performance.now()
+  server.overview()
+  assert.ok(performance.now() - t < 300, `overview took ${Math.round(performance.now() - t)} ms`)
+  db.close()
+  fs.rmSync(tmp, { recursive: true, force: true })
+})
