@@ -58,7 +58,7 @@ function startScan() {
     .then(r => {
       const filled = folders.fill() // new photos in an included folder join its collection
       // Something new here is something a paired phone has not got: tell it, and it will come and fetch it.
-      if (r?.changed || filled) sync?.nudge().catch(() => {})
+      if (r?.changed || filled) { sync?.nudge().catch(() => {}); backUpPluggedDrives() }
       return r
     })
     .finally(() => { scanning = null; analyzeLibrary() })
@@ -68,10 +68,39 @@ function startScan() {
 // The tray: closing the window leaves Tetra running, because a phone that syncs at night needs something to sync
 // with. The window comes back from here; Quit is the only thing that stops it.
 let tray = null, quitting = false
+
+/**
+ * A drive that has been set up backs itself up whenever it is plugged in: a backup that waits for someone to
+ * remember it is a backup that is a month old. One at a time, the same lock as the Devices guide's Start, and the
+ * progress is in the tray, because the window is often closed.
+ */
+let driveBackup = null
+function backUpToDrive(id) {
+  if (driveBackup) return driveBackup.promise
+  const name = db.prepare('SELECT name FROM sync_devices WHERE id = ?').get(String(id))?.name ?? 'the drive'
+  driveBackup = { name, done: 0, total: 0 }
+  updateTray()
+  driveBackup.promise = sync.backUpToDrive(id, p => {
+    Object.assign(driveBackup, p)
+    win?.webContents.send('drive-progress', p)
+    if (p.done % 25 === 0 || p.done === p.total) updateTray()
+  }).finally(() => { driveBackup = null; updateTray() })
+  return driveBackup.promise
+}
+async function backUpPluggedDrives() {
+  if (driveBackup) return
+  for (const d of await sync.drives().catch(() => [])) {
+    const rule = d.device && db.prepare(`SELECT s.set_up_at, c.direction FROM sync_devices s
+      LEFT JOIN sync_connections c ON c.device_id = s.id AND c.content = 'photos' WHERE s.id = ?`).get(d.device.id)
+    if (!rule?.set_up_at || !['receive', 'both'].includes(rule.direction)) continue // not set up, or photos are Off
+    await backUpToDrive(d.device.id).catch(e => console.warn('[drive]', e.message))
+  }
+}
 function showWindow() { if (win) { win.show(); win.focus() } }
 function updateTray() {
   if (!tray) return
-  const status = analysis.running ? `Analysing ${analysis.done.toLocaleString()} / ${analysis.total.toLocaleString()}`
+  const status = driveBackup ? `Backing up to ${driveBackup.name}: ${driveBackup.done.toLocaleString()} / ${driveBackup.total.toLocaleString()}`
+    : analysis.running ? `Analysing ${analysis.done.toLocaleString()} / ${analysis.total.toLocaleString()}`
     : analysis.paused ? 'Analysis paused' : 'Up to date'
   tray.setToolTip(`Tetra — ${status}`)
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -107,6 +136,7 @@ app.whenReady().then(() => {
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   } })
   sync.start().catch(e => { sync.error = e.message })
+  setInterval(() => backUpPluggedDrives(), 60_000) // a drive plugged in is noticed within a minute
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
 
   // media://thumb/<sha256>  and  media://file/<id>  — only files the database knows about are served.
@@ -257,7 +287,7 @@ app.whenReady().then(() => {
   ipcMain.handle('sync:drives', () => sync.drives())
   ipcMain.handle('sync:inspectDrive', (_, uuid) => sync.inspectDrive(uuid))
   ipcMain.handle('sync:addDrive', (_, drive) => sync.addDrive(drive ?? {}))
-  ipcMain.handle('sync:backUpToDrive', (_, id) => sync.backUpToDrive(id, p => win?.webContents.send('drive-progress', p)))
+  ipcMain.handle('sync:backUpToDrive', (_, id) => backUpToDrive(id))
   ipcMain.handle('sync:forget', (_, id) => sync.forget(id))
   ipcMain.handle('sync:setConnection', (_, id, content, rules) => sync.setConnection(id, content, rules))
   ipcMain.handle('open-map', (_, lat, lon) => {
