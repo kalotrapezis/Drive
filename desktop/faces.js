@@ -7,24 +7,29 @@ const crypto = require('node:crypto')
 
 const EMBEDDING_MODEL = 'mobilefacenet-192-eyes38x44-74x44' // phone: PhotoClassifier.embed
 const ANALYSIS_VERSION = 'yunet2023mar-2pass+' + EMBEDDING_MODEL
-// Measured on this library's own named people (2026-09-23, 69 computer faces / 277 phone faces, 13 and 34 people):
-// at 0.74 only 10–14% of pairs that really are the same person ever reach the line, while **no** pair of
-// different people does — the grouping was so cautious it split one person into a dozen groups and sent
-// certainties to Help organize, which is why nine answers in ten were "yes, obviously".
+// Where a face counts as someone this library already knows. Measured twice, and the second one is the one to
+// trust: the first compared random pairs of faces, which is not what the app does. This measures the comparison
+// it actually makes — a new face against each known person, taking that person's closest face — on this
+// library's own named people, 304 faces across 27–28 people on each device:
 //
-//   threshold   same-person pairs joined        different people wrongly joined
-//     0.74          10.7% phone / 14.1% computer     0.00% / 0.00%
-//     0.60          36.7% / 27.4%                    0.22% / 0.00%
-//     0.50          59.4% / 38.6%                    1.73% / 0.44%
+//   line   joins of the same person (computer / phone)   different people wrongly joined
+//   0.60            85.2% / 90.1%                              1.58% / 1.61%
+//   0.68            76.6% / 80.6%                              0.33% / 0.31%
+//   0.75            63.2% / 68.4%                              0.00% / 0.02%
 //
-// 0.60 was tried and made visible mistakes on a real library: a toddler in sunglasses, a black-and-white frame
-// and a stranger all landed on the same child. A join the classifier makes on its own is not recorded anywhere
-// and so cannot be taken back from History — the rule is that the irreversible line stays strict and the
-// uncertain band goes to review, which is reversible by construction. 0.68 sits under the 0.73 where the two
-// closest different people meet and above where the model's mistakes were coming from; review is 0.45–0.68.
-// The same rule removed the loose join for unreliable faces (tiny, blurred, turned away), which used to join at
-// 0.45 with no review and no way back: they now clear the same line as everyone else or wait for a better shot.
-const SAME_PERSON = 0.68, REVIEW_FROM = 0.45, ANCHOR_QUALITY = 0.68
+// 0.60 joined wrongly on one comparison in sixty, which is what it looked like in the library. The line is 0.75,
+// where different people essentially never meet, and everything below it down to 0.45 becomes a question rather
+// than a silent join. The two mistakes are not equal: a wrong join has to be picked apart by hand, a missed one
+// is a Combine or one answer to a card.
+const SAME_PERSON = 0.75, REVIEW_FROM = 0.45, ANCHOR_QUALITY = 0.68
+// The day a photo was taken, as evidence about who is in it — the phone's SAME_DAY_BONUS, same number, same
+// reason. Measured on this library (2026-09-24, 290 faces, 46 people, 7020 comparisons of the kind the app
+// makes): a comparison against someone who appears that same day is the same person 39.3% of the time, against
+// 1.6% on another day. Twenty-five times the prior, so it earns a nudge, not a licence: +0.05 takes five points
+// of the joins the line was missing for one wrong join in seven thousand, and the knee is well before +0.15.
+const SAME_DAY_BONUS = 0.05
+const DAY = 86400000
+const dayOf = t => (t > 0 ? Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / DAY) : -Infinity)
 // Two boxes this far into each other, on the same photo, are the same face found twice (sync, SYNC_PLAN.md 6c).
 const SAME_FACE_OVERLAP = 0.4
 const DETECT_SIZE = 640, DETECT_SCORE = 0.8, NMS_IOU = 0.3
@@ -232,6 +237,8 @@ class People {
       CREATE INDEX IF NOT EXISTS faces_person ON faces(person_id);
       CREATE TABLE IF NOT EXISTS face_reviews (face_id TEXT NOT NULL, person_id TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', updated_at INTEGER NOT NULL, PRIMARY KEY(face_id, person_id));
       CREATE TABLE IF NOT EXISTS face_analysis (sha256 TEXT PRIMARY KEY, version TEXT NOT NULL, faces INTEGER NOT NULL, analyzed_at INTEGER NOT NULL);`)
+    // The face a person is shown by, when somebody has chosen one. Null means "the best one we can find".
+    if (!db.prepare('PRAGMA table_info(people)').all().some(c => c.name === 'cover_face_id')) db.exec('ALTER TABLE people ADD COLUMN cover_face_id TEXT')
   }
 
   tx(fn) { this.db.exec('BEGIN'); try { const r = fn(); this.db.exec('COMMIT'); return r } catch (e) { this.db.exec('ROLLBACK'); throw e } }
@@ -286,13 +293,21 @@ class People {
         this.db.prepare('INSERT INTO face_analysis(sha256, version, faces, analyzed_at) VALUES(?,?,0,?) ON CONFLICT(sha256) DO UPDATE SET version = excluded.version, analyzed_at = excluded.analyzed_at').run(sha, ANALYSIS_VERSION, now)
         return []
       }
-      const candidates = this.db.prepare(`SELECT f.person_id, f.embedding FROM faces f JOIN people p ON p.id = f.person_id AND p.deleted = 0
+      const taken = this.db.prepare('SELECT taken_at FROM media WHERE sha256 = ?').get(sha)?.taken_at ?? 0
+      const day = dayOf(taken)
+      const candidates = this.db.prepare(`SELECT f.person_id, f.embedding, m.taken_at FROM faces f
+        JOIN people p ON p.id = f.person_id AND p.deleted = 0 JOIN media m ON m.sha256 = f.sha256
         WHERE f.deleted = 0 AND f.quality >= ?`).all(ANCHOR_QUALITY)
-        .map(r => ({ person: r.person_id, embedding: new Float32Array(new Uint8Array(r.embedding).buffer) }))
+        .map(r => ({ person: r.person_id, embedding: new Float32Array(new Uint8Array(r.embedding).buffer), day: dayOf(r.taken_at) }))
       const ids = []
       for (const face of faces) {
         let best = null, similarity = -1
-        for (const c of candidates) { const s = cosine(face.embedding, c.embedding); if (s > similarity) { similarity = s; best = c } }
+        // The day is evidence, not proof: a face seen on the same day as someone already known starts a little
+        // closer to them, which is what catches the same person across two photos of one moment.
+        for (const c of candidates) {
+          const s = cosine(face.embedding, c.embedding) + (c.day === day ? SAME_DAY_BONUS : 0)
+          if (s > similarity) { similarity = s; best = c }
+        }
         const reliable = isReliableFace(face.quality, face.yaw, face.roll)
         const person = similarity >= SAME_PERSON ? best.person : !reliable ? null : this.createPerson(now)
         if (!person) continue
@@ -350,12 +365,34 @@ class People {
   /** Live people with photos present in the library. Named people first, like the phone. */
   list() {
     return this.db.prepare(`SELECT p.id, p.name, COUNT(DISTINCT f.sha256) AS count,
+        (SELECT f3.id FROM faces f3 WHERE f3.id = p.cover_face_id AND f3.deleted = 0) AS chosenFace,
         (SELECT f2.id FROM faces f2 JOIN media m2 ON m2.sha256 = f2.sha256
-          WHERE f2.person_id = p.id AND f2.deleted = 0 ORDER BY f2.quality DESC LIMIT 1) AS cover
+          WHERE f2.person_id = p.id AND f2.deleted = 0 ORDER BY f2.quality DESC LIMIT 1) AS best
       FROM people p JOIN faces f ON f.person_id = p.id AND f.deleted = 0 JOIN media m ON m.sha256 = f.sha256
       WHERE p.deleted = 0 GROUP BY p.id`).all()
+      // The face somebody chose, if it is still here; otherwise the best one. (SQLite will not resolve an outer
+      // column inside a subquery's ORDER BY, so the choice is applied out here rather than in the query.)
+      .map(r => ({ ...r, cover: (r.chosenFace && r.chosenFace !== r.best ? r.chosenFace : r.best) ?? r.best }))
       .sort((a, b) => Number(isGeneratedName(a.name)) - Number(isGeneratedName(b.name))
         || (isGeneratedName(a.name) ? Number(a.name.slice(7)) - Number(b.name.slice(7)) : a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })))
+  }
+
+  /** The face a person is shown by, when somebody has chosen one, and every face there is to choose from. */
+  facesOf(personId) {
+    return this.db.prepare(`SELECT f.id, f.sha256, f.quality, f.box_left, f.box_top, f.box_right, f.box_bottom,
+        CASE WHEN p.cover_face_id = f.id THEN 1 ELSE 0 END AS chosen, m.taken_at AS takenAt
+      FROM faces f JOIN people p ON p.id = f.person_id JOIN media m ON m.sha256 = f.sha256
+      WHERE f.person_id = ? AND f.deleted = 0 ORDER BY m.taken_at DESC`).all(String(personId))
+      .map(r => ({ ...r, chosen: !!r.chosen }))
+  }
+
+  /** Choosing it is a decision, so it is kept and it travels like one. */
+  setCover(personId, faceId) {
+    this.live(personId)
+    if (faceId && !this.db.prepare('SELECT 1 FROM faces WHERE id = ? AND person_id = ? AND deleted = 0').get(faceId, String(personId))) {
+      throw new Error('That face does not belong to this person.')
+    }
+    this.db.prepare('UPDATE people SET cover_face_id = ?, updated_at = ? WHERE id = ?').run(faceId ?? null, Date.now(), String(personId))
   }
 
   shas(personId) {
@@ -386,13 +423,18 @@ class People {
   }
 
   /** A person named on the phone. Its UUID becomes this person's id, so the name stays attached across syncs. */
-  applyPerson(uuid, name, updatedAt) {
-    const local = this.db.prepare('SELECT updated_at FROM people WHERE id = ?').get(uuid)
+  applyPerson(uuid, name, updatedAt, cover = null) {
+    const local = this.db.prepare('SELECT updated_at, name FROM people WHERE id = ?').get(uuid)
     if (local) {
       if (local.updated_at >= updatedAt) return
-      return void this.db.prepare('UPDATE people SET name = ?, updated_at = ? WHERE id = ?').run(name, updatedAt, uuid)
+      // The rule faces already had, and people did not: "Person 41" is what an algorithm called someone it had
+      // not been told about, and it never replaces what a human typed, however recently it was written.
+      if (isGeneratedName(name) && !isGeneratedName(local.name)) return
+      // The face somebody chose to show this person by is a decision too, and travels with the name.
+      return void this.db.prepare(`UPDATE people SET name = ?, updated_at = ?${cover ? ', cover_face_id = ?' : ''} WHERE id = ?`)
+        .run(...(cover ? [name, updatedAt, cover, uuid] : [name, updatedAt, uuid]))
     }
-    this.db.prepare('INSERT INTO people(id, name, created_at, updated_at) VALUES(?,?,?,?)').run(uuid, name, updatedAt, updatedAt)
+    this.db.prepare('INSERT INTO people(id, name, created_at, updated_at, cover_face_id) VALUES(?,?,?,?,?)').run(uuid, name, updatedAt, updatedAt, cover)
   }
 
   /**
@@ -413,6 +455,11 @@ class People {
       // between those two — or a device that has just re-analysed from scratch can un-name a whole library,
       // which is exactly what happened on 2026-09-23.
       if (this.isAutoNamed(person) && this.isNamed(mine.person_id)) return
+      // Two devices that both named this face, and disagree. Neither is wrong: grouping is order-dependent, so
+      // two devices starting from the same library reach different people. Newest-wins here meant the face was
+      // torn from one person and given to the other silently — and torn back on the next sync. A disagreement
+      // between two decisions is a question, so the face stays where it is and the difference becomes a card.
+      if (this.isNamed(person) && this.isNamed(mine.person_id) && person !== mine.person_id) return void this.ask(mine.id, mine.person_id, person, updatedAt)
       return void this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?').run(person, updatedAt, mine.id)
     }
     if (!box || !person || !embedding) return // without a box there is nothing to show and nothing to match later
@@ -420,13 +467,50 @@ class People {
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(uuid, sha256, box[0], box[1], box[2], box[3], embedding, model || EMBEDDING_MODEL, quality ?? 1, person, updatedAt)
   }
 
+  /**
+   * An answer to Help organize, as the other device can recognise it: the face and the person it was asked
+   * about, both by uuids that already cross, so the question needed no id of its own. Answers travel; a pending
+   * question does not, because it is this device's own uncertainty rather than news.
+   */
+  reviewsSince(since) {
+    return this.db.prepare(`SELECT face_id AS face, person_id AS person, state, updated_at AS updatedAt
+      FROM face_reviews WHERE state != 'pending' AND updated_at > ?`).all(since)
+  }
+
+  /**
+   * Raise the difference between two groupings as one card, not fifty. Two people who disagree about a face
+   * usually disagree about all of that person's faces, and asking about each one would bury the library in
+   * questions that are all the same question. One pending card per pair of people is enough to *show* the
+   * disagreement; combining them, if that is the answer, is a person's own action on the People page.
+   */
+  ask(faceId, mine, theirs, updatedAt) {
+    const already = this.db.prepare(`SELECT 1 FROM face_reviews r JOIN faces f ON f.id = r.face_id AND f.deleted = 0
+      WHERE f.person_id = ? AND r.person_id = ? AND r.state = 'pending'`).get(mine, theirs)
+    if (already) return
+    this.db.prepare(`INSERT INTO face_reviews(face_id, person_id, state, updated_at) VALUES(?,?, 'pending', ?)
+      ON CONFLICT(face_id, person_id) DO NOTHING`).run(faceId, theirs, updatedAt)
+  }
+
+  /** A question answered elsewhere stops being asked here. Only the state travels; where the face went is the face's own record. */
+  applyReview(faceId, personId, state, updatedAt) {
+    if (!['resolved', 'skipped'].includes(state)) return
+    if (!this.db.prepare('SELECT 1 FROM faces WHERE id = ?').get(faceId)) return
+    if (!this.db.prepare('SELECT 1 FROM people WHERE id = ?').get(personId)) return
+    const mine = this.db.prepare('SELECT state, updated_at FROM face_reviews WHERE face_id = ? AND person_id = ?').get(faceId, personId)
+    if (mine && mine.state !== 'pending' && mine.updated_at >= updatedAt) return
+    this.db.prepare(`INSERT INTO face_reviews(face_id, person_id, state, updated_at) VALUES(?,?,?,?)
+      ON CONFLICT(face_id, person_id) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at`)
+      .run(faceId, personId, state, updatedAt)
+  }
+
   /** People and their faces for the phone's GET /metadata?since= pull. */
   changedSince(since) {
     return {
-      people: this.db.prepare('SELECT id AS uuid, name, updated_at AS updatedAt FROM people WHERE deleted = 0 AND updated_at > ?').all(since),
+      people: this.db.prepare('SELECT id AS uuid, name, updated_at AS updatedAt, cover_face_id AS cover FROM people WHERE deleted = 0 AND updated_at > ?').all(since),
       // The whole face, not only who it belongs to: this computer finds faces the phone's detector misses, and a
       // face it has never seen is only usable there if the box, the embedding and the model travel with it. The
       // box is already in the protocol's own units — fractions of the upright photo — so it needs no translating.
+      reviews: this.reviewsSince(since),
       faces: this.db.prepare(`SELECT id AS uuid, sha256, person_id AS person, updated_at AS updatedAt,
         box_left, box_top, box_right, box_bottom, embedding, model, quality
         FROM faces WHERE deleted = 0 AND updated_at > ?`).all(since).map(f => ({
@@ -542,4 +626,4 @@ class People {
   }
 }
 
-module.exports = { FaceEngine, People, ANALYSIS_VERSION, EMBEDDING_MODEL, iou, SAME_FACE_OVERLAP, faceQualityScore, isReliableFace, faceQuality, alignedInput, l2, cosine, decodeYunet, headAngles, isGeneratedName }
+module.exports = { FaceEngine, People, ANALYSIS_VERSION, EMBEDDING_MODEL, SAME_DAY_BONUS, dayOf, iou, SAME_FACE_OVERLAP, faceQualityScore, isReliableFace, faceQuality, alignedInput, l2, cosine, decodeYunet, headAngles, isGeneratedName }

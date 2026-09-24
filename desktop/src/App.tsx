@@ -8,7 +8,7 @@ import { Collections } from './Collections'
 import { CollectionPicker, Confirm, NewCollection, errorText } from './Dialogs'
 import { Files, type FilesMode } from './Files'
 import { TrashPage } from './TrashPage'
-import { AnalysisBar, CombinePicker, MergeHistory, PeoplePage, RenamePerson, ReviewPage } from './People'
+import { AnalysisBar, ChooseCover, CombinePicker, MergeHistory, PeoplePage, RenamePerson, ReviewPage } from './People'
 import { MapView } from './MapView'
 import { HiddenPage, VaultGate } from './Hidden'
 import { Editor } from './Editor'
@@ -214,7 +214,9 @@ export function App() {
   else if (page.kind === 'hidden') content = <HiddenPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (loading) content = <div className="empty">Loading…</div>
   else if (media.length === 0) content = <div className="empty"><p>No photos or videos in <code>{root}</code> yet. Pair your phone in <b>Devices</b> to back it up here.</p></div>
-  else if (page.kind === 'people') content = <PeoplePage people={people} status={analysis} onBack={() => setPage({ kind: 'collections' })} onOpen={p => setPage({ kind: 'person', id: p.id, name: p.name })} />
+  else if (page.kind === 'people') content = <PeoplePage people={people} status={analysis} onBack={() => setPage({ kind: 'collections' })}
+    onOpen={p => setPage({ kind: 'person', id: p.id, name: p.name })}
+    onChooseCover={p => setDialog(<ChooseCover person={p} onClose={close} onDone={reload} />)} />
   else if (page.kind === 'map') content = <MapView items={items} focus={page.focus} onOpen={setOpen} onBack={() => setPage({ kind: 'collections' })} />
   else if (page.kind === 'review') content = <ReviewPage onBack={() => setPage({ kind: 'collections' })} onChanged={reload} />
   else if (page.kind === 'collections') {

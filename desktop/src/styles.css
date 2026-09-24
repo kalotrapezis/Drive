@@ -340,12 +340,31 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .dialog:has(.pairing) { width: min(460px, 92vw); }
 .add-first { padding: 24px 28px; }
 .add-first h2 { margin: 0 0 16px; font-size: 20px; }
-.device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
-.device-card { display: grid; justify-items: center; text-align: center; gap: 4px; padding: 22px 16px 12px; }
+.device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.device-card { display: grid; align-content: start; gap: 4px; padding: 20px 16px 10px; }
+.device-head { display: grid; justify-items: center; text-align: center; gap: 2px; position: relative; }
+/* What this machine is, next to the page title: the word every rule on the page ends in. */
+.self-island { display: flex; align-items: center; gap: 4px; padding: 4px; }
+.self-chip { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+.self-chip:hover { background: var(--hover); }
+.round.small { width: 36px; height: 36px; }
+
+.card-edit { position: absolute; top: -8px; right: -6px; width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center; color: var(--muted); background: var(--island-2); }
+.card-edit:hover { background: var(--hover); color: inherit; }
+/* Five choices do not go in one row of a 420px box: they wrap, and the box is as wide as a desktop allows. */
+.kind-picker { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-top: 14px; }
+.editor-label { display: block; font-size: 13px; color: var(--muted); margin: 4px 2px 6px; }
+.dialog:has(.kind-picker) { width: min(560px, 94vw); }
 .device-card strong { margin-top: 8px; font-size: 16px; }
 .device-card small { color: var(--muted); }
 .device-card small.live { color: #3fa96b; font-weight: 600; }
-.device-card.add { border: 2px dashed var(--island-2); background: none; padding-bottom: 22px; }
+/* What has actually crossed, as two counts rather than two sentences. */
+.device-tally { display: flex; gap: 14px; margin-top: 8px; color: var(--muted); font-size: 13px; }
+.device-tally span { display: flex; align-items: center; gap: 5px; }
+.device-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--island-2); }
+.device-card.add { border: 2px dashed var(--island-2); background: none; padding-bottom: 22px; justify-items: center; text-align: center; }
 .device-card.add:hover { background: var(--hover); }
 
 /* Photos Trash: the system trash, shown as a plain grid with a pick state and nothing else. */
@@ -372,3 +391,73 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .person-bar { gap: 2px; padding: 6px; }
 .person-bar .text-button { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; }
 .person-bar .text-button:hover { background: var(--hover); }
+
+/* The library, and where it is: one bar for how many places each photo lives, then the same thing per device
+   as a table, because "which of my files are in one place only" is a number you read, not a shape. */
+.library { padding: 18px 20px; margin-bottom: 12px; display: grid; gap: 12px; }
+.library h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.library-total { margin: 0; color: var(--muted); font-size: 14px; }
+.library-total strong { color: var(--fg); }
+.library-total .risk, .holdings td.risk { color: #d8663f; }
+.copies-bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--island-2); }
+.copies-bar i { display: block; height: 100%; }
+.copies-bar i.alone, .dot.alone { background: #d8663f; }
+.copies-bar i.two, .dot.two { background: #c9a227; }
+.copies-bar i.more, .dot.more { background: #3fa96b; }
+.copies-key { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 13px; }
+.copies-key li { display: flex; align-items: center; gap: 8px; }
+.copies-key .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.copies-key small { color: var(--muted); }
+.holdings { border-collapse: collapse; width: 100%; font-size: 13px; }
+.holdings th, .holdings td { text-align: right; padding: 7px 10px; border-top: 1px solid var(--island-2); }
+.holdings thead th { text-align: right; color: var(--muted); font-weight: 600; border-top: none; }
+.holdings thead th:first-child { text-align: left; }
+.holdings tbody th { text-align: left; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.holdings tbody th svg { vertical-align: -3px; margin-right: 8px; flex: none; }
+.holdings tbody th small { color: var(--muted); font-weight: 400; margin-left: 8px; }
+.holdings td.risk { font-weight: 600; }
+.library-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.library-sub { margin: 6px 0 0; font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.copies-bar i.video, .dot.video { background: #6b7fd8; }
+.copies-bar i.image, .dot.image { background: #3fa96b; }
+.copies-bar i.document, .dot.document { background: #c9a227; }
+button.link { padding: 0; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+button.link:hover { opacity: .75; }
+button.link.risk { color: #d8663f; font-weight: 600; }
+.library-sub button.link { text-transform: none; letter-spacing: 0; font-weight: 500; }
+/* A list of files is three columns of text, so it is three columns of text: a table fought its own layout
+   here and lost, and a desktop dialog has room it was not using. */
+.file-scroll { margin-top: 10px; max-height: 62vh; overflow-y: auto; overflow-x: hidden; }
+.file-row { display: grid; grid-template-columns: 1fr 110px 130px; gap: 12px; align-items: center;
+  padding: 8px 4px; border-top: 1px solid var(--island-2); font-size: 13px; }
+.file-row > span:not(:first-child) { text-align: right; color: var(--muted); }
+.file-row.head { position: sticky; top: 0; background: var(--bg); border-top: none; color: var(--muted); font-weight: 600; }
+.file-row.head > span:first-child { color: var(--muted); }
+.file-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.file-name > :last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-name svg { flex: none; }
+.dialog:has(.file-scroll) { width: min(860px, 94vw); }
+
+/* The rules between this computer and one device, on the device's own card (SYNC_PLAN.md 6j). One block per
+   kind of content: its own heading, the choices stacked so each is a line you read, and underneath, in the
+   card's own words, what the one you picked actually does. */
+.connection-rules { display: grid; gap: 6px; width: 100%; margin-top: 14px; text-align: left; }
+.connection-rules h4 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rule-options { display: grid; gap: 4px; background: var(--island-2); border-radius: 14px; padding: 4px; }
+.rule-options button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border-radius: 10px;
+  font-size: 13px; text-align: left; color: inherit; }
+.rule-options button:hover { background: var(--hover); }
+.rule-options button.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.rule-options .glyph { display: grid; place-items: center; flex: none; opacity: .85; }
+.rule-options .glyph.flip { transform: scaleX(-1); }
+.rule-options .rule-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule-options .rule-note { font-size: 11px; opacity: .7; }
+.rule-hint { margin: 2px 2px 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+
+/* Choosing the face a person is shown by. */
+.cover-choices { display: flex; flex-wrap: wrap; gap: 10px; max-height: 340px; overflow-y: auto; padding: 4px 0; }
+.cover-choice { border-radius: 999px; padding: 3px; border: 3px solid transparent; }
+.cover-choice:hover { background: var(--hover); }
+.cover-choice.on { border-color: var(--accent); }

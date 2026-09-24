@@ -8,7 +8,13 @@ const os = require('node:os')
 const { execFile } = require('node:child_process')
 const { DatabaseSync } = require('node:sqlite')
 
-const IMAGE = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.heic': 'image/heic', '.heif': 'image/heif', '.avif': 'image/avif', '.tif': 'image/tiff', '.tiff': 'image/tiff', '.bmp': 'image/bmp' }
+const IMAGE = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.heic': 'image/heic', '.heif': 'image/heif', '.avif': 'image/avif', '.tif': 'image/tiff', '.tiff': 'image/tiff', '.bmp': 'image/bmp',
+  // Camera raw. 83 .NEF sat in this library for months, verified and invisible, because they were not on this
+  // list (SYNC_PLAN.md 6ag). Every raw file embeds a full-size JPEG preview and libvips reads it — a Nikon
+  // .NEF opens as 4898×3265 with no extra dependency — so the only thing raw ever needed was to be named here.
+  '.nef': 'image/x-nikon-nef', '.dng': 'image/x-adobe-dng', '.cr2': 'image/x-canon-cr2', '.cr3': 'image/x-canon-cr3',
+  '.arw': 'image/x-sony-arw', '.raf': 'image/x-fuji-raf', '.orf': 'image/x-olympus-orf', '.rw2': 'image/x-panasonic-rw2',
+  '.pef': 'image/x-pentax-pef', '.srw': 'image/x-samsung-srw' }
 // Bump when imageInfo learns something new: unchanged files get their details re-read once (no re-hash).
 // v2: GPS was dropped by the EXIF field filter in v1. v3: 0,0 means no GPS fix.
 const META_VERSION = 3
@@ -55,6 +61,12 @@ function open(dataDir) {
   if (!columns.includes('meta_v')) db.exec('ALTER TABLE media ADD COLUMN meta_v INTEGER NOT NULL DEFAULT 1')
   // "Hide this album from Gallery" belongs to the album, not to this computer, so it lives here and syncs.
   if (!db.prepare('PRAGMA table_info(collections)').all().some(c => c.name === 'hidden')) db.exec('ALTER TABLE collections ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0')
+  // Labels had no clock, so they could only ever be sent one way (SYNC_PLAN.md 6w 2). Everything already
+  // here is stamped once, now, so the first device to ask with a fresh cursor is given all of it.
+  if (!db.prepare('PRAGMA table_info(photo_labels)').all().some(c => c.name === 'updated_at')) {
+    db.exec('ALTER TABLE photo_labels ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0')
+    db.prepare('UPDATE photo_labels SET updated_at = ?').run(Date.now())
+  }
   const aiColumns = db.prepare('PRAGMA table_info(photo_ai)').all().map(c => c.name)
   if (!aiColumns.includes('source')) db.exec("ALTER TABLE photo_ai ADD COLUMN source TEXT NOT NULL DEFAULT 'desktop'")
   return db
@@ -79,6 +91,9 @@ function sha256(file) {
 }
 
 const isHeic = file => /\.(heic|heif)$/i.test(file)
+const isRaw = file => /\.(nef|dng|cr2|cr3|arw|raf|orf|rw2|pef|srw)$/i.test(file)
+/** Neither a browser nor an editor can open these; both get the JPEG this app makes from them instead. */
+const needsPreview = file => isHeic(file) || isRaw(file)
 
 /**
  * An upright sharp pipeline for any library image. The bundled libvips reads no HEVC HEIC (the phone's
@@ -405,9 +420,9 @@ function forgetFacesOfGonePhotos(db, sha256s) {
 }
 
 /** Search labels only ever merge: they are produced by analysis, never removed by hand. */
-function applyLabels(db, sha, labels) {
-  const q = db.prepare('INSERT OR IGNORE INTO photo_labels(sha256, label) VALUES(?,?)')
-  for (const label of labels) if (typeof label === 'string' && label.trim()) q.run(sha, label.trim().slice(0, 120))
+function applyLabels(db, sha, labels, at = Date.now()) {
+  const q = db.prepare('INSERT OR IGNORE INTO photo_labels(sha256, label, updated_at) VALUES(?,?,?)')
+  for (const label of labels) if (typeof label === 'string' && label.trim()) q.run(sha, label.trim().slice(0, 120), at)
 }
 
 /** Desktop changes for the phone's GET /metadata?since= pull. */
@@ -416,7 +431,15 @@ function metadataSince(db, since) {
     favorites: db.prepare('SELECT sha256, favorite, updated_at AS updatedAt FROM photo_state WHERE updated_at > ?').all(since).map(r => ({ ...r, favorite: !!r.favorite })),
     collections: db.prepare('SELECT id AS uuid, name, deleted, hidden, updated_at AS updatedAt FROM collections WHERE updated_at > ?').all(since).map(r => ({ ...r, deleted: !!r.deleted, hidden: !!r.hidden })),
     collectionItems: db.prepare('SELECT collection_id AS collection, sha256, deleted, updated_at AS updatedAt FROM collection_items WHERE updated_at > ?').all(since).map(r => ({ ...r, deleted: !!r.deleted })),
+    // Labels only ever merge — nothing removes one by hand — so they travel as the whole set for a photo.
+    labels: Object.values(db.prepare('SELECT sha256, label, updated_at AS updatedAt FROM photo_labels WHERE updated_at > ?').all(since)
+      .reduce((byPhoto, r) => {
+        const row = byPhoto[r.sha256] ??= { sha256: r.sha256, labels: [], updatedAt: 0 }
+        row.labels.push(r.label)
+        row.updatedAt = Math.max(row.updatedAt, r.updatedAt)
+        return byPhoto
+      }, {})),
   }
 }
 
-module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
+module.exports = { open, scan, list, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }

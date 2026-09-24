@@ -14,8 +14,28 @@ export interface MergeUndo { sourceId: string; faceIds: string[] }
 export interface VaultStatus { configured: boolean; unlocked: boolean; count: number }
 export interface VaultItem { id: string; sha256: string; name: string; rel_path: string; mime: string; is_video: number; size: number; taken_at: number; has_thumb: number }
 
-export interface SyncDevice { id: string; name: string; paired_at: number; last_seen: number | null; received: number; filesReceived: number }
-export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[] }
+export interface PersonFace { id: string; sha256: string; quality: number; chosen: boolean; takenAt: number }
+export interface SyncConnection { content: 'photos' | 'files'; direction: 'off' | 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing' }
+export interface SyncDevice { id: string; name: string; kind: string | null; volume_uuid: string | null; set_up_at: number | null; paired_at: number; last_seen: number | null; received: number; filesReceived: number; connections: SyncConnection[] }
+export interface SyncOverview {
+  here: { files: number; bytes: number }
+  /** Every file known anywhere — this computer's library and everything a device says it holds. */
+  known: number
+  /** One row per number of machines holding it, this computer included; `here` is how many of those are here. */
+  copies: { copies: number; files: number; bytes: number; here: number }[]
+  devices: { id: string; name: string; last_seen: number | null; holds: number; alsoHere: number; onlyThere: number; freeable: number }[]
+  kinds: { kind: string; files: number; bytes: number }[]
+  /** Receipts whose file is no longer on disk: this computer promised to hold these and does not. */
+  staleReceipts: number
+}
+export interface SyncFile { name: string | null; size: number | null; isVideo: number | null; takenAt: number | null; sha256: string; device: string | null; here: number }
+export interface SyncSelf { kind: string; name: string; label: string }
+export interface Drive { uuid: string; label: string; fstype: string; mount: string; sizeBytes: number; freeBytes: number; hotplug: boolean; device: { id: string; name: string } | null }
+export interface DriveScan {
+  plugged: boolean; mount?: string; label?: string; fstype?: string; free?: number; size?: number
+  total?: number; have?: number; haveBytes?: number; need?: number; needBytes?: number; writable?: boolean; enough?: boolean
+}
+export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[]; overview: SyncOverview; self: SyncSelf }
 
 export interface TrashedPhoto { id: string; name: string; path: string; size: number; deletedAt: number }
 export interface Collection { id: string; name: string; count: number; cover: string | null; hidden: boolean }
@@ -57,6 +77,16 @@ declare global {
         status(): Promise<SyncStatus>
         pair(): Promise<{ payload: { hosts: string[]; port: number }; qr: string }>
         forget(id: string): Promise<void>
+        files(what: 'onlyThere' | 'alone' | 'largest', options?: { deviceId?: string; limit?: number }): Promise<SyncFile[]>
+        setDevice(id: string, changes: { name?: string; kind?: string }): Promise<SyncDevice | null>
+        setSelf(changes: { name?: string; kind?: string }): Promise<SyncSelf>
+        completeSetup(id: string): Promise<SyncDevice | null>
+        drives(): Promise<Drive[]>
+        inspectDrive(uuid: string): Promise<DriveScan>
+        addDrive(drive: { uuid: string; label: string }): Promise<SyncDevice>
+        backUpToDrive(id: string): Promise<{ copied: number; already: number; failed: string[]; total: number }>
+        onDriveProgress(fn: (p: { done: number; total: number; copied: number; already: number }) => void): () => void
+        setConnection(id: string, content: string, rules: { direction: string; keep: string }): Promise<SyncConnection>
         onReceived(fn: () => void): () => void
       }
       documents: {
@@ -75,6 +105,8 @@ declare global {
         shas(id: string): Promise<string[]>
         names(): Promise<Record<string, string[]>>
         rename(id: string, name: string): Promise<string>
+        faces(id: string): Promise<PersonFace[]>
+        setCover(id: string, faceId: string | null): Promise<void>
         merge(source: string, target: string): Promise<MergeUndo>
         detach(id: string, shas: string[]): Promise<{ person: string; faces: number }>
         undoMerge(undo: MergeUndo): Promise<void>
