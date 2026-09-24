@@ -60,25 +60,83 @@ export function ChooseCover({ person, onClose, onDone }: { person: Person; onClo
   )
 }
 
-export function PeoplePage({ people, status, onOpen, onChooseCover, onBack }: { people: Person[]; status: Analysis | null; onOpen: (p: Person) => void; onChooseCover: (p: Person) => void; onBack: () => void }) {
+export function PeoplePage({ people, status, onOpen, onRename, onChooseCover, onForget, onHistory, onBack }: {
+  people: Person[]; status: Analysis | null; onOpen: (p: Person) => void; onRename: (p: Person) => void
+  onChooseCover: (p: Person) => void; onForget: (p: Person) => void; onHistory: () => void; onBack: () => void
+}) {
   return (
     <div className="timeline">
       <header className="topbar">
         <div className="island title-island"><button className="round flat" title="Back to Collections" onClick={onBack}><Icon name="back" /></button><h1>People</h1></div>
+        <button className="round island" title="History: forgotten and combined people" onClick={onHistory}><Icon name="recent" /></button>
       </header>
       <AnalysisBar status={status} />
       {people.length === 0 && <p className="hint">{status?.enabled ? 'No people found yet.' : 'Start Find people to group the faces in your photos.'}</p>}
       <div className="people-grid">
         {people.map(p => (
-          <button key={p.id} className="person" onClick={() => onOpen(p)}
-            onContextMenu={e => { e.preventDefault(); onChooseCover(p) }}
-            title={`${p.name} — right-click to choose the face they are shown by`}>
-            <FaceCircle face={p.cover} />
-            <strong>{p.name}</strong><small>{p.count}</small>
-          </button>
+          <div key={p.id} className="person-wrap">
+            <button className="person" onClick={() => onOpen(p)}
+              onContextMenu={e => { e.preventDefault(); onChooseCover(p) }}
+              title={`${p.name} — right-click to choose the face they are shown by`}>
+              <FaceCircle face={p.cover} />
+              <strong>{p.name}</strong><small>{p.count}</small>
+            </button>
+            <details className="menu person-edit">
+              <summary className="round" title={`Edit ${p.name}`}><Icon name="edit" size={18} /></summary>
+              <div className="island menu-body" onClick={e => (e.currentTarget.parentElement as HTMLDetailsElement).open = false}>
+                <button className="sheet-row" onClick={() => onRename(p)}><Icon name="rename" />Rename</button>
+                <button className="sheet-row" onClick={() => onChooseCover(p)}><Icon name="person" />Choose face</button>
+                <button className="sheet-row" onClick={() => onForget(p)}><Icon name="visibilityOff" />Forget this person</button>
+              </div>
+            </details>
+          </div>
         ))}
       </div>
     </div>
+  )
+}
+
+/**
+ * Everything taken out of People, in one place: people forgotten, and groups combined into someone else.
+ * Neither is lost, and putting one back is one click.
+ */
+export function PeopleHistory({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
+  const [forgotten, setForgotten] = useState<Person[] | null>(null)
+  const [merges, setMerges] = useState<PersonMerge[] | null>(null)
+  const load = () => {
+    window.drive.people.forgotten().then(setForgotten, () => setForgotten([]))
+    window.drive.people.mergeHistory().then(setMerges, () => setMerges([]))
+  }
+  useEffect(load, [])
+  const when = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  const back = async (fn: () => Promise<unknown>) => { await fn(); load(); onChanged() }
+  return (
+    <Modal onClose={onClose}>
+      <h3>History</h3>
+      <span className="menu-head">Forgotten</span>
+      {forgotten?.length === 0 && <p className="hint">Nobody has been forgotten.</p>}
+      <div className="picker">
+        {forgotten?.map(p => (
+          <div key={p.id} className="picker-row">
+            <FaceCircle face={p.cover} size={44} />
+            <span>{p.name}<small>{p.count} {p.count === 1 ? 'photo' : 'photos'}</small></span>
+            <button className="filled-button" onClick={() => back(() => window.drive.people.setHidden(p.id, false))}>Restore</button>
+          </div>
+        ))}
+      </div>
+      <span className="menu-head">Combined</span>
+      {merges?.length === 0 && <p className="hint">Nothing has been combined.</p>}
+      <div className="picker">
+        {merges?.map(m => (
+          <div key={m.id} className="picker-row">
+            <FaceCircle face={m.cover} size={44} />
+            <span>{m.name}<small>{m.count} {m.count === 1 ? 'face' : 'faces'} · {when.format(m.mergedAt)}</small></span>
+            <button className="filled-button" onClick={() => back(() => window.drive.people.restoreMerge(m.id))}>Restore</button>
+          </div>
+        ))}
+      </div>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Close</button></div>
+    </Modal>
   )
 }
 
@@ -134,7 +192,7 @@ export function CombinePicker({ person, people, onClose, onPick }: { person: Per
   )
 }
 
-export function ReviewPage({ onBack, onChanged }: { onBack: () => void; onChanged: () => void }) {
+export function ReviewPage({ left, onBack, onChanged }: { left: number; onBack: () => void; onChanged: () => void }) {
   const [review, setReview] = useState<Review | null | undefined>(undefined)
   const [doc, setDoc] = useState<{ sha256: string } | null>(null)
   // Phone order: document questions first, then faces.
@@ -154,7 +212,7 @@ export function ReviewPage({ onBack, onChanged }: { onBack: () => void; onChange
       <header className="topbar">
         <div className="island title-island"><button className="round flat" title="Back to Collections" onClick={onBack}><Icon name="back" /></button><h1>Help organize</h1></div>
       </header>
-      {review === null && !doc && <div className="empty">Nothing needs a review right now.</div>}
+      {review === null && !doc && <div className="empty">Thanks, no more questions for now! That's it.</div>}
       {doc && (
         <div className="island review">
           <h2>Is this a document?</h2>
@@ -181,6 +239,7 @@ export function ReviewPage({ onBack, onChanged }: { onBack: () => void; onChange
           </div>
         </div>
       )}
+      {(doc || review) && left > 0 && <p className="hint center">{left} {left === 1 ? 'question' : 'questions'} left</p>}
     </div>
   )
 }

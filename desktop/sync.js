@@ -672,6 +672,8 @@ class SyncServer {
   applyMetadata(body) {
     const at = r => Number(r.updatedAt) || Date.now()
     const skipped = []
+    const pendingBefore = this.people.reviewCount()
+    let reviewChanged = false
     const each = (name, fn) => { for (const r of Array.isArray(body?.[name]) ? body[name] : []) try { fn(r) } catch (e) { skipped.push(`${name}: ${e.message}`) } }
     const forPhoto = fn => r => { if (isHash(r.sha256)) fn(r) }
 
@@ -680,8 +682,8 @@ class SyncServer {
     each('collections', c => library.applyCollection(this.db, String(c.uuid), String(c.name ?? ''), !!c.deleted, at(c), !!c.hidden))
     each('collectionItems', forPhoto(i => library.applyCollectionItem(this.db, String(i.collection), i.sha256, !!i.deleted, at(i))))
     each('labels', forPhoto(l => library.applyLabels(this.db, l.sha256, Array.isArray(l.labels) ? l.labels : [])))
-    each('people', p => this.people.applyPerson(String(p.uuid), library.collectionName(p.name), at(p), p.cover ? String(p.cover) : null))
-    each('reviews', r => this.people.applyReview(String(r.face), String(r.person), String(r.state), at(r)))
+    each('people', p => this.people.applyPerson(String(p.uuid), library.collectionName(p.name), at(p), p.cover ? String(p.cover) : null, !!p.hidden))
+    each('reviews', r => { if (this.people.applyReview(String(r.face), String(r.person), String(r.state), at(r))) reviewChanged = true })
     each('files', f => this.files?.applyMetadata({ ...f, path: String(f.path), updatedAt: at(f) }))
     if (body?.viewSettings) try { this.applyViewSettings(body.viewSettings) } catch (e) { skipped.push(`viewSettings: ${e.message}`) }
     if (Array.isArray(body?.fileRecents)) try { this.files?.mergeRecents(body.fileRecents) } catch (e) { skipped.push(`fileRecents: ${e.message}`) }
@@ -690,6 +692,7 @@ class SyncServer {
       box: Array.isArray(f.box) && f.box.length === 4 && f.box.every(Number.isFinite) ? f.box.map(Number) : null,
       embedding: typeof f.embedding === 'string' ? Buffer.from(f.embedding, 'base64') : null,
     })))
+    if (reviewChanged || this.people.reviewCount() > pendingBefore) setTimeout(() => this.nudge().catch(() => {}), 2000)
     if (skipped.length) console.warn(`[sync] ${skipped.length} metadata records skipped, e.g. ${skipped[0]}`)
     return { ok: true, skipped: skipped.length }
   }

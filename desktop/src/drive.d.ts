@@ -102,6 +102,8 @@ declare global {
         rescan(): Promise<void>
         pause(): Promise<void>
         list(): Promise<Person[]>
+        forgotten(): Promise<Person[]>
+        setHidden(id: string, hidden: boolean): Promise<void>
         shas(id: string): Promise<string[]>
         names(): Promise<Record<string, string[]>>
         rename(id: string, name: string): Promise<string>
@@ -110,7 +112,7 @@ declare global {
         merge(source: string, target: string): Promise<MergeUndo>
         detach(id: string, shas: string[]): Promise<{ person: string; faces: number }>
         undoMerge(undo: MergeUndo): Promise<void>
-        mergeHistory(id: string): Promise<PersonMerge[]>
+        mergeHistory(id?: string): Promise<PersonMerge[]>
         restoreMerge(id: number): Promise<void>
         nextReview(): Promise<Review | null>
         answer(faceId: string, personId: string, answer: 'yes' | 'no' | 'skip'): Promise<void>

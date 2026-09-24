@@ -65,6 +65,8 @@ contextBridge.exposeInMainWorld('drive', {
     rescan: () => ipcRenderer.invoke('people:rescan'),
     pause: () => ipcRenderer.invoke('people:pause'),
     list: () => ipcRenderer.invoke('people:list'),
+    forgotten: () => ipcRenderer.invoke('people:forgotten'),
+    setHidden: (id, hidden) => ipcRenderer.invoke('people:setHidden', id, hidden),
     shas: id => ipcRenderer.invoke('people:shas', id),
     names: () => ipcRenderer.invoke('people:names'),
     rename: (id, name) => ipcRenderer.invoke('people:rename', id, name),
