@@ -1922,6 +1922,13 @@ His own setup is one combination of these (documents full copy everywhere; photo
 window on the computer and phone). Context: the computer had ~80 GB free before syncing began and 57 GB now, so
 releasing from the computer is what makes it fit — but that is his case, not a rule.
 
+**The storage drive is a library location (user, same night): "use the hard drive as a library in the app as a
+new location so I can continue seeing and opening all the images, videos and files".** Each photo knows where it
+is (this PC / a storage drive); thumbnails stay in the PC's cache so it never leaves the grid, People, collections
+or search; opening reads it from the drive when plugged in, and says which drive to plug in when not. Files shows
+the drive as a location. This comes before Move — a Move without it makes photos vanish from view. An unplugged
+storage drive must never read as "deleted" (the scan's missing/empty-folder guard, 2026-09-24).
+
 Needed in code: a storage role for a drive next to backup; per-content rules (photos vs files) instead of one
 rule per device; a released ledger per device that syncs; photos known to the library but not on this disk
 (thumbnail kept, "plug in T7-TEO" to open); Drive files to a drive (backUpToDrive is photos only today).
