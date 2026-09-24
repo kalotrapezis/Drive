@@ -1904,6 +1904,20 @@ safest one — full copy of everything, nothing released:
 | Copies required before anything is released | 1, 2, 3… verified places | 2 |
 | Keep favorites on every device regardless of the window | on / off | on |
 
+**Offload (user's design, same day).** On a *sender* — the computer here, never on the drive itself — once a
+drive or a server is connected as Storage, its card on the Devices tab gets:
+
+- **Offload on** → a slider: *keep this disk under N % full* (e.g. 80 %). When the disk goes over, the oldest
+  photos and videos that are safe (the copies rule above) are released until it is back under — oldest first, so
+  what goes is always what has been looked at least.
+- **Offload off** → a window instead: *keep a year / a month / a week* (the same choice phones and tablets get).
+- **Auto backup** toggle on the same card (on = copy to it whenever it is plugged in, which is built).
+
+And, independent of Offload, **a full disk is always said out loud** (nothing does this today — the only space
+check is the Add-a-drive guide's "enough room"): a tray / system notification on the computer and a notification
+on a phone when a disk passes the threshold or a copy fails for lack of space, saying how much and what would
+help ("Offload is off — 31 GB of photos could go to T7-TEO"). A sync never fails silently because a disk filled.
+
 His own setup is one combination of these (documents full copy everywhere; photos & videos stored on T7, a
 window on the computer and phone). Context: the computer had ~80 GB free before syncing began and 57 GB now, so
 releasing from the computer is what makes it fit — but that is his case, not a rule.
