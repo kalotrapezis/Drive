@@ -137,8 +137,8 @@ class Documents {
   record(sha, confidence, labels = null) {
     if (labels) {
       this.db.prepare('DELETE FROM photo_labels WHERE sha256 = ?').run(sha)
-      const add = this.db.prepare('INSERT OR IGNORE INTO photo_labels(sha256, label) VALUES(?,?)')
-      for (const l of labels) add.run(sha, l)
+      const add = this.db.prepare('INSERT OR IGNORE INTO photo_labels(sha256, label, updated_at) VALUES(?,?,?)')
+      for (const l of labels) add.run(sha, l, Date.now())
     }
     const verified = this.db.prepare('SELECT type FROM photo_ai WHERE sha256 = ? AND user_verified = 1').get(sha)
     const type = verified ? verified.type : confidence >= 0.70 ? 'document' : null
