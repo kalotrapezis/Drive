@@ -491,8 +491,8 @@ test('the other direction: what this computer offers, and a connection that says
 
     // Out of the box a pairing is Send & receive, so it is offered.
     assert.deepEqual(server.connections(device), [
-      { content: 'photos', direction: 'both', keep: 'everything' },
-      { content: 'files', direction: 'both', keep: 'everything' },
+      { content: 'photos', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true },
+      { content: 'files', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true },
     ])
     let r = await call('POST', '/library/manifest', { token, json: { hashes: [] } })
     assert.deepEqual(r.body.send, [{ sha256: jpgHash, path: 'DCIM/Camera', name: 'computer.jpg', size: jpg.length, modified: 1 }])
@@ -536,13 +536,15 @@ test('the other direction: what this computer offers, and a connection that says
 
     // Two-way and "keep nothing after sending" cannot both be true.
     assert.deepEqual(server.setConnection(device, 'photos', { direction: 'both', keep: 'nothing' }),
-      { content: 'photos', direction: 'both', keep: 'everything' })
+      { content: 'photos', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true })
 
     // One direction can be a Move, and the device is told so — it is the one that acts on it.
-    assert.deepEqual(server.setConnection(device, 'photos', { direction: 'send', keep: 'nothing' }),
-      { content: 'photos', direction: 'send', keep: 'nothing' })
+    // A Move keeps a window on the device (never everything, or it is a Copy), and the device is told it.
+    assert.deepEqual(server.setConnection(device, 'photos', { direction: 'send', keep: 'nothing', keepDays: 90, keepFavorites: false }),
+      { content: 'photos', direction: 'send', keep: 'nothing', keepDays: 90, keepFavorites: false })
     assert.deepEqual((await call('GET', '/connections', { token })).body.connections.find(c => c.content === 'photos'),
-      { content: 'photos', direction: 'send', keep: 'nothing' })
+      { content: 'photos', direction: 'send', keep: 'nothing', keepDays: 90, keepFavorites: false })
+    assert.equal(server.setConnection(device, 'photos', { direction: 'send', keep: 'nothing', keepDays: 0 }).keepDays, 90, 'no zero window')
 
     // Off is a real answer: nothing crosses, and the device is not even told there is something new.
     server.setConnection(device, 'photos', { direction: 'off', keep: 'everything' })
@@ -776,5 +778,173 @@ test('Drive files go to a drive too: a changed file replaces the copy, and the o
     Object.assign(drives, { list, mountOf })
     db.close()
     fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('a Move to a storage drive: only verified, old, non-favorite photos go, deleted here, and stay in the library', async () => {
+  const drives = require('../drives')
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-move-'))
+  const mount = path.join(tmp, 'T7'); fs.mkdirSync(mount)
+  const uuid = '00000000-dead-4dea-8dea-000000000000' // never a real drive
+  const [list, mountOf] = [drives.list, drives.mountOf]
+  drives.list = async () => [{ uuid, label: 'Test', fstype: 'ext4', mount, sizeBytes: 1e9, freeBytes: 1e9, hotplug: true }]
+  drives.mountOf = async id => id === uuid ? mount : null
+  const db = library.open(path.join(tmp, 'data'))
+  const photos = path.join(tmp, 'Photos'), trash = path.join(tmp, 'Trash')
+  fs.mkdirSync(path.join(photos, 'old'), { recursive: true }); fs.mkdirSync(trash)
+  const old = Date.now() - 3 * 365 * 86_400_000
+  const hash = {}
+  for (const [name, taken] of [['a.jpg', old], ['b.jpg', old], ['fav.jpg', old], ['new.jpg', Date.now()]]) {
+    const bytes = Buffer.from('bytes of ' + name)
+    hash[name] = crypto.createHash('sha256').update(bytes).digest('hex')
+    db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb, meta_v) VALUES(?,?,'image/jpeg',0,?,1,?,1,99)`)
+      .run(`old/${name}`, hash[name], bytes.length, taken)
+    fs.writeFileSync(path.join(photos, 'old', name), bytes)
+  }
+  library.setFavorite(db, [hash['fav.jpg']], true)
+  const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: photos, port: 0,
+    trashItem: async f => fs.renameSync(f, path.join(trash, path.basename(f))) })
+  try {
+    const drive = server.addDrive({ uuid, label: 'Test' })
+    await server.backUpToDrive(drive.id)
+    assert.equal(server.offloadPlan(drive.id).count, 0, 'a backup drive takes nothing')
+    server.setDriveRules(drive.id, { role: 'storage', copies: 1 })
+    const plan = server.offloadPlan(drive.id)
+    assert.equal(plan.count, 2, 'old ones only, and never a favorite')
+    assert.equal(server.setDriveRules(drive.id, { copies: 2 }).copies, 2)
+    assert.equal(server.offloadPlan(drive.id).count, 0, 'the drive alone is one place, and two were asked for')
+    server.holds('phone', 'photo', [hash['a.jpg'], hash['b.jpg']])
+
+    // A drive copy that does not read back the same keeps the photo here.
+    fs.writeFileSync(path.join(mount, 'Tetra', 'Photos', 'old', 'b.jpg'), 'bytes of b.jpX')
+    const r = await server.moveToDrive(drive.id)
+    assert.equal(r.moved, 1)
+    assert.equal(r.failed.length, 1)
+    assert.ok(fs.existsSync(path.join(photos, 'old', 'b.jpg')), 'unverified stays')
+    assert.ok(!fs.existsSync(path.join(photos, 'old', 'a.jpg')) && !fs.existsSync(path.join(trash, 'a.jpg')), 'deleted here: the Trash would free nothing')
+    assert.equal(fs.readFileSync(path.join(mount, 'Tetra', 'Photos', 'old', 'a.jpg'), 'utf8'), 'bytes of a.jpg', 'the drive keeps the checked copy')
+    assert.ok(server.heldSafely(hash['a.jpg']) && server.heldSafely(hash['b.jpg']), 'in the library, or on a backup drive')
+    assert.ok(!server.heldSafely('0'.repeat(64)))
+
+    // Still in the library, located on the drive; the library "has" it; this disk does not count it.
+    const row = db.prepare('SELECT * FROM media WHERE sha256 = ?').get(hash['a.jpg'])
+    assert.equal(row.location, drive.id)
+    assert.equal((await server.locate(row)).file, path.join(mount, 'Tetra', 'Photos', 'old', 'a.jpg'))
+    assert.ok(server.have(hash['a.jpg']), 'no device sends back what was moved')
+    assert.equal(server.overview().here.files, 3)
+    const o = server.overview()
+    assert.deepEqual(o.stored.map(x => ({ ...x })), [{ name: 'Test', files: 1 }], 'in the library, on the drive — not only on a device')
+    assert.equal(o.staleReceipts, 0, 'a photo that moved to the drive is not a missing file')
+    assert.equal(o.devices.find(d => d.name === 'Test').onlyThere, 0)
+    assert.ok(!server.toSend([]).some(p => p.sha256 === hash['a.jpg']))
+
+    // A scan does not read a moved photo as deleted, and an unplugged drive says which one to plug in.
+    await library.scan(db, photos, path.join(tmp, 'data'))
+    assert.ok(db.prepare('SELECT 1 FROM media WHERE sha256 = ?').get(hash['a.jpg']))
+    drives.mountOf = async () => null
+    assert.match((await server.locate(row)).why, /Plug in Test/)
+    assert.throws(() => server.forget(drive.id), /Bring them back/)
+  } finally {
+    Object.assign(drives, { list, mountOf })
+    db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('a device hands its expiring Trash to the purgatory: taken with a drive, "not now" without, refused if changed', async () => {
+  const drives = require('../drives')
+  const { Purgatory } = require('../purgatory')
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-purgatory-'))
+  const mount = path.join(tmp, 'T7'); fs.mkdirSync(mount)
+  const uuid = '00000000-dead-4dea-8dea-000000000000' // never a real drive
+  const [list, mountOf] = [drives.list, drives.mountOf]
+  let plugged = true
+  drives.list = async () => plugged ? [{ uuid, label: 'Test', fstype: 'ext4', mount, sizeBytes: 1e9, freeBytes: 1e9, hotplug: true }] : []
+  drives.mountOf = async id => plugged && id === uuid ? mount : null
+  const db = library.open(path.join(tmp, 'data'))
+  const home = path.join(tmp, 'home')
+  const purgatory = new Purgatory({ db, photosRoot: path.join(tmp, 'Photos'), serverBase: home })
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')),
+    dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0, purgatory }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  try {
+    const token = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Phone' } })).body.token
+    const drive = server.addDrive({ uuid, label: 'Test' }); server.completeSetup(drive.id)
+    const bytes = Buffer.from('an old screenshot')
+    const sha = crypto.createHash('sha256').update(bytes).digest('hex')
+    const url = `/purgatory/${sha}?kind=photo&path=${encodeURIComponent('DCIM/Screenshots/old.png')}`
+
+    // By default the server keeps the purgatory, on its own disk.
+    const first = await call('PUT', url, { token, body: bytes })
+    assert.equal(first.status, 200)
+    assert.equal(fs.readFileSync(path.join(home, 'Tetra', '.purgatory', first.body.purgatory), 'utf8'), 'an old screenshot')
+
+    // Chosen for the drive: what it held moves there, checked, and new items go there.
+    assert.equal((await purgatory.relocate(drive.id, id => server.purgatoryBase(id))).moved, 1)
+    assert.ok(!fs.existsSync(path.join(home, 'Tetra', '.purgatory', first.body.purgatory)), 'moved, not copied twice')
+    assert.equal(fs.readFileSync(path.join(mount, 'Tetra', '.purgatory', first.body.purgatory), 'utf8'), 'an old screenshot')
+    const ok = await call('PUT', url, { token, body: bytes })
+    assert.equal(ok.status, 200)
+    assert.equal(ok.body.drive, 'Test')
+    assert.equal(fs.readFileSync(path.join(mount, 'Tetra', '.purgatory', ok.body.purgatory), 'utf8'), 'an old screenshot')
+    assert.throws(() => server.forget(drive.id), /purgatory is on this drive/)
+    assert.match(ok.body.purgatory, /Phone\/DCIM\/Screenshots\/old \(2\)\.png$/, 'under the device’s name')
+    assert.deepEqual(fs.readdirSync(path.join(mount, 'Tetra', '.purgatory')).filter(n => n.startsWith('.incoming')), [], 'nothing half-written left')
+
+    assert.equal((await call('PUT', url, { token, body: Buffer.from('something else') })).status, 422, 'bytes that do not match are refused')
+    plugged = false
+    assert.equal((await call('PUT', url, { token, body: bytes })).status, 503, 'no drive: the device keeps it and asks again')
+    assert.equal((await call('PUT', `/purgatory/${sha}?kind=photo&path=..%2Fescape`, { token, body: bytes })).status, 400)
+  } finally {
+    Object.assign(drives, { list, mountOf })
+    await server.stop(); db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('before a Move: how much would go, how much stays, and what is not on this computer yet', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-move-preview-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 })
+  try {
+    const h = x => x.repeat(64)
+    const now = Date.now(), DAY = 86_400_000
+    for (const [sha, taken] of [[h('a'), now - 400 * DAY], [h('b'), now - 60 * DAY], [h('c'), now - 5 * DAY], [h('f'), now - 900 * DAY]]) {
+      db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at) VALUES(?,?,'image/jpeg',0,100,1,?)`).run(sha + '.jpg', sha, taken)
+      db.prepare(`INSERT INTO device_holdings(device_id, kind, sha256, seen_at, size, taken_at) VALUES('tab','photo',?,1,100,?)`).run(sha, taken)
+    }
+    db.prepare(`INSERT INTO device_holdings(device_id, kind, sha256, seen_at, size, taken_at) VALUES('tab','photo',?,1,100,1)`).run(h('z')) // only on the tablet
+    library.setFavorite(db, [h('f')], true)
+    const month = server.movePreview('tab', { keepDays: 30, keepFavorites: true })
+    assert.deepEqual({ ...month, lastSeen: undefined }, { holds: 5, onPc: 4, go: 2, goBytes: 200, keep: 2, notOnPc: 1, lastSeen: undefined })
+    assert.equal(server.movePreview('tab', { keepDays: 30, keepFavorites: false }).go, 3, 'the old favorite goes too when asked')
+    assert.equal(server.movePreview('tab', { keepDays: 365, keepFavorites: true }).go, 1, 'a year keeps more')
+  } finally { db.close(); fs.rmSync(tmp, { recursive: true, force: true }) }
+})
+
+test('Trash copies of photos already moved to the drive are let go; anything else in the Trash stays', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-release-'))
+  const xdg = process.env.XDG_DATA_HOME
+  process.env.XDG_DATA_HOME = path.join(tmp, 'share')
+  const db = library.open(path.join(tmp, 'data'))
+  const photos = path.join(tmp, 'Photos')
+  const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: photos, port: 0 })
+  try {
+    const trash = path.join(tmp, 'share', 'Trash')
+    fs.mkdirSync(path.join(trash, 'files'), { recursive: true }); fs.mkdirSync(path.join(trash, 'info'))
+    const put = (id, rel, body) => {
+      fs.writeFileSync(path.join(trash, 'files', id), body)
+      fs.writeFileSync(path.join(trash, 'info', id + '.trashinfo'), `[Trash Info]\nPath=${path.join(photos, rel)}\nDeletionDate=2026-09-25T15:00:00\n`)
+    }
+    db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, location) VALUES('old/a.jpg', ?, 'image/jpeg', 0, 5, 1, 1, 'drive')`).run('a'.repeat(64))
+    put('a.jpg', 'old/a.jpg', 'AAAAA')        // the moved photo's copy: same path, same size
+    put('b.jpg', 'old/b.jpg', 'BBBBB')        // something else the person trashed
+    put('a.2.jpg', 'old/a.jpg', 'changed!')   // same name, other bytes: not provably the same photo
+    assert.equal(await server.releaseTrashedMoved(), 1)
+    assert.deepEqual(fs.readdirSync(path.join(trash, 'files')).sort(), ['a.2.jpg', 'b.jpg'])
+    assert.ok(!fs.existsSync(path.join(trash, 'info', 'a.jpg.trashinfo')))
+  } finally {
+    if (xdg === undefined) delete process.env.XDG_DATA_HOME; else process.env.XDG_DATA_HOME = xdg
+    db.close(); fs.rmSync(tmp, { recursive: true, force: true })
   }
 })

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu } = require('electron')
+const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
@@ -12,6 +12,8 @@ const editor = require('./editor')
 const docs = require('./documents')
 const { SyncServer } = require('./sync')
 const { Folders } = require('./folders')
+const { Purgatory } = require('./purgatory')
+const history = require('./history')
 
 const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'local-drive-desktop')
 // ~/Tetra/Photos and ~/Tetra/Files, moved from ~/Drive once (home.js). Never from a hidden QA copy (scripts/shot.js),
@@ -28,7 +30,7 @@ const FILES_ROOT = process.env.DRIVE_FILES || HOME.files
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
-let db, files, people, documents, folders, vault, sync, win, scanning = null
+let db, files, people, documents, folders, vault, sync, purgatory, win, scanning = null
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage']
 
@@ -106,6 +108,67 @@ async function backUpPluggedDrives() {
   }
 }
 function showWindow() { if (win) { win.show(); win.focus() } }
+
+/**
+ * Space, said out loud (SYNC_PLAN.md D3). Once a minute: what a storage drive that is plugged in could take off
+ * this computer — "Free 22 GB … Yes?" — and, whatever Offload is set to, a disk past its threshold. Each is said
+ * at most every few hours; the answer is always the person's, in the window, never automatic.
+ */
+let offer = null, moving = null
+const said = { offer: 0, full: 0 }
+const HOURS = 3_600_000
+const fmtBytes = n => n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`
+function notify(title, body) {
+  if (!Notification.isSupported()) return
+  const n = new Notification({ title, body, icon: path.join(__dirname, 'public', 'icon.png') })
+  n.on('click', () => { showWindow(); if (offer) win?.webContents.send('offload-offer', offer.deviceId) })
+  n.show()
+}
+async function checkSpace() {
+  if (moving || driveBackup) return
+  const plugged = await sync.drives().catch(() => [])
+  offer = null
+  for (const d of plugged) {
+    if (!d.device || sync.driveRules(d.device.id).role !== 'storage') continue
+    const plan = sync.offloadPlan(d.device.id)
+    if (plan.count && (!offer || plan.bytes > offer.bytes)) offer = plan
+  }
+  updateTray()
+  const disk = sync.disk()
+  if (offer && Date.now() - said.offer > 12 * HOURS) {
+    said.offer = Date.now()
+    const why = offer.rules.offload ? `to bring this disk under ${offer.rules.percent} %` : `older than ${offer.rules.keep} ${offer.rules.unit}${offer.rules.keep > 1 ? 's' : ''}`
+    notify(`Free ${fmtBytes(offer.bytes)}?`, `${offer.count.toLocaleString()} photos ${why} are safe on ${offer.name}. Click to review — Yes and they go.`)
+  }
+  const storage = sync.devices().find(x => x.rules?.role === 'storage' && x.rules.offload)
+  const limit = storage ? storage.rules.percent : 90
+  if (disk && disk.percent >= limit && Date.now() - said.full > 6 * HOURS) {
+    said.full = Date.now()
+    notify(`This disk is ${disk.percent} % full`, `${fmtBytes(disk.free)} left.` + (offer ? ` ${fmtBytes(offer.bytes)} of photos could go to ${offer.name}.`
+      : storage ? '' : ' Make a drive Storage on the Devices page and old photos can move there.'))
+  }
+}
+/** Trash past its days → the purgatory on the drive; purgatory past its days → gone (SYNC_PLAN.md D6). Hourly. */
+let swept = 0
+async function sweepPurgatory() {
+  if (Date.now() - swept < HOURS || moving || driveBackup) return
+  await sync.releaseTrashedMoved().catch(e => console.warn('[trash]', e.message))
+  const drive = await sync.purgatoryDrive()
+  if (!drive) return // the chosen drive is unplugged: nothing leaves a Trash without somewhere safe to go
+  swept = Date.now()
+  // Items still in the old place after a move that waited for a drive to be plugged in.
+  if (purgatory.summary().some(s => s.driveId !== drive.id)) await purgatory.relocate(purgatory.settings().location, id => sync.purgatoryBase(id))
+  const r = await purgatory.sweep(drive.id, drive.mount)
+  if (r.entered || r.purged || r.failed.length) console.log(`[purgatory] ${r.entered} in, ${r.purged} deleted, ${r.failed.length} failed`, r.failed.slice(0, 3))
+  if (r.entered) win?.webContents.send('sync-received')
+}
+function moveToDrive(id, options) {
+  if (moving) throw new Error('A move is already running.')
+  moving = sync.moveToDrive(id, options, p => win?.webContents.send('move-progress', p))
+    .finally(() => {
+      sync.releaseTrashedMoved().catch(() => {}) moving = null; offer = null; said.offer = Date.now(); updateTray(); win?.webContents.send('sync-received') })
+  return moving
+}
 function updateTray() {
   if (!tray) return
   const status = driveBackup ? `Backing up to ${driveBackup.name}: ${driveBackup.done.toLocaleString()} / ${driveBackup.total.toLocaleString()}`
@@ -115,6 +178,8 @@ function updateTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open Tetra', click: showWindow },
     { label: status, enabled: false },
+    { label: offer ? `Free ${fmtBytes(offer.bytes)}: ${offer.count.toLocaleString()} photos to ${offer.name}…` : '', visible: !!offer,
+      click: () => { showWindow(); win?.webContents.send('offload-offer', offer.deviceId) } },
     analysis.running ? { label: 'Pause analysis', click: () => { analysis.paused = true; analyzer?.postMessage({ type: 'pause' }) } }
       : { label: 'Resume analysis', visible: analysis.paused, click: () => analyzeLibrary() },
     { type: 'separator' },
@@ -137,15 +202,22 @@ app.whenReady().then(() => {
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
-  folders = new Folders(db)
+  // Read on each question, not once: a device's Photos row can change while the app runs.
+  folders = new Folders(db, () => !!sync?.devices().some(d => !d.volume_uuid && d.connections.some(c => c.content === 'photos' && c.direction === 'both')))
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
-  sync = new SyncServer({ db, documents, people, files, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, onReceived: () => {
+  purgatory = new Purgatory({ db, photosRoot: PHOTOS_ROOT, files, serverBase: path.dirname(HOME.root) })
+  sync = new SyncServer({ db, documents, people, files, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   } })
   sync.start().catch(e => { sync.error = e.message })
-  setInterval(() => backUpPluggedDrives(), 60_000) // a drive plugged in is noticed within a minute
+  purgatory.held = sha => sync.heldSafely(sha)
+  // Photos moved before a Move deleted outright are still in the system Trash, taking the room they were to free.
+  setTimeout(() => sync.releaseTrashedMoved().then(n => n && console.log(`[trash] ${n} moved photos let go`)).catch(() => {}), 5000)
+  // A drive plugged in is noticed within a minute. Never from a hidden QA copy (scripts/shot.js): it would back up
+  // and notify from a database that is not the real one.
+  if (!process.env.DRIVE_HIDDEN) setInterval(() => backUpPluggedDrives().then(checkSpace).then(sweepPurgatory).catch(e => console.warn('[space]', e.message)), 60_000)
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
 
   // media://thumb/<sha256>  and  media://file/<id>  — only files the database knows about are served.
@@ -155,8 +227,9 @@ app.whenReady().then(() => {
     let file
     if (url.host === 'thumb' && /^[0-9a-f]{64}$/.test(key)) file = path.join(DATA_DIR, 'thumbs', key + '.webp')
     if (url.host === 'file') {
-      const row = db.prepare('SELECT path, sha256 FROM media WHERE id = ?').get(Number(key))
-      if (row) file = path.join(PHOTOS_ROOT, row.path)
+      const row = db.prepare('SELECT path, sha256, location FROM media WHERE id = ?').get(Number(key))
+      if (row) file = (await sync.locate(row)).file // on the storage drive, or null when it is not plugged in
+      // A preview made before the move is still in the cache, so a moved HEIC opens without the drive.
       if (row && library.needsPreview(row.path)) file = await library.preview(file, row.sha256, DATA_DIR).catch(() => null)
     }
     if (url.host === 'face' && /^[0-9a-f-]{36}$/.test(key)) file = await people.crop(key, PHOTOS_ROOT).catch(() => null)
@@ -178,13 +251,27 @@ app.whenReady().then(() => {
 
   ipcMain.handle('library:info', () => ({ photosRoot: PHOTOS_ROOT }))
   // The Photos view shows the default folders and the ones you said yes to (folders.js); the library keeps all.
-  ipcMain.handle('library:list', () => { const c = folders.choices(); return library.list(db).filter(m => folders.isShown(m.path, c)) })
+  ipcMain.handle('library:list', () => {
+    const c = folders.choices()
+    const names = new Map(db.prepare('SELECT id, name FROM sync_devices WHERE volume_uuid IS NOT NULL').all().map(d => [d.id, d.name]))
+    return library.list(db).filter(m => folders.isShown(m.path, c)).map(m => m.location ? { ...m, drive: names.get(m.location) ?? 'a drive' } : m)
+  })
   ipcMain.handle('folders:list', () => folders.list().map(({ shas, ...f }) => f))
   ipcMain.handle('folders:set', (_, name, included) => { folders.set(name, included); sync.nudge().catch(() => {}) })
   ipcMain.handle('library:scan', () => startScan())
   ipcMain.handle('photos:favorite', (_, shas, on) => library.setFavorite(db, shas, on))
-  ipcMain.handle('photos:trash', (_, ids) => library.trash(db, PHOTOS_ROOT, ids, f => shell.trashItem(f)))
-  ipcMain.handle('collections:list', () => library.collections(db))
+  ipcMain.handle('photos:trash', (_, ids) => {
+    for (const id of ids) { const r = db.prepare('SELECT path, sha256, size FROM media WHERE id = ?').get(Number(id)); if (r) history.record(db, { action: 'trashed', kind: 'photo', name: r.path, sha256: r.sha256, size: r.size }) }
+    return library.trash(db, PHOTOS_ROOT, ids, f => shell.trashItem(f))
+  })
+  ipcMain.handle('photos:places', () => folders.places())
+  ipcMain.handle('photos:moveTo', (_, ids, dest) => {
+    const r = folders.move(PHOTOS_ROOT, ids, dest)
+    if (r.moved) { sync.nudge().catch(() => {}); history.record(db, { action: 'moved to folder', kind: 'photo', name: dest, detail: `${r.moved} photos` }) }
+    return r
+  })
+  // A collection named after an included folder is that folder: taking a photo out of it moves the file.
+  ipcMain.handle('collections:list', () => { const albums = folders.folderAlbums(); return library.collections(db).map(c => ({ ...c, folder: albums.has(c.name.toLowerCase()) })) })
   ipcMain.handle('collections:create', (_, name) => library.createCollection(db, name))
   ipcMain.handle('collections:delete', (_, id) => library.deleteCollection(db, id))
   ipcMain.handle('collections:members', (_, id) => library.members(db, id))
@@ -192,8 +279,17 @@ app.whenReady().then(() => {
   ipcMain.handle('collections:hide', (_, id, hidden) => library.setCollectionHidden(db, id, hidden))
   // Photos Trash is the system's own trash, filtered to what came out of this library.
   ipcMain.handle('trash:list', () => library.trashedPhotos(PHOTOS_ROOT))
-  ipcMain.handle('trash:restore', async (_, ids) => { const r = await library.restoreTrashed(PHOTOS_ROOT, ids); startScan(); return r })
-  ipcMain.handle('trash:empty', () => library.emptyPhotoTrash(PHOTOS_ROOT))
+  ipcMain.handle('trash:restore', async (_, ids) => {
+    const r = await library.restoreTrashed(PHOTOS_ROOT, ids); startScan()
+    for (const p of r.restored) history.record(db, { action: 'restored', kind: 'photo', name: p })
+    return r
+  })
+  // By hand, so a plain delete (D6): the person chose it.
+  ipcMain.handle('trash:empty', async () => { const n = await library.emptyPhotoTrash(PHOTOS_ROOT); history.record(db, { action: 'emptied Trash by hand', kind: 'photo', detail: `${n} deleted` }); return n })
+  ipcMain.handle('history:list', (_, options) => history.list(db, options ?? {}))
+  ipcMain.handle('purgatory:settings', () => ({ ...purgatory.settings(), summary: purgatory.summary() }))
+  ipcMain.handle('purgatory:set', (_, changes) => purgatory.setSettings(changes ?? {}))
+  ipcMain.handle('purgatory:setLocation', (_, driveId) => purgatory.relocate(driveId ? String(driveId) : '', id => sync.purgatoryBase(id)))
   // These two describe the library, not this computer, so they live in the database and sync (SYNC_PLAN.md).
   ipcMain.handle('settings:view', () => ({ hideScreenshots: setting('hideScreenshots') === '1', hideDocuments: setting('hideDocuments') === '1' }))
   ipcMain.handle('settings:setView', (_, key, on) => {
@@ -240,8 +336,8 @@ app.whenReady().then(() => {
   ipcMain.handle('vault:hide', async (_, ids) => {
     const result = { hidden: 0, failed: [] }
     for (const id of ids) {
-      const row = db.prepare('SELECT * FROM media WHERE id = ?').get(Number(id))
-      if (!row) continue
+      const row = db.prepare('SELECT * FROM media WHERE id = ? AND location IS NULL').get(Number(id))
+      if (!row) { result.failed.push('A photo on a storage drive cannot be hidden from here.'); continue }
       try {
         await vault.hide(row, path.join(PHOTOS_ROOT, row.path), path.join(DATA_DIR, 'thumbs', row.sha256 + '.webp'))
         // No plaintext traces: thumbnail, HEIC preview and face crops of this photo go too.
@@ -261,14 +357,17 @@ app.whenReady().then(() => {
   })
   // Editor: bytes in (HEIC via its JPEG preview), JPEG out.
   ipcMain.handle('editor:load', async (_, id) => {
-    const row = db.prepare('SELECT path, sha256 FROM media WHERE id = ?').get(Number(id))
+    const row = db.prepare('SELECT path, sha256, location FROM media WHERE id = ?').get(Number(id))
     if (!row) throw new Error('This photo is no longer in the library.')
-    const full = path.join(PHOTOS_ROOT, row.path)
+    const { file: full, why } = await sync.locate(row)
+    if (!full) throw new Error(why)
     return fs.promises.readFile(library.needsPreview(row.path) ? await library.preview(full, row.sha256, DATA_DIR) : full)
   })
   ipcMain.handle('editor:save', async (_, id, bytes, mode) => {
     const row = db.prepare('SELECT * FROM media WHERE id = ?').get(Number(id))
     if (!row) throw new Error('This photo is no longer in the library.')
+    // ponytail: saving next to a photo that lives on the storage drive is not built; bring it back first.
+    if (row.location) throw new Error('This photo lives on a storage drive; saving an edit there is not possible yet.')
     const full = path.join(PHOTOS_ROOT, row.path)
     const target = mode === 'replace'
       ? await editor.replace(full, bytes, row.taken_at, f => shell.trashItem(f))
@@ -282,9 +381,15 @@ app.whenReady().then(() => {
     await startScan()
     return path.relative(PHOTOS_ROOT, target)
   })
-  ipcMain.handle('sync:status', () => ({ port: sync.port, fingerprint: sync.fingerprint, error: sync.error ?? null,
+  // This PC's own counts for the Devices page, which asks every 3 s: files are walked at most once a minute.
+  let filesCount = { at: 0, n: 0 }
+  const selfCounts = async () => {
+    if (Date.now() - filesCount.at > 60_000) filesCount = { at: Date.now(), n: (await files.all().catch(() => [])).filter(i => !i.dir).length }
+    return { photos: db.prepare('SELECT COUNT(*) n FROM media WHERE location IS NULL').get().n, files: filesCount.n }
+  }
+  ipcMain.handle('sync:status', async () => ({ counts: await selfCounts(), port: sync.port, fingerprint: sync.fingerprint, error: sync.error ?? null,
     addresses: require('node:os').networkInterfaces && Object.values(require('node:os').networkInterfaces()).flat().filter(a => a?.family === 'IPv4' && !a.internal).map(a => a.address),
-    devices: sync.devices(), overview: sync.overview(), self: sync.self() }))
+    devices: sync.devices(), overview: sync.overview(), self: sync.self(), disk: sync.disk() }))
   ipcMain.handle('sync:pair', async () => {
     const payload = sync.startPairing()
     return { payload, qr: await require('qrcode').toDataURL(JSON.stringify(payload), { margin: 1, width: 360, errorCorrectionLevel: 'M' }) }
@@ -298,7 +403,11 @@ app.whenReady().then(() => {
   ipcMain.handle('sync:addDrive', (_, drive) => sync.addDrive(drive ?? {}))
   ipcMain.handle('sync:backUpToDrive', (_, id) => backUpToDrive(id))
   ipcMain.handle('sync:forget', (_, id) => sync.forget(id))
+  ipcMain.handle('sync:setDriveRules', (_, id, rules) => sync.setDriveRules(id, rules ?? {}))
+  ipcMain.handle('sync:offloadPlan', (_, id) => ({ ...sync.offloadPlan(id), ids: undefined }))
+  ipcMain.handle('sync:moveToDrive', (_, id, options) => moveToDrive(id, options ?? {}))
   ipcMain.handle('sync:setConnection', (_, id, content, rules) => sync.setConnection(id, content, rules))
+  ipcMain.handle('sync:movePreview', (_, id, options) => sync.movePreview(id, options ?? {}))
   ipcMain.handle('open-map', (_, lat, lon) => {
     if (![lat, lon].every(Number.isFinite) || Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error('Invalid location.')
     return shell.openExternal(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`)
@@ -306,6 +415,7 @@ app.whenReady().then(() => {
   ipcMain.handle('files:root', () => files.root)
   ipcMain.handle('files:call', (_, method, ...args) => {
     if (!FILE_CALLS.includes(method)) throw new Error('Unknown Files action.')
+    if (method === 'trash' || method === 'emptyTrash') history.record(db, { action: method === 'trash' ? 'trashed' : 'emptied Trash by hand', kind: 'file', name: method === 'trash' ? String(args[0]) : null })
     return files[method](...args)
   })
   ipcMain.handle('files:open', async (_, rel) => {
@@ -316,8 +426,8 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('files:reveal', (_, rel) => shell.showItemInFolder(files.resolve(rel)))
   ipcMain.handle('library:show', (_, id) => {
-    const row = db.prepare('SELECT path FROM media WHERE id = ?').get(id)
-    if (row) shell.showItemInFolder(path.join(PHOTOS_ROOT, row.path))
+    const row = db.prepare('SELECT path, location FROM media WHERE id = ?').get(id)
+    if (row) sync.locate(row).then(at => at.file && shell.showItemInFolder(at.file))
   })
 
   if (!process.env.DRIVE_HIDDEN && HOME.root.endsWith('Tetra')) home.markFolder(HOME.root, path.join(__dirname, 'public', 'icon.png'), DATA_DIR)

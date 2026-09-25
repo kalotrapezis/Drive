@@ -1,6 +1,6 @@
 {
   "name": "local-drive-desktop",
-  "version": "0.2.0-alpha.3",
+  "version": "0.2.0-alpha.4",
   "description": "Tetra desktop app",
   "main": "main.js",
   "scripts": {
@@ -56,6 +56,8 @@
       "folders.js",
       "drives.js",
       "home.js",
+      "purgatory.js",
+      "history.js",
       "models/*.onnx",
       "dist/**",
       "public/icon.png",

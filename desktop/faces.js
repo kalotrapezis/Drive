@@ -254,11 +254,11 @@ class People {
   /** `everything` is a rescan: read photos that were read before, because the rules have changed since. */
   pending(everything = false) {
     if (everything) {
-      return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m WHERE m.is_video = 0
+      return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m WHERE m.is_video = 0 AND m.location IS NULL
         GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all()
     }
     return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m LEFT JOIN face_analysis a ON a.sha256 = m.sha256 AND a.version = ?
-      WHERE m.is_video = 0 AND a.sha256 IS NULL GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all(ANALYSIS_VERSION)
+      WHERE m.is_video = 0 AND m.location IS NULL AND a.sha256 IS NULL GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all(ANALYSIS_VERSION)
   }
 
   /**

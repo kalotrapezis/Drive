@@ -60,6 +60,10 @@ function open(dataDir) {
   const columns = db.prepare('PRAGMA table_info(media)').all().map(c => c.name)
   if (!columns.includes('place')) db.exec('ALTER TABLE media ADD COLUMN place TEXT; ALTER TABLE media ADD COLUMN place_names TEXT;')
   if (!columns.includes('meta_v')) db.exec('ALTER TABLE media ADD COLUMN meta_v INTEGER NOT NULL DEFAULT 1')
+  // Where the photo physically is (SYNC_PLAN.md D3): NULL is this computer's Photos folder, otherwise the id of the
+  // storage drive it was moved to, at the same relative path under <drive>/Tetra/Photos. It stays in the library
+  // either way — grid, People, collections and search keep it — only opening it needs the drive.
+  if (!columns.includes('location')) db.exec('ALTER TABLE media ADD COLUMN location TEXT')
   // "Hide this album from Gallery" belongs to the album, not to this computer, so it lives here and syncs.
   if (!db.prepare('PRAGMA table_info(collections)').all().some(c => c.name === 'hidden')) db.exec('ALTER TABLE collections ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0')
   // Labels had no clock, so they could only ever be sent one way (SYNC_PLAN.md 6w 2). Everything already
@@ -155,7 +159,8 @@ async function makeThumb(file, isVideo, target) {
 
 /** Brings the database in line with the folder. Unchanged files (same size + mtime) are not re-read. */
 async function scan(db, root, dataDir, onProgress = () => {}) {
-  const known = new Map(db.prepare('SELECT path, size, mtime, sha256, thumb, meta_v FROM media').all().map(r => [r.path, r]))
+  // Only what lives here: a photo moved to a storage drive is not in this folder, and that is not a deletion.
+  const known = new Map(db.prepare('SELECT path, size, mtime, sha256, thumb, meta_v FROM media WHERE location IS NULL').all().map(r => [r.path, r]))
   // A folder that is not there is not a library that was emptied: a renamed folder or an unmounted disk must never
   // read as "every photo was deleted", which would drop every face and every place with them.
   if (known.size && !fs.existsSync(root)) throw new Error(`The Photos folder is missing (${root}); nothing was changed.`)
@@ -163,7 +168,8 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
   const insert = db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, width, height, latitude, longitude, camera, thumb, meta_v)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,${META_VERSION}) ON CONFLICT(path) DO UPDATE SET sha256=excluded.sha256, mime=excluded.mime, is_video=excluded.is_video,
     size=excluded.size, mtime=excluded.mtime, taken_at=excluded.taken_at, width=excluded.width, height=excluded.height,
-    latitude=excluded.latitude, longitude=excluded.longitude, camera=excluded.camera, thumb=excluded.thumb, meta_v=excluded.meta_v, place=NULL, place_names=NULL`)
+    latitude=excluded.latitude, longitude=excluded.longitude, camera=excluded.camera, thumb=excluded.thumb, meta_v=excluded.meta_v, place=NULL, place_names=NULL,
+    location=NULL`) // found in the folder again (restored from the Trash, say): it lives here again
   let done = 0, changed = 0
   for await (const file of walk(root)) {
     const ext = path.extname(file).toLowerCase()
@@ -188,7 +194,7 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
   // An empty mount point looks exactly like this. A handful of photos all deleted on purpose is allowed through.
   // ponytail: a count, not a mount check; switch to comparing the folder's device id if it ever misfires.
   if (known.size >= 20 && seen.size === 0) throw new Error(`The Photos folder is empty (${root}); nothing was changed.`)
-  const del = db.prepare('DELETE FROM media WHERE path = ?')
+  const del = db.prepare('DELETE FROM media WHERE path = ? AND location IS NULL')
   const byPath = db.prepare('SELECT sha256 FROM media WHERE path = ?')
   const gone = []
   let removed = 0
@@ -210,6 +216,7 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
 
 function list(db) {
   return db.prepare(`SELECT m.id, m.path, m.sha256, m.mime, m.is_video, m.size, m.taken_at, m.width, m.height, m.latitude, m.longitude, m.camera, m.thumb, m.place, m.place_names,
+    m.location,
     COALESCE(s.favorite, 0) AS favorite, COALESCE(a.type = 'document', 0) AS document,
     (SELECT GROUP_CONCAT(label, ', ') FROM photo_labels l WHERE l.sha256 = m.sha256) AS labels
     FROM media m LEFT JOIN photo_state s ON s.sha256 = m.sha256 LEFT JOIN photo_ai a ON a.sha256 = m.sha256 ORDER BY m.taken_at DESC, m.path`).all()

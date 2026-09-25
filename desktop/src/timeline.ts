@@ -6,6 +6,8 @@ export interface Media {
   taken_at: number; width: number | null; height: number | null
   latitude: number | null; longitude: number | null; camera: string | null; thumb: number; favorite: number
   place: string | null; place_names: string | null; document?: number; labels?: string | null
+  /** Set when the photo lives on a storage drive: the drive's id, and its name. */
+  location?: string | null; drive?: string
 }
 
 export interface Group<T> { key: string; label: string; items: T[] }

@@ -11,6 +11,7 @@ const dgram = require('node:dgram')
 const crypto = require('node:crypto')
 const library = require('./library')
 const drives = require('./drives')
+const history = require('./history')
 
 const PORT = 43180
 const BEACON_PORT = 43181
@@ -26,6 +27,13 @@ const MAX_SEND = 2000 // one answer's worth; the next sync continues where this 
 const CONTENTS = ['photos', 'files']
 const DIRECTIONS = ['off', 'send', 'receive', 'both']
 const KEEPS = ['everything', 'nothing']
+/**
+ * What a drive is for, and when this computer lets photos go to it (SYNC_PLAN.md D3). Every choice is the
+ * person's; the default is the safest one — a backup, nothing released. `copies` counts places that hold it
+ * *other than this computer*, the storage drive included, and the drive's copy is read back before each move.
+ */
+const DRIVE_RULES = { role: 'backup', offload: false, percent: 80, keep: 1, unit: 'year', copies: 2, favorites: true }
+const UNIT_MS = { day: 86_400_000, week: 7 * 86_400_000, month: 30 * 86_400_000, year: 365 * 86_400_000 }
 const sha = s => crypto.createHash('sha256').update(s).digest('hex')
 const isHash = h => typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)
 const safeRel = rel => typeof rel === 'string' && rel.length < 512 && !rel.startsWith('/') && rel.split('/').every(p => p !== '.' && p !== '..') && !/[\\\0]/.test(rel)
@@ -49,8 +57,8 @@ function lanAddresses() {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan). */
-  constructor({ db, documents, people, files, dataDir, photosRoot, onReceived = () => {}, port = PORT, beaconPort = BEACON_PORT }) {
-    Object.assign(this, { db, documents, people, files, dataDir, photosRoot, onReceived, port, beaconPort })
+  constructor({ db, documents, people, files, dataDir, photosRoot, onReceived = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null }) {
+    Object.assign(this, { db, documents, people, files, dataDir, photosRoot, onReceived, port, beaconPort, trashItem, purgatory })
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS sync_devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, paired_at INTEGER NOT NULL, last_seen INTEGER);
@@ -88,6 +96,9 @@ class SyncServer {
     // A drive is not reached over a network, so it has none of the peer columns: it is known by the UUID of
     // its filesystem, because a mount point moves and a disk does not (SYNC_PLAN.md D5).
     if (!columns.includes('volume_uuid')) db.exec('ALTER TABLE sync_devices ADD COLUMN volume_uuid TEXT')
+    if (!columns.includes('rules')) db.exec('ALTER TABLE sync_devices ADD COLUMN rules TEXT') // a drive's DRIVE_RULES, as JSON
+    // Drive files on a drive, as counted by its last backup: a drive has no manifest to send, so it is counted there.
+    if (!columns.includes('files_held')) db.exec('ALTER TABLE sync_devices ADD COLUMN files_held INTEGER')
     // Nothing crosses until someone has said what should cross. A device paired straight into "Send & receive"
     // and started uploading its whole camera roll before anyone could stop it (24 September, the tablet), so a
     // new device now waits here, with every row Off, until the rules are answered (SYNC_PLAN.md 6aj).
@@ -95,6 +106,11 @@ class SyncServer {
       db.exec('ALTER TABLE sync_devices ADD COLUMN set_up_at INTEGER')
       db.exec('UPDATE sync_devices SET set_up_at = paired_at')  // everything paired before this was set up by hand
     }
+    // A Move keeps a window on the device — never everything, or it is a Copy (asked 2026-09-25): the last
+    // keep_days days, and favorites unless told otherwise. 30 days by default.
+    const connCols = db.prepare('PRAGMA table_info(sync_connections)').all().map(c => c.name)
+    if (!connCols.includes('keep_days')) db.exec('ALTER TABLE sync_connections ADD COLUMN keep_days INTEGER NOT NULL DEFAULT 30')
+    if (!connCols.includes('keep_favorites')) db.exec('ALTER TABLE sync_connections ADD COLUMN keep_favorites INTEGER NOT NULL DEFAULT 1')
     const held = db.prepare('PRAGMA table_info(device_holdings)').all().map(c => c.name)
     for (const [name, type] of [['name', 'TEXT'], ['size', 'INTEGER'], ['is_video', 'INTEGER'], ['taken_at', 'INTEGER']]) {
       if (!held.includes(name)) db.exec(`ALTER TABLE device_holdings ADD COLUMN ${name} ${type}`)
@@ -227,17 +243,20 @@ class SyncServer {
     const root = path.join(mount, 'Tetra', 'Photos')
     // The drive's own rules decide what goes: photos, Drive files, or both (the Add-a-drive guide sets them).
     const on = content => ['receive', 'both'].includes(this.db.prepare('SELECT direction FROM sync_connections WHERE device_id = ? AND content = ?').get(device.id, content)?.direction)
-    const rows = on('photos') ? this.db.prepare('SELECT path, sha256, size FROM media ORDER BY size').all() : []
+    const rows = on('photos') ? this.db.prepare('SELECT path, sha256, size FROM media WHERE location IS NULL ORDER BY size').all() : []
     const files = on('files') ? (await this.driveFiles(mount)).filter(f => !f.there) : []
     const total = rows.length + files.length
     const held = this.db.prepare("SELECT 1 FROM device_holdings WHERE device_id = ? AND kind = 'photo' AND sha256 = ?")
     let copied = 0, already = 0, failed = []
+    // Everything the drive holds is said again at the end, not only what was copied this time: holds() forgets what
+    // is not repeated within a day, and the drive then looked like it held last night's copies and nothing else.
+    const present = on('photos') ? this.db.prepare('SELECT sha256 FROM media WHERE location = ?').all(device.id).map(r => r.sha256) : []
     for (const [i, row] of rows.entries()) {
       onProgress({ done: i, total, copied, already })
       const target = path.join(root, row.path)
       // Already there is two questions, not one: the ledger says so *and* the file is still that size. The
       // lesson of 6ag, applied before it can happen here.
-      if (held.get(device.id, row.sha256) && fs.existsSync(target) && fs.statSync(target).size === row.size) { already++; continue }
+      if (held.get(device.id, row.sha256) && fs.existsSync(target) && fs.statSync(target).size === row.size) { already++; present.push(row.sha256); continue }
       try {
         await fsp.mkdir(path.dirname(target), { recursive: true })
         const part = target + '.part'
@@ -253,17 +272,21 @@ class SyncServer {
         await fsp.rename(part, target)
         this.db.prepare(`INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at, kind)
           VALUES(?,?,?,?,?,'photo')`).run(device.id, row.sha256, row.path, row.size, Date.now())
-        this.holds(device.id, 'photo', [row.sha256])
+        present.push(row.sha256)
         copied++
       } catch (e) {
         failed.push(`${row.path}: ${e.message}`)
         if (failed.length > 50) break
       }
     }
+    let filesFailed = 0
     for (const [i, f] of files.entries()) {
       onProgress({ done: rows.length + i, total, copied, already })
-      try { await this.copyFileToDrive(f, mount); copied++ } catch (e) { failed.push(`${f.path}: ${e.message}`); if (failed.length > 50) break }
+      try { await this.copyFileToDrive(f, mount); copied++ } catch (e) { filesFailed++; failed.push(`${f.path}: ${e.message}`); if (failed.length > 50) break }
     }
+    if (on('files')) this.db.prepare('UPDATE sync_devices SET files_held = ? WHERE id = ?').run((await this.driveFiles(mount)).filter(f => f.there).length, device.id)
+    this.holds(device.id, 'photo', present)
+    if (copied || failed.length) history.record(this.db, { action: 'backed up to drive', device: device.id, detail: `${copied} copied, ${already} already there, ${failed.length} failed` })
     this.db.prepare('UPDATE sync_devices SET last_seen = ? WHERE id = ?').run(Date.now(), device.id)
     onProgress({ done: total, total, copied, already })
     return { copied, already, failed, total }
@@ -306,9 +329,9 @@ class SyncServer {
     for await (const c of fs.createReadStream(part)) back.update(c)
     if (read.digest('hex') !== back.digest('hex')) { await fsp.rm(part, { force: true }); throw new Error('The copy on the drive did not read back the same; nothing was kept.') }
     if (fs.existsSync(target)) {
-      const history = path.join(mount, 'Tetra', 'Files history', new Date().toISOString().replace(/[:.]/g, '-'), f.path)
-      await fsp.mkdir(path.dirname(history), { recursive: true })
-      await fsp.rename(target, history)
+      const older = path.join(mount, 'Tetra', 'Files history', new Date().toISOString().replace(/[:.]/g, '-'), f.path)
+      await fsp.mkdir(path.dirname(older), { recursive: true })
+      await fsp.rename(target, older)
     }
     await fsp.rename(part, target)
     await fsp.utimes(target, new Date(), new Date(f.mtimeMs))
@@ -322,12 +345,198 @@ class SyncServer {
   }
 
   devices() {
-    return this.db.prepare(`SELECT d.id, d.name, d.paired_at, d.last_seen, d.kind, d.volume_uuid, d.set_up_at,
+    return this.db.prepare(`SELECT d.id, d.name, d.paired_at, d.last_seen, d.kind, d.volume_uuid, d.set_up_at, d.rules,
         (SELECT COUNT(*) FROM sync_receipts r WHERE r.device_id = d.id AND r.kind = 'photo') AS received,
-        (SELECT COUNT(*) FROM sync_receipts r WHERE r.device_id = d.id AND r.kind = 'file') AS filesReceived
-      FROM sync_devices d ORDER BY d.paired_at`).all().map(d => ({ ...d, connections: this.connections(d.id) }))
+        (SELECT COUNT(*) FROM sync_receipts r WHERE r.device_id = d.id AND r.kind = 'file') AS filesReceived,
+        -- What the device holds, as it last said (a drive: as its last backup found it), not what it once sent.
+        (SELECT COUNT(*) FROM device_holdings h WHERE h.device_id = d.id AND h.kind = 'photo') AS holdsPhotos,
+        CASE WHEN d.volume_uuid IS NOT NULL THEN d.files_held
+          ELSE (SELECT COUNT(*) FROM device_holdings h WHERE h.device_id = d.id AND h.kind = 'file') END AS holdsFiles
+      FROM sync_devices d ORDER BY d.paired_at`).all().map(d => ({ ...d, rules: d.volume_uuid ? this.driveRules(d.id) : null, connections: this.connections(d.id) }))
   }
-  forget(id) { this.db.prepare('DELETE FROM sync_devices WHERE id = ?').run(String(id)) }
+  forget(id) {
+    // Photos that live on this drive would have nowhere to be opened from, and nobody to ask for them.
+    if (this.db.prepare('SELECT 1 FROM media WHERE location = ?').get(String(id))) throw new Error('Photos live on this drive. Bring them back before forgetting it.')
+    if (this.purgatory?.settings().location === String(id)) throw new Error('The purgatory is on this drive. Move it back to this PC before forgetting it.')
+    this.db.prepare('DELETE FROM sync_devices WHERE id = ?').run(String(id))
+  }
+
+  driveRules(id) {
+    let saved = {}
+    try { saved = JSON.parse(this.db.prepare('SELECT rules FROM sync_devices WHERE id = ?').get(String(id))?.rules ?? '{}') ?? {} } catch {}
+    return { ...DRIVE_RULES, ...saved }
+  }
+
+  /** Only known keys, each checked: this is what decides which photos may leave this computer. */
+  setDriveRules(id, changes = {}) {
+    const r = this.driveRules(id)
+    if (['backup', 'storage'].includes(changes.role)) r.role = changes.role
+    if (typeof changes.offload === 'boolean') r.offload = changes.offload
+    if (Number.isInteger(changes.percent) && changes.percent >= 10 && changes.percent <= 99) r.percent = changes.percent
+    if (Number.isInteger(changes.keep) && changes.keep >= 1 && changes.keep <= 1000) r.keep = changes.keep
+    if (UNIT_MS[changes.unit]) r.unit = changes.unit
+    if (Number.isInteger(changes.copies) && changes.copies >= 1 && changes.copies <= 5) r.copies = changes.copies
+    if (typeof changes.favorites === 'boolean') r.favorites = changes.favorites
+    this.db.prepare('UPDATE sync_devices SET rules = ? WHERE id = ? AND volume_uuid IS NOT NULL').run(JSON.stringify(r), String(id))
+    return r
+  }
+
+  /**
+   * The drive the purgatory lives on right now: a set-up drive that is plugged in, the storage drive first.
+   * Null when none is — then nothing may leave a Trash (SYNC_PLAN.md D6).
+   */
+  async purgatoryDrive() {
+    if (!this.purgatory) return null
+    const chosen = this.purgatory.settings().location
+    // By default the server keeps it, on its own disk; a drive only when the person chose one for it.
+    if (!chosen) return this.purgatory.serverBase ? { id: 'server', name: this.self().label, mount: this.purgatory.serverBase } : null
+    const d = this.db.prepare('SELECT id, name, volume_uuid FROM sync_devices WHERE id = ?').get(chosen)
+    const mount = d?.volume_uuid && await drives.mountOf(d.volume_uuid)
+    return mount ? { id: d.id, name: d.name, mount } : null
+  }
+
+  /** Where a purgatory location is right now: '' is this computer, a drive id is its mount point or null. */
+  async purgatoryBase(id) {
+    if (!id) return this.purgatory?.serverBase ?? null
+    const d = this.db.prepare('SELECT volume_uuid FROM sync_devices WHERE id = ?').get(id)
+    return d?.volume_uuid ? drives.mountOf(d.volume_uuid) : null
+  }
+
+  /**
+   * A device's Trash item whose days are nearly up, handed over instead of being let expire (D6): written to the
+   * drive, checked against the hash the device named, then entered into the purgatory. 503 when there is no
+   * drive: the device keeps it in its Trash and asks again next sync.
+   */
+  async receivePurgatory(req, device, expected, params) {
+    const kind = params.get('kind') === 'file' ? 'file' : 'photo'
+    const origin = params.get('path') ?? ''
+    if (!this.purgatory || !safeRel(origin) || origin === '') throw Object.assign(new Error('Invalid path.'), { status: 400, expose: true })
+    const drive = await this.purgatoryDrive()
+    if (!drive) throw Object.assign(new Error('No storage drive is plugged in; keep it in the Trash for now.'), { status: 503, expose: true })
+    const incoming = path.join(drive.mount, 'Tetra', '.purgatory', `.incoming-${crypto.randomUUID()}`)
+    await fsp.mkdir(path.dirname(incoming), { recursive: true })
+    const hash = crypto.createHash('sha256')
+    const out = fs.createWriteStream(incoming, { flags: 'wx' })
+    try {
+      for await (const chunk of req) { hash.update(chunk); if (!out.write(chunk)) await new Promise(r => out.once('drain', r)) }
+      await new Promise((resolve, reject) => out.end(err => err ? reject(err) : resolve()))
+      if (hash.digest('hex') !== expected) throw Object.assign(new Error('The file changed in transit; nothing was kept.'), { status: 422, expose: true })
+      // Under the device's name, so two phones' "IMG_0001.jpg" never meet.
+      const rel = await this.purgatory.enter(drive.id, drive.mount, kind, incoming, `${device.name.replace(/[\/\0]/g, '_')}/${origin}`)
+      return { sha256: expected, purgatory: rel, drive: drive.name }
+    } finally { out.destroy(); await fsp.rm(incoming, { force: true }) }
+  }
+
+  /**
+   * Copies of moved photos that went to the system Trash before a Move deleted outright (25 September): the drive
+   * holds each of them, checked, so the Trash copy is only taking the room the Move was meant to free.
+   */
+  async releaseTrashedMoved() {
+    const moved = new Map(this.db.prepare('SELECT path, size FROM media WHERE location IS NOT NULL').all().map(r => [r.path, r.size]))
+    if (!moved.size) return 0
+    let released = 0
+    for (const item of await library.trashedPhotos(this.photosRoot)) {
+      if (moved.get(item.path) !== item.size) continue // not that photo, or not the same bytes: leave it alone
+      await fsp.rm(item.file, { force: true })
+      await fsp.rm(path.join(path.dirname(path.dirname(item.file)), 'info', item.id + '.trashinfo'), { force: true })
+      released++
+    }
+    if (released) history.record(this.db, { action: 'emptied from Trash, already on the drive', kind: 'photo', detail: `${released} photos` })
+    return released
+  }
+
+  /** How full the disk that holds the Photos folder is. */
+  disk() {
+    try {
+      const st = fs.statfsSync(this.photosRoot)
+      const size = st.blocks * st.bsize, free = st.bavail * st.bsize
+      return { size, free, percent: size ? Math.round(((size - free) / size) * 100) : 0 }
+    } catch { return null }
+  }
+
+  /**
+   * Where a library photo's bytes are right now: its path in this computer's Photos folder, its path on the storage
+   * drive it was moved to, or null with `why` when that drive is not plugged in.
+   */
+  async locate(row) {
+    if (!row.location) return { file: path.join(this.photosRoot, row.path) }
+    const d = this.db.prepare('SELECT name, volume_uuid FROM sync_devices WHERE id = ?').get(row.location)
+    const mount = d?.volume_uuid && await drives.mountOf(d.volume_uuid)
+    if (!mount) return { file: null, why: `Plug in ${d?.name ?? 'the drive it was moved to'} to open this.` }
+    return { file: path.join(mount, 'Tetra', 'Photos', row.path) }
+  }
+
+  /**
+   * What could leave this computer for a storage drive, oldest first (SYNC_PLAN.md D3 Offload). Only photos the
+   * drive already holds and `copies` places hold in all, never a favorite unless asked. With Offload on, just enough
+   * to bring the disk back under `percent`; with it off, everything older than the window. Nothing moves here.
+   */
+  offloadPlan(deviceId) {
+    const d = this.db.prepare('SELECT id, name, volume_uuid FROM sync_devices WHERE id = ?').get(String(deviceId))
+    if (!d?.volume_uuid) throw new Error('That device is not a drive.')
+    const r = this.driveRules(d.id)
+    const disk = this.disk()
+    const plan = { deviceId: d.id, name: d.name, rules: r, disk, ids: [], count: 0, bytes: 0, oldest: null, newest: null }
+    if (r.role !== 'storage') return plan
+    const rows = this.db.prepare(`SELECT m.id, m.size, m.taken_at FROM media m
+      WHERE m.location IS NULL
+        ${r.favorites ? 'AND NOT EXISTS(SELECT 1 FROM photo_state s WHERE s.sha256 = m.sha256 AND s.favorite = 1)' : ''}
+        AND EXISTS(SELECT 1 FROM device_holdings h WHERE h.sha256 = m.sha256 AND h.kind = 'photo' AND h.device_id = ?)
+        AND (SELECT COUNT(DISTINCT h.device_id) FROM device_holdings h WHERE h.sha256 = m.sha256 AND h.kind = 'photo') >= ?
+      ORDER BY m.taken_at, m.id`).all(d.id, r.copies)
+    let chosen
+    if (r.offload) {
+      const over = disk ? (disk.size - disk.free) - disk.size * (r.percent / 100) : 0
+      let freed = 0
+      chosen = []
+      for (const row of rows) { if (freed >= over) break; chosen.push(row); freed += row.size }
+      plan.short = freed < over ? over - freed : 0 // photos alone cannot bring the disk under the line
+    } else {
+      const cutoff = Date.now() - r.keep * UNIT_MS[r.unit]
+      chosen = rows.filter(row => row.taken_at < cutoff)
+    }
+    plan.ids = chosen.map(c => c.id)
+    plan.count = chosen.length
+    plan.bytes = chosen.reduce((a, c) => a + c.size, 0)
+    plan.oldest = chosen[0]?.taken_at ?? null
+    plan.newest = chosen.at(-1)?.taken_at ?? null
+    return plan
+  }
+
+  /**
+   * The Move: each photo in the plan is read back from the drive and hashed, and only a match lets this computer's
+   * copy go — deleted, not put in the Trash: the Trash is on this same disk and freed nothing (97 % full on
+   * 25 September, after 2,795 photos had "moved"), and the drive holds the checked copy. The photo stays in the
+   * library, now located on the drive. `limit` is for trying it on a handful first.
+   */
+  async moveToDrive(deviceId, { limit = Infinity } = {}, onProgress = () => {}) {
+    const plan = this.offloadPlan(deviceId)
+    const d = this.db.prepare('SELECT id, name, volume_uuid FROM sync_devices WHERE id = ?').get(plan.deviceId)
+    const mount = await drives.mountOf(d.volume_uuid)
+    if (!mount) throw new Error(`${d.name} is not plugged in.`)
+    const ids = plan.ids.slice(0, limit)
+    const get = this.db.prepare('SELECT id, path, sha256, size FROM media WHERE id = ? AND location IS NULL')
+    const put = this.db.prepare('UPDATE media SET location = ? WHERE id = ?')
+    let moved = 0, bytes = 0
+    const failed = []
+    for (const [i, id] of ids.entries()) {
+      onProgress({ done: i, total: ids.length, moved })
+      const row = get.get(id)
+      if (!row) continue
+      const copy = path.join(mount, 'Tetra', 'Photos', row.path)
+      try {
+        const st = await fsp.stat(copy).catch(() => null)
+        if (st?.size !== row.size || await library.sha256(copy) !== row.sha256) throw new Error(`the copy on ${d.name} is not the same; this one stays here`)
+        put.run(d.id, row.id) // first, so a scan running meanwhile reads the missing file as moved, not deleted
+        try { await fsp.rm(path.join(this.photosRoot, row.path)) } catch (e) { put.run(null, row.id); throw e }
+        moved++; bytes += row.size
+        history.record(this.db, { action: 'moved to drive', kind: 'photo', name: row.path, sha256: row.sha256, size: row.size, device: d.id })
+      } catch (e) { failed.push(`${row.path}: ${e.message}`) }
+    }
+    if (moved) this.hereAt = 0
+    onProgress({ done: ids.length, total: ids.length, moved })
+    return { moved, bytes, failed, total: ids.length }
+  }
 
   /**
    * "There is something new here." (SYNC_PLAN.md 6i.)
@@ -411,15 +620,15 @@ class SyncServer {
    * be true, so Keep is forced back to everything whenever the direction is 'both' (SYNC_PLAN.md 6j).
    */
   connection(deviceId, content) {
-    const row = this.db.prepare('SELECT direction, keep FROM sync_connections WHERE device_id = ? AND content = ?').get(deviceId, content)
-    if (row) return { content, direction: row.direction, keep: row.direction === 'both' ? 'everything' : row.keep }
+    const row = this.db.prepare('SELECT direction, keep, keep_days, keep_favorites FROM sync_connections WHERE device_id = ? AND content = ?').get(deviceId, content)
+    if (row) return { content, direction: row.direction, keep: row.direction === 'both' ? 'everything' : row.keep, keepDays: row.keep_days, keepFavorites: !!row.keep_favorites }
     // A device that has not been set up yet gets Off, not Send & receive: the answer to "what should cross"
     // is the person's, and until it is given the honest default is "nothing".
     const setUp = this.db.prepare('SELECT set_up_at FROM sync_devices WHERE id = ?').get(deviceId)?.set_up_at
     const direction = setUp ? 'both' : 'off'
     this.db.prepare('INSERT INTO sync_connections(device_id, content, direction, keep, updated_at) VALUES(?,?,?,?,?)')
       .run(deviceId, content, direction, 'everything', Date.now())
-    return { content, direction, keep: 'everything' }
+    return { content, direction, keep: 'everything', keepDays: 30, keepFavorites: true }
   }
 
   /** The rules have been answered: the device may sync from now on. */
@@ -430,21 +639,57 @@ class SyncServer {
 
   connections(deviceId) { return CONTENTS.map(c => this.connection(deviceId, c)) }
 
-  setConnection(deviceId, content, { direction, keep }) {
+  setConnection(deviceId, content, { direction, keep, keepDays, keepFavorites }) {
     if (!CONTENTS.includes(content)) throw new Error('Unknown content.')
     if (!DIRECTIONS.includes(direction)) throw new Error('Unknown direction.')
     const kept = direction === 'both' ? 'everything' : (KEEPS.includes(keep) ? keep : 'everything')
-    this.db.prepare(`INSERT INTO sync_connections(device_id, content, direction, keep, updated_at) VALUES(?,?,?,?,?)
-      ON CONFLICT(device_id, content) DO UPDATE SET direction = excluded.direction, keep = excluded.keep, updated_at = excluded.updated_at`)
-      .run(String(deviceId), content, direction, kept, Date.now())
-    return { content, direction, keep: kept }
+    const old = this.connection(String(deviceId), content)
+    const days = Number.isInteger(keepDays) && keepDays >= 1 && keepDays <= 36500 ? keepDays : old.keepDays
+    const favorites = typeof keepFavorites === 'boolean' ? keepFavorites : old.keepFavorites
+    this.db.prepare(`INSERT INTO sync_connections(device_id, content, direction, keep, keep_days, keep_favorites, updated_at) VALUES(?,?,?,?,?,?,?)
+      ON CONFLICT(device_id, content) DO UPDATE SET direction = excluded.direction, keep = excluded.keep, keep_days = excluded.keep_days,
+        keep_favorites = excluded.keep_favorites, updated_at = excluded.updated_at`)
+      .run(String(deviceId), content, direction, kept, days, favorites ? 1 : 0, Date.now())
+    if (kept !== old.keep || days !== old.keepDays) history.record(this.db, { action: kept === 'nothing' ? `Move, keeping ${days} days` : 'Copy', kind: content, device: String(deviceId) })
+    return this.connection(String(deviceId), content)
+  }
+
+  /**
+   * What a Move would do on a device, before it is chosen (asked 2026-09-25): of what the device said it holds,
+   * how much this computer's library has, and how much of that is older than the window — what the device would
+   * then be offered to let go. A photo whose date the device never said is kept, and favorites too if asked.
+   */
+  movePreview(deviceId, { keepDays = 30, keepFavorites = true, content = 'photos' } = {}) {
+    this.refreshHere()
+    const cutoff = Date.now() - Math.max(1, Number(keepDays) || 30) * 86_400_000
+    // Files: what this computer's Files folder held at its last reconcile, by hash.
+    const rows = content === 'files'
+      ? (this.db.exec('CREATE TABLE IF NOT EXISTS sync_manifest (device_id TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, PRIMARY KEY(device_id, path))'),
+        this.db.prepare(`SELECT h.sha256, h.size, h.taken_at, EXISTS(SELECT 1 FROM sync_manifest s WHERE s.device_id = 'self' AND s.sha256 = h.sha256) AS onPc,
+          COALESCE((SELECT m.favorite FROM file_meta m WHERE m.path = h.name), 0) AS favorite
+        FROM device_holdings h WHERE h.device_id = ? AND h.kind = 'file'
+          -- Only files move: the folders stay, system folders (Documents, Scanned Documents) included; the device's own
+          -- Trash is not part of a Move (asked 2026-09-25).
+          AND COALESCE(h.name, '') NOT LIKE 'Trash/%'`).all(String(deviceId)))
+      : this.db.prepare(`SELECT h.sha256, h.size, h.taken_at,
+        (EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = h.sha256) OR EXISTS(SELECT 1 FROM media m WHERE m.sha256 = h.sha256)) AS onPc,
+        COALESCE((SELECT s.favorite FROM photo_state s WHERE s.sha256 = h.sha256), 0) AS favorite
+      FROM device_holdings h WHERE h.device_id = ? AND h.kind = 'photo'`).all(String(deviceId))
+    const out = { holds: rows.length, onPc: 0, go: 0, goBytes: 0, keep: 0, notOnPc: 0, lastSeen: this.db.prepare('SELECT last_seen FROM sync_devices WHERE id = ?').get(String(deviceId))?.last_seen ?? null }
+    for (const r of rows) {
+      if (!r.onPc) { out.notOnPc++; continue }
+      out.onPc++
+      if (r.taken_at && r.taken_at < cutoff && !(keepFavorites && r.favorite)) { out.go++; out.goBytes += r.size ?? 0 } else out.keep++
+    }
+    return out
   }
 
   /** Photos this computer holds that the device says it has not got: the other half of /have. */
   toSend(hashes, limit = MAX_SEND) {
     const known = new Set(hashes)
     const out = []
-    for (const m of this.db.prepare('SELECT sha256, path, size, taken_at FROM media ORDER BY taken_at DESC').all()) {
+    // ponytail: photos on the storage drive are not offered; fetch them from the drive when it is plugged in, if asked.
+    for (const m of this.db.prepare('SELECT sha256, path, size, taken_at FROM media WHERE location IS NULL ORDER BY taken_at DESC').all()) {
       if (known.has(m.sha256) || out.length >= limit) continue
       const parsed = path.parse(m.path)
       out.push({ sha256: m.sha256, path: parsed.dir.split(path.sep).join('/'), name: parsed.base, size: m.size, modified: m.taken_at })
@@ -529,10 +774,11 @@ class SyncServer {
     this.db.exec('BEGIN')
     try {
       this.db.exec('DELETE FROM here_now')
-      for (const r of this.db.prepare('SELECT DISTINCT sha256 FROM media').all()) add.run(r.sha256)
+      for (const r of this.db.prepare('SELECT DISTINCT sha256 FROM media WHERE location IS NULL').all()) add.run(r.sha256)
       let stale = 0
+      const moved = this.db.prepare('SELECT 1 FROM media WHERE sha256 = ? AND location IS NOT NULL')
       for (const r of this.db.prepare("SELECT sha256, path FROM sync_receipts WHERE kind = 'photo'").all()) {
-        if (known.get(r.sha256)) continue
+        if (known.get(r.sha256) || moved.get(r.sha256)) continue // here, or moved to a storage drive: not missing
         if (this.photosRoot && fs.existsSync(path.join(this.photosRoot, r.path))) add.run(r.sha256)
         else stale++
       }
@@ -557,7 +803,7 @@ class SyncServer {
    */
   overview() {
     this.refreshHere()
-    const mine = this.db.prepare('SELECT COUNT(*) n, COALESCE(SUM(size), 0) bytes FROM media').get()
+    const mine = this.db.prepare('SELECT COUNT(*) n, COALESCE(SUM(size), 0) bytes FROM media WHERE location IS NULL').get()
     const copies = this.db.prepare(`SELECT copies, COUNT(*) AS files, COALESCE(SUM(bytes), 0) AS bytes, SUM(here) AS here FROM (
         SELECT s.sha AS sha,
           (CASE WHEN EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = s.sha) THEN 1 ELSE 0 END)
@@ -566,16 +812,23 @@ class SyncServer {
           (SELECT MIN(m.size) FROM media m WHERE m.sha256 = s.sha) AS bytes
         FROM (SELECT sha256 AS sha FROM here_now UNION SELECT sha256 FROM device_holdings WHERE kind = 'photo') s
       ) GROUP BY copies ORDER BY copies`).all()
+    // A photo moved to a storage drive is still in the library (SYNC_PLAN.md D3): it is on that drive, not "only on
+    // a device". Counted apart, per drive, so the page can say where it is.
+    const stored = this.db.prepare(`SELECT d.name, COUNT(DISTINCT m.sha256) AS files FROM media m JOIN sync_devices d ON d.id = m.location
+      WHERE NOT EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = m.sha256) GROUP BY d.id`).all()
     const devices = this.db.prepare(`SELECT d.id, d.name, d.last_seen,
         (SELECT COUNT(*) FROM device_holdings h WHERE h.device_id = d.id AND h.kind = 'photo') AS holds,
         (SELECT COUNT(*) FROM device_holdings h WHERE h.device_id = d.id AND h.kind = 'photo'
-           AND EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = h.sha256)) AS alsoHere,
+           AND (EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = h.sha256)
+             OR EXISTS(SELECT 1 FROM media m WHERE m.sha256 = h.sha256 AND m.location IS NOT NULL))) AS alsoHere,
         (SELECT COALESCE(SUM(m.size), 0) FROM device_holdings h JOIN media m ON m.sha256 = h.sha256
            WHERE h.device_id = d.id AND h.kind = 'photo') AS freeable
       FROM sync_devices d ORDER BY d.paired_at`).all()
     const known = copies.reduce((a, c) => a + c.files, 0)
     return {
       here: { files: mine.n, bytes: mine.bytes },
+      /** In the library but on a storage drive, per drive. */
+      stored,
       known,
       /** One row per number of machines holding it, this computer included. `here` is how many of them are here. */
       copies: copies.map(c => ({ copies: c.copies, files: c.files, bytes: c.bytes, here: c.here })),
@@ -591,7 +844,7 @@ class SyncServer {
     const rows = this.db.prepare(`SELECT CASE WHEN m.is_video = 1 THEN 'video'
         WHEN EXISTS(SELECT 1 FROM photo_ai a WHERE a.sha256 = m.sha256 AND a.type = 'document') THEN 'document'
         ELSE 'image' END AS kind, COUNT(*) AS files, COALESCE(SUM(m.size), 0) AS bytes
-      FROM media m GROUP BY kind ORDER BY bytes DESC`).all()
+      FROM media m WHERE m.location IS NULL GROUP BY kind ORDER BY bytes DESC`).all()
     return rows
   }
 
@@ -610,7 +863,8 @@ class SyncServer {
     }
     const theirs = `SELECT h.name, h.size, h.is_video AS isVideo, h.taken_at AS takenAt, h.sha256, d.name AS device, 0 AS here
       FROM device_holdings h JOIN sync_devices d ON d.id = h.device_id
-      WHERE h.kind = 'photo' AND NOT EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = h.sha256)`
+      WHERE h.kind = 'photo' AND NOT EXISTS(SELECT 1 FROM here_now n WHERE n.sha256 = h.sha256)
+        AND NOT EXISTS(SELECT 1 FROM media m WHERE m.sha256 = h.sha256 AND m.location IS NOT NULL)`
     if (what === 'onlyThere') {
       return this.db.prepare(`${theirs} ${deviceId ? 'AND h.device_id = ?' : ''} ORDER BY h.size DESC NULLS LAST, h.name LIMIT ?`)
         .all(...(deviceId ? [deviceId, limit] : [limit]))
@@ -635,7 +889,20 @@ class SyncServer {
    */
   have(hash) {
     this.refreshHere()
+    // The library answers, not this disk: a photo moved to the storage drive is had, or every device would send
+    // back what was just moved (SYNC_PLAN.md D3 rule 1).
     return !!this.db.prepare('SELECT 1 FROM here_now WHERE sha256 = ?').get(hash)
+      || !!this.db.prepare('SELECT 1 FROM media WHERE sha256 = ? AND location IS NOT NULL').get(hash)
+  }
+
+  /**
+   * Is a copy of this photo safe somewhere the server keeps: its library (on this disk or moved to a drive) or a
+   * backup drive. Then a Trash item needs no purgatory and nothing is sent (asked 2026-09-25: "why send anything
+   * if the computer already has it — or the backup").
+   */
+  heldSafely(hash) {
+    return this.have(hash) || !!this.db.prepare(`SELECT 1 FROM device_holdings h JOIN sync_devices d ON d.id = h.device_id
+      WHERE d.volume_uuid IS NOT NULL AND h.kind = 'photo' AND h.sha256 = ?`).get(hash)
   }
 
   async handle(req, res) {
@@ -667,6 +934,11 @@ class SyncServer {
       this.holds(device.id, 'photo', hashes)
       return this.send(res, 200, { missing: hashes.filter(h => !this.have(h)) })
     }
+    if (req.method === 'POST' && url.pathname === '/held') {
+      const { hashes } = await this.json(req, 1 << 22)
+      if (!Array.isArray(hashes) || hashes.length > MAX_HAVE || !hashes.every(isHash)) return this.send(res, 400, { error: `Send up to ${MAX_HAVE} SHA-256 hashes.` })
+      return this.send(res, 200, { held: hashes.filter(h => this.heldSafely(h)) })
+    }
     if (req.method === 'POST' && url.pathname === '/inventory') {
       const { items } = await this.json(req, 1 << 23)
       if (!Array.isArray(items)) return this.send(res, 400, { error: 'Send a list of items.' })
@@ -688,17 +960,25 @@ class SyncServer {
     }
     const blob = /^\/blob\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'GET' && blob) {
-      const row = this.db.prepare('SELECT path FROM media WHERE sha256 = ?').get(blob[1])
-      if (!row) return this.send(res, 404, { error: 'No such photo here.' })
-      return this.sendFile(res, path.join(this.photosRoot, row.path), blob[1])
+      const row = this.db.prepare('SELECT path, location FROM media WHERE sha256 = ? ORDER BY location IS NOT NULL').get(blob[1])
+      const at = row && await this.locate(row)
+      if (!at?.file) return this.send(res, 404, { error: 'No such photo here.' })
+      history.record(this.db, { action: 'sent', kind: 'photo', name: row.path, sha256: blob[1], device: device.id })
+      return this.sendFile(res, at.file, blob[1])
     }
     if (req.method === 'PUT' && blob) return this.send(res, 200, await this.receive(req, device, blob[1], url.searchParams))
+    const doomed = /^\/purgatory\/([0-9a-f]{64})$/.exec(url.pathname)
+    if (req.method === 'PUT' && doomed) return this.send(res, 200, await this.receivePurgatory(req, device, doomed[1], url.searchParams))
     if (req.method === 'POST' && url.pathname === '/files/manifest') {
       if (!this.files) return this.send(res, 200, { want: [], moved: [], have: [], moveTo: [] })
       const { files: offered } = await this.json(req, 1 << 24)
       const list = Array.isArray(offered) ? offered : []
       this.holds(device.id, 'file', list.map(f => f && f.sha256).filter(isHash))
-      const answer = await this.files.reconcile(list, device.id)
+      // Name, size and date of each, so a Move can be shown in numbers before it is chosen (movePreview).
+      const describe = this.db.prepare("UPDATE device_holdings SET name = ?, size = ?, taken_at = ? WHERE device_id = ? AND kind = 'file' AND sha256 = ?")
+      for (const f of list) if (f && isHash(f.sha256)) describe.run(String(f.path ?? '').slice(0, 300) || null, Number(f.size) || null, Number(f.modified) || null, device.id, f.sha256)
+      const rule = this.connection(device.id, 'files')
+      const answer = await this.files.reconcile(list, device.id, { followTrash: !(rule.direction === 'send' && rule.keep === 'nothing') })
       // 'want' and 'moved' are what this computer does; 'have' and 'moveTo' are what it offers the device.
       const direction = this.connection(device.id, 'files').direction
       return this.send(res, 200, direction === 'send' || direction === 'off' ? { ...answer, have: [], moveTo: [] } : answer)
@@ -709,6 +989,7 @@ class SyncServer {
       if (!this.files || !safeRel(rel) || rel === '') return this.send(res, 400, { error: 'Invalid path.' })
       const absolute = this.files.resolve(rel, false)
       if (await this.files.hash(rel) !== file[1]) return this.send(res, 404, { error: 'That is not what is here any more.' })
+      history.record(this.db, { action: 'sent', kind: 'file', name: rel, sha256: file[1], device: device.id })
       return this.sendFile(res, absolute, file[1])
     }
     if (req.method === 'PUT' && file) return this.send(res, 200, await this.receiveFile(req, device, file[1], url.searchParams))
@@ -783,6 +1064,7 @@ class SyncServer {
       const taken = Number(params.get('modified'))
       if (Number.isFinite(taken) && taken > 0) await fsp.utimes(target, new Date(), new Date(taken))
       const receipt = this.receipt(device, expected, path.relative(this.photosRoot, target), size)
+      history.record(this.db, { action: 'received', kind: 'photo', name: receipt.path, sha256: expected, size, device: device.id })
       this.onReceived(receipt)
       return receipt
     } catch (e) { out.destroy(); await fsp.rm(part, { force: true }); throw e }
@@ -860,6 +1142,7 @@ class SyncServer {
       const modified = Number(params.get('modified'))
       if (Number.isFinite(modified) && modified > 0) await fsp.utimes(kept, new Date(), new Date(modified))
       const relKept = this.files.rel(kept)
+      history.record(this.db, { action: 'received', kind: 'file', name: relKept, sha256: expected, device: device.id })
       this.db.prepare(`INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at, kind) VALUES(?,?,?,?,?,'file')`)
         .run(device.id, expected, relKept, (await fsp.stat(kept)).size, Date.now())
       return { sha256: expected, path: relKept, verified: true }

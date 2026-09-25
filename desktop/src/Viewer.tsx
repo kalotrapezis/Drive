@@ -11,7 +11,7 @@ const RESET: View = { scale: 1, x: 0, y: 0 }
 interface Props {
   media: Media[]; index: number; setIndex: (i: number) => void; onClose: () => void
   onFavorite?: (m: Media) => void; onTrash?: (m: Media) => void; onHide?: (m: Media) => void; onRestore?: (m: Media) => void; onEdit?: (m: Media) => void
-  onCollect?: (m: Media) => void; onUncollect?: (m: Media) => void
+  onCollect?: (m: Media) => void; onUncollect?: (m: Media) => void; uncollectTitle?: string; onMove?: (m: Media) => void
   people: string[]
   onShowOnMap?: (m: Media) => void
   onDocument?: (m: Media, isDocument: boolean) => void
@@ -19,7 +19,7 @@ interface Props {
   thumbUrl?: (m: Media) => string
 }
 
-export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect, people, onShowOnMap, onHide, onRestore, onEdit, onDocument,
+export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, onCollect, onUncollect, uncollectTitle, onMove, people, onShowOnMap, onHide, onRestore, onEdit, onDocument,
   fileUrl = m => `media://file/${m.id}`, thumbUrl = m => `media://thumb/${m.sha256}` }: Props) {
   const item = media[index]
   const [view, setView] = useState<View>(RESET)
@@ -99,7 +99,8 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           {onFavorite && <button className="round flat" title={item.favorite ? 'Remove from Favorites (F)' : 'Add to Favorites (F)'} onClick={() => onFavorite(item)}>
             <Icon name={item.favorite ? 'heartFill' : 'heart'} /></button>}
           {onCollect && <button className="round flat" title="Add to collection" onClick={() => onCollect(item)}><Icon name="collect" /></button>}
-          {onUncollect && <button className="round flat" title="Remove from this collection" onClick={() => onUncollect(item)}><Icon name="uncollect" /></button>}
+          {onUncollect && <button className="round flat" title={uncollectTitle ?? 'Remove from this collection'} onClick={() => onUncollect(item)}><Icon name="uncollect" /></button>}
+          {onMove && !item.location && <button className="round flat" title="Move to folder…" onClick={() => onMove(item)}><Icon name="moveTo" /></button>}
           {onEdit && !item.is_video && <button className="round flat" title="Edit" onClick={() => onEdit(item)}><Icon name="edit" /></button>}
           {onHide && <button className="round flat" title="Move to Hidden" onClick={() => onHide(item)}><Icon name="lock" /></button>}
           {onRestore && <button className="round flat" title="Restore to Photos" onClick={() => onRestore(item)}><Icon name="lockOpen" /></button>}
@@ -115,12 +116,13 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           onPointerDown={e => { if (view.scale > 1) { drag.current = { x: e.clientX - view.x, y: e.clientY - view.y }; (e.target as Element).setPointerCapture(e.pointerId) } }}
           onPointerMove={e => { if (drag.current) { const d = drag.current; setView(v => ({ ...v, x: e.clientX - d.x, y: e.clientY - d.y })) } }}
           onPointerUp={() => { drag.current = null }}>
-          {item.is_video
-            ? <video key={item.id} src={fileUrl(item)} controls autoPlay />
+          {item.is_video && !failed
+            ? <video key={item.id} src={fileUrl(item)} controls autoPlay onError={() => setFailed(true)} />
             : <img key={item.id} draggable={false} alt={name}
                 src={failed ? thumbUrl(item) : fileUrl(item)}
                 onError={() => setFailed(true)} // formats Chromium cannot draw (HEIC) fall back to the thumbnail
                 style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }} />}
+          {item.location && failed && <div className="island plug-in"><Icon name="database" size={20} />Plug in {item.drive} to open this — it lives there now.</div>}
           {index > 0 && <button className="round nav prev" title="Previous (←)" onClick={() => go(index - 1)}><Icon name="back" /></button>}
           {index < media.length - 1 && <button className="round nav next" title="Next (→)" onClick={() => go(index + 1)}><Icon name="forward" /></button>}
         </div>
@@ -131,6 +133,7 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
               <dt>Date</dt><dd>{when.format(item.taken_at)}</dd>
               <dt>Name</dt><dd>{name}</dd>
               <dt>Folder</dt><dd>{folder}</dd>
+              {item.location && <><dt>Where</dt><dd><Icon name="database" size={16} /> On {item.drive}</dd></>}
               <dt>Size</dt><dd>{formatBytes(item.size)}{item.width ? ` · ${item.width} × ${item.height}` : ''}</dd>
               {people.length > 0 && <><dt>People</dt><dd>{people.join(', ')}</dd></>}
               {item.labels && <><dt>Labels</dt><dd>{item.labels.replace(/Scene: /g, '')}</dd></>}

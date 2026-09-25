@@ -5,14 +5,14 @@ import { Icon, type IconName } from './Icon'
 import { Timeline } from './Timeline'
 import { Viewer } from './Viewer'
 import { Collections } from './Collections'
-import { CollectionPicker, Confirm, NewCollection, errorText } from './Dialogs'
+import { CollectionPicker, Confirm, FolderPicker, NewCollection, errorText } from './Dialogs'
 import { Files, type FilesMode } from './Files'
 import { TrashPage } from './TrashPage'
 import { AnalysisBar, ChooseCover, CombinePicker, MergeHistory, PeopleHistory, PeoplePage, RenamePerson, ReviewPage } from './People'
 import { MapView } from './MapView'
 import { HiddenPage, VaultGate } from './Hidden'
 import { Editor } from './Editor'
-import { SyncPage } from './Sync'
+import { OffloadDialog, SyncPage } from './Sync'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
   | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' }
@@ -45,6 +45,8 @@ export function App() {
   const [trashCount, setTrashCount] = useState(0)
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [open, setOpen] = useState<number | null>(null)
+  // The photos the viewer pages through when it was opened from a map group; null is every item.
+  const [scope, setScope] = useState<string[] | null>(null)
   const [dialog, setDialog] = useState<ReactNode>(null)
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null)
   const [people, setPeople] = useState<Person[]>([])
@@ -88,13 +90,15 @@ export function App() {
   const reloadRef = useRef(reload)
   reloadRef.current = reload
   useEffect(() => { store('level', level) }, [level])
+  // "Free 22 GB?" from the tray or a notification opens here, whatever page is showing (SYNC_PLAN.md D3).
+  useEffect(() => window.drive.sync.onOffer(id => setDialog(<OffloadDialog deviceId={id} onClose={() => setDialog(null)} />)), [])
   useEffect(() => { window.drive.viewSettings().then(v => { setHideScreenshots(v.hideScreenshots); setHideDocuments(v.hideDocuments) }) }, [])
   useEffect(() => { window.drive.trashList().then(t => setTrashCount(t.length)).catch(() => {}) }, [page])
   useEffect(() => {
     Promise.all(hiddenAlbums.map(id => window.drive.members(id).catch(() => []))).then(lists => setHiddenAlbumShas(new Set(lists.flat())))
   }, [collections])
   useEffect(() => {
-    setSelected(new Set()); setOpen(null); setMembers(null)
+    setSelected(new Set()); setOpen(null); setScope(null); setMembers(null)
     if (memberSource) memberSource().then(m => setMembers(new Set(m)))
   }, [page])
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), toast.undo ? 8000 : 4000); return () => clearTimeout(t) }, [toast])
@@ -113,6 +117,13 @@ export function App() {
 
   // Keep the viewer on a valid item when the list shrinks (trash, unfavorite in Favorites, remove from collection).
   useEffect(() => { if (open !== null && open >= items.length) setOpen(items.length ? items.length - 1 : null) }, [items, open])
+  // By hash, so trashing one from the viewer does not shift the rest; mapped back to indices into items.
+  const scoped = useMemo(() => {
+    if (!scope) return null
+    const at = new Map(items.map((m, i) => [m.sha256, i]))
+    return scope.map(h => at.get(h)).filter((i): i is number => i !== undefined)
+  }, [scope, items])
+  useEffect(() => { if (scoped?.length === 0) { setOpen(null); setScope(null) } }, [scoped])
 
   const picked = items.filter(m => selected.has(m.id))
   const say = (text: string, undo?: () => void) => setToast({ text, undo })
@@ -142,7 +153,16 @@ export function App() {
     setDialog(<CollectionPicker collections={collections} count={list.length} onClose={close} onPick={add} onNew={() => newCollection(add)} />)
   }
 
-  const uncollect = (list: Media[]) => custom && page.kind === 'collection' &&
+  // A collection that is a folder is not a grouping: taking a photo out of it moves the file (asked 2026-09-25).
+  const folderAlbum = custom && page.kind === 'collection' && collections.find(c => c.id === custom)?.folder ? page.name : null
+  function moveTo(list: Media[], leaving?: string) {
+    setDialog(<FolderPicker count={list.length} leaving={leaving} onClose={close} onPick={dest => run(async () => {
+      const r = await window.drive.moveTo(list.map(m => m.id), dest)
+      setSelected(new Set())
+      say(r.failed.length ? `Moved ${r.moved}; ${r.failed.length} stayed: ${r.failed.slice(0, 2).join(', ')}` : `Moved ${count(r.moved)} to ${dest}`)
+    })} />)
+  }
+  const uncollect = (list: Media[]) => folderAlbum ? moveTo(list, folderAlbum) : custom && page.kind === 'collection' &&
     run(() => window.drive.setMembership(custom, list.map(m => m.sha256), false), `Removed ${count(list.length)} from “${page.name}”`)
       .then(() => setSelected(new Set()))
 
@@ -221,7 +241,7 @@ export function App() {
     onChooseCover={p => setDialog(<ChooseCover person={p} onClose={close} onDone={reload} />)}
     onForget={p => run(() => window.drive.people.setHidden(p.id, true), `${p.name} is forgotten`)}
     onHistory={() => setDialog(<PeopleHistory onClose={close} onChanged={reload} />)} />
-  else if (page.kind === 'map') content = <MapView items={items} focus={page.focus} onOpen={setOpen} onBack={() => setPage({ kind: 'collections' })} />
+  else if (page.kind === 'map') content = <MapView items={items} focus={page.focus} onOpen={(i, group) => { setScope(group ? group.map(g => items[g].sha256) : null); setOpen(i) }} onBack={() => setPage({ kind: 'collections' })} />
   else if (page.kind === 'review') content = <ReviewPage left={analysis?.reviews ?? 0} onBack={() => setPage({ kind: 'collections' })} onChanged={reload} />
   else if (page.kind === 'collections') {
     content = <Collections mine={collections} onNew={() => newCollection()} onDelete={deleteCollection}
@@ -327,8 +347,9 @@ export function App() {
             <button className="round flat" title={picked.every(m => m.favorite) ? 'Remove from Favorites' : 'Add to Favorites'} onClick={() => favorite(picked)}>
               <Icon name={picked.every(m => m.favorite) ? 'heartFill' : 'heart'} /></button>
             {custom
-              ? <button className="round flat" title="Remove from this collection" onClick={() => uncollect(picked)}><Icon name="uncollect" /></button>
+              ? <button className="round flat" title={folderAlbum ? `Move out of the ${folderAlbum} folder` : 'Remove from this collection'} onClick={() => uncollect(picked)}><Icon name="uncollect" /></button>
               : <button className="round flat" title="Add to collection" onClick={() => collect(picked)}><Icon name="collect" /></button>}
+            <button className="round flat" title="Move to folder…" onClick={() => moveTo(picked)}><Icon name="moveTo" /></button>
             <button className="round flat" title="Move to Hidden" onClick={() => hide(picked)}><Icon name="lock" /></button>
             <button className="round flat" title="Move to Trash (Delete)" onClick={() => trash(picked)}><Icon name="trash" /></button>
             {page.kind === 'person' && person && (
@@ -342,11 +363,13 @@ export function App() {
         )}
       </main>
       {open !== null && items[open] && (
-        <Viewer media={items} index={open} setIndex={setOpen} onClose={() => setOpen(null)} people={names[items[open].sha256] ?? []}
+        <Viewer media={scoped ? scoped.map(i => items[i]) : items} index={scoped ? Math.max(0, scoped.indexOf(open)) : open}
+          setIndex={i => setOpen(scoped ? scoped[i] : i)} onClose={() => { setOpen(null); setScope(null) }} people={names[items[open].sha256] ?? []}
           onShowOnMap={m => { setOpen(null); setPage({ kind: 'map', focus: m.sha256 }) }}
           onDocument={(m, on) => run(() => window.drive.documents.set(m.sha256, on), on ? 'Marked as a document' : 'No longer a document')}
           onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={m => hide([m])} onEdit={setEditing}
-          onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} />
+          onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} onMove={m => moveTo([m])}
+          uncollectTitle={folderAlbum ? `Move out of the ${folderAlbum} folder` : undefined} />
       )}
       {editing && <Editor item={editing} onClose={() => setEditing(null)} onSaved={msg => { setEditing(null); say(msg); reload() }} />}
       {dialog}

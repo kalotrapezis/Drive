@@ -17,10 +17,17 @@ export interface VaultStatus { configured: boolean; unlocked: boolean; count: nu
 export interface VaultItem { id: string; sha256: string; name: string; rel_path: string; mime: string; is_video: number; size: number; taken_at: number; has_thumb: number }
 
 export interface PersonFace { id: string; sha256: string; quality: number; chosen: boolean; takenAt: number }
-export interface SyncConnection { content: 'photos' | 'files'; direction: 'off' | 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing' }
-export interface SyncDevice { id: string; name: string; kind: string | null; volume_uuid: string | null; set_up_at: number | null; paired_at: number; last_seen: number | null; received: number; filesReceived: number; connections: SyncConnection[] }
+export interface SyncConnection { content: 'photos' | 'files'; direction: 'off' | 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing'; keepDays?: number; keepFavorites?: boolean }
+export interface MovePreview { holds: number; onPc: number; go: number; goBytes: number; keep: number; notOnPc: number; lastSeen: number | null }
+export interface DriveRules { role: 'backup' | 'storage'; offload: boolean; percent: number; keep: number; unit: 'day' | 'week' | 'month' | 'year'; copies: number; favorites: boolean }
+export interface OffloadPlan { deviceId: string; name: string; rules: DriveRules; disk: Disk | null; count: number; bytes: number; oldest: number | null; newest: number | null; short?: number }
+export interface Disk { size: number; free: number; percent: number }
+export interface HistoryRow { id: number; at: number; device: string | null; deviceName: string | null; action: string; kind: string | null; name: string | null; sha256: string | null; size: number | null; detail: string | null }
+export interface PurgatorySettings { trashDays: number; purgatoryDays: number; location?: string; summary?: { driveId: string; items: number; bytes: number; oldest: number | null }[] }
+export interface SyncDevice { id: string; name: string; kind: string | null; volume_uuid: string | null; rules: DriveRules | null; set_up_at: number | null; paired_at: number; last_seen: number | null; received: number; filesReceived: number; holdsPhotos: number; holdsFiles: number | null; connections: SyncConnection[] }
 export interface SyncOverview {
   here: { files: number; bytes: number }
+  stored?: { name: string; files: number }[]
   /** Every file known anywhere — this computer's library and everything a device says it holds. */
   known: number
   /** One row per number of machines holding it, this computer included; `here` is how many of those are here. */
@@ -38,10 +45,11 @@ export interface DriveScan {
   total?: number; have?: number; haveBytes?: number; need?: number; needBytes?: number; writable?: boolean; enough?: boolean
   files?: { total: number; have: number; need: number; needBytes: number }
 }
-export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[]; overview: SyncOverview; self: SyncSelf }
+export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[]; overview: SyncOverview; self: SyncSelf; disk: Disk | null; counts: { photos: number; files: number } }
 
 export interface TrashedPhoto { id: string; name: string; path: string; size: number; deletedAt: number }
-export interface Collection { id: string; name: string; count: number; cover: string | null; hidden: boolean }
+export interface Collection { id: string; name: string; count: number; cover: string | null; hidden: boolean; folder?: boolean }
+export interface PhotoPlace { path: string; name: string; count: number }
 
 declare global {
   interface Window {
@@ -60,6 +68,8 @@ declare global {
       onScanProgress(fn: (p: { done: number; changed: number }) => void): () => void
       favorite(shas: string[], on: boolean): Promise<void>
       trash(ids: number[]): Promise<{ trashed: number; failed: string[] }>
+      places(): Promise<PhotoPlace[]>
+      moveTo(ids: number[], dest: string): Promise<{ moved: number; failed: string[] }>
       collections(): Promise<Collection[]>
       createCollection(name: string): Promise<Collection>
       deleteCollection(id: string): Promise<void>
@@ -80,6 +90,8 @@ declare global {
         hide(ids: number[]): Promise<{ hidden: number; failed: string[] }>
         restore(ids: string[]): Promise<string[]>
       }
+      history(options?: { limit?: number; before?: number }): Promise<HistoryRow[]>
+      purgatory: { settings(): Promise<PurgatorySettings>; set(changes: Partial<PurgatorySettings>): Promise<PurgatorySettings>; setLocation(driveId: string | null): Promise<{ moved: number; waiting: number; failed: string[] }> }
       sync: {
         status(): Promise<SyncStatus>
         pair(): Promise<{ payload: { hosts: string[]; port: number }; qr: string }>
@@ -93,7 +105,13 @@ declare global {
         addDrive(drive: { uuid: string; label: string }): Promise<SyncDevice>
         backUpToDrive(id: string): Promise<{ copied: number; already: number; failed: string[]; total: number }>
         onDriveProgress(fn: (p: { done: number; total: number; copied: number; already: number }) => void): () => void
-        setConnection(id: string, content: string, rules: { direction: string; keep: string }): Promise<SyncConnection>
+        setConnection(id: string, content: string, rules: { direction: string; keep: string; keepDays?: number; keepFavorites?: boolean }): Promise<SyncConnection>
+        movePreview(id: string, options: { keepDays: number; keepFavorites: boolean; content?: string }): Promise<MovePreview>
+        setDriveRules(id: string, rules: Partial<DriveRules>): Promise<DriveRules>
+        offloadPlan(id: string): Promise<OffloadPlan>
+        moveToDrive(id: string, options?: { limit?: number }): Promise<{ moved: number; bytes: number; failed: string[]; total: number }>
+        onMoveProgress(fn: (p: { done: number; total: number; moved: number }) => void): () => void
+        onOffer(fn: (deviceId: string) => void): () => void
         onReceived(fn: () => void): () => void
       }
       documents: {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import type { Collection } from './drive'
+import type { Collection, PhotoPlace } from './drive'
 import { Icon } from './Icon'
 
 /** Native modal <dialog>: focus trap, Esc and backdrop come from the platform. */
@@ -65,6 +65,37 @@ export function CollectionPicker({ collections, count, onPick, onNew, onClose }:
           </button>
         ))}
       </div>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button></div>
+    </Modal>
+  )
+}
+
+/**
+ * Where to move photos: a real folder under Photos, not a collection. `leaving` is the folder album they are
+ * being taken out of, which is not offered as a destination.
+ */
+export function FolderPicker({ count, leaving, onPick, onClose }: { count: number; leaving?: string; onPick: (dest: string) => void; onClose: () => void }) {
+  const [places, setPlaces] = useState<PhotoPlace[] | null>(null)
+  const [name, setName] = useState('')
+  useEffect(() => { window.drive.places().then(setPlaces) }, [])
+  const what = count === 1 ? 'this photo' : `${count} photos`
+  const shown = places?.filter(p => !leaving || p.name.toLowerCase() !== leaving.toLowerCase())
+  return (
+    <Modal onClose={onClose}>
+      <h3>{leaving ? `Move ${what} out of “${leaving}”` : `Move ${what} to a folder`}</h3>
+      <p className="rule-hint">The file really moves, on this computer. Favorites, collections and people stay with it.</p>
+      <div className="picker">
+        {!shown ? <span className="spinner" /> : shown.map(p => (
+          <button key={p.path} className="picker-row" onClick={() => { onClose(); onPick(p.path) }}>
+            <span className="picker-cover"><Icon name="folder" /></span>
+            <span>{p.name}<small>{p.path} · {p.count}</small></span>
+          </button>
+        ))}
+      </div>
+      <form className="new-folder" onSubmit={e => { e.preventDefault(); if (name.trim()) { onClose(); onPick(`Pictures/${name.trim()}`) } }}>
+        <input className="field" maxLength={60} placeholder="New folder in Pictures" value={name} onChange={e => setName(e.target.value.replace(/[\\/]/g, ''))} />
+        <button className="filled-button" disabled={!name.trim()}>Move</button>
+      </form>
       <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button></div>
     </Modal>
   )

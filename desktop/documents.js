@@ -128,11 +128,11 @@ class Documents {
   pending(everything = false) {
     if (everything) {
       return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m LEFT JOIN photo_ai a ON a.sha256 = m.sha256
-        WHERE m.is_video = 0 AND COALESCE(a.source, 'desktop') != 'phone'
+        WHERE m.is_video = 0 AND m.location IS NULL AND COALESCE(a.source, 'desktop') != 'phone'
         GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all()
     }
     return this.db.prepare(`SELECT m.sha256, MIN(m.path) AS path FROM media m LEFT JOIN photo_ai a ON a.sha256 = m.sha256
-      WHERE m.is_video = 0 AND COALESCE(a.source, 'desktop') != 'phone' AND (a.version IS NULL OR a.version != ?)
+      WHERE m.is_video = 0 AND m.location IS NULL AND COALESCE(a.source, 'desktop') != 'phone' AND (a.version IS NULL OR a.version != ?)
       GROUP BY m.sha256 ORDER BY MAX(m.taken_at) DESC`).all(VERSION)
   }
 

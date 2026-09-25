@@ -8,14 +8,17 @@ maplibregl.setWorkerUrl(workerUrl)
 import type { Media } from './timeline'
 import { Icon } from './Icon'
 
-// Same style as the phone (OpenFreeMap). Tiles need internet; coordinates and place names stay local.
+// OpenFreeMap, as on the phone. Tiles need internet; coordinates and place names stay local.
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty'
 const when = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
-export function MapView({ items, focus, onOpen, onBack }: { items: Media[]; focus?: string; onOpen: (index: number) => void; onBack: () => void }) {
+/** `group` is the indices the viewer may page through: a group's photos, not every located photo. */
+export function MapView({ items, focus, onOpen, onBack }: { items: Media[]; focus?: string; onOpen: (index: number, group?: number[]) => void; onBack: () => void }) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<maplibregl.Map | null>(null)
   const [selected, setSelected] = useState<number | null>(null)
+  // A group opens as a panel from the bottom, a grid of its photos, newest first (asked 2026-09-25).
+  const [group, setGroup] = useState<{ indices: number[]; center: [number, number]; zoom: number } | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'offline'>('loading')
 
   useEffect(() => {
@@ -32,37 +35,30 @@ export function MapView({ items, focus, onOpen, onBack }: { items: Media[]; focu
         clusterProperties: { newest: ['min', ['get', 'i']] }, // items are newest first, so the smallest index is the newest photo
         data: { type: 'FeatureCollection', features: items.map((it, i) => ({ type: 'Feature', properties: { i }, geometry: { type: 'Point', coordinates: [it.longitude!, it.latitude!] } })) },
       })
-      // An invisible layer keeps the source's tiles loaded; what you see are the photo markers below.
-      m.addLayer({ id: 'photos-hit', type: 'circle', source: 'photos', paint: { 'circle-radius': 1, 'circle-opacity': 0 } })
-
-      // Photo thumbnails as markers: a cluster shows its newest photo and a count; zooming in splits it.
-      const markers = new Map<string, maplibregl.Marker>()
-      const update = () => {
-        const seen = new Set<string>()
-        // Only what is drawn now (not tiles still cached from the previous zoom), deduplicated across tile edges.
-        for (const f of m.queryRenderedFeatures({ layers: ['photos-hit'] })) {
-          const p = f.properties as { cluster?: boolean; cluster_id?: number; point_count?: number; newest?: number; i?: number }
-          const key = p.cluster ? `c${p.cluster_id}` : `p${p.i}`
-          if (seen.has(key)) continue // features repeat across tiles
-          seen.add(key)
-          if (markers.has(key)) continue
-          const index = p.cluster ? p.newest! : p.i!
-          const el = document.createElement('button')
-          el.className = 'map-thumb'
-          el.title = items[index].place || items[index].path
-          el.innerHTML = `<img src="media://thumb/${items[index].sha256}" alt="">${p.cluster ? `<span>${p.point_count}</span>` : ''}`
-          const coords = (f.geometry as unknown as { coordinates: [number, number] }).coordinates
-          el.addEventListener('click', async e => {
-            e.stopPropagation()
-            if (!p.cluster) return setSelected(index)
-            const zoom = await (m.getSource('photos') as maplibregl.GeoJSONSource).getClusterExpansionZoom(p.cluster_id!)
-            m.easeTo({ center: coords, zoom })
-          })
-          markers.set(key, new maplibregl.Marker({ element: el }).setLngLat(coords).addTo(m))
-        }
-        for (const [key, marker] of markers) if (!seen.has(key)) { marker.remove(); markers.delete(key) }
+      // Red pins drawn by the map itself: photo thumbnails as DOM markers were rebuilt after every move and made
+      // panning unusable (2026-09-25). A cluster is a bigger pin with its count; clicking splits it.
+      const RED = '#e5484d'
+      m.addLayer({ id: 'clusters', type: 'circle', source: 'photos', filter: ['has', 'point_count'], paint: {
+        'circle-color': RED, 'circle-stroke-color': '#7a1d20', 'circle-stroke-width': 2,
+        'circle-radius': ['step', ['get', 'point_count'], 14, 10, 18, 100, 23, 1000, 28] } })
+      m.addLayer({ id: 'cluster-count', type: 'symbol', source: 'photos', filter: ['has', 'point_count'],
+        layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-allow-overlap': true },
+        paint: { 'text-color': '#fff' } })
+      m.addLayer({ id: 'pins', type: 'circle', source: 'photos', filter: ['!', ['has', 'point_count']], paint: {
+        'circle-color': RED, 'circle-radius': 7, 'circle-stroke-color': '#7a1d20', 'circle-stroke-width': 2 } })
+      m.on('click', 'clusters', async e => {
+        const f = e.features![0], p = f.properties as { cluster_id: number; point_count: number }
+        const source = m.getSource('photos') as maplibregl.GeoJSONSource
+        const [zoom, leaves] = await Promise.all([source.getClusterExpansionZoom(p.cluster_id), source.getClusterLeaves(p.cluster_id, p.point_count, 0)])
+        setSelected(null)
+        setGroup({ indices: leaves.map(l => (l.properties as { i: number }).i).sort((a, b) => a - b), zoom,
+          center: (f.geometry as unknown as { coordinates: [number, number] }).coordinates })
+      })
+      m.on('click', 'pins', e => { setGroup(null); setSelected((e.features![0].properties as { i: number }).i) })
+      for (const layer of ['clusters', 'pins']) {
+        m.on('mouseenter', layer, () => { m.getCanvas().style.cursor = 'pointer' })
+        m.on('mouseleave', layer, () => { m.getCanvas().style.cursor = '' })
       }
-      m.on('idle', update) // after every move/zoom once tiles and fades are done
       m.resize() // the container may have been laid out after the map measured it
       const focused = focus ? items.findIndex(it => it.sha256 === focus) : -1
       if (focused >= 0) { m.jumpTo({ center: [items[focused].longitude!, items[focused].latitude!], zoom: 14 }); setSelected(focused) }
@@ -76,6 +72,7 @@ export function MapView({ items, focus, onOpen, onBack }: { items: Media[]; focu
   }, [items, focus])
 
   const it = selected !== null ? items[selected] : null
+  const places = group && [...new Set(group.indices.map(i => items[i].place).filter(Boolean))]
   return (
     <div className="map-page">
       <div ref={box} className="map" />
@@ -85,6 +82,24 @@ export function MapView({ items, focus, onOpen, onBack }: { items: Media[]; focu
       {state === 'loading' && <div className="island map-note"><span className="spinner" /> Loading the map…</div>}
       {state === 'offline' && <div className="island map-note">The map background needs internet. Locations are still in each photo’s Details.</div>}
       {items.length === 0 && state === 'ready' && <div className="island map-note">No photos with a location yet.</div>}
+      {group && (
+        <div className="island map-sheet">
+          <header>
+            <strong>{group.indices.length.toLocaleString()} photos</strong>
+            {places && places.length > 0 && <small>{places.slice(0, 3).join(' · ')}{places.length > 3 ? ` · +${places.length - 3}` : ''}</small>}
+            <button className="text-button" onClick={() => { map.current?.easeTo({ center: group.center, zoom: group.zoom }); setGroup(null) }}>
+              <Icon name="zoomIn" size={18} /> Zoom in</button>
+            <button className="round flat" title="Close" onClick={() => setGroup(null)}><Icon name="close" /></button>
+          </header>
+          <div className="map-sheet-grid">
+            {group.indices.map(i => (
+              <button key={i} title={items[i].place || items[i].path} onClick={() => onOpen(i, group.indices)}>
+                <img src={`media://thumb/${items[i].sha256}`} loading="lazy" alt="" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {it && (
         <div className="island map-card">
           <img src={`media://thumb/${it.sha256}`} alt="" onClick={() => onOpen(selected!)} />

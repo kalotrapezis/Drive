@@ -266,7 +266,11 @@ class Files {
    * layout under 'self'. The first sync with a device therefore moves nothing on either side, which is the
    * rule that stops one device quietly reorganising the other's Drive.
    */
-  async reconcile(entries, deviceId = 'phone') {
+  /**
+   * `followTrash: false` is a Move device (SYNC_PLAN.md D6): what it puts in its Trash is its own business — this
+   * computer keeps its copy, so it neither follows that move nor asks for the Trash's contents.
+   */
+  async reconcile(entries, deviceId = 'phone', { followTrash = true } = {}) {
     this.db.exec('CREATE TABLE IF NOT EXISTS sync_manifest (device_id TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, PRIMARY KEY(device_id, path))')
     const offered = new Map()
     for (const e of entries ?? []) if (isSafeRel(e?.path) && /^[0-9a-f]{64}$/.test(e?.sha256 ?? '')) offered.set(e.path, e.sha256)
@@ -283,6 +287,7 @@ class Files {
     }
     const want = [], moved = []
     for (const [rel, sha] of offered) {
+      if (!followTrash && inTrash(rel)) continue
       if (mine.get(sha)?.includes(rel)) continue // already here, at this very path
       // The phone kept these bytes here last time and does not any more: it moved them, so follow.
       const elsewhere = (mine.get(sha) ?? []).find(other => before.get(other) === sha && !offered.has(other))
