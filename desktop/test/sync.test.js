@@ -223,6 +223,12 @@ test('the ledger counts who still holds a file, not who once sent it', async () 
     assert.equal(row.holds, 1)
     assert.equal(row.onlyThere, 0, 'nothing on the phone is missing here')
     assert.equal(row.freeable, 1000, 'what it could give back is what was checked here')
+    // A device's own Sync page shows the same overview, asked for over the wire.
+    const remote = (await call('GET', '/overview', { token: phone })).body
+    assert.equal(remote.known, 2)
+    assert.deepEqual(remote.copies.map(c => c.copies), [1, 3])
+    assert.equal(remote.devices.find(d => d.name === 'Phone').holds, 1)
+    assert.equal((await call('GET', '/overview')).status, 401, 'paired devices only')
 
     // A device holding something this computer has never seen is the risky case, and it is counted as such.
     const stray = crypto.randomBytes(32).toString('hex')

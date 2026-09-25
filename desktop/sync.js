@@ -946,6 +946,14 @@ class SyncServer {
       this.describes(device.id, items)
       return this.send(res, 200, { ok: true, described: items.length })
     }
+    // The library, and where it is — the same overview the Devices page shows, for a device's own Sync page.
+    if (req.method === 'GET' && url.pathname === '/overview') {
+      const o = this.overview()
+      const kinds = new Map(this.db.prepare('SELECT id, kind, volume_uuid FROM sync_devices').all().map(d => [d.id, d.volume_uuid ? 'database' : d.kind]))
+      return this.send(res, 200, { name: this.self().name, you: device.id, at: Date.now(),
+        known: o.known, here: o.here, stored: o.stored, copies: o.copies,
+        devices: o.devices.map(d => ({ id: d.id, name: d.name, kind: kinds.get(d.id) ?? null, lastSeen: d.last_seen, holds: d.holds, alsoHere: d.alsoHere, onlyThere: d.onlyThere })) })
+    }
     if (req.method === 'GET' && url.pathname === '/connections') {
       return this.send(res, 200, { name: os.hostname(), connections: this.connections(device.id) })
     }
