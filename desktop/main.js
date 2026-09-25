@@ -40,7 +40,8 @@ const setSetting = (key, value) => db.prepare('INSERT INTO settings(key, value) 
 // Local analysis (People, Documents): each starts only after an explicit request, like the phone; pausable; nothing
 // is uploaded. It runs in analyzer.js, its own low-priority process, so reading a library never holds this thread.
 const analysis = { running: false, paused: false, done: 0, total: 0, error: '' }
-const sendAnalysis = () => { win?.webContents.send('people-progress', { ...analysis }); updateTray() }
+// The window may already be gone when the worker stops (quitting): nothing to tell then.
+const sendAnalysis = () => { if (win && !win.isDestroyed()) win.webContents.send('people-progress', { ...analysis }); updateTray() }
 let analyzer = null, scanDone = null
 
 /** The background thread (analyzer.js): scanning and analysis both run there, never on the window's thread. */
@@ -166,11 +167,12 @@ function moveToDrive(id, options) {
   if (moving) throw new Error('A move is already running.')
   moving = sync.moveToDrive(id, options, p => win?.webContents.send('move-progress', p))
     .finally(() => {
-      sync.releaseTrashedMoved().catch(() => {}) moving = null; offer = null; said.offer = Date.now(); updateTray(); win?.webContents.send('sync-received') })
+      sync.releaseTrashedMoved().catch(() => {})
+      moving = null; offer = null; said.offer = Date.now(); updateTray(); win?.webContents.send('sync-received') })
   return moving
 }
 function updateTray() {
-  if (!tray) return
+  if (!tray || tray.isDestroyed()) return
   const status = driveBackup ? `Backing up to ${driveBackup.name}: ${driveBackup.done.toLocaleString()} / ${driveBackup.total.toLocaleString()}`
     : analysis.running ? `Analysing ${analysis.done.toLocaleString()} / ${analysis.total.toLocaleString()}`
     : analysis.paused ? 'Analysis paused' : 'Up to date'
