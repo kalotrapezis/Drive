@@ -940,10 +940,19 @@ class SyncServer {
       return this.send(res, 200, { held: hashes.filter(h => this.heldSafely(h)) })
     }
     if (req.method === 'POST' && url.pathname === '/inventory') {
-      const { items } = await this.json(req, 1 << 23)
+      const { items, part, of } = await this.json(req, 1 << 23)
       if (!Array.isArray(items)) return this.send(res, 400, { error: 'Send a list of items.' })
+      // A numbered list is the device's whole library: its first part starts the count, and after its last part
+      // whatever the device did not mention is no longer on it (a Move, a delete) — not a day later.
+      this.sweeps ??= new Map()
+      if (part === 0) this.sweeps.set(device.id, Date.now())
       this.holds(device.id, 'photo', items.map(i => i && i.sha256).filter(isHash))
       this.describes(device.id, items)
+      const started = this.sweeps.get(device.id)
+      if (Number.isInteger(part) && Number.isInteger(of) && part === of - 1 && started) {
+        this.db.prepare("DELETE FROM device_holdings WHERE device_id = ? AND kind = 'photo' AND seen_at < ?").run(device.id, started)
+        this.sweeps.delete(device.id)
+      }
       return this.send(res, 200, { ok: true, described: items.length })
     }
     // The library, and where it is — the same overview the Devices page shows, for a device's own Sync page.

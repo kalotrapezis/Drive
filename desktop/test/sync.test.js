@@ -230,6 +230,13 @@ test('the ledger counts who still holds a file, not who once sent it', async () 
     assert.equal(remote.devices.find(d => d.name === 'Phone').holds, 1)
     assert.equal((await call('GET', '/overview')).status, 401, 'paired devices only')
 
+    // A complete, numbered list is the whole library: what it leaves out is gone from that device now, not a day later.
+    await call('POST', '/have', { token: tablet, json: { hashes: [shared, lonely] } })
+    assert.equal(server.overview().devices.find(d => d.name === 'Tablet').holds, 2)
+    await call('POST', '/inventory', { token: tablet, json: { items: [{ sha256: shared }], part: 0, of: 1 } })
+    assert.equal(server.overview().devices.find(d => d.name === 'Tablet').holds, 1, 'the Move took the other one off it')
+    await call('POST', '/have', { token: tablet, json: { hashes: [shared] } }) // back to what the rest of this test expects
+
     // A device holding something this computer has never seen is the risky case, and it is counted as such.
     const stray = crypto.randomBytes(32).toString('hex')
     await call('POST', '/have', { token: phone, json: { hashes: [shared, stray] } })
