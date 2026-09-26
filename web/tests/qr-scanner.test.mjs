@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import jsQR from 'jsqr';
+
+test('QR decoder reads a known pixel matrix and rejects a blank image', () => {
+  // Generated once with libqrencode for "Local Drive beta".
+  const rows = `1111111001110010001111111
+1000001010010100001000001
+1011101000011001001011101
+1011101001101100001011101
+1011101011001100101011101
+1000001001011011101000001
+1111111010101010101111111
+0000000001100001000000000
+1010101000011000100010010
+1111100111011100101001011
+1000101001001010111111011
+0110110010100111111110001
+1111111101000010011000010
+0100100101110010111001011
+1011011001000100011001111
+0111110101010001100100010
+1011011100001000111110010
+0000000010011101100010110
+1111111001011011101010111
+1000001001001110100011010
+1011101011010010111110001
+1011101000010011110011000
+1011101011100100100110101
+1000001000110001110100010
+1111111011001001101110111`.split('\n');
+  const size = (rows.length + 8) * 5;
+  const pixels = new Uint8ClampedArray(size * size * 4).fill(255);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    if (rows[Math.floor(y / 5) - 4]?.[Math.floor(x / 5) - 4] === '1') {
+      const index = (y * size + x) * 4; pixels[index] = pixels[index + 1] = pixels[index + 2] = 0;
+    }
+  }
+  assert.equal(jsQR(pixels, size, size)?.data, 'Local Drive beta');
+  assert.equal(jsQR(new Uint8ClampedArray(size * size * 4).fill(255), size, size), null);
+});

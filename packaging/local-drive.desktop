@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Local Drive Alpha
+Comment=Verified local file and photo transfer
+Exec=local-drive
+Icon=local-drive
+Terminal=false
+Categories=Utility;FileTools;
+StartupNotify=false

@@ -1,0 +1,91 @@
+{
+  "name": "local-drive-desktop",
+  "version": "0.3.0-beta.1",
+  "description": "Tetra desktop app",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite & sleep 2; VITE_DEV_URL=http://localhost:5199 electron .; kill %1",
+    "start": "vite build && electron .",
+    "check": "tsc -p .",
+    "test": "node --test src/*.test.ts test/*.test.js",
+    "dist": "vite build && electron-builder --linux AppImage deb"
+  },
+  "author": "Theologos Kalotrapezis <kalotrapezis@gmail.com>",
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  },
+  "dependencies": {
+    "exifr": "^7.1.3",
+    "heic-decode": "^2.1.0",
+    "libsodium-wrappers-sumo": "^0.8.4",
+    "maplibre-gl": "^6.10.0",
+    "onnxruntime-node": "^1.30.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "selfsigned": "^5.5.0",
+    "sharp": "^0.35.4"
+  },
+  "productName": "Tetra",
+  "private": true,
+  "license": "SEE LICENSE IN ../LICENSE",
+  "build": {
+    "appId": "com.kalotrapezis.drive.desktop",
+    "productName": "Tetra",
+    "files": [
+      "main.js",
+      "preload.js",
+      "library.js",
+      "files.js",
+      "faces.js",
+      "sync.js",
+      "models/*.txt",
+      "documents.js",
+      "data/places.tsv.gz",
+      "editor.js",
+      "vault.js",
+      "places.js",
+      "analyzer.js",
+      "folders.js",
+      "drives.js",
+      "home.js",
+      "purgatory.js",
+      "history.js",
+      "notes.js",
+      "importer.js",
+      "models/*.onnx",
+      "dist/**",
+      "public/icon.png",
+      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_cuda.so",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_tensorrt.so"
+    ],
+    "asarUnpack": [
+      "node_modules/sharp/**",
+      "node_modules/@img/**",
+      "node_modules/onnxruntime-node/**"
+    ],
+    "linux": {
+      "category": "Graphics",
+      "icon": "public/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "maintainer": "Theologos Kalotrapezis <kalotrapezis@gmail.com>"
+    },
+    "directories": {
+      "output": "release"
+    }
+  },
+  "homepage": "https://github.com/kalotrapezis"
+}
