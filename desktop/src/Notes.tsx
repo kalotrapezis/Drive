@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Icon, type IconName } from './Icon'
-import { Confirm, Modal, errorText } from './Dialogs'
+import { Confirm, Modal, TagsDialog, errorText } from './Dialogs'
 import { Undo, blocks, endsWord, indent, prefix, preview, sortItems, toggleLine, wrap, type Edit, type Inline, type Item } from './notesEdit'
 
 // Notes (asked 2026-09-26): kept in Files' hidden .notes folder (notes.js). No sidebar of folders — labels only, a
@@ -252,6 +252,9 @@ function NoteEditor({ initial, setDialog, onClose }: {
   }
 
   const history = () => setDialog(<HistoryDialog id={initial.id} onClose={close} onRestore={n => edit({ title: n.title, content: n.content ?? '', items: n.checklistItems ?? [] }, true)} />)
+  // Tags, chosen or created in the same dialog as Files' (asked 2026-09-26).
+  const tags = () => call<Note[]>('list').then(all => setDialog(<TagsDialog title={`Tags for \u201c${title || 'Untitled'}\u201d`} initial={meta.labels}
+    known={all.flatMap(n => n.labels ?? [])} onClose={close} onSave={async labels => { await setMetaNow({ labels }) }} />))
   const toTrash = () => { changed.current = true; flush.current().then(() => call('save', initial.id, { trashedAt: Date.now() })).then(() => leave('Note moved to Trash', () => call('save', initial.id, { trashedAt: null }))) }
   const archive = () => {
     const on = !meta.archivedAt
@@ -263,30 +266,6 @@ function NoteEditor({ initial, setDialog, onClose }: {
 
   return (
     <div className="notes note-editor" onKeyDown={onKey} style={meta.color ? { ['--note' as string]: meta.color } : undefined}>
-      {/* One line of the basics; everything else slides up from the bottom. */}
-      <header className="editor-bar island">
-        <button className="round flat" title="Back (Esc)" onClick={() => leave()}><Icon name="back" /></button>
-        {tool('undo', 'Undo (Ctrl+Z)', () => apply(undo.current.undo()))}
-        {tool('redo', 'Redo (Ctrl+Y)', () => apply(undo.current.redo()))}
-        <span className="bar-gap" />
-        {!checklist && !reading && <>
-          {tool('bold', 'Bold (Ctrl+B)', () => format(x => wrap(x, '**')))}
-          {tool('italic', 'Italic (Ctrl+I)', () => format(x => wrap(x, '*')))}
-          {tool('checkBox', 'Checkbox list', () => format(x => prefix(x, '- [ ] ')))}
-          {tool('bullets', 'Bulleted list', () => format(x => prefix(x, '- ')))}
-          <span className="bar-gap" />
-        </>}
-        <span className="bar-fill" />
-        {trashed ? <>
-          <button className="text-button" onClick={() => call('save', initial.id, { trashedAt: null }).then(() => leave('Note restored'))}>Restore</button>
-          <button className="text-button danger" onClick={() => setDialog(<Confirm title="Delete this note for good?" action="Delete" danger onClose={close}
-            body="Its saved versions stay in the history folder." onConfirm={() => call('remove', initial.id).then(() => onClose(null, 'Note deleted'))} />)}>Delete for good</button>
-        </> : <>
-          {!checklist && tool(reading ? 'editNote' : 'visibility', reading ? 'Edit' : 'Read', () => setReading(r => !r), reading)}
-          {tool('pin', meta.isPinned ? 'Unpin' : 'Pin', () => setMetaNow({ isPinned: !meta.isPinned }), meta.isPinned)}
-          <button className={`round flat ${tools ? 'on' : ''}`} title="More tools" aria-expanded={tools} onClick={() => setTools(t => !t)}><Icon name="arrowUp" size={20} /></button>
-        </>}
-      </header>
 
       <div className={`editor-page ${meta.color ? 'tinted' : ''}`}>
         <input className="editor-title" placeholder="Title" value={title} readOnly={trashed} onChange={e => edit({ title: e.target.value }, false, endsWord(title, e.target.value, e.target.selectionStart ?? 0))} />
@@ -297,6 +276,35 @@ function NoteEditor({ initial, setDialog, onClose }: {
         {!!meta.labels.length && <div className="note-labels">{meta.labels.map(l => <small key={l}>{l}</small>)}</div>}
       </div>
 
+      {/* The tools are an island at the bottom, like the rest of Tetra: one line of the basics, pulled up (or its grip
+          clicked) for everything else (asked 2026-09-26: not a bar at the top with the rest at the bottom). */}
+      {!tools && <div className="notes-dock">
+        {!trashed && <Handle open={tools} setOpen={setTools} />}
+        <nav className="editor-bar island">
+          <button className="round flat" title="Back (Esc)" onClick={() => leave()}><Icon name="back" /></button>
+          {tool('undo', 'Undo (Ctrl+Z)', () => apply(undo.current.undo()))}
+          {tool('redo', 'Redo (Ctrl+Y)', () => apply(undo.current.redo()))}
+          <span className="bar-gap" />
+          {!checklist && !reading && <>
+            {tool('bold', 'Bold (Ctrl+B)', () => format(x => wrap(x, '**')))}
+            {tool('italic', 'Italic (Ctrl+I)', () => format(x => wrap(x, '*')))}
+            {tool('checkBox', 'Checkbox list', () => format(x => prefix(x, '- [ ] ')))}
+            {tool('bullets', 'Bulleted list', () => format(x => prefix(x, '- ')))}
+            <span className="bar-gap" />
+          </>}
+          <span className="bar-gap" />
+          {trashed ? <>
+            <button className="text-button" onClick={() => call('save', initial.id, { trashedAt: null }).then(() => leave('Note restored'))}>Restore</button>
+            <button className="text-button danger" onClick={() => setDialog(<Confirm title="Delete this note for good?" action="Delete" danger onClose={close}
+              body="Its saved versions stay in the history folder." onConfirm={() => call('remove', initial.id).then(() => onClose(null, 'Note deleted'))} />)}>Delete for good</button>
+          </> : <>
+            {tool('label', 'Tags', tags, meta.labels.length > 0)}
+            {tool('history', 'History', history)}
+            {!checklist && tool(reading ? 'editNote' : 'visibility', reading ? 'Edit' : 'Read', () => setReading(r => !r), reading)}
+            {tool('pin', meta.isPinned ? 'Unpin' : 'Pin', () => setMetaNow({ isPinned: !meta.isPinned }), meta.isPinned)}
+          </>}
+        </nav>
+      </div>}
       <div className={`note-tools island ${tools ? 'open' : ''}`} aria-hidden={!tools}>
         <Handle open={tools} setOpen={setTools} />
         {!checklist && !reading && <section>
@@ -325,12 +333,7 @@ function NoteEditor({ initial, setDialog, onClose }: {
             {COLORS.map(c => <button key={c} className={`swatch ${meta.color === c ? 'on' : ''}`} style={{ background: c }} title={c} onClick={() => setMetaNow({ color: c })} />)}
           </div>
         </section>
-        <section>
-          <h4>Labels</h4>
-          <LabelEditor labels={meta.labels} onChange={labels => setMetaNow({ labels })} />
-        </section>
         <section className="tool-row">
-          <button className="text-button" onClick={history}><Icon name="history" size={18} /> History</button>
           <button className="text-button" onClick={archive}><Icon name={meta.archivedAt ? 'unarchive' : 'archive'} size={18} /> {meta.archivedAt ? 'Unarchive' : 'Archive'}</button>
           <button className="text-button" onClick={toTrash}><Icon name="trash" size={18} /> Move to Trash</button>
         </section>
@@ -398,20 +401,6 @@ function Rendered({ md, onToggle }: { md: string; onToggle: (line: number) => vo
   )
 }
 
-function LabelEditor({ labels, onChange }: { labels: string[]; onChange: (labels: string[]) => void }) {
-  const [all, setAll] = useState<string[]>([])
-  const [name, setName] = useState('')
-  useEffect(() => { call<Note[]>('list').then(ns => setAll([...new Set(ns.flatMap(n => n.labels ?? []))].sort((a, b) => a.localeCompare(b)))) }, [])
-  const toggle = (l: string) => onChange(labels.includes(l) ? labels.filter(x => x !== l) : [...labels, l])
-  return (
-    <div className="chips wrap">
-      {[...new Set([...all, ...labels])].map(l => <button key={l} className={`chip ${labels.includes(l) ? 'on' : ''}`} onClick={() => toggle(l)}>{l}</button>)}
-      <form onSubmit={e => { e.preventDefault(); const l = name.trim(); if (l && !labels.includes(l)) onChange([...labels, l]); setName('') }}>
-        <input className="chip-input" placeholder="New label" value={name} onChange={e => setName(e.target.value)} />
-      </form>
-    </div>
-  )
-}
 
 function HistoryDialog({ id, onClose, onRestore }: { id: string; onClose: () => void; onRestore: (n: Note) => void }) {
   const [versions, setVersions] = useState<Version[] | null>(null)

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DriveItem } from './drive'
 import { Icon, type IconName } from './Icon'
-import { Confirm, Modal, errorText } from './Dialogs'
+import { Confirm, Modal, TagsDialog, errorText } from './Dialogs'
 import { formatBytes } from './timeline'
 
 export type FilesMode = 'browse' | 'favorites' | 'recent'
@@ -171,7 +171,9 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
     setDialog(<RenameDialog item={item} onClose={close} onRename={async name => { await call('rename', item.path, name); refresh() }} />)
   }
   function editTags(items: DriveItem[]) {
-    setDialog(<TagsDialog items={items} known={tags} onClose={close}
+    setDialog(<TagsDialog title={items.length > 1 ? `Tags for ${items.length} items` : `Tags for \u201c${items[0].name}\u201d`}
+      hint={items.length > 1 ? 'These tags replace the tags on every selected item.' : undefined}
+      initial={items.length > 1 ? [] : items[0].tags} known={[...tags, ...items.flatMap(i => i.tags)]} onClose={close}
       onSave={async names => { await actAll(items, i => call('setTags', i.path, names), n => n === 1 ? 'Tags saved' : `Tags saved on ${n} items`) }} />)
   }
   function pickColor(item: DriveItem) {
@@ -348,35 +350,3 @@ function RenameDialog({ item, onRename, onClose }: { item: DriveItem; onRename: 
   )
 }
 
-function TagsDialog({ items, known, onSave, onClose }: { items: DriveItem[]; known: string[]; onSave: (t: string[]) => Promise<void>; onClose: () => void }) {
-  const many = items.length > 1
-  const [chosen, setChosen] = useState(new Set(many ? [] : items[0].tags)) // a set chosen for many replaces what each had
-  const [all, setAll] = useState([...new Set([...known, ...items.flatMap(i => i.tags)])])
-  const [draft, setDraft] = useState('')
-  const [error, setError] = useState('')
-  const toggle = (t: string) => setChosen(s => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n })
-  function add(e: React.FormEvent) {
-    e.preventDefault()
-    const t = draft.trim()
-    if (!t || t.length > 32 || t.includes(',')) return setError('Tags must be 1\u201332 characters and cannot contain commas.')
-    const existing = all.find(x => x.toLowerCase() === t.toLowerCase())
-    if (!existing) setAll(a => [...a, t])
-    setChosen(s => new Set(s).add(existing ?? t)); setDraft(''); setError('')
-  }
-  return (
-    <Modal onClose={onClose}>
-      <h3>{many ? `Tags for ${items.length} items` : `Tags for \u201c${items[0].name}\u201d`}</h3>
-      {many && <p className="hint">These tags replace the tags on every selected item.</p>}
-      <div className="chips wrap">{all.map(t => <button key={t} className={`chip ${chosen.has(t) ? 'on' : ''}`} onClick={() => toggle(t)}>{t}</button>)}</div>
-      <form onSubmit={add} className="tag-add">
-        <input className="field" placeholder="New tag" maxLength={32} value={draft} onChange={e => { setDraft(e.target.value); setError('') }} />
-        <button className="round" title="Add tag" disabled={!draft.trim()}><Icon name="add" /></button>
-      </form>
-      {error && <p className="error">{error}</p>}
-      <div className="dialog-actions">
-        <button className="text-button" onClick={onClose}>Cancel</button>
-        <button className="filled-button" onClick={async () => { try { await onSave([...chosen]); onClose() } catch (e) { setError(errorText(e)) } }}>Save</button>
-      </div>
-    </Modal>
-  )
-}

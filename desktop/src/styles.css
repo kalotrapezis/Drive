@@ -550,11 +550,11 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .chip-input { width: 130px; padding: 6px 14px; border-radius: 999px; border: 1px dashed var(--muted); background: none; color: var(--text); font: inherit; font-size: 13px; outline: none; }
 
 .note-editor { --note: var(--island); }
-.editor-bar { display: flex; align-items: center; gap: 2px; padding: 4px; margin-bottom: 12px; flex: none; }
+.editor-bar { display: flex; align-items: center; gap: 2px; padding: 6px; box-shadow: 0 8px 30px #0006; }
 .bar-gap { width: 1px; height: 24px; background: var(--island-2); margin: 0 6px; }
 .bar-fill { flex: 1; }
 .text-button.danger { color: #ff7a6b; }
-.editor-page { flex: 1; overflow-y: auto; display: flex; flex-direction: column; width: min(820px, 100%); margin: 0 auto; padding: 24px 32px 120px;
+.editor-page { flex: 1; overflow-y: auto; display: flex; flex-direction: column; width: min(820px, 100%); margin: 0 auto; padding: 24px 32px 140px;
   border-radius: 24px; background: var(--island); }
 .editor-page.tinted { background: var(--note); color: #1b1d1f; }
 .editor-page.tinted input, .editor-page.tinted textarea { color: #1b1d1f; }
