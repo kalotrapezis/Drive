@@ -477,6 +477,16 @@ app.whenReady().then(() => {
     show: !process.env.DRIVE_HIDDEN, // visual QA (scripts/shot.js) renders without appearing on the desktop
     webPreferences: { preload: path.join(__dirname, 'preload.js'), offscreen: !!process.env.DRIVE_HIDDEN },
   })
+  // Right-click on text: the usual Cut / Copy / Paste / Select all, and spelling suggestions (asked 2026-09-26; Electron
+  // gives none by itself). Undo and Redo stay the note's own, by the word — the built-in ones would not know about it.
+  win.webContents.on('context-menu', (_, p) => {
+    const items = []
+    for (const word of p.dictionarySuggestions ?? []) items.push({ label: word, click: () => win.webContents.replaceMisspelling(word) })
+    if (p.misspelledWord) items.push({ label: 'Add to dictionary', click: () => win.webContents.session.addWordToSpellCheckerDictionary(p.misspelledWord) }, { type: 'separator' })
+    if (p.isEditable) items.push({ role: 'cut', enabled: p.editFlags.canCut }, { role: 'copy', enabled: p.editFlags.canCopy }, { role: 'paste', enabled: p.editFlags.canPaste }, { type: 'separator' }, { role: 'selectAll' })
+    else if (p.selectionText.trim()) items.push({ role: 'copy' })
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win })
+  })
   if (process.env.VITE_DEV_URL) win.loadURL(process.env.VITE_DEV_URL)
   else win.loadFile(path.join(__dirname, 'dist', 'index.html'))
   if (!process.env.DRIVE_HIDDEN) {
