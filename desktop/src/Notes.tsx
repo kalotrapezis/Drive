@@ -266,6 +266,49 @@ function NoteEditor({ initial, setDialog, onClose }: {
 
   return (
     <div className="notes note-editor" onKeyDown={onKey} style={meta.color ? { ['--note' as string]: meta.color } : undefined}>
+      {/* On the computer every tool is in one line at the top, nothing hidden (asked 2026-09-26); the phone keeps
+          its bottom island. The colours open from their own button so the line stays one line. */}
+      <header className="editor-bar island">
+        <button className="round flat" title="Back (Esc)" onClick={() => leave()}><Icon name="back" /></button>
+        {tool('undo', 'Undo (Ctrl+Z)', () => apply(undo.current.undo()))}
+        {tool('redo', 'Redo (Ctrl+Y)', () => apply(undo.current.redo()))}
+        <span className="bar-gap" />
+        {trashed ? <>
+          <span className="bar-fill" />
+          <button className="text-button" onClick={() => call('save', initial.id, { trashedAt: null }).then(() => leave('Note restored'))}>Restore</button>
+          <button className="text-button danger" onClick={() => setDialog(<Confirm title="Delete this note for good?" action="Delete" danger onClose={close}
+            body="Its saved versions stay in the history folder." onConfirm={() => call('remove', initial.id).then(() => onClose(null, 'Note deleted'))} />)}>Delete for good</button>
+        </> : <>
+          {!checklist && !reading && <>
+            {tool('heading', 'Heading', () => format(x => prefix(x, '# ')))}
+            {tool('bold', 'Bold (Ctrl+B)', () => format(x => wrap(x, '**')))}
+            {tool('italic', 'Italic (Ctrl+I)', () => format(x => wrap(x, '*')))}
+            {tool('strike', 'Strikethrough', () => format(x => wrap(x, '~~')))}
+            {tool('code', 'Code', () => format(x => wrap(x, '`')))}
+            <span className="bar-gap" />
+            {tool('bullets', 'Bulleted list', () => format(x => prefix(x, '- ')))}
+            {tool('numbered', 'Numbered list', () => format(x => prefix(x, '1. ')))}
+            {tool('checkBox', 'Checkbox list', () => format(x => prefix(x, '- [ ] ')))}
+            {tool('quote', 'Quote', () => format(x => prefix(x, '> ')))}
+            {tool('link', 'Link', link)}
+            {tool('rule', 'Divider', () => format(x => ({ text: x.text.slice(0, x.end) + '\n\n---\n' + x.text.slice(x.end), start: x.end + 6, end: x.end + 6 })))}
+            {tool('indent', 'Indent', () => format(x => indent(x, false)))}
+            {tool('outdent', 'Outdent', () => format(x => indent(x, true)))}
+          </>}
+          <span className="bar-fill" />
+          {tool('label', 'Tags', tags, meta.labels.length > 0)}
+          {tool('palette', 'Colour', () => setTools(t => !t), tools)}
+          {tool('history', 'History', history)}
+          {!checklist && tool(reading ? 'editNote' : 'visibility', reading ? 'Edit' : 'Read', () => setReading(r => !r), reading)}
+          {tool('pin', meta.isPinned ? 'Unpin' : 'Pin', () => setMetaNow({ isPinned: !meta.isPinned }), meta.isPinned)}
+          {tool(meta.archivedAt ? 'unarchive' : 'archive', meta.archivedAt ? 'Unarchive' : 'Archive', archive)}
+          {tool('trash', 'Move to Trash', toTrash)}
+        </>}
+      </header>
+      {tools && <div className="palette-pop island">
+        <button className={`swatch none ${meta.color ? '' : 'on'}`} title="No colour" onClick={() => { setMetaNow({ color: undefined }); setTools(false) }} />
+        {COLORS.map(c => <button key={c} className={`swatch ${meta.color === c ? 'on' : ''}`} style={{ background: c }} title={c} onClick={() => { setMetaNow({ color: c }); setTools(false) }} />)}
+      </div>}
 
       <div className={`editor-page ${meta.color ? 'tinted' : ''}`}>
         <input className="editor-title" placeholder="Title" value={title} readOnly={trashed} onChange={e => edit({ title: e.target.value }, false, endsWord(title, e.target.value, e.target.selectionStart ?? 0))} />
@@ -276,68 +319,6 @@ function NoteEditor({ initial, setDialog, onClose }: {
         {!!meta.labels.length && <div className="note-labels">{meta.labels.map(l => <small key={l}>{l}</small>)}</div>}
       </div>
 
-      {/* The tools are an island at the bottom, like the rest of Tetra: one line of the basics, pulled up (or its grip
-          clicked) for everything else (asked 2026-09-26: not a bar at the top with the rest at the bottom). */}
-      {!tools && <div className="notes-dock">
-        {!trashed && <Handle open={tools} setOpen={setTools} />}
-        <nav className="editor-bar island">
-          <button className="round flat" title="Back (Esc)" onClick={() => leave()}><Icon name="back" /></button>
-          {tool('undo', 'Undo (Ctrl+Z)', () => apply(undo.current.undo()))}
-          {tool('redo', 'Redo (Ctrl+Y)', () => apply(undo.current.redo()))}
-          <span className="bar-gap" />
-          {!checklist && !reading && <>
-            {tool('bold', 'Bold (Ctrl+B)', () => format(x => wrap(x, '**')))}
-            {tool('italic', 'Italic (Ctrl+I)', () => format(x => wrap(x, '*')))}
-            {tool('checkBox', 'Checkbox list', () => format(x => prefix(x, '- [ ] ')))}
-            {tool('bullets', 'Bulleted list', () => format(x => prefix(x, '- ')))}
-            <span className="bar-gap" />
-          </>}
-          <span className="bar-gap" />
-          {trashed ? <>
-            <button className="text-button" onClick={() => call('save', initial.id, { trashedAt: null }).then(() => leave('Note restored'))}>Restore</button>
-            <button className="text-button danger" onClick={() => setDialog(<Confirm title="Delete this note for good?" action="Delete" danger onClose={close}
-              body="Its saved versions stay in the history folder." onConfirm={() => call('remove', initial.id).then(() => onClose(null, 'Note deleted'))} />)}>Delete for good</button>
-          </> : <>
-            {tool('label', 'Tags', tags, meta.labels.length > 0)}
-            {tool('history', 'History', history)}
-            {!checklist && tool(reading ? 'editNote' : 'visibility', reading ? 'Edit' : 'Read', () => setReading(r => !r), reading)}
-            {tool('pin', meta.isPinned ? 'Unpin' : 'Pin', () => setMetaNow({ isPinned: !meta.isPinned }), meta.isPinned)}
-          </>}
-        </nav>
-      </div>}
-      <div className={`note-tools island ${tools ? 'open' : ''}`} aria-hidden={!tools}>
-        <Handle open={tools} setOpen={setTools} />
-        {!checklist && !reading && <section>
-          <h4>Text</h4>
-          <div className="tool-row">
-            {tool('heading', 'Heading', () => format(x => prefix(x, '# ')))}
-            <button className="round flat" title="Subheading" onClick={() => format(x => prefix(x, '## '))}><b>H2</b></button>
-            {tool('bold', 'Bold', () => format(x => wrap(x, '**')))}
-            {tool('italic', 'Italic', () => format(x => wrap(x, '*')))}
-            {tool('strike', 'Strikethrough', () => format(x => wrap(x, '~~')))}
-            {tool('code', 'Code', () => format(x => wrap(x, '`')))}
-            {tool('bullets', 'Bulleted list', () => format(x => prefix(x, '- ')))}
-            {tool('numbered', 'Numbered list', () => format(x => prefix(x, '1. ')))}
-            {tool('checkBox', 'Checkbox list', () => format(x => prefix(x, '- [ ] ')))}
-            {tool('quote', 'Quote', () => format(x => prefix(x, '> ')))}
-            {tool('link', 'Link', link)}
-            {tool('rule', 'Divider', () => format(x => ({ text: x.text.slice(0, x.end) + '\n\n---\n' + x.text.slice(x.end), start: x.end + 6, end: x.end + 6 })))}
-            {tool('indent', 'Indent', () => format(x => indent(x, false)))}
-            {tool('outdent', 'Outdent', () => format(x => indent(x, true)))}
-          </div>
-        </section>}
-        <section>
-          <h4>Colour</h4>
-          <div className="tool-row">
-            <button className={`swatch none ${meta.color ? '' : 'on'}`} title="No colour" onClick={() => setMetaNow({ color: undefined })} />
-            {COLORS.map(c => <button key={c} className={`swatch ${meta.color === c ? 'on' : ''}`} style={{ background: c }} title={c} onClick={() => setMetaNow({ color: c })} />)}
-          </div>
-        </section>
-        <section className="tool-row">
-          <button className="text-button" onClick={archive}><Icon name={meta.archivedAt ? 'unarchive' : 'archive'} size={18} /> {meta.archivedAt ? 'Unarchive' : 'Archive'}</button>
-          <button className="text-button" onClick={toTrash}><Icon name="trash" size={18} /> Move to Trash</button>
-        </section>
-      </div>
     </div>
   )
 }
