@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('drive', {
     pick: folders => ipcRenderer.invoke('import:pick', folders),
     drives: () => ipcRenderer.invoke('import:drives'),
     run: (kind, sources, driveId, move) => ipcRenderer.invoke('import:run', kind, sources, driveId, move),
+    cancel: () => ipcRenderer.invoke('import:cancel'),
     onProgress: cb => { const f = (_, p) => cb(p); ipcRenderer.on('import-progress', f); return () => ipcRenderer.removeListener('import-progress', f) },
   },
   theme: () => ipcRenderer.invoke('settings:theme'),

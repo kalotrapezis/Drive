@@ -152,7 +152,8 @@ declare global {
       imports: {
         pick(folders: boolean): Promise<string[]>
         drives(): Promise<{ id: string; name: string; free: number }[]>
-        run(kind: 'photos' | 'files', sources: string[], driveId: string | null, move: boolean): Promise<{ imported: number; skipped: number; failed: string[]; total: number }>
+        run(kind: 'photos' | 'files', sources: string[], driveId: string | null, move: boolean): Promise<{ imported: number; skipped: number; failed: string[]; total: number; stopped?: boolean }>
+        cancel(): Promise<void>
         onProgress(cb: (p: { done: number; total: number; imported: number; skipped: number }) => void): () => void
       }
       theme(): Promise<'system' | 'light' | 'dark'>

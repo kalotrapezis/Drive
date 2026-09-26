@@ -32,6 +32,7 @@ const FILES_ROOT = process.env.DRIVE_FILES || HOME.files
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
+let importing = null, importStop = null
 let notes, db, files, people, documents, folders, vault, sync, purgatory, win, scanning = null
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage']
@@ -102,7 +103,8 @@ function backUpToDrive(id) {
   return driveBackup.promise
 }
 async function backUpPluggedDrives() {
-  if (driveBackup) return
+  // Not during an import: both wrote the same new photos to the drive at once, and left 118 half copies (26 September).
+  if (driveBackup || importing) return
   for (const d of await sync.drives().catch(() => [])) {
     const rule = d.device && db.prepare(`SELECT s.set_up_at, c.direction FROM sync_devices s
       LEFT JOIN sync_connections c ON c.device_id = s.id AND c.content IN ('photos', 'files') AND c.direction IN ('receive', 'both')
@@ -465,11 +467,12 @@ app.whenReady().then(() => {
   let notesNudge = null
   ipcMain.handle('notes:synced', () => sync.notesSynced)
   // Import (importer.js): photos and files from anywhere, to this computer or straight to a plugged-in drive.
-  let importing = null
   ipcMain.handle('import:pick', async (_, folders) => (await dialog.showOpenDialog(win, { properties: [folders ? 'openDirectory' : 'openFile', 'multiSelections'] })).filePaths)
   ipcMain.handle('import:drives', async () => (await sync.drives()).filter(d => d.device && d.mount).map(d => ({ id: d.device.id, name: d.device.name, free: d.freeBytes })))
+  ipcMain.handle('import:cancel', () => { if (importStop) importStop.cancelled = true })
   ipcMain.handle('import:run', async (_, kind, sources, driveId, move) => {
     move = move === true
+    const stop = importStop = { cancelled: false }
     if (importing) throw new Error('An import is already running.')
     if (!Array.isArray(sources) || !sources.length) throw new Error('Choose what to import.')
     const plugged = driveId ? (await sync.drives()).find(d => d.device?.id === driveId && d.mount) : null
@@ -477,14 +480,14 @@ app.whenReady().then(() => {
     const drive = plugged && { id: plugged.device.id, name: plugged.device.name, mount: plugged.mount }
     const onProgress = p => win?.webContents.send('import-progress', p)
     importing = kind === 'files'
-      ? importer.importFiles({ db, root: drive ? path.join(drive.mount, 'Tetra', 'Files') : FILES_ROOT, sources, move, onProgress })
-      : (folders.set('Imported', true), importer.importPhotos({ db, photosRoot: PHOTOS_ROOT, sources, drive, move, scan: () => startScan(), onProgress }))
+      ? importer.importFiles({ db, root: drive ? path.join(drive.mount, 'Tetra', 'Files') : FILES_ROOT, sources, move, stop, onProgress })
+      : (folders.set('Imported', true), importer.importPhotos({ db, photosRoot: PHOTOS_ROOT, sources, drive, move, stop, scan: () => startScan(), onProgress }))
     try {
       const r = await importing
       if (kind !== 'files') await startScan()
-      notify(`${move ? 'Moved in' : 'Imported'} ${r.imported.toLocaleString()} ${kind === 'files' ? 'files' : 'photos'}`, (drive ? `Straight to ${drive.name}. ` : '') + (r.skipped ? `${r.skipped} were already in the library. ` : '') + (r.failed.length ? `${r.failed.length} could not be copied.` : ''))
+      notify(`${r.stopped ? 'Stopped: ' : ''}${move ? 'moved in' : 'imported'} ${r.imported.toLocaleString()} ${kind === 'files' ? 'files' : 'photos'}`, (drive ? `Straight to ${drive.name}. ` : '') + (r.skipped ? `${r.skipped} were already in the library. ` : '') + (r.failed.length ? `${r.failed.length} could not be copied.` : ''))
       return r
-    } finally { importing = null }
+    } finally { importing = null; importStop = null }
   })
   db.exec('CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY, at INTEGER NOT NULL, title TEXT NOT NULL, body TEXT, read INTEGER NOT NULL DEFAULT 0)')
   ipcMain.handle('notifications:list', () => db.prepare('SELECT id, at, title, body, read FROM notifications ORDER BY at DESC LIMIT 500').all())

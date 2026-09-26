@@ -63,3 +63,20 @@ test('import with Move: originals go once their copies read back, the library\'s
     db.close()
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
+
+test('import stops when asked, keeping what came in whole', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'import-stop-'))
+  try {
+    const card = path.join(tmp, 'Card'); fs.mkdirSync(card)
+    for (const n of ['a', 'b', 'c']) fs.writeFileSync(path.join(card, n + '.jpg'), 'photo ' + n)
+    const photos = path.join(tmp, 'Photos'); fs.mkdirSync(photos)
+    const db = library.open(path.join(tmp, 'data'))
+    const stop = { cancelled: false }
+    const r = await importPhotos({ db, photosRoot: photos, sources: [card], stop, scan: fakeScan(db, photos), onProgress: p => { if (p.imported === 1) stop.cancelled = true } })
+    assert.equal(r.stopped, true)
+    assert.equal(r.imported, 1)
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM media').get().n, 1, 'what came in was scanned')
+    assert.deepEqual(fs.readdirSync(path.join(photos, 'Imported', 'Card')).filter(f => f.endsWith('.part')), [])
+    db.close()
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})

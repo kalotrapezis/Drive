@@ -15,6 +15,7 @@ export function ImportDialog({ kind, onClose, onDone }: { kind: 'photos' | 'file
   const [progress, setProgress] = useState<{ done: number; total: number; imported: number; skipped: number } | null>(null)
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [stopping, setStopping] = useState(false)
   useEffect(() => { window.drive.imports.drives().then(setDrives) }, [])
   useEffect(() => window.drive.imports.onProgress(setProgress), [])
   const add = (folders: boolean) => window.drive.imports.pick(folders).then(p => setSources(s => [...new Set([...s, ...p])]))
@@ -23,14 +24,14 @@ export function ImportDialog({ kind, onClose, onDone }: { kind: 'photos' | 'file
     setError(''); setProgress({ done: 0, total: 0, imported: 0, skipped: 0 })
     try {
       const r = await window.drive.imports.run(kind, sources, to, move)
-      setResult(`${move ? 'Moved in' : 'Imported'} ${r.imported.toLocaleString()}` + (r.skipped ? `, ${r.skipped.toLocaleString()} already in the library` : '')
+      setResult(`${r.stopped ? 'Stopped. ' : ''}${move ? 'Moved in' : 'Imported'} ${r.imported.toLocaleString()}` + (r.skipped ? `, ${r.skipped.toLocaleString()} already in the library` : '')
         + (r.failed.length ? `. ${r.failed.length} could not be copied: ${r.failed.slice(0, 2).join('; ')}` : '.'))
       onDone()
     } catch (e) { setError(errorText(e)); setProgress(null) }
   }
   const what = kind === 'photos' ? 'photos and videos' : 'files'
   return (
-    <Modal onClose={() => { if (!running) onClose() }}>
+    <Modal onClose={() => { if (running) { setStopping(true); window.drive.imports.cancel() } else onClose() }}>
       <h3>Import {kind}</h3>
       {result ? <p>{result}</p> : running ? (
         <>
@@ -60,7 +61,8 @@ export function ImportDialog({ kind, onClose, onDone }: { kind: 'photos' | 'file
       {error && <p className="error">{error}</p>}
       <div className="dialog-actions">
         {result ? <button className="filled-button" onClick={onClose}>Done</button> : <>
-          <button className="text-button" disabled={running} onClick={onClose}>Cancel</button>
+          {/* Cancel while it runs stops it: after the photo in hand, with what came in so far kept whole. */}
+          <button className="text-button" disabled={stopping} onClick={() => { if (running) { setStopping(true); window.drive.imports.cancel() } else onClose() }}>{stopping ? 'Stopping…' : 'Cancel'}</button>
           <button className="filled-button" disabled={!sources.length || running} onClick={start}>Import</button>
         </>}
       </div>

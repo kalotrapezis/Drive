@@ -57,7 +57,7 @@ async function copyChecked(src, dest, expected = null) {
   let target = dest
   const { dir, name, ext } = path.parse(dest)
   for (let n = 2; fs.existsSync(target); n++) target = path.join(dir, `${name} (${n})${ext}`)
-  const part = `${target}.part`
+  const part = `${target}.${crypto.randomUUID()}.part` // its own name: nothing else writing the same file can meet it
   const hash = crypto.createHash('sha256')
   await new Promise((resolve, reject) => {
     const r = fs.createReadStream(src), w = fs.createWriteStream(part, { flags: 'wx' })
@@ -76,7 +76,7 @@ async function copyChecked(src, dest, expected = null) {
  * `drive`: null for this computer, or { id, name, mount }. `scan()` reads the Photos folder (resolves when done).
  * `onProgress({ done, total, imported, skipped })`.
  */
-async function importPhotos({ db, photosRoot, sources, drive = null, move = false, scan, onProgress = () => {}, batchBytes = BATCH }) {
+async function importPhotos({ db, photosRoot, sources, drive = null, move = false, stop = { cancelled: false }, scan, onProgress = () => {}, batchBytes = BATCH }) {
   const files = await gather(sources, MEDIA)
   const known = new Set(db.prepare('SELECT sha256 FROM media').all().map(r => r.sha256))
   const out = { imported: 0, skipped: 0, failed: [], total: files.length }
@@ -102,7 +102,9 @@ async function importPhotos({ db, photosRoot, sources, drive = null, move = fals
     batch = []; bytes = 0
   }
   for (const [i, f] of files.entries()) {
+    // Cancel stops between photos; the batch in hand is finished — scanned, and let go to the drive — not left half.
     onProgress({ done: i, total: files.length, imported: out.imported, skipped: out.skipped })
+    if (stop.cancelled) { out.stopped = true; break }
     try {
       const sha = await library.sha256(f.src)
       if (known.has(sha)) { out.skipped++; if (move) await fsp.rm(f.src); continue }
@@ -124,11 +126,12 @@ async function importPhotos({ db, photosRoot, sources, drive = null, move = fals
 }
 
 /** Files into `<root>/Imported/`, folders as they were; `root` is this computer's Files or a drive's Tetra/Files. */
-async function importFiles({ db, root, sources, move = false, onProgress = () => {} }) {
+async function importFiles({ db, root, sources, move = false, stop = { cancelled: false }, onProgress = () => {} }) {
   const files = await gather(sources)
   const out = { imported: 0, skipped: 0, failed: [], total: files.length }
   for (const [i, f] of files.entries()) {
     onProgress({ done: i, total: files.length, imported: out.imported, skipped: 0 })
+    if (stop.cancelled) { out.stopped = true; break }
     try {
       const sha = move ? await library.sha256(f.src) : null
       const copy = await copyChecked(f.src, path.join(root, 'Imported', f.rel), sha)
