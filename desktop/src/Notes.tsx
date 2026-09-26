@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Icon, type IconName } from './Icon'
 import { Confirm, Modal, errorText } from './Dialogs'
-import { Undo, blocks, indent, prefix, preview, sortItems, toggleLine, wrap, type Edit, type Inline, type Item } from './notesEdit'
+import { Undo, blocks, endsWord, indent, prefix, preview, sortItems, toggleLine, wrap, type Edit, type Inline, type Item } from './notesEdit'
 
 // Notes (asked 2026-09-26): kept in Files' hidden .notes folder (notes.js). No sidebar of folders — labels only, a
 // bottom island for the views and a drawer pulled up from it for the pins and labels.
@@ -11,17 +11,16 @@ export interface Note {
   color?: string; isPinned?: boolean; archivedAt?: number; trashedAt?: number; createdAt: number; updatedAt: number
 }
 interface Version { name: string; at: number; title: string; content: string; checklistItems?: Item[] }
-type View = 'home' | 'pinned' | 'archived' | 'trash'
+type View = 'home' | 'archived' | 'trash'
 
 const call = <T,>(method: string, ...args: unknown[]) => window.drive.notes<T>(method, ...args)
 const VIEWS: { id: View; name: string; icon: IconName }[] = [
-  { id: 'home', name: 'Notes', icon: 'home' }, { id: 'pinned', name: 'Pinned', icon: 'pin' },
-  { id: 'archived', name: 'Archived', icon: 'archive' }, { id: 'trash', name: 'Trash', icon: 'trash' },
+  { id: 'home', name: 'Notes', icon: 'home' }, { id: 'archived', name: 'Archived', icon: 'archive' }, { id: 'trash', name: 'Trash', icon: 'trash' },
 ]
 // Keep's palette, which the imported notes already use.
 const COLORS = ['#F28B82', '#FBBC04', '#FFF475', '#CCFF90', '#A7FFEB', '#CBF0F8', '#AECBFA', '#D7AEFB', '#FDCFE8', '#E6C9A8', '#E8EAED']
 const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
-const inView = (n: Note, v: View) => v === 'trash' ? !!n.trashedAt : !n.trashedAt && (v === 'archived' ? !!n.archivedAt : !n.archivedAt && (v === 'home' || !!n.isPinned))
+const inView = (n: Note, v: View) => v === 'trash' ? !!n.trashedAt : !n.trashedAt && (v === 'archived' ? !!n.archivedAt : !n.archivedAt)
 const newItem = (order: number): Item => ({ id: crypto.randomUUID(), text: '', isChecked: false, order, originalOrder: order, createdAt: Date.now(), indentationLevel: 0 })
 
 export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => void; say: (text: string, undo?: () => void) => void }) {
@@ -31,6 +30,7 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState<Note | null>(null)
   const [drawer, setDrawer] = useState(false)
+  useEffect(() => setSelected(new Set()), [view, label])
   const reload = () => call<Note[]>('list').then(setNotes)
   useEffect(() => { reload() }, [])
   const close = () => setDialog(null)
@@ -44,9 +44,18 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
     const q = fold(query.trim())
     return (notes ?? []).filter(n => inView(n, view) && (!label || n.labels?.includes(label))
       && (!q || fold([n.title, n.content, ...(n.labels ?? []), ...(n.checklistItems ?? []).map(i => i.text)].join(' ')).includes(q)))
-      .sort((a, b) => view === 'trash' ? (b.trashedAt ?? 0) - (a.trashedAt ?? 0) : Number(!!b.isPinned) - Number(!!a.isPinned) || b.updatedAt - a.updatedAt)
+      .sort((a, b) => view === 'trash' ? (b.trashedAt ?? 0) - (a.trashedAt ?? 0) : b.updatedAt - a.updatedAt)
   }, [notes, view, label, query])
-  const pinned = (notes ?? []).filter(n => n.isPinned && !n.trashedAt && !n.archivedAt)
+  // Pinned on top of Home, the rest below (asked 2026-09-26).
+  const pinned = view === 'home' ? shown.filter(n => n.isPinned) : []
+  const others = shown.filter(n => !pinned.includes(n))
+  // Long press (or Ctrl+click) selects; then a click adds or takes away.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const toggle = (id: string) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const picked = shown.filter(n => selected.has(n.id))
+  const act = async (said: string, change: Record<string, unknown>) => { for (const n of picked) await call('save', n.id, change); setSelected(new Set()); reload(); say(said) }
+  const cards = (list: Note[]) => list.map(n => <NoteCard key={n.id} note={n} selected={selected.has(n.id)}
+    onSelect={() => toggle(n.id)} onOpen={() => selected.size ? toggle(n.id) : setOpen(n)} />)
 
   async function create(noteType: 'TEXT' | 'CHECKLIST') {
     const n = await call<Note>('create', { noteType, labels: label ? [label] : [] })
@@ -65,6 +74,7 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
   // Ctrl+N a note, Ctrl+Shift+N a checklist, from anywhere on the page but the editor.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!open && e.key === 'Escape' && selected.size) { setSelected(new Set()); return }
       if (open || !(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'n') return
       e.preventDefault(); create(e.shiftKey ? 'CHECKLIST' : 'TEXT')
     }
@@ -83,15 +93,15 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
         {view === 'trash' && shown.length > 0 && <button className="text-button" onClick={emptyTrash}>Empty Trash</button>}
       </header>
       {!notes ? <div className="empty">Loading…</div> : shown.length === 0 ? (
-        <div className="empty"><p>{query ? 'No note matches.' : view === 'trash' ? 'The Trash is empty. Notes stay here 30 days.' : view === 'archived' ? 'Nothing archived.' : view === 'pinned' ? 'Pin a note to keep it at hand.' : 'No notes yet. Start one below.'}</p></div>
+        <div className="empty"><p>{query ? 'No note matches.' : view === 'trash' ? 'The Trash is empty. Notes stay here 30 days.' : view === 'archived' ? 'Nothing archived.' : 'No notes yet. Start one below.'}</p></div>
       ) : (
-        <div className="notes-scroll"><div className="notes-grid">{shown.map(n => <NoteCard key={n.id} note={n} onOpen={() => setOpen(n)} />)}</div></div>
+        <div className="notes-scroll">
+          {pinned.length > 0 && <><h4 className="notes-section">Pinned</h4><div className="notes-grid">{cards(pinned)}</div>{others.length > 0 && <h4 className="notes-section">Others</h4>}</>}
+          <div className="notes-grid">{cards(others)}</div>
+        </div>
       )}
 
       <div className={`notes-drawer island ${drawer ? 'open' : ''}`} aria-hidden={!drawer}>
-        <h4><Icon name="pin" size={18} />Pinned</h4>
-        {pinned.length ? <div className="drawer-pins">{pinned.map(n => <NoteCard key={n.id} note={n} small onOpen={() => { setDrawer(false); setOpen(n) }} />)}</div>
-          : <p className="muted">Pin a note from its editor to find it here.</p>}
         <h4><Icon name="label" size={18} />Labels</h4>
         <div className="chips wrap">
           <button className={`chip ${label ? '' : 'on'}`} onClick={() => { setLabel(null); setDrawer(false) }}>All</button>
@@ -100,13 +110,32 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
       </div>
       <div className="notes-dock">
         <Handle open={drawer} setOpen={setDrawer} />
-        <nav className="notes-island island">
-          {VIEWS.map(v => <button key={v.id} className={`island-item ${view === v.id ? 'on' : ''}`} title={v.name} onClick={() => { setView(v.id); setDrawer(false) }}>
-            <Icon name={v.icon} size={20} /><span>{v.id === 'home' ? 'Home' : v.name}</span></button>)}
-          <span className="island-gap" />
-          <button className="round" title="New note (Ctrl+N)" onClick={() => create('TEXT')}><Icon name="noteAdd" /></button>
-          <button className="round" title="New checklist (Ctrl+Shift+N)" onClick={() => create('CHECKLIST')}><Icon name="checklist" /></button>
-        </nav>
+        {selected.size > 0 ? (
+          <nav className="notes-island island">
+            <button className="round flat" title="Clear selection (Esc)" onClick={() => setSelected(new Set())}><Icon name="close" /></button>
+            <strong className="island-count">{selected.size}</strong>
+            {view === 'trash' ? <>
+              <button className="island-item" onClick={() => act('Restored', { trashedAt: null })}><Icon name="undo" size={20} /><span>Restore</span></button>
+              <button className="island-item" onClick={() => setDialog(<Confirm title={`Delete ${picked.length} for good?`} action="Delete" danger onClose={close}
+                body="Their saved versions stay in the history folder." onConfirm={async () => { for (const n of picked) await call('remove', n.id); setSelected(new Set()); reload(); say('Deleted') }} />)}><Icon name="deleteForever" size={20} /><span>Delete</span></button>
+            </> : <>
+              <button className="island-item" onClick={() => { const all = picked.every(n => n.isPinned); act(all ? 'Unpinned' : 'Pinned', { isPinned: !all }) }}><Icon name="pin" size={20} /><span>{picked.every(n => n.isPinned) ? 'Unpin' : 'Pin'}</span></button>
+              {view === 'archived' ? <button className="island-item" onClick={() => act('Unarchived', { archivedAt: null })}><Icon name="unarchive" size={20} /><span>Unarchive</span></button>
+                : <button className="island-item" onClick={() => act('Archived', { archivedAt: Date.now() })}><Icon name="archive" size={20} /><span>Archive</span></button>}
+              <button className="island-item" onClick={() => act('Moved to Trash', { trashedAt: Date.now() })}><Icon name="trash" size={20} /><span>Trash</span></button>
+            </>}
+          </nav>
+        ) : (
+          <nav className="notes-island island">
+            {/* Home, the two ways to start, then Archived and Trash; pulled up, the labels. */}
+            <button className={`island-item ${view === 'home' ? 'on' : ''}`} onClick={() => { setView('home'); setDrawer(false) }}><Icon name="home" size={20} /><span>Home</span></button>
+            <button className="island-item" title="New note (Ctrl+N)" onClick={() => create('TEXT')}><Icon name="noteAdd" size={20} /><span>New note</span></button>
+            <button className="island-item" title="New checklist (Ctrl+Shift+N)" onClick={() => create('CHECKLIST')}><Icon name="checklist" size={20} /><span>Checklist</span></button>
+            <span className="island-gap" />
+            {VIEWS.filter(v => v.id !== 'home').map(v => <button key={v.id} className={`island-item ${view === v.id ? 'on' : ''}`} onClick={() => { setView(v.id); setDrawer(false) }}>
+              <Icon name={v.icon} size={20} /><span>{v.name}</span></button>)}
+          </nav>
+        )}
       </div>
     </div>
   )
@@ -124,9 +153,14 @@ function Handle({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => voi
   )
 }
 
-function NoteCard({ note, small, onOpen }: { note: Note; small?: boolean; onOpen: () => void }) {
+function NoteCard({ note, small, selected, onSelect, onOpen }: { note: Note; small?: boolean; selected?: boolean; onSelect?: () => void; onOpen: () => void }) {
+  const hold = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const held = useRef(false)
   return (
-    <button className={`note-card ${note.color ? 'tinted' : ''} ${small ? 'small' : ''}`} style={note.color ? { background: note.color } : undefined} onClick={onOpen}>
+    <button className={`note-card ${note.color ? 'tinted' : ''} ${small ? 'small' : ''} ${selected ? 'selected' : ''}`} style={note.color ? { background: note.color } : undefined}
+      onPointerDown={() => { held.current = false; if (onSelect) hold.current = setTimeout(() => { held.current = true; onSelect() }, 500) }}
+      onPointerUp={() => clearTimeout(hold.current)} onPointerLeave={() => clearTimeout(hold.current)}
+      onClick={e => { if (held.current) return; if ((e.ctrlKey || e.metaKey) && onSelect) onSelect(); else onOpen() }}>
       {note.isPinned && !small && <span className="note-pin"><Icon name="pin" size={16} /></span>}
       {note.title && <strong>{note.title}</strong>}
       {preview(note, small ? 3 : 8).map((l, i) => <span key={i} className="note-line">{l}</span>)}
@@ -165,10 +199,10 @@ function NoteEditor({ initial, setDialog, onClose }: {
     clearTimeout(saving.current)
     saving.current = setTimeout(() => flush.current(), 400)
   }, [title, content, items])
-  const edit = (next: Partial<Snap>, step = false) => {
+  const edit = (next: Partial<Snap>, step = false, wordDone = false) => {
     const snap = { title, content, items, ...next }
     changed.current = true
-    step ? undo.current.step(snap) : undo.current.push(snap)
+    step ? undo.current.step(snap) : undo.current.push(snap, Date.now(), wordDone)
     if (next.title !== undefined) setTitle(next.title)
     if (next.content !== undefined) setContent(next.content)
     if (next.items !== undefined) setItems(next.items)
@@ -248,11 +282,11 @@ function NoteEditor({ initial, setDialog, onClose }: {
       </header>
 
       <div className={`editor-page ${meta.color ? 'tinted' : ''}`}>
-        <input className="editor-title" placeholder="Title" value={title} readOnly={trashed} onChange={e => edit({ title: e.target.value })} />
+        <input className="editor-title" placeholder="Title" value={title} readOnly={trashed} onChange={e => edit({ title: e.target.value }, false, endsWord(title, e.target.value, e.target.selectionStart ?? 0))} />
         {checklist ? <Checklist items={items} readOnly={trashed} onChange={(next, step) => edit({ items: next }, step)} />
           : reading ? <Rendered md={content} onToggle={line => edit({ content: toggleLine(content, line) }, true)} />
           : <textarea ref={area} className="editor-body" placeholder="Write here. **bold**, *italic*, - [ ] a checkbox…" value={content} readOnly={trashed}
-              autoFocus={!initial.content && !!initial.title} onChange={e => edit({ content: e.target.value })} />}
+              autoFocus={!initial.content && !!initial.title} onChange={e => edit({ content: e.target.value }, false, endsWord(content, e.target.value, e.target.selectionStart ?? 0))} />}
         {!!meta.labels.length && <div className="note-labels">{meta.labels.map(l => <small key={l}>{l}</small>)}</div>}
       </div>
 

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { Undo, blocks, prefix, preview, toggleLine, wrap } from './notesEdit.ts'
+import { Undo, blocks, endsWord, prefix, preview, toggleLine, wrap } from './notesEdit.ts'
 
 test('wrap puts marks around a selection and takes them off again', () => {
   const on = wrap({ text: 'a word here', start: 2, end: 6 }, '**')
@@ -15,8 +15,16 @@ test('prefix marks every selected line, replaces another mark, and numbers a lis
   assert.equal(prefix({ text: '# a', start: 1, end: 1 }, '# ').text, 'a')
 })
 
+test('undo goes back by the word', () => {
+  const w = new Undo('')
+  w.push('h', 1000); w.push('hi', 1100); w.push('hi ', 1200, endsWord('hi', 'hi ', 3)); w.push('hi t', 1300); w.push('hi th', 1400)
+  assert.equal(w.undo(), 'hi ')
+  assert.equal(w.undo(), '')
+  assert.equal(endsWord('hi', 'hia', 3), false)
+})
+
 test('undo groups a burst of typing, a toolbar step stands alone, redo comes back', () => {
-  const u = new Undo('')
+  const u = new Undo('', 700)
   u.push('h', 1000); u.push('he', 1100); u.push('hel', 1200)
   u.step('**hel**')
   assert.equal(u.undo(), 'hel')

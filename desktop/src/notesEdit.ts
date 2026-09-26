@@ -35,30 +35,35 @@ export function indent({ text, start, end }: Edit, out: boolean): Edit {
 }
 
 /**
- * Undo in memory, per open note. Typing is grouped: a change within `quietMs` of the last one joins it, so one
- * undo takes back a burst of typing, not a letter.
+ * Undo in memory, per open note, by the word (asked 2026-09-26): typing joins the step it is in until a word ends — a
+ * space or a mark typed after it — or it pauses for `quietMs`. A toolbar action is a step of its own.
  */
 export class Undo<T> {
   private past: T[] = []
   private future: T[] = []
   private last = 0
+  private split = true
   private current: T
   private quietMs: number
-  constructor(current: T, quietMs = 700) { this.current = current; this.quietMs = quietMs }
+  constructor(current: T, quietMs = 2000) { this.current = current; this.quietMs = quietMs }
   get canUndo() { return this.past.length > 0 }
   get canRedo() { return this.future.length > 0 }
-  push(next: T, now = Date.now()) {
-    if (now - this.last > this.quietMs || this.past.length === 0) this.past.push(this.current)
+  push(next: T, now = Date.now(), wordDone = false) {
+    if (this.split || now - this.last > this.quietMs) this.past.push(this.current)
     if (this.past.length > 500) this.past.shift()
     this.current = next
     this.future = []
     this.last = now
+    this.split = wordDone
   }
   /** A separate step even when it follows typing at once (a toolbar action). */
-  step(next: T) { this.last = 0; this.push(next) }
-  undo(): T | null { const p = this.past.pop(); if (p === undefined) return null; this.future.push(this.current); this.current = p; this.last = 0; return p }
-  redo(): T | null { const f = this.future.pop(); if (f === undefined) return null; this.past.push(this.current); this.current = f; this.last = 0; return f }
+  step(next: T) { this.split = true; this.push(next); this.split = true }
+  undo(): T | null { const p = this.past.pop(); if (p === undefined) return null; this.future.push(this.current); this.current = p; this.split = true; return p }
+  redo(): T | null { const f = this.future.pop(); if (f === undefined) return null; this.past.push(this.current); this.current = f; this.split = true; return f }
 }
+
+/** One character typed at `at` that is not part of a word: the word before it is done. */
+export const endsWord = (old: string, next: string, at: number) => next.length === old.length + 1 && at >= 1 && !/[\p{L}\p{N}]/u.test(next[at - 1])
 
 export type Inline = { t: 'text' | 'b' | 'i' | 's' | 'code' | 'link'; v: string; href?: string }
 export type Block =
