@@ -2129,9 +2129,10 @@ vault is only read). They do **not** ride Files sync (it keeps both copies of a 
 note and deletion, the newer `updatedAt` of each wins, a deletion (`deletions.json`) beats any edit. Off when the
 device's Files row is Off.
 
-- **Undo** is in memory, per open note (a burst of typing is one step). **History** is written when the editor closes
-  with changes: `history/<id>/<Title>-YYYY-MM-DD-HH-MM-N.json`, per device (not synced); Restore keeps the current
-  version first. Trash keeps a note 30 days.
+- **Undo** is in memory, per open note, by the word. **History** is what undo cannot reach once a note is closed: a copy
+  is taken before the first change of an opened note and when it is left (the same text is not kept twice), the
+  newest **three** per note, `history/<id>/<Title>-YYYY-MM-DD-HH-MM-N.json`, per device (not synced); Restore keeps the
+  current version first. Trash keeps a note 30 days.
 - **UI**: a bottom island (Home · Pinned · Archived · Trash) with New note / New checklist beside it; pulled up, a
   drawer of pinned notes and labels. The editor has one line of basics (back, undo, redo, bold, checkbox, read, pin)
   and the rest slides up (formatting, colour, labels, history, archive, trash). The PC editor is a plain text box,

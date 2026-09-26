@@ -193,9 +193,16 @@ function NoteEditor({ initial, setDialog, onClose }: {
   // Saved as you type (a short pause), the whole note each time.
   const saving = useRef<ReturnType<typeof setTimeout>>(undefined)
   const flush = useRef<() => Promise<unknown>>(() => Promise.resolve())
+  const snapped = useRef(false)
   useEffect(() => {
     if (!changed.current) return
-    flush.current = () => { clearTimeout(saving.current); flush.current = () => Promise.resolve(); return call('save', initial.id, { title, content, ...(checklist ? { checklistItems: items } : {}) }) }
+    flush.current = () => {
+      clearTimeout(saving.current); flush.current = () => Promise.resolve()
+      // The note as it was when opened goes to its history before the first change is written over it.
+      const before = snapped.current ? Promise.resolve() : call('snapshot', initial.id)
+      snapped.current = true
+      return before.then(() => call('save', initial.id, { title, content, ...(checklist ? { checklistItems: items } : {}) }))
+    }
     clearTimeout(saving.current)
     saving.current = setTimeout(() => flush.current(), 400)
   }, [title, content, items])
@@ -413,7 +420,7 @@ function HistoryDialog({ id, onClose, onRestore }: { id: string; onClose: () => 
   return (
     <Modal onClose={onClose}>
       <h3>History</h3>
-      <p>A version is kept each time you leave the note with changes. Restoring keeps the current one too.</p>
+      <p>The note as it was before you last changed it, and as you left it — the newest three. Restoring keeps the current one too.</p>
       {error && <p className="error">{error}</p>}
       <div className="versions">
         {versions?.length === 0 && <p>No versions yet.</p>}

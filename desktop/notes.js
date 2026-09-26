@@ -15,6 +15,7 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 
 const TRASH_DAYS = 30
+const KEEP = 3 // copies of a note in its history
 const isId = id => typeof id === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(id)
 const safeTitle = t => (String(t ?? '').replace(/[\/\\\0:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Untitled')
 const pad = n => String(n).padStart(2, '0')
@@ -69,15 +70,22 @@ class Notes {
     return this.write({ ...note, updatedAt: Date.now(), deviceId: this.deviceId })
   }
 
-  /** The editor closed with changes: the note as it is now goes to its history, numbered. */
+  /**
+   * A copy of the note as it is now, in its history: taken before the first change of an opened note and when it is
+   * left (asked 2026-09-26: "when I change stuff I can still see my old note before the edits"). The same text as the
+   * newest copy is not kept twice, and only the newest KEEP copies stay.
+   */
   snapshot(id) {
     const note = this.get(id)
     if (!note) return null
     const dir = this.versions(id)
     fs.mkdirSync(dir, { recursive: true })
-    const n = fs.readdirSync(dir).filter(f => f.endsWith('.json')).length + 1
+    const same = (v) => v && v.title === note.title && v.content === note.content && JSON.stringify(v.checklistItems ?? null) === JSON.stringify(note.checklistItems ?? null)
+    if (same(this.history(id)[0])) return null
+    const n = Math.max(0, ...fs.readdirSync(dir).map(f => Number(/-(\d+)\.json$/.exec(f)?.[1]) || 0)) + 1
     const name = `${safeTitle(note.title)}-${stamp(Date.now())}-${n}.json`
-    fs.writeFileSync(path.join(dir, name), JSON.stringify(note, null, 2))
+    fs.writeFileSync(path.join(dir, name), JSON.stringify({ ...note, savedAt: Date.now(), version: n }, null, 2))
+    for (const old of this.history(id).slice(KEEP)) fs.rmSync(path.join(dir, old.name), { force: true })
     return name
   }
 
@@ -85,8 +93,8 @@ class Notes {
     const dir = this.versions(id)
     let names = []
     try { names = fs.readdirSync(dir).filter(f => f.endsWith('.json')) } catch { return [] }
-    return names.map(name => { const v = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')); return { name, at: v.updatedAt, title: v.title, content: v.content, checklistItems: v.checklistItems } })
-      .sort((a, b) => b.at - a.at)
+    return names.map(name => { const v = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')); return { name, at: v.updatedAt, n: v.version ?? 0, title: v.title, content: v.content, checklistItems: v.checklistItems } })
+      .sort((a, b) => b.n - a.n || b.at - a.at)
   }
 
   /** A version comes back as a new edit; what it replaces is kept in the history first. */
