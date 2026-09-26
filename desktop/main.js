@@ -138,6 +138,16 @@ async function checkSpace() {
   }
   updateTray()
   const disk = sync.disk()
+  // Offload by itself (asked 2026-09-26, after three good ones by hand): what the plan offers goes, each copy read
+  // back first as always, and it is said afterwards instead of asked before. Off on the drive's card to be asked again.
+  if (offer?.rules.auto && Date.now() - (said.auto ?? 0) > HOURS) { // at most hourly: what failed is not retried every minute
+    said.auto = Date.now()
+    const { name, deviceId } = offer
+    moveToDrive(deviceId, {}).then(r => r.moved && notify(`Freed ${fmtBytes(r.bytes)}`, `${r.moved.toLocaleString()} photos now live on ${name}; they open from there when it is plugged in.`
+      + (r.failed.length ? ` ${r.failed.length} stayed here.` : '')))
+      .catch(e => notify(`Could not free space on ${name}`, e.message))
+    return
+  }
   if (offer && Date.now() - said.offer > 12 * HOURS) {
     said.offer = Date.now()
     const why = offer.rules.offload ? `to bring this disk under ${offer.rules.percent} %` : `older than ${offer.rules.keep} ${offer.rules.unit}${offer.rules.keep > 1 ? 's' : ''}`

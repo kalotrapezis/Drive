@@ -733,7 +733,8 @@ function DriveCard({ device, disk, onChange, setDialog }: { device: SyncDevice; 
             </label>
             <label className="rule-hint check-row"><input type="checkbox" checked={r.favorites} onChange={e => set({ favorites: e.target.checked })} /><span>Favorites always stay on this PC</span></label>
             <p className="rule-hint">{plan ? (plan.count ? <>{plan.count.toLocaleString()} photos, <b>{formatBytes(plan.bytes)}</b>, could go now.</> : 'Nothing to free right now.') : '…'}
-              {' '}You are always asked first.</p>
+              {' '}{r.auto ? 'It goes by itself, and you are told.' : 'You are always asked first.'}</p>
+            <label className="rule-hint check-row"><input type="checkbox" checked={r.auto} onChange={e => set({ auto: e.target.checked })} /><span>Free space by itself, without asking</span></label>
             {!!plan?.count && <button className="filled-button" onClick={() => setDialog(<OffloadDialog deviceId={device.id} onClose={() => { setDialog(null); onChange() }} />)}>Free {formatBytes(plan.bytes)}…</button>}
           </>
         )}

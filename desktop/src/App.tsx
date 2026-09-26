@@ -355,8 +355,9 @@ export function App() {
         {nav({ kind: 'photos' }, section === 'photos', 'photos', 'Photos')}
         {nav({ kind: 'files', mode: 'browse', folder: '' }, section === 'files', 'drive', 'Files')}
         {nav({ kind: 'notes' }, page.kind === 'notes', 'notes', 'Notes')}
-        {collections.filter(c => c.drive).map(c => <div key={c.id}>{nav({ kind: 'collection', id: c.id, name: c.name }, driveId === c.id.slice(6), 'database', c.name)}</div>)}
         {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Devices')}
+        {/* A drive is a device: its photos sit under Devices (asked 2026-09-26). */}
+        {collections.filter(c => c.drive).map(c => <div key={c.id} className="rail-group">{nav({ kind: 'collection', id: c.id, name: c.name }, driveId === c.id.slice(6), 'database', c.name)}</div>)}
         {analysis?.running && (
           <div className="rail-progress">
             <span>Analysing… {analysis.done.toLocaleString()}/{analysis.total.toLocaleString()}</span>

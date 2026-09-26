@@ -110,7 +110,6 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
         </div>
       </div>
       <div className="notes-dock">
-        <Handle open={drawer} setOpen={setDrawer} />
         {selected.size > 0 ? (
           <nav className="notes-island island">
             <button className="round flat" title="Clear selection (Esc)" onClick={() => setSelected(new Set())}><Icon name="close" /></button>
@@ -135,6 +134,8 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
             <span className="island-gap" />
             {VIEWS.filter(v => v.id !== 'home').map(v => <button key={v.id} className={`island-item ${view === v.id ? 'on' : ''}`} onClick={() => { setView(v.id); setDrawer(false) }}>
               <Icon name={v.icon} size={20} /><span>{v.name}</span></button>)}
+            {/* The labels open from a button of their own (asked 2026-09-26: a grip to drag is not how a computer works). */}
+            <button className={`island-item ${drawer ? 'on' : ''}`} aria-expanded={drawer} onClick={() => setDrawer(d => !d)}><Icon name="label" size={20} /><span>{label ?? 'Labels'}</span></button>
           </nav>
         )}
       </div>
@@ -142,17 +143,6 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
   )
 }
 
-/** The grip above the island: click, or pull up (down) to open (close) the drawer. */
-function Handle({ open, setOpen }: { open: boolean; setOpen: (b: boolean) => void }) {
-  const start = useRef<number | null>(null)
-  return (
-    <button className="notes-handle" title={open ? 'Close pins and labels' : 'Pull up for pins and labels'} aria-expanded={open}
-      onPointerDown={e => { start.current = e.clientY; e.currentTarget.setPointerCapture(e.pointerId) }}
-      onPointerUp={e => { const dy = e.clientY - (start.current ?? e.clientY); start.current = null; setOpen(Math.abs(dy) < 8 ? !open : dy < 0) }}>
-      <span />
-    </button>
-  )
-}
 
 function NoteCard({ note, small, selected, onSelect, onOpen }: { note: Note; small?: boolean; selected?: boolean; onSelect?: () => void; onOpen: () => void }) {
   const hold = useRef<ReturnType<typeof setTimeout>>(undefined)

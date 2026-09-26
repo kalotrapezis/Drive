@@ -32,7 +32,7 @@ const KEEPS = ['everything', 'nothing']
  * person's; the default is the safest one — a backup, nothing released. `copies` counts places that hold it
  * *other than this computer*, the storage drive included, and the drive's copy is read back before each move.
  */
-const DRIVE_RULES = { role: 'backup', offload: false, percent: 80, keep: 1, unit: 'year', copies: 2, favorites: true, screenshots: true }
+const DRIVE_RULES = { role: 'backup', offload: false, percent: 80, keep: 1, unit: 'year', copies: 2, favorites: true, screenshots: true, auto: true }
 const UNIT_MS = { day: 86_400_000, week: 7 * 86_400_000, month: 30 * 86_400_000, year: 365 * 86_400_000 }
 const sha = s => crypto.createHash('sha256').update(s).digest('hex')
 const isHash = h => typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)
@@ -509,6 +509,7 @@ class SyncServer {
     if (Number.isInteger(changes.copies) && changes.copies >= 1 && changes.copies <= 5) r.copies = changes.copies
     if (typeof changes.favorites === 'boolean') r.favorites = changes.favorites
     if (typeof changes.screenshots === 'boolean') r.screenshots = changes.screenshots
+    if (typeof changes.auto === 'boolean') r.auto = changes.auto
     this.db.prepare('UPDATE sync_devices SET rules = ? WHERE id = ? AND volume_uuid IS NOT NULL').run(JSON.stringify(r), String(id))
     return r
   }

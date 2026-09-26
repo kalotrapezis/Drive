@@ -1963,6 +1963,13 @@ rule per device; a released ledger per device that syncs; photos known to the li
 Not yet: Files showing the drive as a location (documents stay full copy, so nothing leaves Files); bringing a
 photo back from the drive; phones releasing (MANAGE_MEDIA) and the released ledger; Offload acting without a Yes.
 
+### D3, Offload by itself (asked 2026-09-26)
+
+After three good Moves by hand the user asked for the automatic one. A storage drive's rule `auto` (default on, the
+card's "Free space by itself") makes the once-a-minute check run what the plan offers — every copy read back first,
+favorites and the copies rule as before — at most hourly, and say it afterwards ("Freed 2 GB"). Off: asked first, as
+before.
+
 ### D6. Trash → Purgatory → gone (agreed 2026-09-25, simplified the same afternoon)
 
 The server (the computer) makes the rules and keeps everything safe on its storage drive. Deleting has a grace
