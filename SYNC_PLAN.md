@@ -1970,6 +1970,17 @@ card's "Free space by itself") makes the once-a-minute check run what the plan o
 favorites and the copies rule as before — at most hourly, and say it afterwards ("Freed 2 GB"). Off: asked first, as
 before.
 
+### D6, Both ways trash and Import (built 2026-09-26)
+
+- **Both ways trash**: a photo deleted on the computer on purpose (its Trash, or Delete in a drive's collection) is
+  `declined` in the /have answer; a two-way device moves its copy to its own Trash (Android keeps it 30 days) — a
+  one-way device only stops sending it. A two-way device sends the hashes of its own Trash (`POST /trashed`) and the
+  computer trashes its copies. A restore is not mirrored: a photo restored on the phone is simply offered again.
+- **Import (PC)**: Import on the Photos and Files islands — folders or files from anywhere, copied and checked, the
+  originals left where they are; photos the library has are skipped. Into this computer (Photos/Imported, included at
+  once) or **straight to a drive**: batches of ~1 GB copied to both, scanned here for thumbnails and metadata, then this
+  computer's copy let go (the photo lives on the drive, like a Move). Files to a drive land in its Tetra/Files/Imported.
+
 ### D6. Trash → Purgatory → gone (agreed 2026-09-25, simplified the same afternoon)
 
 The server (the computer) makes the rules and keeps everything safe on its storage drive. Deleting has a grace

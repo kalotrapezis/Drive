@@ -36,6 +36,12 @@ contextBridge.exposeInMainWorld('drive', {
     clear: () => ipcRenderer.invoke('notifications:clear'),
     onChange: cb => { const f = () => cb(); ipcRenderer.on('notifications-changed', f); return () => ipcRenderer.removeListener('notifications-changed', f) },
   },
+  imports: {
+    pick: folders => ipcRenderer.invoke('import:pick', folders),
+    drives: () => ipcRenderer.invoke('import:drives'),
+    run: (kind, sources, driveId) => ipcRenderer.invoke('import:run', kind, sources, driveId),
+    onProgress: cb => { const f = (_, p) => cb(p); ipcRenderer.on('import-progress', f); return () => ipcRenderer.removeListener('import-progress', f) },
+  },
   theme: () => ipcRenderer.invoke('settings:theme'),
   setTheme: t => ipcRenderer.invoke('settings:setTheme', t),
   onNotesSynced: cb => { const f = (_, s) => cb(s); ipcRenderer.on('notes-synced', f); return () => ipcRenderer.removeListener('notes-synced', f) },

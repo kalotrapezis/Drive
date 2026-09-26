@@ -149,6 +149,12 @@ declare global {
       onNotesChanged(cb: () => void): () => void
       notesSynced(): Promise<{ at: number; device: string } | null>
       notifications: { list(): Promise<AppNotification[]>; read(): Promise<void>; clear(): Promise<void>; onChange(cb: () => void): () => void }
+      imports: {
+        pick(folders: boolean): Promise<string[]>
+        drives(): Promise<{ id: string; name: string; free: number }[]>
+        run(kind: 'photos' | 'files', sources: string[], driveId: string | null): Promise<{ imported: number; skipped: number; failed: string[]; total: number }>
+        onProgress(cb: (p: { done: number; total: number; imported: number; skipped: number }) => void): () => void
+      }
       theme(): Promise<'system' | 'light' | 'dark'>
       setTheme(t: 'system' | 'light' | 'dark'): Promise<void>
       onNotesSynced(cb: (s: { at: number; device: string }) => void): () => void

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification, nativeTheme } = require('electron')
+const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification, nativeTheme, dialog } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
@@ -15,6 +15,7 @@ const { Folders } = require('./folders')
 const { Purgatory } = require('./purgatory')
 const history = require('./history')
 const { Notes } = require('./notes')
+const importer = require('./importer')
 
 const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'local-drive-desktop')
 // ~/Tetra/Photos and ~/Tetra/Files, moved from ~/Drive once (home.js). Never from a hidden QA copy (scripts/shot.js),
@@ -463,6 +464,27 @@ app.whenReady().then(() => {
   // them without waiting for their own sync (asked 2026-09-26). Only a device with Tetra open is listening.
   let notesNudge = null
   ipcMain.handle('notes:synced', () => sync.notesSynced)
+  // Import (importer.js): photos and files from anywhere, to this computer or straight to a plugged-in drive.
+  let importing = null
+  ipcMain.handle('import:pick', async (_, folders) => (await dialog.showOpenDialog(win, { properties: [folders ? 'openDirectory' : 'openFile', 'multiSelections'] })).filePaths)
+  ipcMain.handle('import:drives', async () => (await sync.drives()).filter(d => d.device && d.mount).map(d => ({ id: d.device.id, name: d.device.name, free: d.freeBytes })))
+  ipcMain.handle('import:run', async (_, kind, sources, driveId) => {
+    if (importing) throw new Error('An import is already running.')
+    if (!Array.isArray(sources) || !sources.length) throw new Error('Choose what to import.')
+    const plugged = driveId ? (await sync.drives()).find(d => d.device?.id === driveId && d.mount) : null
+    if (driveId && !plugged) throw new Error('That drive is not plugged in.')
+    const drive = plugged && { id: plugged.device.id, name: plugged.device.name, mount: plugged.mount }
+    const onProgress = p => win?.webContents.send('import-progress', p)
+    importing = kind === 'files'
+      ? importer.importFiles({ db, root: drive ? path.join(drive.mount, 'Tetra', 'Files') : FILES_ROOT, sources, onProgress })
+      : (folders.set('Imported', true), importer.importPhotos({ db, photosRoot: PHOTOS_ROOT, sources, drive, scan: () => startScan(), onProgress }))
+    try {
+      const r = await importing
+      if (kind !== 'files') await startScan()
+      notify(`Imported ${r.imported.toLocaleString()} ${kind === 'files' ? 'files' : 'photos'}`, (drive ? `Straight to ${drive.name}. ` : '') + (r.skipped ? `${r.skipped} were already in the library. ` : '') + (r.failed.length ? `${r.failed.length} could not be copied.` : ''))
+      return r
+    } finally { importing = null }
+  })
   db.exec('CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY, at INTEGER NOT NULL, title TEXT NOT NULL, body TEXT, read INTEGER NOT NULL DEFAULT 0)')
   ipcMain.handle('notifications:list', () => db.prepare('SELECT id, at, title, body, read FROM notifications ORDER BY at DESC LIMIT 500').all())
   ipcMain.handle('notifications:read', () => { db.exec('UPDATE notifications SET read = 1 WHERE read = 0') })

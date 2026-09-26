@@ -59,6 +59,7 @@
       "purgatory.js",
       "history.js",
       "notes.js",
+      "importer.js",
       "models/*.onnx",
       "dist/**",
       "public/icon.png",

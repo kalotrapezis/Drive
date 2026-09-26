@@ -15,6 +15,7 @@ import { Editor } from './Editor'
 import { OffloadDialog, SyncPage } from './Sync'
 import { NotesPage } from './Notes'
 import { NotificationsPage, SettingsPage } from './Settings'
+import { ImportDialog } from './Import'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
   | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' } | { kind: 'notifications' } | { kind: 'settings' }
@@ -259,12 +260,16 @@ export function App() {
       {section === 'photos' && <>
         {item({ kind: 'photos' }, page.kind === 'photos', 'photos', 'Gallery')}
         {item({ kind: 'collections' }, page.kind !== 'photos', 'collections', 'Collections')}
+        <span className="island-gap" />
+        <button className="island-item" onClick={() => setDialog(<ImportDialog kind="photos" onClose={close} onDone={reload} />)}><Icon name="add" size={20} /><span>Import</span></button>
       </>}
       {section === 'files' && <>
         {item({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
         {item({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
         {item({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', 'Recent')}
         {item({ kind: 'files', mode: 'browse', folder: 'Trash' }, inFilesTrash, 'trash', 'Trash')}
+        <span className="island-gap" />
+        <button className="island-item" onClick={() => setDialog(<ImportDialog kind="files" onClose={close} onDone={() => setPage({ kind: 'files', mode: 'browse', folder: '' })} />)}><Icon name="add" size={20} /><span>Import</span></button>
       </>}
       {section === 'drive' && <>
         {item({ kind: 'collection', id: `drive:${driveId}`, name: driveName }, !driveFilter, 'photos', 'Gallery')}
