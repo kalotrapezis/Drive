@@ -25,6 +25,8 @@ class Notes {
   constructor(root, deviceId = 'desktop') {
     this.root = root
     this.deviceId = deviceId
+    // A new note lives here until something is written in it: an empty one is never saved, so never sent (2026-09-26).
+    this.drafts = new Map()
   }
 
   file(id) { if (!isId(id)) throw new Error('Not a note.'); return path.join(this.root, `${id}.json`) }
@@ -41,11 +43,14 @@ class Notes {
     return out
   }
 
-  get(id) { try { return JSON.parse(fs.readFileSync(this.file(id), 'utf8')) } catch { return null } }
+  get(id) {
+    try { return JSON.parse(fs.readFileSync(this.file(id), 'utf8')) } catch { return this.drafts.has(id) ? structuredClone(this.drafts.get(id)) : null }
+  }
 
   /** Written whole, through a temporary file, so a crash never leaves half a note. */
   write(note) {
     fs.mkdirSync(this.root, { recursive: true })
+    this.drafts.delete(note.id)
     const tmp = `${this.file(note.id)}.${process.pid}.tmp`
     fs.writeFileSync(tmp, JSON.stringify(note, null, 2))
     fs.renameSync(tmp, this.file(note.id))
@@ -54,10 +59,12 @@ class Notes {
 
   create({ noteType = 'TEXT', labels = [] } = {}) {
     const now = Date.now()
-    return this.write({ id: crypto.randomUUID(), title: '', content: '', createdAt: now, updatedAt: now, deviceId: this.deviceId,
+    return this.draft({ id: crypto.randomUUID(), title: '', content: '', createdAt: now, updatedAt: now, deviceId: this.deviceId,
       syncStatus: 'LOCAL_ONLY', noteType: noteType === 'CHECKLIST' ? 'CHECKLIST' : 'TEXT', isPinned: false, labels,
       ...(noteType === 'CHECKLIST' ? { checklistItems: [] } : {}) })
   }
+
+  draft(note) { this.drafts.set(note.id, note); return structuredClone(note) }
 
   /** Only the fields a person edits; anything else a newer app wrote is kept. */
   save(id, changes) {
@@ -77,7 +84,7 @@ class Notes {
    */
   snapshot(id) {
     const note = this.get(id)
-    if (!note) return null
+    if (!note || (!note.title?.trim() && !note.content?.trim() && !(note.checklistItems ?? []).some(i => i.text?.trim()))) return null // nothing to go back to
     const dir = this.versions(id)
     fs.mkdirSync(dir, { recursive: true })
     const same = (v) => v && v.title === note.title && v.content === note.content && JSON.stringify(v.checklistItems ?? null) === JSON.stringify(note.checklistItems ?? null)
@@ -109,6 +116,7 @@ class Notes {
 
   /** For good: the file goes and the id is remembered. Its history stays, so it can still be read back. */
   remove(id, at = Date.now()) {
+    if (this.drafts.delete(id) && !fs.existsSync(this.file(id))) return // never saved: nothing to tell anyone
     fs.rmSync(this.file(id), { force: true })
     const list = this.deletions().filter(d => d.id !== id)
     list.push({ id, deletedAt: at, deviceId: this.deviceId })

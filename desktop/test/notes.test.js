@@ -74,3 +74,18 @@ test('notes: the old vault moves in once, each folder a label; trash goes after 
     assert.equal(notes.get('x'), null)
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
+
+test('notes: a new note is not saved or sent until something is written, and leaves no trace when left empty', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'notes-'))
+  try {
+    const notes = new Notes(path.join(tmp, '.notes'))
+    const n = notes.create()
+    assert.equal(notes.list().length, 0)
+    notes.remove(n.id)
+    assert.deepEqual(notes.deletions(), [])
+    const m = notes.create()
+    assert.equal(notes.snapshot(m.id), null, 'an empty note has no version worth keeping')
+    notes.save(m.id, { title: 'Hi' })
+    assert.equal(notes.list().length, 1)
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})
