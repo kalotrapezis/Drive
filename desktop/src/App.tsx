@@ -13,9 +13,10 @@ import { MapView } from './MapView'
 import { HiddenPage, VaultGate } from './Hidden'
 import { Editor } from './Editor'
 import { OffloadDialog, SyncPage } from './Sync'
+import { NotesPage } from './Notes'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
-  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' }
+  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' }
 
 const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
@@ -248,6 +249,7 @@ export function App() {
   // Pages that do not depend on the photo library come first: an empty library must not hide Devices, Files or Hidden.
   if (page.kind === 'files') content = <Files mode={page.mode} folder={page.folder} go={(mode, folder) => setPage({ kind: 'files', mode, folder })} setDialog={setDialog} say={say} />
   else if (page.kind === 'sync') content = <SyncPage setDialog={setDialog} />
+  else if (page.kind === 'notes') content = <NotesPage setDialog={setDialog} say={say} />
   else if (page.kind === 'photoTrash') content = <TrashPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (page.kind === 'hidden') content = <HiddenPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (loading) content = <div className="empty">Loading…</div>
@@ -339,6 +341,8 @@ export function App() {
         {nav({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
         {nav({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', 'Recent')}
         {nav({ kind: 'files', mode: 'browse', folder: 'Trash' }, filesMode === 'browse' && page.kind === 'files' && page.folder.startsWith('Trash'), 'trash', 'Trash')}
+        <small className="rail-head">Notes</small>
+        {nav({ kind: 'notes' }, page.kind === 'notes', 'notes', 'Notes')}
         <small className="rail-head">Sync</small>
         {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Devices')}
         {analysis?.running && (

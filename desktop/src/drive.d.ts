@@ -144,6 +144,7 @@ declare global {
         answer(faceId: string, personId: string, answer: 'yes' | 'no' | 'skip'): Promise<void>
         onProgress(fn: (a: Analysis) => void): () => void
       }
+      notes<T = unknown>(method: string, ...args: unknown[]): Promise<T>
       files: {
         root(): Promise<string>
         call<T = unknown>(method: string, ...args: unknown[]): Promise<T>
