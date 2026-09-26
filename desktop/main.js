@@ -33,6 +33,21 @@ const FILES_ROOT = process.env.DRIVE_FILES || HOME.files
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
 let importing = null, importStop = null
+// The video inside a picture, read when the viewer asks; the last one is kept for the playback that follows.
+let lastMotion = { id: null, video: null }
+async function embeddedMotion(id) {
+  if (lastMotion.id === id) return lastMotion.video
+  const row = db.prepare('SELECT path, sha256, location, is_video FROM media WHERE id = ?').get(id)
+  let video = null
+  if (row && !row.is_video && /\.(jpe?g|heic|heif)$/i.test(row.path)) {
+    const file = (await sync.locate(row)).file
+    const buf = file ? await fs.promises.readFile(file).catch(() => null) : null
+    const at = buf ? library.embeddedVideoOffset(buf) : -1
+    if (at > 0) video = buf.subarray(at)
+  }
+  lastMotion = { id, video }
+  return video
+}
 let notes, db, files, people, documents, folders, vault, sync, purgatory, win, scanning = null
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage']
@@ -264,6 +279,11 @@ app.whenReady().then(() => {
       // A preview made before the move is still in the cache, so a moved HEIC opens without the drive.
       if (row && library.needsPreview(row.path)) file = await library.preview(file, row.sha256, DATA_DIR).catch(() => null)
     }
+    // The video inside a motion photo (Pixel, Samsung), cut from the end of the original.
+    if (url.host === 'motion') {
+      const video = await embeddedMotion(Number(key))
+      return video ? new Response(video, { headers: { 'content-type': 'video/mp4', 'cache-control': 'no-store' } }) : new Response('Not found', { status: 404 })
+    }
     if (url.host === 'face' && /^[0-9a-f-]{36}$/.test(key)) file = await people.crop(key, PHOTOS_ROOT).catch(() => null)
     // A trashed photo is no longer in the library, so it is served from the trash by the name it has there.
     if (url.host === 'trash') file = (await library.trashedPhotos(PHOTOS_ROOT)).find(t => t.id === key)?.file ?? null
@@ -286,12 +306,17 @@ app.whenReady().then(() => {
   ipcMain.handle('library:list', () => {
     const c = folders.choices()
     const names = new Map(db.prepare('SELECT id, name FROM sync_devices WHERE volume_uuid IS NOT NULL').all().map(d => [d.id, d.name]))
-    return library.list(db).filter(m => folders.isShown(m.path, c)).map(m => m.location ? { ...m, drive: names.get(m.location) ?? 'a drive' } : m)
+    return library.pairMotion(library.list(db).filter(m => folders.isShown(m.path, c)).map(m => m.location ? { ...m, drive: names.get(m.location) ?? 'a drive' } : m))
   })
   ipcMain.handle('folders:list', () => folders.list().map(({ shas, ...f }) => f))
   ipcMain.handle('folders:set', (_, name, included) => { folders.set(name, included); sync.nudge().catch(() => {}) })
   ipcMain.handle('library:scan', () => startScan())
   ipcMain.handle('photos:favorite', (_, shas, on) => library.setFavorite(db, shas, on))
+  ipcMain.handle('photos:hasMotion', async (_, id) => !!(await embeddedMotion(Number(id))))
+  // Motion photos (asked 2026-09-26): "one" shows a picture and its seconds of video as one; "remove" leaves the
+  // video half out on import. Pairing what is already in the library happens either way (library.pairMotion).
+  ipcMain.handle('settings:motion', () => setting('motionPhotos') || 'one')
+  ipcMain.handle('settings:setMotion', (_, v) => { if (['one', 'remove'].includes(v)) setSetting('motionPhotos', v) })
   ipcMain.handle('photos:trash', async (_, ids) => {
     const rows = ids.map(id => db.prepare('SELECT path, sha256, size FROM media WHERE id = ?').get(Number(id))).filter(Boolean)
     for (const r of rows) history.record(db, { action: 'trashed', kind: 'photo', name: r.path, sha256: r.sha256, size: r.size })
@@ -481,7 +506,7 @@ app.whenReady().then(() => {
     const onProgress = p => win?.webContents.send('import-progress', p)
     importing = kind === 'files'
       ? importer.importFiles({ db, root: drive ? path.join(drive.mount, 'Tetra', 'Files') : FILES_ROOT, sources, move, stop, onProgress })
-      : (folders.set('Imported', true), importer.importPhotos({ db, photosRoot: PHOTOS_ROOT, sources, drive, move, stop, scan: () => startScan(), onProgress }))
+      : (folders.set('Imported', true), importer.importPhotos({ db, photosRoot: PHOTOS_ROOT, sources, drive, move, dropMotion: setting('motionPhotos') === 'remove', stop, scan: () => startScan(), onProgress }))
     try {
       const r = await importing
       if (kind !== 'files') await startScan()

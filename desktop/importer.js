@@ -51,13 +51,12 @@ function sidecarDate(src) {
 
 /**
  * The few seconds of video a motion photo leaves beside its picture in an export (MVIMG_….MP4 next to MVIMG_….jpg,
- * 20230529_201908.MP4 next to the .heic): left out on import — the user had 23 of them removed (26 September).
+ * 20230529_201908.MP4 next to the .heic): left out on import when Motion photos is "Remove on import" — the user had
+ * 23 of them removed (26 September). Under "Show as one" they come in and the library pairs them (library.pairMotion).
  */
-const VIDEO = /\.(mp4|mov|m4v|3gp|mkv|webm|avi)$/i
-const stemOf = f => path.join(path.dirname(f), path.basename(f).replace(/\.[^.]+$/, '').replace(/\.MP$/i, '').replace(/(\(\d+\)|~\d+)$/, '').toLowerCase())
 function withoutMotionVideos(files) {
-  const pictures = new Set(files.filter(f => !VIDEO.test(f.src)).map(f => stemOf(f.src)))
-  return files.filter(f => !(VIDEO.test(f.src) && pictures.has(stemOf(f.src))))
+  const pictures = new Set(files.filter(f => !library.isVideoPath(f.src)).map(f => library.motionStem(f.src)))
+  return files.filter(f => !(library.isVideoPath(f.src) && pictures.has(library.motionStem(f.src))))
 }
 
 /** Every file under the chosen files and folders, with where it goes: <folder name>/<path inside it>. */
@@ -98,8 +97,9 @@ async function copyChecked(src, dest, expected = null) {
  * `drive`: null for this computer, or { id, name, mount }. `scan()` reads the Photos folder (resolves when done).
  * `onProgress({ done, total, imported, skipped })`.
  */
-async function importPhotos({ db, photosRoot, sources, drive = null, move = false, stop = { cancelled: false }, scan, onProgress = () => {}, batchBytes = BATCH }) {
-  const files = withoutMotionVideos(await gather(sources, MEDIA))
+async function importPhotos({ db, photosRoot, sources, drive = null, move = false, dropMotion = false, stop = { cancelled: false }, scan, onProgress = () => {}, batchBytes = BATCH }) {
+  const found = await gather(sources, MEDIA)
+  const files = dropMotion ? withoutMotionVideos(found) : found
   const known = new Set(db.prepare('SELECT sha256 FROM media').all().map(r => r.sha256))
   const out = { imported: 0, skipped: 0, failed: [], total: files.length }
   let batch = [], bytes = 0

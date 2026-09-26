@@ -97,7 +97,7 @@ test('import: a Google Takeout sidecar dates a photo that has no date of its own
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
 
-test('import leaves out the video half of a motion photo', async () => {
+test('Remove on import leaves out the video half of a motion photo; Show as one brings it in', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'import-motion-'))
   try {
     const card = path.join(tmp, 'Card'); fs.mkdirSync(card)
@@ -108,9 +108,13 @@ test('import leaves out the video half of a motion photo', async () => {
     fs.writeFileSync(path.join(card, 'holiday.mp4'), 'a real video')
     const photos = path.join(tmp, 'Photos'); fs.mkdirSync(photos)
     const db = library.open(path.join(tmp, 'data'))
-    const r = await importPhotos({ db, photosRoot: photos, sources: [card], scan: fakeScan(db, photos) })
+    const r = await importPhotos({ db, photosRoot: photos, sources: [card], dropMotion: true, scan: fakeScan(db, photos) })
     assert.equal(r.imported, 3)
     assert.deepEqual(fs.readdirSync(path.join(photos, 'Imported', 'Card')).sort(), ['20230529_201908.heic', 'MVIMG_20191204_100537.jpg', 'holiday.mp4'])
     db.close()
+    const photos2 = path.join(tmp, 'Photos2'); fs.mkdirSync(photos2)
+    const db2 = library.open(path.join(tmp, 'data2'))
+    assert.equal((await importPhotos({ db: db2, photosRoot: photos2, sources: [card], scan: fakeScan(db2, photos2) })).imported, 5)
+    db2.close()
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })

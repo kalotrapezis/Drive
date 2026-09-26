@@ -25,12 +25,23 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
   const [view, setView] = useState<View>(RESET)
   const [details, setDetails] = useState(false)
   const [failed, setFailed] = useState(false)
+  // Motion photos: the paired video (item.motion) or the one inside the file (Pixel, Samsung), played in place.
+  const [motionUrl, setMotionUrl] = useState<string | null>(null)
+  const [playing, setPlaying] = useState(false)
   const stage = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
   const strip = useRef<HTMLDivElement>(null)
 
   const go = (i: number) => { if (i >= 0 && i < media.length) setIndex(i) }
-  useEffect(() => { setView(RESET); setFailed(false) }, [index])
+  useEffect(() => { setView(RESET); setFailed(false); setPlaying(false) }, [index])
+  useEffect(() => {
+    setMotionUrl(null)
+    if (item.is_video || !fileUrl(item).startsWith('media://file/')) return // not in Hidden or the Trash
+    if (item.motion) { setMotionUrl(`media://file/${item.motion}`); return }
+    let live = true
+    window.drive.hasMotion(item.id).then(has => { if (live && has) setMotionUrl(`media://motion/${item.id}`) }).catch(() => {})
+    return () => { live = false }
+  }, [item])
   useEffect(() => {
     strip.current?.querySelector('.current')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
   }, [index])
@@ -96,6 +107,7 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
             <button className="round flat" title="Zoom out (−)" onClick={() => zoomAt(view.scale / 1.5)}><Icon name="zoomOut" /></button>
             <button className="round flat" title="Zoom in (+)" onClick={() => zoomAt(view.scale * 1.5)}><Icon name="zoomIn" /></button>
           </>}
+          {motionUrl && <button className={`round flat ${playing ? 'on' : ''}`} title={playing ? 'Stop the motion' : 'Play the motion'} onClick={() => setPlaying(p => !p)}><Icon name="motion" /></button>}
           {onFavorite && <button className="round flat" title={item.favorite ? 'Remove from Favorites (F)' : 'Add to Favorites (F)'} onClick={() => onFavorite(item)}>
             <Icon name={item.favorite ? 'heartFill' : 'heart'} /></button>}
           {onCollect && <button className="round flat" title="Add to collection" onClick={() => onCollect(item)}><Icon name="collect" /></button>}
@@ -116,7 +128,9 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           onPointerDown={e => { if (view.scale > 1) { drag.current = { x: e.clientX - view.x, y: e.clientY - view.y }; (e.target as Element).setPointerCapture(e.pointerId) } }}
           onPointerMove={e => { if (drag.current) { const d = drag.current; setView(v => ({ ...v, x: e.clientX - d.x, y: e.clientY - d.y })) } }}
           onPointerUp={() => { drag.current = null }}>
-          {item.is_video && !failed
+          {playing && motionUrl
+            ? <video key={`motion-${item.id}`} src={motionUrl} autoPlay onEnded={() => setPlaying(false)} onClick={() => setPlaying(false)} />
+            : item.is_video && !failed
             ? <video key={item.id} src={fileUrl(item)} controls autoPlay onError={() => setFailed(true)} />
             : <img key={item.id} draggable={false} alt={name}
                 src={failed ? thumbUrl(item) : fileUrl(item)}
