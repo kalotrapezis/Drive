@@ -27,13 +27,17 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
   const [failed, setFailed] = useState(false)
   // Motion photos: the paired video (item.motion) or the one inside the file (Pixel, Samsung), played in place.
   const [motionUrl, setMotionUrl] = useState<string | null>(null)
-  const [playing, setPlaying] = useState(false)
+  // Motion on: a motion photo plays once by itself when it opens (asked 2026-09-27); off: the still. Remembered here.
+  const [motionOn, setMotionOn] = useState(() => { try { return localStorage.getItem('motion') !== 'off' } catch { return true } })
+  const [ended, setEnded] = useState(false)
+  const playing = motionOn && !ended && !!motionUrl
+  const toggleMotion = () => { const on = !motionOn; setMotionOn(on); setEnded(false); try { localStorage.setItem('motion', on ? 'on' : 'off') } catch {} }
   const stage = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
   const strip = useRef<HTMLDivElement>(null)
 
   const go = (i: number) => { if (i >= 0 && i < media.length) setIndex(i) }
-  useEffect(() => { setView(RESET); setFailed(false); setPlaying(false) }, [index])
+  useEffect(() => { setView(RESET); setFailed(false); setEnded(false) }, [index])
   useEffect(() => {
     setMotionUrl(null)
     if (item.is_video || !fileUrl(item).startsWith('media://file/')) return // not in Hidden or the Trash
@@ -107,7 +111,6 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
             <button className="round flat" title="Zoom out (−)" onClick={() => zoomAt(view.scale / 1.5)}><Icon name="zoomOut" /></button>
             <button className="round flat" title="Zoom in (+)" onClick={() => zoomAt(view.scale * 1.5)}><Icon name="zoomIn" /></button>
           </>}
-          {motionUrl && <button className={`round flat ${playing ? 'on' : ''}`} title={playing ? 'Stop the motion' : 'Play the motion'} onClick={() => setPlaying(p => !p)}><Icon name="motion" /></button>}
           {onFavorite && <button className="round flat" title={item.favorite ? 'Remove from Favorites (F)' : 'Add to Favorites (F)'} onClick={() => onFavorite(item)}>
             <Icon name={item.favorite ? 'heartFill' : 'heart'} /></button>}
           {onCollect && <button className="round flat" title="Add to collection" onClick={() => onCollect(item)}><Icon name="collect" /></button>}
@@ -119,6 +122,7 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           {onTrash && <button className="round flat" title="Move to Trash (Delete)" onClick={() => onTrash(item)}><Icon name="trash" /></button>}
           {onTrash && <button className="round flat" title="Show in folder" onClick={() => window.drive.show(item.id)}><Icon name="folder" /></button>}
           <button className={`round flat ${details ? 'on' : ''}`} title="Details (i)" onClick={() => setDetails(d => !d)}><Icon name="info" /></button>
+          {motionUrl && <button className={`round flat ${motionOn ? 'on' : ''}`} title={motionOn ? 'Motion on — click for the still' : 'Motion off — click to play'} onClick={toggleMotion}><Icon name="motion" /></button>}
         </div>
       </div>
 
@@ -128,8 +132,8 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           onPointerDown={e => { if (view.scale > 1) { drag.current = { x: e.clientX - view.x, y: e.clientY - view.y }; (e.target as Element).setPointerCapture(e.pointerId) } }}
           onPointerMove={e => { if (drag.current) { const d = drag.current; setView(v => ({ ...v, x: e.clientX - d.x, y: e.clientY - d.y })) } }}
           onPointerUp={() => { drag.current = null }}>
-          {playing && motionUrl
-            ? <video key={`motion-${item.id}`} src={motionUrl} autoPlay onEnded={() => setPlaying(false)} onClick={() => setPlaying(false)} />
+          {playing
+            ? <video key={`motion-${item.id}`} src={motionUrl!} autoPlay muted={false} onEnded={() => setEnded(true)} onClick={() => setEnded(true)} />
             : item.is_video && !failed
             ? <video key={item.id} src={fileUrl(item)} controls autoPlay onError={() => setFailed(true)} />
             : <img key={item.id} draggable={false} alt={name}
