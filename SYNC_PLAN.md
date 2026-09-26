@@ -2120,6 +2120,25 @@ Move, Free space or Add) is **its collection**, named after the drive, on this P
   Nothing is excluded or deleted by itself: a drive rule `screenshots` (default on) can leave screenshots out of backup.
 - Otherwise read-only: no Hidden, Edit or Move to folder inside a drive's collection.
 
+### D7. Notes (asked and built 2026-09-26)
+
+Notes live inside Tetra on both apps, in a hidden folder of Files: `~/Tetra/Files/.notes/` on the computer,
+`/sdcard/Tetra/.notes/` on a phone — one `<id>.json` per note in the Notes apps' format (unknown fields kept), **labels
+only, no folders**. The 296 notes of the GTK Notes app moved in once at start (each folder became a label; the old
+vault is only read). They do **not** ride Files sync (it keeps both copies of a changed file): `POST /notes` sends every
+note and deletion, the newer `updatedAt` of each wins, a deletion (`deletions.json`) beats any edit. Off when the
+device's Files row is Off.
+
+- **Undo** is in memory, per open note (a burst of typing is one step). **History** is written when the editor closes
+  with changes: `history/<id>/<Title>-YYYY-MM-DD-HH-MM-N.json`, per device (not synced); Restore keeps the current
+  version first. Trash keeps a note 30 days.
+- **UI**: a bottom island (Home · Pinned · Archived · Trash) with New note / New checklist beside it; pulled up, a
+  drawer of pinned notes and labels. The editor has one line of basics (back, undo, redo, bold, checkbox, read, pin)
+  and the rest slides up (formatting, colour, labels, history, archive, trash). The PC editor is a plain text box,
+  so the old GTK app's mouse-selection bug cannot come back.
+- **Android home**: a yellow group — the big Notes card (Assets/Notes.png), Checklist and New note beside it. A
+  tablet shows the home groups two by two.
+
 ### D5. External storage as a device (asked 2026-09-24)
 
 "Add a device" should also offer **a drive that is plugged in right now** — pick it
