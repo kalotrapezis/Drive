@@ -443,9 +443,17 @@ app.whenReady().then(() => {
     if (method === 'trash' || method === 'emptyTrash') history.record(db, { action: method === 'trash' ? 'trashed' : 'emptied Trash by hand', kind: 'file', name: method === 'trash' ? String(args[0]) : null })
     return files[method](...args)
   })
+  // A note changed here: the devices are told a few seconds after the typing stops, so a delete or an edit reaches
+  // them without waiting for their own sync (asked 2026-09-26). Only a device with Tetra open is listening.
+  let notesNudge = null
   ipcMain.handle('notes:call', (_, method, ...args) => {
     if (!NOTE_CALLS.includes(method)) throw new Error('Unknown Notes action.')
-    return notes[method](...args)
+    const result = notes[method](...args)
+    if (['save', 'remove', 'restoreVersion'].includes(method)) {
+      clearTimeout(notesNudge)
+      notesNudge = setTimeout(() => sync.nudge().catch(() => {}), 5000)
+    }
+    return result
   })
   ipcMain.handle('files:open', async (_, rel) => {
     const full = files.resolve(rel)
