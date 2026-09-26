@@ -30,6 +30,14 @@ contextBridge.exposeInMainWorld('drive', {
   deleteFromDrive: (id, shas) => ipcRenderer.invoke('drive:delete', id, shas),
   notes: (method, ...args) => ipcRenderer.invoke('notes:call', method, ...args),
   notesSynced: () => ipcRenderer.invoke('notes:synced'),
+  notifications: {
+    list: () => ipcRenderer.invoke('notifications:list'),
+    read: () => ipcRenderer.invoke('notifications:read'),
+    clear: () => ipcRenderer.invoke('notifications:clear'),
+    onChange: cb => { const f = () => cb(); ipcRenderer.on('notifications-changed', f); return () => ipcRenderer.removeListener('notifications-changed', f) },
+  },
+  theme: () => ipcRenderer.invoke('settings:theme'),
+  setTheme: t => ipcRenderer.invoke('settings:setTheme', t),
   onNotesSynced: cb => { const f = (_, s) => cb(s); ipcRenderer.on('notes-synced', f); return () => ipcRenderer.removeListener('notes-synced', f) },
   onNotesChanged: cb => { const f = () => cb(); ipcRenderer.on('notes-changed', f); return () => ipcRenderer.removeListener('notes-changed', f) },
   files: {

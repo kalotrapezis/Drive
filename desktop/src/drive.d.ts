@@ -49,6 +49,7 @@ export interface SyncStatus { port: number; fingerprint: string; error: string |
 
 export interface TrashedPhoto { id: string; name: string; path: string; size: number; deletedAt: number }
 export interface Collection { id: string; name: string; count: number; cover: string | null; hidden: boolean; folder?: boolean; drive?: boolean }
+export interface AppNotification { id: number; at: number; title: string; body: string | null; read: number }
 export interface PhotoPlace { path: string; name: string; count: number }
 
 declare global {
@@ -147,6 +148,9 @@ declare global {
       notes<T = unknown>(method: string, ...args: unknown[]): Promise<T>
       onNotesChanged(cb: () => void): () => void
       notesSynced(): Promise<{ at: number; device: string } | null>
+      notifications: { list(): Promise<AppNotification[]>; read(): Promise<void>; clear(): Promise<void>; onChange(cb: () => void): () => void }
+      theme(): Promise<'system' | 'light' | 'dark'>
+      setTheme(t: 'system' | 'light' | 'dark'): Promise<void>
       onNotesSynced(cb: (s: { at: number; device: string }) => void): () => void
       files: {
         root(): Promise<string>

@@ -14,9 +14,10 @@ import { HiddenPage, VaultGate } from './Hidden'
 import { Editor } from './Editor'
 import { OffloadDialog, SyncPage } from './Sync'
 import { NotesPage } from './Notes'
+import { NotificationsPage, SettingsPage } from './Settings'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
-  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' }
+  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' } | { kind: 'notifications' } | { kind: 'settings' }
 
 const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
@@ -55,6 +56,11 @@ export function App() {
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [vault, setVault] = useState<VaultStatus | null>(null)
   const [editing, setEditing] = useState<Media | null>(null)
+  const [unread, setUnread] = useState(0)
+  useEffect(() => {
+    const count = () => window.drive.notifications.list().then(l => setUnread(l.filter(n => !n.read).length))
+    count(); return window.drive.notifications.onChange(count)
+  }, [page])
 
   // A drive is a collection of what is on it (sync.js driveMembers), on this PC only: photos leave it only by Remove.
   // In the sidebar under Drives, with its own Screenshots and Documents (drive:<id>:screenshots), to see what to delete.
@@ -274,6 +280,8 @@ export function App() {
   if (page.kind === 'files') content = <Files mode={page.mode} folder={page.folder} go={(mode, folder) => setPage({ kind: 'files', mode, folder })} setDialog={setDialog} say={say} dock={dock} />
   else if (page.kind === 'sync') content = <SyncPage setDialog={setDialog} />
   else if (page.kind === 'notes') content = <NotesPage setDialog={setDialog} say={say} />
+  else if (page.kind === 'notifications') content = <NotificationsPage />
+  else if (page.kind === 'settings') content = <SettingsPage />
   else if (page.kind === 'photoTrash') content = <TrashPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (page.kind === 'hidden') content = <HiddenPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (loading) content = <div className="empty">Loading…</div>
@@ -364,6 +372,11 @@ export function App() {
             <progress value={analysis.done} max={Math.max(analysis.total, 1)} />
           </div>
         )}
+        <div className="rail-bottom">
+          <button className={`nav-item ${page.kind === 'notifications' ? 'active' : ''}`} onClick={() => setPage({ kind: 'notifications' })}>
+            <Icon name="bell" />Notifications{unread > 0 && <span className="badge-count">{unread}</span>}</button>
+          {nav({ kind: 'settings' }, page.kind === 'settings', 'settings', 'Settings')}
+        </div>
         <div className="rail-foot">
           <span>{scan ?? `${media?.length ?? 0} items`}</span>
           <button className="round" title="Rescan library" disabled={!!scan} onClick={rescan}><Icon name="refresh" size={20} /></button>

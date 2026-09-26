@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification } = require('electron')
+const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification, nativeTheme } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
@@ -122,6 +122,12 @@ const said = { offer: 0, full: 0 }
 const HOURS = 3_600_000
 const fmtBytes = n => n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`
 function notify(title, body) {
+  // Kept as well as shown: a notification goes by in seconds, the Notifications page keeps them (asked 2026-09-26).
+  try {
+    db.exec('CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY, at INTEGER NOT NULL, title TEXT NOT NULL, body TEXT, read INTEGER NOT NULL DEFAULT 0)')
+    db.prepare('INSERT INTO notifications(at, title, body) VALUES(?,?,?)').run(Date.now(), String(title), body == null ? null : String(body))
+    win?.webContents.send('notifications-changed')
+  } catch (e) { console.warn('[notify]', e.message) }
   if (!Notification.isSupported()) return
   const n = new Notification({ title, body, icon: path.join(__dirname, 'public', 'icon.png') })
   n.on('click', () => { showWindow(); if (offer) win?.webContents.send('offload-offer', offer.deviceId) })
@@ -457,6 +463,13 @@ app.whenReady().then(() => {
   // them without waiting for their own sync (asked 2026-09-26). Only a device with Tetra open is listening.
   let notesNudge = null
   ipcMain.handle('notes:synced', () => sync.notesSynced)
+  db.exec('CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY, at INTEGER NOT NULL, title TEXT NOT NULL, body TEXT, read INTEGER NOT NULL DEFAULT 0)')
+  ipcMain.handle('notifications:list', () => db.prepare('SELECT id, at, title, body, read FROM notifications ORDER BY at DESC LIMIT 500').all())
+  ipcMain.handle('notifications:read', () => { db.exec('UPDATE notifications SET read = 1 WHERE read = 0') })
+  ipcMain.handle('notifications:clear', () => { db.exec('DELETE FROM notifications') })
+  // Appearance: Auto follows the system, or Light / Dark whatever it says. The page's colours follow nativeTheme.
+  ipcMain.handle('settings:theme', () => setting('theme') || 'system')
+  ipcMain.handle('settings:setTheme', (_, t) => { if (!['system', 'light', 'dark'].includes(t)) return; setSetting('theme', t); nativeTheme.themeSource = t })
   ipcMain.handle('notes:call', (_, method, ...args) => {
     if (!NOTE_CALLS.includes(method)) throw new Error('Unknown Notes action.')
     const result = notes[method](...args)
@@ -479,6 +492,7 @@ app.whenReady().then(() => {
   })
 
   if (!process.env.DRIVE_HIDDEN && HOME.root.endsWith('Tetra')) home.markFolder(HOME.root, path.join(__dirname, 'public', 'icon.png'), DATA_DIR)
+  nativeTheme.themeSource = setting('theme') || 'system'
   win = new BrowserWindow({
     width: 1400, height: 900, minWidth: 720, minHeight: 500,
     backgroundColor: '#121416', title: 'Tetra',
