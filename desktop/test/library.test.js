@@ -87,3 +87,27 @@ test('offline place names', () => {
   assert.equal(places.nearest(40.5830, 22.9510).name, 'Kalamariá')
   assert.equal(places.nearest(0, -30), null) // mid-Atlantic
 })
+
+test('a date in the name beats a copy date; an EXIF date is never replaced', () => {
+  const { dateFromName, repairDatesFromNames } = library
+  const local = (...a) => new Date(...a).getTime()
+  assert.equal(dateFromName('Camera/20240325_104816.mp4'), local(2024, 2, 25, 10, 48, 16))
+  assert.equal(dateFromName('IMG-20240305-WA0001.jpg'), local(2024, 2, 5, 12))
+  assert.equal(dateFromName('Screenshot_2024-03-05-12-08-58.png'), local(2024, 2, 5, 12, 8, 58))
+  assert.equal(dateFromName('PXL_20240305_120858123.jpg'), local(2024, 2, 5, 12, 8, 58))
+  assert.equal(dateFromName('holiday.jpg'), null)
+  assert.equal(dateFromName('IMG_99991231_000000.jpg'), null, 'not a plausible date')
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dates-'))
+  try {
+    const db = library.open(tmp)
+    const copied = local(2026, 7, 21, 15, 38)
+    const add = (p, taken, mtime) => db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb, meta_v) VALUES(?,?,'video/mp4',1,1,?,?,1,99)`).run(p, p, mtime, taken)
+    add('a/20240325_104816.mp4', copied, copied) // the copy's date: fixed
+    add('a/20240320_112124.heic', local(2024, 2, 20, 9, 21), copied) // EXIF: kept
+    add('a/20240401_101010.mp4', local(2024, 3, 1, 10, 10, 10), local(2024, 3, 1, 10, 10, 10)) // already right
+    assert.equal(repairDatesFromNames(db), 1)
+    assert.equal(db.prepare('SELECT taken_at FROM media WHERE path = ?').get('a/20240325_104816.mp4').taken_at, local(2024, 2, 25, 10, 48, 16))
+    assert.equal(db.prepare('SELECT taken_at FROM media WHERE path = ?').get('a/20240320_112124.heic').taken_at, local(2024, 2, 20, 9, 21))
+    db.close()
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})

@@ -118,6 +118,36 @@ async function preview(file, sha, dataDir) {
   return target
 }
 
+/**
+ * The date a phone or an app wrote into a file's name (20240325_104816.mp4, IMG-20240305-WA0001.jpg,
+ * Screenshot_2024-03-05-12-08-58.png, PXL_20240305_120858123.jpg), in local time — for a video, or a photo with no
+ * EXIF date. Before this the file's own date was used, and a copy made later carried that day instead (the imports of
+ * 26 September landed in August 2026). Null when the name holds no plausible date.
+ */
+function dateFromName(rel) {
+  const name = path.basename(String(rel))
+  let d = null
+  let m = /(?:^|\D)((?:19|20)\d{2})[-_.]?(0[1-9]|1[0-2])[-_.]?(0[1-9]|[12]\d|3[01])[-_ .T]?([01]\d|2[0-3])[-_.:]?([0-5]\d)[-_.:]?([0-5]\d)/.exec(name)
+  if (m) d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])
+  else if ((m = /(?:^|\D)((?:19|20)\d{2})[-_]?(0[1-9]|1[0-2])[-_]?(0[1-9]|[12]\d|3[01])(?:\D|$)/.exec(name))) d = new Date(+m[1], +m[2] - 1, +m[3], 12)
+  const t = d?.getTime()
+  return t && t > Date.UTC(1990, 0) && t < Date.now() + 86_400_000 ? t : null
+}
+
+/**
+ * Rows whose date is only the file's date, where that is days after the date in the name: a copy's date, not the
+ * photo's. Moved photos too (they are not scanned). The EXIF date is never touched: it is not the file's date then.
+ */
+function repairDatesFromNames(db) {
+  const fix = db.prepare('UPDATE media SET taken_at = ? WHERE id = ?')
+  let n = 0
+  for (const r of db.prepare('SELECT id, path, taken_at, mtime FROM media WHERE taken_at = mtime').all()) {
+    const d = dateFromName(r.path)
+    if (d && r.mtime - d > 2 * 86_400_000) { fix.run(d, r.id); n++ }
+  }
+  return n
+}
+
 async function imageInfo(file) {
   const exifr = require('exifr')
   const out = {}
@@ -187,7 +217,7 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
     const thumbFile = path.join(dataDir, 'thumbs', hash + '.webp')
     let thumb = fs.existsSync(thumbFile)
     if (!thumb) thumb = await makeThumb(file, isVideo, thumbFile).then(() => true, () => false)
-    insert.run(rel, hash, mime, isVideo ? 1 : 0, st.size, Math.trunc(st.mtimeMs), info.taken_at ?? Math.trunc(st.mtimeMs),
+    insert.run(rel, hash, mime, isVideo ? 1 : 0, st.size, Math.trunc(st.mtimeMs), info.taken_at ?? dateFromName(rel) ?? Math.trunc(st.mtimeMs),
       info.width ?? null, info.height ?? null, info.latitude ?? null, info.longitude ?? null, info.camera ?? null, thumb ? 1 : 0)
     onProgress(++done, ++changed)
   }
@@ -211,7 +241,8 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
     const trashed = new Set((await trashedPhotos(root).catch(() => [])).map(t => t.path))
     forgetFacesOfGonePhotos(db, gone.filter(g => !trashed.has(g.rel)).map(g => g.sha256))
   }
-  return { total: seen.size, changed, removed }
+  const redated = repairDatesFromNames(db)
+  return { total: seen.size, changed: changed + redated, removed }
 }
 
 function list(db) {
@@ -461,4 +492,4 @@ function metadataSince(db, since) {
 /** A screenshot, by its name or folder — the same test the phone uses. */
 const isScreenshot = p => /screenshot|στιγμιοτυπο|screen[ _-]?shot|scrnshot/.test(p.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase())
 
-module.exports = { isScreenshot, open, scan, list, transaction, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
+module.exports = { dateFromName, repairDatesFromNames, isScreenshot, open, scan, list, transaction, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
