@@ -14,6 +14,7 @@ const { SyncServer } = require('./sync')
 const { Folders } = require('./folders')
 const { Purgatory } = require('./purgatory')
 const history = require('./history')
+const { Notes } = require('./notes')
 
 const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'local-drive-desktop')
 // ~/Tetra/Photos and ~/Tetra/Files, moved from ~/Drive once (home.js). Never from a hidden QA copy (scripts/shot.js),
@@ -30,9 +31,10 @@ const FILES_ROOT = process.env.DRIVE_FILES || HOME.files
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
 
-let db, files, people, documents, folders, vault, sync, purgatory, win, scanning = null
+let notes, db, files, people, documents, folders, vault, sync, purgatory, win, scanning = null
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage']
+const NOTE_CALLS = ['list', 'create', 'save', 'snapshot', 'history', 'restoreVersion', 'remove']
 
 const setting = key => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value
 const setSetting = (key, value) => db.prepare('INSERT INTO settings(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
@@ -201,6 +203,8 @@ function analyzeLibrary(rescan = null) {
 app.whenReady().then(() => {
   db = library.open(DATA_DIR)
   files = new Files(db, FILES_ROOT)
+  // Notes live in a hidden folder of Files (notes.js), and sync through their own step, newest edit wins.
+  notes = new Notes(path.join(FILES_ROOT, '.notes'), 'tetra-desktop')
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
@@ -209,7 +213,7 @@ app.whenReady().then(() => {
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
   purgatory = new Purgatory({ db, photosRoot: PHOTOS_ROOT, files, serverBase: path.dirname(HOME.root) })
-  sync = new SyncServer({ db, documents, people, files, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onReceived: () => {
+  sync = new SyncServer({ db, documents, people, files, notes, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   } })
@@ -221,6 +225,13 @@ app.whenReady().then(() => {
   // and notify from a database that is not the real one.
   if (!process.env.DRIVE_HIDDEN) setInterval(() => backUpPluggedDrives().then(checkSpace).then(sweepPurgatory).catch(e => console.warn('[space]', e.message)), 60_000)
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
+  // The Notes app's vault moves in once (its folders become labels); the old one is only read, never changed.
+  if (!process.env.DRIVE_HIDDEN && !setting('notesImported')) {
+    const n = notes.importVault(path.join(os.homedir(), '.local', 'share', 'Notes', 'notes'))
+    setSetting('notesImported', String(Date.now()))
+    if (n) history.record(db, { action: 'notes moved in', detail: `${n} notes from ~/.local/share/Notes` })
+  }
+  if (!process.env.DRIVE_HIDDEN) notes.sweep()
 
   // media://thumb/<sha256>  and  media://file/<id>  — only files the database knows about are served.
   protocol.handle('media', async request => {
@@ -427,6 +438,10 @@ app.whenReady().then(() => {
     if (!FILE_CALLS.includes(method)) throw new Error('Unknown Files action.')
     if (method === 'trash' || method === 'emptyTrash') history.record(db, { action: method === 'trash' ? 'trashed' : 'emptied Trash by hand', kind: 'file', name: method === 'trash' ? String(args[0]) : null })
     return files[method](...args)
+  })
+  ipcMain.handle('notes:call', (_, method, ...args) => {
+    if (!NOTE_CALLS.includes(method)) throw new Error('Unknown Notes action.')
+    return notes[method](...args)
   })
   ipcMain.handle('files:open', async (_, rel) => {
     const full = files.resolve(rel)

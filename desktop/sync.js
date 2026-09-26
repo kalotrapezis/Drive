@@ -73,8 +73,8 @@ async function copyVerified(src, dest, expected) {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan). */
-  constructor({ db, documents, people, files, dataDir, photosRoot, onReceived = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null }) {
-    Object.assign(this, { db, documents, people, files, dataDir, photosRoot, onReceived, port, beaconPort, trashItem, purgatory })
+  constructor({ db, documents, people, files, notes = null, dataDir, photosRoot, onReceived = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null }) {
+    Object.assign(this, { db, documents, people, files, notes, dataDir, photosRoot, onReceived, port, beaconPort, trashItem, purgatory })
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS sync_devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, paired_at INTEGER NOT NULL, last_seen INTEGER);
@@ -1115,6 +1115,12 @@ class SyncServer {
     if (req.method === 'PUT' && blob) return this.send(res, 200, await this.receive(req, device, blob[1], url.searchParams))
     const doomed = /^\/purgatory\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'PUT' && doomed) return this.send(res, 200, await this.receivePurgatory(req, device, doomed[1], url.searchParams))
+    // Notes: every note and deletion the device has, the newer of each kept (notes.js merge). Notes cross whenever
+    // Files do, both ways: they are the person's own writing, not a device's copy of something.
+    if (req.method === 'POST' && url.pathname === '/notes') {
+      if (!this.notes || this.connection(device.id, 'files').direction === 'off') return this.send(res, 200, { notes: [], deletions: [], off: true })
+      return this.send(res, 200, this.notes.merge(await this.json(req, 1 << 25)))
+    }
     if (req.method === 'POST' && url.pathname === '/files/manifest') {
       if (!this.files) return this.send(res, 200, { want: [], moved: [], have: [], moveTo: [] })
       const { files: offered } = await this.json(req, 1 << 24)

@@ -58,6 +58,7 @@
       "home.js",
       "purgatory.js",
       "history.js",
+      "notes.js",
       "models/*.onnx",
       "dist/**",
       "public/icon.png",

@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('drive', {
   members: id => ipcRenderer.invoke('collections:members', id),
   setMembership: (id, shas, member) => ipcRenderer.invoke('collections:set', id, shas, member),
   deleteFromDrive: (id, shas) => ipcRenderer.invoke('drive:delete', id, shas),
+  notes: (method, ...args) => ipcRenderer.invoke('notes:call', method, ...args),
   files: {
     root: () => ipcRenderer.invoke('files:root'),
     call: (method, ...args) => ipcRenderer.invoke('files:call', method, ...args),
