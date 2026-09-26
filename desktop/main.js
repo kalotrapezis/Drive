@@ -213,7 +213,7 @@ app.whenReady().then(() => {
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
   purgatory = new Purgatory({ db, photosRoot: PHOTOS_ROOT, files, serverBase: path.dirname(HOME.root) })
-  sync = new SyncServer({ db, documents, people, files, notes, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onReceived: () => {
+  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   } })
@@ -451,7 +451,7 @@ app.whenReady().then(() => {
     const result = notes[method](...args)
     if (['save', 'remove', 'restoreVersion'].includes(method)) {
       clearTimeout(notesNudge)
-      notesNudge = setTimeout(() => sync.nudge().catch(() => {}), 5000)
+      notesNudge = setTimeout(() => sync.nudge().catch(() => {}), 2500)
     }
     return result
   })

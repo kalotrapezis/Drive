@@ -33,6 +33,7 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
   useEffect(() => setSelected(new Set()), [view, label])
   const reload = () => call<Note[]>('list').then(setNotes)
   useEffect(() => { reload() }, [])
+  useEffect(() => window.drive.onNotesChanged(reload), []) // a device's change, shown as it lands
   const close = () => setDialog(null)
 
   const labels = useMemo(() => {

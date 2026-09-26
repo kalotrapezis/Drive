@@ -73,8 +73,8 @@ async function copyVerified(src, dest, expected) {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan). */
-  constructor({ db, documents, people, files, notes = null, dataDir, photosRoot, onReceived = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null }) {
-    Object.assign(this, { db, documents, people, files, notes, dataDir, photosRoot, onReceived, port, beaconPort, trashItem, purgatory })
+  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, dataDir, photosRoot, onReceived = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null }) {
+    Object.assign(this, { db, documents, people, files, notes, onNotes, dataDir, photosRoot, onReceived, port, beaconPort, trashItem, purgatory })
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
       CREATE TABLE IF NOT EXISTS sync_devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, paired_at INTEGER NOT NULL, last_seen INTEGER);
@@ -1133,7 +1133,9 @@ class SyncServer {
     // Files do, both ways: they are the person's own writing, not a device's copy of something.
     if (req.method === 'POST' && url.pathname === '/notes') {
       if (!this.notes || this.connection(device.id, 'files').direction === 'off') return this.send(res, 200, { notes: [], deletions: [], off: true })
-      return this.send(res, 200, this.notes.merge(await this.json(req, 1 << 25)))
+      const { changed, ...answer } = this.notes.merge(await this.json(req, 1 << 25))
+      if (changed) this.onNotes() // an open Notes page shows it at once
+      return this.send(res, 200, answer)
     }
     if (req.method === 'POST' && url.pathname === '/files/manifest') {
       if (!this.files) return this.send(res, 200, { want: [], moved: [], have: [], moveTo: [] })

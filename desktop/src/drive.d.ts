@@ -145,6 +145,7 @@ declare global {
         onProgress(fn: (a: Analysis) => void): () => void
       }
       notes<T = unknown>(method: string, ...args: unknown[]): Promise<T>
+      onNotesChanged(cb: () => void): () => void
       files: {
         root(): Promise<string>
         call<T = unknown>(method: string, ...args: unknown[]): Promise<T>

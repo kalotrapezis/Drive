@@ -46,6 +46,7 @@ test('notes: merge keeps the newer of each, a deletion beats an edit, and says w
     assert.equal(notes.get('d'), null)
     assert.deepEqual(r.notes.map(n => n.id).sort(), ['a', 'c'])
     assert.deepEqual(r.deletions.map(d => d.id), ['d'])
+    assert.equal(r.changed, 3, 'b newer, e new, d deleted: what an open Notes page must show')
     notes.remove('c')
     assert.ok(!notes.merge({ notes: [{ id: 'c', updatedAt: 1e15 }] }).notes.some(n => n.id === 'c'), 'a deleted note never comes back')
     assert.equal(notes.get('c'), null)

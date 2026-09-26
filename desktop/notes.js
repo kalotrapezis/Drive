@@ -129,17 +129,21 @@ class Notes {
    */
   merge({ notes = [], deletions = [] } = {}) {
     const gone = new Map(this.deletions().map(d => [d.id, d]))
-    for (const d of deletions) if (isId(d?.id) && !gone.has(d.id)) { gone.set(d.id, { id: d.id, deletedAt: Number(d.deletedAt) || Date.now(), deviceId: d.deviceId ?? null }); fs.rmSync(this.file(d.id), { force: true }) }
+    let changed = 0
+    for (const d of deletions) if (isId(d?.id) && !gone.has(d.id)) {
+      gone.set(d.id, { id: d.id, deletedAt: Number(d.deletedAt) || Date.now(), deviceId: d.deviceId ?? null })
+      if (fs.existsSync(this.file(d.id))) { fs.rmSync(this.file(d.id), { force: true }); changed++ }
+    }
     fs.mkdirSync(this.root, { recursive: true })
     fs.writeFileSync(path.join(this.root, 'deletions.json'), JSON.stringify([...gone.values()]))
     const theirs = new Map()
     for (const n of notes) if (isId(n?.id) && !gone.has(n.id)) {
       theirs.set(n.id, n)
       const mine = this.get(n.id)
-      if (!mine || (Number(n.updatedAt) || 0) > (Number(mine.updatedAt) || 0)) this.write(n)
+      if (!mine || (Number(n.updatedAt) || 0) > (Number(mine.updatedAt) || 0)) { this.write(n); changed++ }
     }
     const send = this.list().filter(m => !theirs.has(m.id) || (Number(m.updatedAt) || 0) > (Number(theirs.get(m.id).updatedAt) || 0))
-    return { notes: send, deletions: [...gone.values()] }
+    return { notes: send, deletions: [...gone.values()], changed }
   }
 
   /**
