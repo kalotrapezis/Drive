@@ -1069,6 +1069,8 @@ test('a photo deleted here on purpose is declined, not asked for, until it is ba
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
   try {
     const { token } = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Phone' } })).body
+    // Every sync starts with an empty question to find the computer: on a fresh start it failed (26 September).
+    assert.deepEqual((await call('POST', '/have', { token, json: { hashes: [] } })), { status: 200, body: { missing: [], declined: [] } })
     const bytes = Buffer.from('a trashed photo'), hash = crypto.createHash('sha256').update(bytes).digest('hex')
     const other = crypto.createHash('sha256').update('another').digest('hex')
     server.deletedHere([hash])

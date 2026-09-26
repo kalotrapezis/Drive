@@ -1072,6 +1072,7 @@ class SyncServer {
       this.holds(device.id, 'photo', hashes)
       // A photo deleted here on purpose is declined, not asked for: sending it would bring it back (bug found by the
       // user, 26 September). It is not "had" either, so a Move device keeps its copy rather than offering to let it go.
+      this.refreshHere() // here_now exists only once it has been built — an empty question (every sync's first) did not
       const absent = hashes.filter(h => !this.have(h))
       this.db.exec('DELETE FROM deleted_here WHERE sha256 IN (SELECT sha256 FROM here_now)') // restored since
       const declined = absent.filter(h => this.db.prepare('SELECT 1 FROM deleted_here WHERE sha256 = ?').get(h))
