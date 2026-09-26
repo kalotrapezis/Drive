@@ -92,3 +92,10 @@ test('the system folders are always there and stay put, while what is inside the
   assert.ok(fs.existsSync(path.join(root, 'Trash', 'scan.pdf')))
   fs.rmSync(tmp, { recursive: true })
 })
+
+test('a name already in Trash never blocks a delete: the newcomer becomes "name (2)"', async () => {
+  const { tmp, root, files } = setup()
+  for (let i = 0; i < 2; i++) { fs.mkdirSync(path.join(root, 'QA')); fs.writeFileSync(path.join(root, 'a.txt'), 'x'); await files.trash('QA'); await files.trash('a.txt') }
+  assert.deepEqual(fs.readdirSync(path.join(root, 'Trash')).sort(), ['QA', 'QA (2)', 'a (2).txt', 'a.txt'])
+  fs.rmSync(tmp, { recursive: true })
+})

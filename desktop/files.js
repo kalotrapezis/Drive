@@ -166,8 +166,15 @@ class Files {
   /** Reversible: Drive/Trash/ is an ordinary folder; Move brings items back. */
   async trash(rel) {
     if (inTrash(rel)) fail('This item is already in Trash.')
+    const src = this.resolve(rel)
+    if (src === this.root) fail('Drive itself cannot be moved.')
+    if (isSystem(rel)) systemFail(rel)
     await fsp.mkdir(path.join(this.root, TRASH), { recursive: true })
-    return this.move(rel, TRASH)
+    // A name already in Trash never blocks a delete: the newcomer becomes "name (2)", as everywhere in Drive.
+    const { name, ext } = path.parse(src)
+    let target = path.join(this.resolve(TRASH), path.basename(src))
+    for (let n = 2; fs.existsSync(target); n++) target = path.join(this.resolve(TRASH), `${name} (${n})${ext}`)
+    return this.moveTo(src, target)
   }
 
   /** The only permanent delete; the UI confirms first. */
@@ -285,9 +292,20 @@ class Files {
       mine.get(sha).push(rel)
       minePaths.set(rel, sha)
     }
+    // What this computer held at the last sync and holds nowhere now, it deleted (emptied from Trash, or removed by
+    // hand). Asking a device for it again would undo that — files came back after an Empty Trash (26 September) —
+    // so it is remembered, like photos' deleted_here, until the same bytes are back here.
+    this.db.exec('CREATE TABLE IF NOT EXISTS file_deleted_here (sha256 TEXT PRIMARY KEY, at INTEGER NOT NULL)')
+    const forget = this.db.prepare('INSERT OR IGNORE INTO file_deleted_here(sha256, at) VALUES(?,?)')
+    // An empty Drive where 20+ files were is a missing folder, not a deletion (the photo scan's guard too).
+    if (mine.size || mineBefore.size < 20) for (const sha of mineBefore.values()) if (!mine.has(sha)) forget.run(sha, Date.now())
+    const back = this.db.prepare('DELETE FROM file_deleted_here WHERE sha256 = ?')
+    for (const sha of mine.keys()) back.run(sha)
+    const deletedHere = new Set(this.db.prepare('SELECT sha256 FROM file_deleted_here').all().map(r => r.sha256))
     const want = [], moved = []
     for (const [rel, sha] of offered) {
       if (!followTrash && inTrash(rel)) continue
+      if (deletedHere.has(sha)) continue
       if (mine.get(sha)?.includes(rel)) continue // already here, at this very path
       // The phone kept these bytes here last time and does not any more: it moved them, so follow.
       const elsewhere = (mine.get(sha) ?? []).find(other => before.get(other) === sha && !offered.has(other))

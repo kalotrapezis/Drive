@@ -540,6 +540,15 @@ test('the other direction: what this computer offers, and a connection that says
     assert.equal(r.body.have.some(h => h.sha256 === binHash), false, 'what the phone deleted stays deleted')
     assert.equal(fs.existsSync(path.join(root, 'Notes/shared.txt')), true, 'and this computer keeps its own copy')
 
+    // And the other way round: what this computer deleted is not asked for again (it came back after an Empty Trash).
+    fs.rmSync(path.join(root, 'Notes/shared.txt'))
+    const offer = { files: [{ path: 'Notes/shared.txt', sha256: binHash, size: bin.length }] }
+    assert.deepEqual((await call('POST', '/files/manifest', { token, json: offer })).body.want, [], 'deleted here stays deleted')
+    assert.deepEqual((await call('POST', '/files/manifest', { token, json: offer })).body.want, [], 'on the next sync too')
+    fs.writeFileSync(path.join(root, 'Notes/back.txt'), bin) // the same bytes put back here by hand
+    assert.deepEqual((await call('POST', '/files/manifest', { token, json: offer })).body.want, ['Notes/shared.txt'], 'back here: forgotten')
+    fs.rmSync(path.join(root, 'Notes/back.txt'))
+
     // Send-only: the device may give, and receives nothing back.
     server.setConnection(device, 'photos', { direction: 'send', keep: 'everything' })
     server.setConnection(device, 'files', { direction: 'send', keep: 'everything' })
