@@ -468,7 +468,8 @@ app.whenReady().then(() => {
   let importing = null
   ipcMain.handle('import:pick', async (_, folders) => (await dialog.showOpenDialog(win, { properties: [folders ? 'openDirectory' : 'openFile', 'multiSelections'] })).filePaths)
   ipcMain.handle('import:drives', async () => (await sync.drives()).filter(d => d.device && d.mount).map(d => ({ id: d.device.id, name: d.device.name, free: d.freeBytes })))
-  ipcMain.handle('import:run', async (_, kind, sources, driveId) => {
+  ipcMain.handle('import:run', async (_, kind, sources, driveId, move) => {
+    move = move === true
     if (importing) throw new Error('An import is already running.')
     if (!Array.isArray(sources) || !sources.length) throw new Error('Choose what to import.')
     const plugged = driveId ? (await sync.drives()).find(d => d.device?.id === driveId && d.mount) : null
@@ -476,12 +477,12 @@ app.whenReady().then(() => {
     const drive = plugged && { id: plugged.device.id, name: plugged.device.name, mount: plugged.mount }
     const onProgress = p => win?.webContents.send('import-progress', p)
     importing = kind === 'files'
-      ? importer.importFiles({ db, root: drive ? path.join(drive.mount, 'Tetra', 'Files') : FILES_ROOT, sources, onProgress })
-      : (folders.set('Imported', true), importer.importPhotos({ db, photosRoot: PHOTOS_ROOT, sources, drive, scan: () => startScan(), onProgress }))
+      ? importer.importFiles({ db, root: drive ? path.join(drive.mount, 'Tetra', 'Files') : FILES_ROOT, sources, move, onProgress })
+      : (folders.set('Imported', true), importer.importPhotos({ db, photosRoot: PHOTOS_ROOT, sources, drive, move, scan: () => startScan(), onProgress }))
     try {
       const r = await importing
       if (kind !== 'files') await startScan()
-      notify(`Imported ${r.imported.toLocaleString()} ${kind === 'files' ? 'files' : 'photos'}`, (drive ? `Straight to ${drive.name}. ` : '') + (r.skipped ? `${r.skipped} were already in the library. ` : '') + (r.failed.length ? `${r.failed.length} could not be copied.` : ''))
+      notify(`${move ? 'Moved in' : 'Imported'} ${r.imported.toLocaleString()} ${kind === 'files' ? 'files' : 'photos'}`, (drive ? `Straight to ${drive.name}. ` : '') + (r.skipped ? `${r.skipped} were already in the library. ` : '') + (r.failed.length ? `${r.failed.length} could not be copied.` : ''))
       return r
     } finally { importing = null }
   })

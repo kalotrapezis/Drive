@@ -11,6 +11,7 @@ export function ImportDialog({ kind, onClose, onDone }: { kind: 'photos' | 'file
   const [sources, setSources] = useState<string[]>([])
   const [drives, setDrives] = useState<{ id: string; name: string; free: number }[]>([])
   const [to, setTo] = useState<string | null>(null)
+  const [move, setMove] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number; imported: number; skipped: number } | null>(null)
   const [result, setResult] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -21,8 +22,8 @@ export function ImportDialog({ kind, onClose, onDone }: { kind: 'photos' | 'file
   async function start() {
     setError(''); setProgress({ done: 0, total: 0, imported: 0, skipped: 0 })
     try {
-      const r = await window.drive.imports.run(kind, sources, to)
-      setResult(`Imported ${r.imported.toLocaleString()}` + (r.skipped ? `, ${r.skipped.toLocaleString()} already in the library` : '')
+      const r = await window.drive.imports.run(kind, sources, to, move)
+      setResult(`${move ? 'Moved in' : 'Imported'} ${r.imported.toLocaleString()}` + (r.skipped ? `, ${r.skipped.toLocaleString()} already in the library` : '')
         + (r.failed.length ? `. ${r.failed.length} could not be copied: ${r.failed.slice(0, 2).join('; ')}` : '.'))
       onDone()
     } catch (e) { setError(errorText(e)); setProgress(null) }
@@ -39,7 +40,7 @@ export function ImportDialog({ kind, onClose, onDone }: { kind: 'photos' | 'file
         </>
       ) : (
         <>
-          <p>Choose folders or single files; every {kind === 'photos' ? 'photo' : 'file'} is copied and checked, the originals stay where they are.
+          <p>Choose folders or single files; every {kind === 'photos' ? 'photo' : 'file'} is copied and checked.
             {kind === 'photos' && ' Photos the library already has are skipped.'}</p>
           <div className="dialog-actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
             <button className="text-button" onClick={() => add(true)}><Icon name="folder" size={18} /> Add folders…</button>
@@ -51,6 +52,9 @@ export function ImportDialog({ kind, onClose, onDone }: { kind: 'photos' | 'file
           {drives.map(d => <label key={d.id} className="check-row"><input type="radio" checked={to === d.id} onChange={() => setTo(d.id)} />
             <span>Straight to {d.name} ({formatBytes(d.free)} free) — {kind === 'photos' ? 'the photos live on the drive, and show here like moved ones' : 'into its Tetra / Files / Imported'}</span></label>)}
           {!drives.length && <p className="hint">Plug in a set-up drive to import {what} straight to it.</p>}
+          <h4 className="import-head">Originals</h4>
+          <label className="check-row"><input type="checkbox" checked={move} onChange={e => setMove(e.target.checked)} />
+            <span>Move instead of copy — each original is deleted once its copy reads back the same{kind === 'photos' ? '; ones the library already has go too' : ''}. Emptied folders go.</span></label>
         </>
       )}
       {error && <p className="error">{error}</p>}

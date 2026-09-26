@@ -45,3 +45,21 @@ test('import photos: new ones copied under Imported, ones the library has skippe
     db.close()
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
+
+test('import with Move: originals go once their copies read back, the library\'s own too, and emptied folders', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'import-move-'))
+  try {
+    const card = path.join(tmp, 'Card'); fs.mkdirSync(path.join(card, 'DCIM'), { recursive: true })
+    fs.writeFileSync(path.join(card, 'DCIM', 'a.jpg'), 'photo a'); fs.writeFileSync(path.join(card, 'DCIM', 'dup.jpg'), 'photo a')
+    fs.writeFileSync(path.join(card, 'keep.txt'), 'not a photo, not moved')
+    const photos = path.join(tmp, 'Photos'); fs.mkdirSync(photos)
+    const mount = path.join(tmp, 'T7'); fs.mkdirSync(mount)
+    const db = library.open(path.join(tmp, 'data'))
+    const r = await importPhotos({ db, photosRoot: photos, sources: [card], drive: { id: 'T7', name: 'T7', mount }, move: true, scan: fakeScan(db, photos) })
+    assert.deepEqual({ imported: r.imported, skipped: r.skipped, failed: r.failed.length }, { imported: 1, skipped: 1, failed: 0 })
+    assert.ok(!fs.existsSync(path.join(card, 'DCIM')), 'both photos gone from the card, and the emptied folder')
+    assert.ok(fs.existsSync(path.join(card, 'keep.txt')), 'what was not imported stays, and so does its folder')
+    assert.ok(fs.existsSync(path.join(mount, 'Tetra', 'Photos', 'Imported', 'Card', 'DCIM', 'a.jpg')))
+    db.close()
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})

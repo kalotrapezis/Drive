@@ -10,6 +10,9 @@
  * disk only ever holds one batch.
  *
  * Files land in Files/Imported/, or in the drive's Tetra/Files/Imported/, folders kept as they were.
+ *
+ * **Move** instead of copy (asked the same day, "I have no space"): an original is deleted only once every copy of it
+ * has been read back and matches; one the library already had goes too — the library holds it. Folders left empty go.
  */
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
@@ -20,6 +23,20 @@ const history = require('./history')
 
 const MEDIA = /\.(jpe?g|png|heic|heif|webp|gif|tiff?|bmp|avif|dng|cr2|cr3|nef|arw|orf|rw2|raf|mp4|mov|m4v|3gp|mkv|webm|avi)$/i
 const BATCH = 1 << 30
+
+/** Read back: the copy is what was hashed, byte for byte, or the original stays. */
+async function letGo(src, copies, sha) {
+  for (const c of copies) if (await library.sha256(c) !== sha) throw new Error('a copy did not read back the same; the original stays')
+  await fsp.rm(src)
+}
+
+/** Folders a Move emptied, deepest first; one still holding anything stays. */
+async function pruneEmpty(sources) {
+  const dirs = []
+  const walk = async d => { const st = await fsp.lstat(d).catch(() => null); if (!st?.isDirectory()) return; dirs.push(d); for (const e of await fsp.readdir(d)) await walk(path.join(d, e)) }
+  for (const s of sources) await walk(s)
+  for (const d of dirs.reverse()) await fsp.rmdir(d).catch(() => {})
+}
 
 /** Every file under the chosen files and folders, with where it goes: <folder name>/<path inside it>. */
 async function gather(sources, only = null) {
@@ -59,7 +76,7 @@ async function copyChecked(src, dest, expected = null) {
  * `drive`: null for this computer, or { id, name, mount }. `scan()` reads the Photos folder (resolves when done).
  * `onProgress({ done, total, imported, skipped })`.
  */
-async function importPhotos({ db, photosRoot, sources, drive = null, scan, onProgress = () => {}, batchBytes = BATCH }) {
+async function importPhotos({ db, photosRoot, sources, drive = null, move = false, scan, onProgress = () => {}, batchBytes = BATCH }) {
   const files = await gather(sources, MEDIA)
   const known = new Set(db.prepare('SELECT sha256 FROM media').all().map(r => r.sha256))
   const out = { imported: 0, skipped: 0, failed: [], total: files.length }
@@ -88,10 +105,11 @@ async function importPhotos({ db, photosRoot, sources, drive = null, scan, onPro
     onProgress({ done: i, total: files.length, imported: out.imported, skipped: out.skipped })
     try {
       const sha = await library.sha256(f.src)
-      if (known.has(sha)) { out.skipped++; continue }
+      if (known.has(sha)) { out.skipped++; if (move) await fsp.rm(f.src); continue }
       const here = await copyChecked(f.src, path.join(photosRoot, 'Imported', f.rel), sha)
       const rel = path.relative(photosRoot, here)
-      if (drive) await copyChecked(f.src, path.join(drive.mount, 'Tetra', 'Photos', rel), sha)
+      const onDrive = drive && await copyChecked(f.src, path.join(drive.mount, 'Tetra', 'Photos', rel), sha)
+      if (move) await letGo(f.src, onDrive ? [here, onDrive] : [here], sha)
       known.add(sha)
       batch.push({ rel }); bytes += f.size
       if (!drive) history.record(db, { action: 'imported', kind: 'photo', name: rel, sha256: sha, size: f.size })
@@ -100,18 +118,25 @@ async function importPhotos({ db, photosRoot, sources, drive = null, scan, onPro
     } catch (e) { out.failed.push(`${f.rel}: ${e.message}`) }
   }
   await finish()
+  if (move) await pruneEmpty(sources)
   onProgress({ done: files.length, total: files.length, imported: out.imported, skipped: out.skipped })
   return out
 }
 
 /** Files into `<root>/Imported/`, folders as they were; `root` is this computer's Files or a drive's Tetra/Files. */
-async function importFiles({ db, root, sources, onProgress = () => {} }) {
+async function importFiles({ db, root, sources, move = false, onProgress = () => {} }) {
   const files = await gather(sources)
   const out = { imported: 0, skipped: 0, failed: [], total: files.length }
   for (const [i, f] of files.entries()) {
     onProgress({ done: i, total: files.length, imported: out.imported, skipped: 0 })
-    try { await copyChecked(f.src, path.join(root, 'Imported', f.rel)); out.imported++ } catch (e) { out.failed.push(`${f.rel}: ${e.message}`) }
+    try {
+      const sha = move ? await library.sha256(f.src) : null
+      const copy = await copyChecked(f.src, path.join(root, 'Imported', f.rel), sha)
+      if (move) await letGo(f.src, [copy], sha)
+      out.imported++
+    } catch (e) { out.failed.push(`${f.rel}: ${e.message}`) }
   }
+  if (move) await pruneEmpty(sources)
   if (out.imported) history.record(db, { action: 'imported', kind: 'file', detail: `${out.imported} files into ${root}` })
   return out
 }
