@@ -80,3 +80,19 @@ test('import stops when asked, keeping what came in whole', async () => {
     db.close()
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
+
+test('import: a Google Takeout sidecar dates a photo that has no date of its own', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'import-sidecar-'))
+  try {
+    const card = path.join(tmp, 'Takeout'); fs.mkdirSync(card)
+    fs.writeFileSync(path.join(card, 'Final.png'), 'no date inside')
+    fs.writeFileSync(path.join(card, 'Final.png.json'), JSON.stringify({ photoTakenTime: { timestamp: '1700000000' } }))
+    const photos = path.join(tmp, 'Photos'); fs.mkdirSync(photos)
+    const db = library.open(path.join(tmp, 'data'))
+    // The stand-in scan dates everything by the file, as the real one does for a PNG with no date.
+    const scan = async () => { await fakeScan(db, photos)(); db.exec('UPDATE media SET taken_at = mtime') }
+    await importPhotos({ db, photosRoot: photos, sources: [card], scan })
+    assert.equal(db.prepare("SELECT taken_at FROM media WHERE path LIKE '%Final.png'").get().taken_at, 1700000000000)
+    db.close()
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})

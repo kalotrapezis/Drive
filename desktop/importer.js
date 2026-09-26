@@ -38,6 +38,17 @@ async function pruneEmpty(sources) {
   for (const d of dirs.reverse()) await fsp.rmdir(d).catch(() => {})
 }
 
+/**
+ * The time a Google Photos export (Takeout) recorded, from the .json beside a photo — for one with no date inside
+ * and none in its name (33 of the import of 26 September were dated this way). Null when there is none.
+ */
+function sidecarDate(src) {
+  for (const j of [`${src}.json`, `${src}.supplemental-metadata.json`, `${src}.takeout-metadata-repair.json`]) {
+    try { const t = Number(JSON.parse(fs.readFileSync(j, 'utf8')).photoTakenTime?.timestamp) * 1000; if (t > Date.UTC(1995, 0)) return t } catch {}
+  }
+  return null
+}
+
 /** Every file under the chosen files and folders, with where it goes: <folder name>/<path inside it>. */
 async function gather(sources, only = null) {
   const out = []
@@ -84,6 +95,9 @@ async function importPhotos({ db, photosRoot, sources, drive = null, move = fals
   const finish = async () => {
     if (!batch.length) return
     await scan()
+    // A Takeout sidecar's date, where the scan had only the file's own date to go on.
+    const dated = db.prepare('UPDATE media SET taken_at = ? WHERE path = ? AND taken_at = mtime')
+    for (const b of batch) if (b.sidecar) dated.run(b.sidecar, b.rel)
     if (drive) {
       const row = db.prepare('SELECT id, path, sha256, size FROM media WHERE path = ? AND location IS NULL')
       const put = db.prepare('UPDATE media SET location = ? WHERE id = ?')
@@ -113,7 +127,7 @@ async function importPhotos({ db, photosRoot, sources, drive = null, move = fals
       const onDrive = drive && await copyChecked(f.src, path.join(drive.mount, 'Tetra', 'Photos', rel), sha)
       if (move) await letGo(f.src, onDrive ? [here, onDrive] : [here], sha)
       known.add(sha)
-      batch.push({ rel }); bytes += f.size
+      batch.push({ rel, sidecar: sidecarDate(f.src) }); bytes += f.size
       if (!drive) history.record(db, { action: 'imported', kind: 'photo', name: rel, sha256: sha, size: f.size })
       out.imported++
       if (drive && bytes >= batchBytes) await finish()
@@ -144,4 +158,4 @@ async function importFiles({ db, root, sources, move = false, stop = { cancelled
   return out
 }
 
-module.exports = { importPhotos, importFiles, gather, MEDIA }
+module.exports = { importPhotos, importFiles, gather, sidecarDate, MEDIA }
