@@ -130,6 +130,7 @@ function dateFromName(rel) {
   let m = /(?:^|\D)((?:19|20)\d{2})[-_.]?(0[1-9]|1[0-2])[-_.]?(0[1-9]|[12]\d|3[01])[-_ .T]?([01]\d|2[0-3])[-_.:]?([0-5]\d)[-_.:]?([0-5]\d)/.exec(name)
   if (m) d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])
   else if ((m = /(?:^|\D)((?:19|20)\d{2})[-_]?(0[1-9]|1[0-2])[-_]?(0[1-9]|[12]\d|3[01])(?:\D|$)/.exec(name))) d = new Date(+m[1], +m[2] - 1, +m[3], 12)
+  else if ((m = /^(1[0-9]{12})(?:\D|$)/.exec(name))) d = new Date(+m[1]) // milliseconds since 1970, as some apps name files
   const t = d?.getTime()
   return t && t > Date.UTC(1990, 0) && t < Date.now() + 86_400_000 ? t : null
 }
