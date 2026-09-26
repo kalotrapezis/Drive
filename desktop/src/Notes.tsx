@@ -181,6 +181,7 @@ function NoteEditor({ initial, setDialog, onClose }: {
   const [items, setItems] = useState<Item[]>(initial.checklistItems ?? [])
   const [meta, setMeta] = useState({ labels: initial.labels ?? [], color: initial.color, isPinned: !!initial.isPinned, archivedAt: initial.archivedAt })
   const [reading, setReading] = useState(false)
+  const [toBody, setToBody] = useState(0) // a checklist's first item takes the focus when this counts up
   const [tools, setTools] = useState(false)
   const [, redraw] = useState(0)
   const undo = useRef(new Undo<Snap>({ title, content, items }))
@@ -315,8 +316,10 @@ function NoteEditor({ initial, setDialog, onClose }: {
       </header>
 
       <div className={`editor-page ${meta.color ? 'tinted' : ''}`}>
-        <input className="editor-title" placeholder="Title" value={title} readOnly={trashed} onChange={e => edit({ title: e.target.value }, false, endsWord(title, e.target.value, e.target.selectionStart ?? 0))} />
-        {checklist ? <Checklist items={items} readOnly={trashed} onChange={(next, step) => edit({ items: next }, step)} />
+        {/* Enter in the title goes on to the body (asked 2026-09-26): the text, or a checklist's first item. */}
+        <input className="editor-title" placeholder="Title" value={title} readOnly={trashed}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); checklist ? setToBody(n => n + 1) : area.current?.focus() } }} onChange={e => edit({ title: e.target.value }, false, endsWord(title, e.target.value, e.target.selectionStart ?? 0))} />
+        {checklist ? <Checklist items={items} readOnly={trashed} focusFirst={toBody} onChange={(next, step) => edit({ items: next }, step)} />
           : reading ? <Rendered md={content} onToggle={line => edit({ content: toggleLine(content, line) }, true)} />
           : <textarea ref={area} className="editor-body" placeholder="Write here. **bold**, *italic*, - [ ] a checkbox…" value={content} readOnly={trashed}
               autoFocus={!initial.content && !!initial.title} onChange={e => edit({ content: e.target.value }, false, endsWord(content, e.target.value, e.target.selectionStart ?? 0))} />}
@@ -327,7 +330,7 @@ function NoteEditor({ initial, setDialog, onClose }: {
   )
 }
 
-function Checklist({ items, readOnly, onChange }: { items: Item[]; readOnly: boolean; onChange: (items: Item[], step?: boolean) => void }) {
+function Checklist({ items, readOnly, focusFirst, onChange }: { items: Item[]; readOnly: boolean; focusFirst: number; onChange: (items: Item[], step?: boolean) => void }) {
   const sorted = sortItems(items)
   const open = sorted.filter(i => !i.isChecked), done = sorted.filter(i => i.isChecked)
   const inputs = useRef(new Map<string, HTMLInputElement>())
@@ -340,6 +343,7 @@ function Checklist({ items, readOnly, onChange }: { items: Item[]; readOnly: boo
     const list = [...open.slice(0, at), added, ...open.slice(at)].map((i, n) => ({ ...i, order: n }))
     onChange([...list, ...done], true); setFocus(added.id)
   }
+  useEffect(() => { if (focusFirst) open.length ? setFocus(open[0].id) : insertAfter(null) }, [focusFirst])
   const set = (id: string, change: Partial<Item>, step = false) => onChange(items.map(i => i.id === id ? { ...i, ...change } : i), step)
   const remove = (id: string) => {
     const at = open.findIndex(i => i.id === id)
