@@ -1,11 +1,11 @@
-# Local Drive — desktop app
+# Tetra for the desktop — the app
 
 Electron + React + TypeScript. Plan and data model: [../SYNC_PLAN.md](../SYNC_PLAN.md).
 The C++/Qt code in the parent folder is reference only.
 
-- Photos: `~/Drive/Photos/`. The app only changes it when you confirm **Move to Trash**,
+- Photos: `~/Tetra/Photos/`. The app only changes it when you confirm **Move to Trash**,
   which uses the system Trash (restore from the file manager).
-- Files: `~/Drive/Drive/` (like the phone's `/sdcard/Drive/`); its Trash is `Drive/Trash/`.
+- Files: `~/Tetra/Files/` (like the phone's `/sdcard/Tetra/`); its Trash is `Files/Trash/`, notes are in `Files/.notes/`.
 - App data (SQLite `library.db`, thumbnails): `~/.local/share/local-drive-desktop/`
 - Override for testing with disposable files: `DRIVE_PHOTOS=… DRIVE_FILES=… DRIVE_DATA=…`
 
