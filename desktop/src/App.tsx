@@ -56,8 +56,10 @@ export function App() {
   const [editing, setEditing] = useState<Media | null>(null)
 
   // A drive is a collection of what is on it (sync.js driveMembers), on this PC only: photos leave it only by Remove.
-  const driveId = page.kind === 'collection' && page.id.startsWith('drive:') ? page.id.slice(6) : null
-  const custom = page.kind === 'collection' && !SYSTEM.some(s => s.id === page.id) ? page.id : null
+  // In the sidebar under Drives, with its own Screenshots and Documents (drive:<id>:screenshots), to see what to delete.
+  const [, driveId = null, driveFilter = null] = page.kind === 'collection' && page.id.startsWith('drive:') ? page.id.split(':') : []
+  const custom = page.kind === 'collection' && !SYSTEM.some(s => s.id === page.id) ? (driveId ? `drive:${driveId}` : page.id) : null
+  const driveName = driveId ? collections.find(c => c.id === custom)?.name ?? 'the drive' : ''
   const memberSource = custom ? () => window.drive.members(custom) : page.kind === 'person' ? () => window.drive.people.shas(page.id) : null
 
   async function reload() {
@@ -110,12 +112,13 @@ export function App() {
     if (page.kind === 'photos') return query.trim() ? media.filter(m => matches({ path: `${m.path} ${(names[m.sha256] ?? []).join(' ')} ${m.place_names ?? ''} ${m.labels ?? ''}` }, query)) : media.filter(m => !(hideScreenshots && isScreenshot(m.path)) && !(hideDocuments && m.document) && !hiddenAlbumShas.has(m.sha256))
     if (page.kind === 'collection') {
       const system = SYSTEM.find(s => s.id === page.id)
-      return system ? media.filter(system.test) : members ? media.filter(m => members.has(m.sha256)) : []
+      const test = driveFilter === 'screenshots' ? (m: Media) => isScreenshot(m.path) : driveFilter === 'documents' ? (m: Media) => !!m.document : () => true
+      return system ? media.filter(system.test) : members ? media.filter(m => members.has(m.sha256) && test(m)) : []
     }
     if (page.kind === 'person') return members ? media.filter(m => members.has(m.sha256)) : []
     if (page.kind === 'map') return media.filter(m => m.latitude != null && m.longitude != null)
     return []
-  }, [media, page, query, hideScreenshots, hideDocuments, hiddenAlbumShas, members, names])
+  }, [media, page, query, hideScreenshots, hideDocuments, hiddenAlbumShas, members, names, driveFilter])
 
   // Keep the viewer on a valid item when the list shrinks (trash, unfavorite in Favorites, remove from collection).
   useEffect(() => { if (open !== null && open >= items.length) setOpen(items.length ? items.length - 1 : null) }, [items, open])
@@ -165,9 +168,9 @@ export function App() {
     })} />)
   }
   const uncollect = (list: Media[]) => driveId && page.kind === 'collection' ? setDialog(
-    <Confirm title={`Take ${count(list.length)} off ${page.name}?`} action="Take off the drive" danger onClose={close}
-      body={`Any that live only on ${page.name} come back to this PC first, checked. Copies of ones this PC has are deleted from the drive, and backup will not put them back unless you add them again.`}
-      onConfirm={() => run(() => window.drive.setMembership(custom!, list.map(m => m.sha256), false), `Took ${count(list.length)} off ${page.name}`).then(() => setSelected(new Set()))} />)
+    <Confirm title={`Take ${count(list.length)} off ${driveName}?`} action="Take off the drive" danger onClose={close}
+      body={`Any that live only on ${driveName} come back to this PC first, checked. Copies of ones this PC has are deleted from the drive, and backup will not put them back unless you add them again.`}
+      onConfirm={() => run(() => window.drive.setMembership(custom!, list.map(m => m.sha256), false), `Took ${count(list.length)} off ${driveName}`).then(() => setSelected(new Set()))} />)
     : folderAlbum ? moveTo(list, folderAlbum) : custom && page.kind === 'collection' &&
     run(() => window.drive.setMembership(custom, list.map(m => m.sha256), false), `Removed ${count(list.length)} from “${page.name}”`)
       .then(() => setSelected(new Set()))
@@ -175,7 +178,7 @@ export function App() {
   function trash(list: Media[]) {
     // In a drive's collection Delete is by hand and final for the library: to the purgatory, where it waits its days.
     if (driveId) return setDialog(<Confirm title={`Delete ${count(list.length)}?`} action="Delete" danger onClose={close}
-      body={`They leave the library, from ${page.kind === 'collection' ? page.name : 'the drive'} and from this PC. One copy waits in the purgatory for its days (Devices → Deleted items), then it is gone.`}
+      body={`They leave the library, from ${driveName} and from this PC. One copy waits in the purgatory for its days (Devices → Deleted items), then it is gone.`}
       onConfirm={() => run(async () => {
         const r = await window.drive.deleteFromDrive(driveId, list.map(m => m.sha256))
         setSelected(new Set())
@@ -324,7 +327,13 @@ export function App() {
         <div className="brand"><img src="./icon.png" alt="" />Tetra</div>
         <small className="rail-head">Photos</small>
         {nav({ kind: 'photos' }, page.kind === 'photos', 'photos', 'Photos')}
-        {nav({ kind: 'collections' }, ['collections', 'collection', 'people', 'person', 'review', 'map', 'hidden'].includes(page.kind), 'collections', 'Collections')}
+        {nav({ kind: 'collections' }, !driveId && ['collections', 'collection', 'people', 'person', 'review', 'map', 'hidden'].includes(page.kind), 'collections', 'Collections')}
+        {collections.some(c => c.drive) && <small className="rail-head">Drives</small>}
+        {collections.filter(c => c.drive).map(c => <div key={c.id} className="rail-group">
+          {nav({ kind: 'collection', id: c.id, name: c.name }, page.kind === 'collection' && page.id === c.id, 'database', c.name)}
+          {nav({ kind: 'collection', id: `${c.id}:screenshots`, name: `${c.name} · Screenshots` }, page.kind === 'collection' && page.id === `${c.id}:screenshots`, 'screenshot', 'Screenshots')}
+          {nav({ kind: 'collection', id: `${c.id}:documents`, name: `${c.name} · Documents` }, page.kind === 'collection' && page.id === `${c.id}:documents`, 'document', 'Documents')}
+        </div>)}
         <small className="rail-head">Files</small>
         {nav({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
         {nav({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}

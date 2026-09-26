@@ -32,7 +32,7 @@ const KEEPS = ['everything', 'nothing']
  * person's; the default is the safest one — a backup, nothing released. `copies` counts places that hold it
  * *other than this computer*, the storage drive included, and the drive's copy is read back before each move.
  */
-const DRIVE_RULES = { role: 'backup', offload: false, percent: 80, keep: 1, unit: 'year', copies: 2, favorites: true, screenshots: false }
+const DRIVE_RULES = { role: 'backup', offload: false, percent: 80, keep: 1, unit: 'year', copies: 2, favorites: true, screenshots: true }
 const UNIT_MS = { day: 86_400_000, week: 7 * 86_400_000, month: 30 * 86_400_000, year: 365 * 86_400_000 }
 const sha = s => crypto.createHash('sha256').update(s).digest('hex')
 const isHash = h => typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)
@@ -265,7 +265,7 @@ class SyncServer {
     const on = content => ['receive', 'both'].includes(this.db.prepare('SELECT direction FROM sync_connections WHERE device_id = ? AND content = ?').get(device.id, content)?.direction)
     let rows = on('photos') ? this.db.prepare(`SELECT path, sha256, size FROM media m WHERE location IS NULL
       AND NOT EXISTS(SELECT 1 FROM drive_removed r WHERE r.device_id = ? AND r.sha256 = m.sha256) ORDER BY size`).all(device.id) : []
-    // Screenshots are for a day or a week, not for keeping: backup leaves them out unless the drive's rule says so.
+    // Screenshots can be left out, a drive's rule (off by default: some are paintings worth keeping).
     if (!this.driveRules(device.id).screenshots) rows = rows.filter(r => !library.isScreenshot(r.path))
     const files = on('files') ? (await this.driveFiles(mount)).filter(f => !f.there) : []
     const total = rows.length + files.length

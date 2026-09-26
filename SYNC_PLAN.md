@@ -2115,8 +2115,9 @@ Move, Free space or Add) is **its collection**, named after the drive, on this P
 - **Delete** (the Trash button and the Delete key, in that collection): the photo leaves the library — one copy, the
   drive's or else this PC's, goes to the purgatory checked (`sync.deleteFromDrive`), then both copies are deleted.
   No purgatory reachable: nothing is deleted. Asked for the screenshots that were only for a day or a week.
-- **Screenshots are not backed up** (drive rule `screenshots`, default off, a checkbox on the drive's card). The 408
-  already on T7-TEO stay until deleted or removed by hand. Not backed up also means Free space never moves them.
+- **In the sidebar** under Drives, with the drive's own **Screenshots** and **Documents** (the same tests as the
+  library's), so what to delete is seen clearly — some screenshots are students' paintings, some documents matter.
+  Nothing is excluded or deleted by itself: a drive rule `screenshots` (default on) can leave screenshots out of backup.
 - Otherwise read-only: no Hidden, Edit or Move to folder inside a drive's collection.
 
 ### D5. External storage as a device (asked 2026-09-24)

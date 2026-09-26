@@ -1018,7 +1018,7 @@ test('a drive is a collection: what is on it, added by copying, and taken off on
   }
 })
 
-test('Delete in a drive collection sends one checked copy to the purgatory; backup leaves screenshots out', async () => {
+test('Delete in a drive collection sends one checked copy to the purgatory; backup leaves screenshots out when told', async () => {
   const drives = require('../drives')
   const { Purgatory } = require('../purgatory')
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-delete-'))
@@ -1040,8 +1040,9 @@ test('Delete in a drive collection sends one checked copy to the purgatory; back
   const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: photos, port: 0, purgatory })
   try {
     const drive = server.addDrive({ uuid, label: 'Test' })
+    server.setDriveRules(drive.id, { screenshots: false })
     await server.backUpToDrive(drive.id)
-    assert.deepEqual(server.driveMembers(drive.id), [], 'screenshots are not backed up by default')
+    assert.deepEqual(server.driveMembers(drive.id), [], 'screenshots left out')
     await server.addToDrive(drive.id, [hash['Screenshots/s.png']])
     const r = await server.deleteFromDrive(drive.id, [hash['Screenshots/s.png']])
     assert.deepEqual(r, { deleted: 1, failed: [] })
