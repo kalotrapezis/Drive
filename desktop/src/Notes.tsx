@@ -231,7 +231,20 @@ function NoteEditor({ initial, setDialog, onClose }: {
   }
 
   // Leaving: save what is pending, and the note as it now is goes to its history, if anything changed.
+  // Leaving by the sidebar or another page unmounts the editor without Back: it still saves, keeps a version, and
+  // drops an empty note — before, an empty one stayed and went to the phone (26 September).
+  const left = useRef(false)
+  const latest = useRef({ title, content, items })
+  latest.current = { title, content, items }
+  useEffect(() => () => {
+    if (left.current) return
+    const { title: t, content: c, items: i } = latest.current
+    const empty = !t.trim() && !c.trim() && !i.some(x => x.text.trim())
+    flush.current().then(() => empty ? call('remove', initial.id) : changed.current ? call('snapshot', initial.id) : null).catch(() => {})
+  }, [])
+
   async function leave(message?: string, undoIt?: () => Promise<unknown>) {
+    left.current = true
     await flush.current()
     if (changed.current) await call('snapshot', initial.id)
     onClose({ ...initial, title, content, checklistItems: items }, message, undoIt)
@@ -286,7 +299,7 @@ function NoteEditor({ initial, setDialog, onClose }: {
           <span className="bar-fill" />
           <button className="text-button" onClick={() => call('save', initial.id, { trashedAt: null }).then(() => leave('Note restored'))}>Restore</button>
           <button className="text-button danger" onClick={() => setDialog(<Confirm title="Delete this note for good?" action="Delete" danger onClose={close}
-            body="Its saved versions stay in the history folder." onConfirm={() => call('remove', initial.id).then(() => onClose(null, 'Note deleted'))} />)}>Delete for good</button>
+            body="Its saved versions stay in the history folder." onConfirm={() => { left.current = true; return call('remove', initial.id).then(() => onClose(null, 'Note deleted')) }} />)}>Delete for good</button>
         </> : <>
           {tool('label', 'Tags', tags, meta.labels.length > 0)}
           <span className="palette-anchor">
