@@ -1028,6 +1028,18 @@ class SyncServer {
       || !!this.db.prepare('SELECT 1 FROM media WHERE sha256 = ? AND location IS NOT NULL').get(hash)
   }
 
+  async trashFromDevice(device, hashes) {
+    const find = this.db.prepare('SELECT id, path, sha256, size FROM media WHERE sha256 = ? AND location IS NULL')
+    const rows = hashes.flatMap(h => find.all(h))
+    if (!rows.length) return 0
+    const r = await library.trash(this.db, this.photosRoot, rows.map(x => x.id), this.trashItem)
+    const name = this.db.prepare('SELECT name FROM sync_devices WHERE id = ?').get(device.id)?.name
+    for (const x of rows) history.record(this.db, { action: 'trashed', kind: 'photo', name: x.path, sha256: x.sha256, size: x.size, device: device.id, detail: `trashed on ${name}` })
+    this.hereAt = 0
+    if (r.trashed) this.onReceived({ trashed: r.trashed })
+    return r.trashed
+  }
+
   /** Deleted here on purpose: devices are told not to send these again (the /have answer's `declined`). */
   deletedHere(shas) {
     const put = this.db.prepare('INSERT OR REPLACE INTO deleted_here(sha256, at) VALUES(?,?)')
@@ -1140,6 +1152,14 @@ class SyncServer {
       this.notesSynced = { at: Date.now(), device: this.db.prepare('SELECT name FROM sync_devices WHERE id = ?').get(device.id)?.name ?? 'a device' }
       this.onNotesSynced(this.notesSynced)
       return this.send(res, 200, answer)
+    }
+    // Both ways (SYNC_PLAN D6): what a two-way device has in its Trash goes to this computer's Trash too — restorable
+    // for its 30 days, then the purgatory. Photos that live on a storage drive stay: the drive is the archive.
+    if (req.method === 'POST' && url.pathname === '/trashed') {
+      const { hashes } = await this.json(req, 1 << 22)
+      if (!Array.isArray(hashes) || !hashes.every(isHash)) return this.send(res, 400, { error: 'Send SHA-256 hashes.' })
+      if (this.connection(device.id, 'photos').direction !== 'both' || !this.trashItem) return this.send(res, 200, { trashed: 0 })
+      return this.send(res, 200, { trashed: await this.trashFromDevice(device, hashes) })
     }
     if (req.method === 'POST' && url.pathname === '/files/manifest') {
       if (!this.files) return this.send(res, 200, { want: [], moved: [], have: [], moveTo: [] })

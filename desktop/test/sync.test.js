@@ -1086,3 +1086,28 @@ test('a photo deleted here on purpose is declined, not asked for, until it is ba
     fs.rmSync(tmp, { recursive: true, force: true })
   }
 })
+
+test('Both ways: a photo in a two-way device Trash goes to this computer Trash; a one-way device is not heard', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-trashed-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const photos = path.join(tmp, 'Photos'); fs.mkdirSync(photos)
+  const trashed = []
+  const server = await new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: photos, port: 0, trashItem: async f => { trashed.push(path.basename(f)); fs.rmSync(f) } }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  try {
+    const { token } = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Phone' } })).body
+    const bytes = Buffer.from('a photo trashed on the phone'), hash = crypto.createHash('sha256').update(bytes).digest('hex')
+    fs.writeFileSync(path.join(photos, 'p.jpg'), bytes)
+    db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb, meta_v) VALUES('p.jpg',?,'image/jpeg',0,?,1,1,1,99)`).run(hash, bytes.length)
+    const id = server.devices()[0].id
+    server.setConnection(id, 'photos', { direction: 'send' })
+    assert.deepEqual((await call('POST', '/trashed', { token, json: { hashes: [hash] } })).body, { trashed: 0 }, 'a device that only sends does not trash here')
+    server.setConnection(id, 'photos', { direction: 'both' })
+    assert.deepEqual((await call('POST', '/trashed', { token, json: { hashes: [hash] } })).body, { trashed: 1 })
+    assert.deepEqual(trashed, ['p.jpg'])
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM deleted_here').get().n, 0, 'not declined: restored on the phone, it may come back')
+  } finally {
+    server.stop?.(); db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
