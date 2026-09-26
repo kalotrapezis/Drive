@@ -129,6 +129,8 @@ class SyncServer {
     if (!connCols.includes('keep_favorites')) db.exec('ALTER TABLE sync_connections ADD COLUMN keep_favorites INTEGER NOT NULL DEFAULT 1')
     // Photos taken off a drive by hand, in its collection: backup never puts them back until they are added again.
     db.exec('CREATE TABLE IF NOT EXISTS drive_removed (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, removed_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256))')
+    // Photos deleted on this computer on purpose (its Trash, or Delete in a drive's collection): no device sends them back.
+    db.exec('CREATE TABLE IF NOT EXISTS deleted_here (sha256 TEXT PRIMARY KEY, at INTEGER NOT NULL)')
     const held = db.prepare('PRAGMA table_info(device_holdings)').all().map(c => c.name)
     for (const [name, type] of [['name', 'TEXT'], ['size', 'INTEGER'], ['is_video', 'INTEGER'], ['taken_at', 'INTEGER']]) {
       if (!held.includes(name)) db.exec(`ALTER TABLE device_holdings ADD COLUMN ${name} ${type}`)
@@ -410,6 +412,7 @@ class SyncServer {
         if (this.db.prepare('SELECT sha256 FROM purgatory WHERE drive_id = ? AND rel = ?').get(pg.id, rel)?.sha256 !== sha) throw new Error('the purgatory copy is not this photo')
         for (const f of [onDrive, ...here]) if (f) await fsp.rm(f, { force: true })
         this.db.prepare('DELETE FROM media WHERE sha256 = ?').run(sha)
+        this.deletedHere([sha])
         this.db.prepare('DELETE FROM sync_receipts WHERE device_id = ? AND sha256 = ?').run(d.id, sha)
         this.db.prepare("DELETE FROM device_holdings WHERE device_id = ? AND kind = 'photo' AND sha256 = ?").run(d.id, sha)
         history.record(this.db, { action: 'deleted by hand', kind: 'photo', name: drivePath ?? rows[0]?.path, sha256: sha, device: d.id })
@@ -1024,6 +1027,12 @@ class SyncServer {
       || !!this.db.prepare('SELECT 1 FROM media WHERE sha256 = ? AND location IS NOT NULL').get(hash)
   }
 
+  /** Deleted here on purpose: devices are told not to send these again (the /have answer's `declined`). */
+  deletedHere(shas) {
+    const put = this.db.prepare('INSERT OR REPLACE INTO deleted_here(sha256, at) VALUES(?,?)')
+    for (const sha of shas) if (isHash(sha)) put.run(sha, Date.now())
+  }
+
   /**
    * Is a copy of this photo safe somewhere the server keeps: its library (on this disk or moved to a drive) or a
    * backup drive. Then a Trash item needs no purgatory and nothing is sent (asked 2026-09-25: "why send anything
@@ -1061,7 +1070,12 @@ class SyncServer {
       const { hashes } = await this.json(req, 1 << 22)
       if (!Array.isArray(hashes) || hashes.length > MAX_HAVE || !hashes.every(isHash)) return this.send(res, 400, { error: `Send up to ${MAX_HAVE} SHA-256 hashes.` })
       this.holds(device.id, 'photo', hashes)
-      return this.send(res, 200, { missing: hashes.filter(h => !this.have(h)) })
+      // A photo deleted here on purpose is declined, not asked for: sending it would bring it back (bug found by the
+      // user, 26 September). It is not "had" either, so a Move device keeps its copy rather than offering to let it go.
+      const absent = hashes.filter(h => !this.have(h))
+      this.db.exec('DELETE FROM deleted_here WHERE sha256 IN (SELECT sha256 FROM here_now)') // restored since
+      const declined = absent.filter(h => this.db.prepare('SELECT 1 FROM deleted_here WHERE sha256 = ?').get(h))
+      return this.send(res, 200, { missing: absent.filter(h => !declined.includes(h)), declined })
     }
     if (req.method === 'POST' && url.pathname === '/held') {
       const { hashes } = await this.json(req, 1 << 22)

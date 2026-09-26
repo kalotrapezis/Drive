@@ -1060,3 +1060,27 @@ test('Delete in a drive collection sends one checked copy to the purgatory; back
     fs.rmSync(tmp, { recursive: true, force: true })
   }
 })
+
+test('a photo deleted here on purpose is declined, not asked for, until it is back in the library', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-declined-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const photos = path.join(tmp, 'Photos'); fs.mkdirSync(photos)
+  const server = await new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: photos, port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  try {
+    const { token } = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Phone' } })).body
+    const bytes = Buffer.from('a trashed photo'), hash = crypto.createHash('sha256').update(bytes).digest('hex')
+    const other = crypto.createHash('sha256').update('another').digest('hex')
+    server.deletedHere([hash])
+    assert.deepEqual((await call('POST', '/have', { token, json: { hashes: [hash, other] } })).body, { missing: [other], declined: [hash] })
+    // Restored from the Trash: it is in the library again, and the ledger lets it go.
+    fs.writeFileSync(path.join(photos, 'a.jpg'), bytes)
+    db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb, meta_v) VALUES('a.jpg',?,'image/jpeg',0,?,1,1,1,99)`).run(hash, bytes.length)
+    server.hereAt = 0
+    assert.deepEqual((await call('POST', '/have', { token, json: { hashes: [hash] } })).body, { missing: [], declined: [] })
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM deleted_here').get().n, 0)
+  } finally {
+    server.stop?.(); db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})

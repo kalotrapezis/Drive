@@ -273,9 +273,13 @@ app.whenReady().then(() => {
   ipcMain.handle('folders:set', (_, name, included) => { folders.set(name, included); sync.nudge().catch(() => {}) })
   ipcMain.handle('library:scan', () => startScan())
   ipcMain.handle('photos:favorite', (_, shas, on) => library.setFavorite(db, shas, on))
-  ipcMain.handle('photos:trash', (_, ids) => {
-    for (const id of ids) { const r = db.prepare('SELECT path, sha256, size FROM media WHERE id = ?').get(Number(id)); if (r) history.record(db, { action: 'trashed', kind: 'photo', name: r.path, sha256: r.sha256, size: r.size }) }
-    return library.trash(db, PHOTOS_ROOT, ids, f => shell.trashItem(f))
+  ipcMain.handle('photos:trash', async (_, ids) => {
+    const rows = ids.map(id => db.prepare('SELECT path, sha256, size FROM media WHERE id = ?').get(Number(id))).filter(Boolean)
+    for (const r of rows) history.record(db, { action: 'trashed', kind: 'photo', name: r.path, sha256: r.sha256, size: r.size })
+    const result = await library.trash(db, PHOTOS_ROOT, ids, f => shell.trashItem(f))
+    // Trashed here on purpose: a device that still holds one must not send it back (restoring it lifts that).
+    sync.deletedHere(rows.filter(r => !db.prepare('SELECT 1 FROM media WHERE sha256 = ?').get(r.sha256)).map(r => r.sha256))
+    return result
   })
   ipcMain.handle('photos:places', () => folders.places())
   ipcMain.handle('photos:moveTo', (_, ids, dest) => {
