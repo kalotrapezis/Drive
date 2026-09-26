@@ -146,6 +146,8 @@ declare global {
       }
       notes<T = unknown>(method: string, ...args: unknown[]): Promise<T>
       onNotesChanged(cb: () => void): () => void
+      notesSynced(): Promise<{ at: number; device: string } | null>
+      onNotesSynced(cb: (s: { at: number; device: string }) => void): () => void
       files: {
         root(): Promise<string>
         call<T = unknown>(method: string, ...args: unknown[]): Promise<T>

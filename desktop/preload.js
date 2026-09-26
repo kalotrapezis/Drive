@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('drive', {
   setMembership: (id, shas, member) => ipcRenderer.invoke('collections:set', id, shas, member),
   deleteFromDrive: (id, shas) => ipcRenderer.invoke('drive:delete', id, shas),
   notes: (method, ...args) => ipcRenderer.invoke('notes:call', method, ...args),
+  notesSynced: () => ipcRenderer.invoke('notes:synced'),
+  onNotesSynced: cb => { const f = (_, s) => cb(s); ipcRenderer.on('notes-synced', f); return () => ipcRenderer.removeListener('notes-synced', f) },
   onNotesChanged: cb => { const f = () => cb(); ipcRenderer.on('notes-changed', f); return () => ipcRenderer.removeListener('notes-changed', f) },
   files: {
     root: () => ipcRenderer.invoke('files:root'),

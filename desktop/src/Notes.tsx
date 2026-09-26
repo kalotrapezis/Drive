@@ -130,7 +130,7 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
           <nav className="notes-island island">
             {/* Home, the two ways to start, then Archived and Trash; pulled up, the labels. */}
             <button className={`island-item ${view === 'home' ? 'on' : ''}`} onClick={() => { setView('home'); setDrawer(false) }}><Icon name="home" size={20} /><span>Home</span></button>
-            <button className="island-item" title="New note (Ctrl+N)" onClick={() => create('TEXT')}><Icon name="noteAdd" size={20} /><span>New note</span></button>
+            <button className="island-item" title="New note (Ctrl+N)" onClick={() => create('TEXT')}><Icon name="noteAdd" size={20} /><span>Note</span></button>
             <button className="island-item" title="New checklist (Ctrl+Shift+N)" onClick={() => create('CHECKLIST')}><Icon name="checklist" size={20} /><span>Checklist</span></button>
             <span className="island-gap" />
             {VIEWS.filter(v => v.id !== 'home').map(v => <button key={v.id} className={`island-item ${view === v.id ? 'on' : ''}`} onClick={() => { setView(v.id); setDrawer(false) }}>
@@ -182,6 +182,10 @@ function NoteEditor({ initial, setDialog, onClose }: {
   const [items, setItems] = useState<Item[]>(initial.checklistItems ?? [])
   const [meta, setMeta] = useState({ labels: initial.labels ?? [], color: initial.color, isPinned: !!initial.isPinned, archivedAt: initial.archivedAt })
   const [reading, setReading] = useState(false)
+  const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
+  const [savedAt, setSavedAt] = useState(initial.updatedAt)
+  const [synced, setSynced] = useState<{ at: number; device: string } | null>(null)
+  useEffect(() => { window.drive.notesSynced().then(setSynced); return window.drive.onNotesSynced(setSynced) }, [])
   const [toBody, setToBody] = useState(0) // a checklist's first item takes the focus when this counts up
   const [tools, setTools] = useState(false)
   const [, redraw] = useState(0)
@@ -208,7 +212,8 @@ function NoteEditor({ initial, setDialog, onClose }: {
       return before.then(() => call('save', initial.id, { title, content, ...(checklist ? { checklistItems: items } : {}) }))
     }
     clearTimeout(saving.current)
-    saving.current = setTimeout(() => flush.current(), 400)
+    setSaveState('saving')
+    saving.current = setTimeout(() => flush.current().then(() => { setSaveState('saved'); setSavedAt(Date.now()) }), 400)
   }, [title, content, items])
   const edit = (next: Partial<Snap>, step = false, wordDone = false) => {
     const snap = { title, content, items, ...next }
@@ -270,8 +275,8 @@ function NoteEditor({ initial, setDialog, onClose }: {
 
   return (
     <div className="notes note-editor" onKeyDown={onKey} style={meta.color ? { ['--note' as string]: meta.color } : undefined}>
-      {/* On the computer every tool is in one line at the top, nothing hidden (asked 2026-09-26); the phone keeps
-          its bottom island. The colours open from their own button so the line stays one line. */}
+      {/* Two lines (asked 2026-09-26): the note's own buttons with what became of it — saved, synced — on top, the
+          writing tools under them; on a narrow window either wraps rather than hides. */}
       <header className="editor-bar island">
         <button className="round flat" title="Back (Esc)" onClick={() => leave()}><Icon name="back" /></button>
         {tool('undo', 'Undo (Ctrl+Z)', () => apply(undo.current.undo()))}
@@ -283,37 +288,40 @@ function NoteEditor({ initial, setDialog, onClose }: {
           <button className="text-button danger" onClick={() => setDialog(<Confirm title="Delete this note for good?" action="Delete" danger onClose={close}
             body="Its saved versions stay in the history folder." onConfirm={() => call('remove', initial.id).then(() => onClose(null, 'Note deleted'))} />)}>Delete for good</button>
         </> : <>
-          {!checklist && !reading && <>
-            {tool('heading', 'Heading', () => format(x => prefix(x, '# ')))}
-            {tool('bold', 'Bold (Ctrl+B)', () => format(x => wrap(x, '**')))}
-            {tool('italic', 'Italic (Ctrl+I)', () => format(x => wrap(x, '*')))}
-            {tool('strike', 'Strikethrough', () => format(x => wrap(x, '~~')))}
-            {tool('code', 'Code', () => format(x => wrap(x, '`')))}
-            <span className="bar-gap" />
-            {tool('bullets', 'Bulleted list', () => format(x => prefix(x, '- ')))}
-            {tool('numbered', 'Numbered list', () => format(x => prefix(x, '1. ')))}
-            {tool('checkBox', 'Checkbox list', () => format(x => prefix(x, '- [ ] ')))}
-            {tool('quote', 'Quote', () => format(x => prefix(x, '> ')))}
-            {tool('link', 'Link', link)}
-            {tool('rule', 'Divider', () => format(x => ({ text: x.text.slice(0, x.end) + '\n\n---\n' + x.text.slice(x.end), start: x.end + 6, end: x.end + 6 })))}
-            {tool('indent', 'Indent', () => format(x => indent(x, false)))}
-            {tool('outdent', 'Outdent', () => format(x => indent(x, true)))}
-          </>}
-          <span className="bar-fill" />
           {tool('label', 'Tags', tags, meta.labels.length > 0)}
           <span className="palette-anchor">
             {tool('palette', 'Colour', () => setTools(t => !t), tools)}
-  {tools && <div className="palette-pop island">
-            <button className={`swatch none ${meta.color ? '' : 'on'}`} title="No colour" onClick={() => { setMetaNow({ color: undefined }); setTools(false) }} />
-            {COLORS.map(c => <button key={c} className={`swatch ${meta.color === c ? 'on' : ''}`} style={{ background: c }} title={c} onClick={() => { setMetaNow({ color: c }); setTools(false) }} />)}
-          </div>}
+            {tools && <div className="palette-pop island">
+              <button className={`swatch none ${meta.color ? '' : 'on'}`} title="No colour" onClick={() => { setMetaNow({ color: undefined }); setTools(false) }} />
+              {COLORS.map(c => <button key={c} className={`swatch ${meta.color === c ? 'on' : ''}`} style={{ background: c }} title={c} onClick={() => { setMetaNow({ color: c }); setTools(false) }} />)}
+            </div>}
           </span>
           {tool('history', 'History', history)}
           {!checklist && tool(reading ? 'editNote' : 'visibility', reading ? 'Edit' : 'Read', () => setReading(r => !r), reading)}
           {tool('pin', meta.isPinned ? 'Unpin' : 'Pin', () => setMetaNow({ isPinned: !meta.isPinned }), meta.isPinned)}
           {tool(meta.archivedAt ? 'unarchive' : 'archive', meta.archivedAt ? 'Unarchive' : 'Archive', archive)}
           {tool('trash', 'Move to Trash', toTrash)}
+          <span className="bar-fill" />
+          <span className="note-status" title="Saved on this computer">{saveState === 'saving' ? 'Saving…' : 'Saved'}</span>
+          <span className="note-status" title="The last time a device took the notes">{synced && synced.at >= savedAt ? `Synced with ${synced.device} · ${new Date(synced.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not synced yet'}</span>
         </>}
+        {!trashed && !checklist && !reading && <div className="editor-tools-row">
+          {tool('heading', 'Heading', () => format(x => prefix(x, '# ')))}
+          {tool('bold', 'Bold (Ctrl+B)', () => format(x => wrap(x, '**')))}
+          {tool('italic', 'Italic (Ctrl+I)', () => format(x => wrap(x, '*')))}
+          {tool('strike', 'Strikethrough', () => format(x => wrap(x, '~~')))}
+          {tool('code', 'Code', () => format(x => wrap(x, '`')))}
+          <span className="bar-gap" />
+          {tool('bullets', 'Bulleted list', () => format(x => prefix(x, '- ')))}
+          {tool('numbered', 'Numbered list', () => format(x => prefix(x, '1. ')))}
+          {tool('checkBox', 'Checkbox list', () => format(x => prefix(x, '- [ ] ')))}
+          {tool('quote', 'Quote', () => format(x => prefix(x, '> ')))}
+          {tool('link', 'Link', link)}
+          {tool('rule', 'Divider', () => format(x => ({ text: x.text.slice(0, x.end) + '\n\n---\n' + x.text.slice(x.end), start: x.end + 6, end: x.end + 6 })))}
+          <span className="bar-gap" />
+          {tool('indent', 'Indent', () => format(x => indent(x, false)))}
+          {tool('outdent', 'Outdent', () => format(x => indent(x, true)))}
+        </div>}
       </header>
 
       <div className={`editor-page ${meta.color ? 'tinted' : ''}`}>

@@ -213,7 +213,7 @@ app.whenReady().then(() => {
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
   purgatory = new Purgatory({ db, photosRoot: PHOTOS_ROOT, files, serverBase: path.dirname(HOME.root) })
-  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onReceived: () => {
+  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   } })
@@ -446,6 +446,7 @@ app.whenReady().then(() => {
   // A note changed here: the devices are told a few seconds after the typing stops, so a delete or an edit reaches
   // them without waiting for their own sync (asked 2026-09-26). Only a device with Tetra open is listening.
   let notesNudge = null
+  ipcMain.handle('notes:synced', () => sync.notesSynced)
   ipcMain.handle('notes:call', (_, method, ...args) => {
     if (!NOTE_CALLS.includes(method)) throw new Error('Unknown Notes action.')
     const result = notes[method](...args)
