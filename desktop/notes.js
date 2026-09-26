@@ -155,6 +155,9 @@ class Notes {
       if (!isId(note?.id) || gone.has(note.id) || this.get(note.id)) return
       const label = note.folderName ?? folder
       delete note.folderName
+      // Its days in Tetra's Trash start now: counted from the old app's date, the sweep at the next start deleted 85
+      // imported notes for good on the first day (26 September).
+      if (note.trashedAt) note.trashedAt = Date.now()
       if (label) note.labels = [...new Set([...(note.labels ?? []), label])]
       this.write(note); added++
     }

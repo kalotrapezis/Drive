@@ -95,7 +95,7 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
       {!notes ? <div className="empty">Loading…</div> : shown.length === 0 ? (
         <div className="empty"><p>{query ? 'No note matches.' : view === 'trash' ? 'The Trash is empty. Notes stay here 30 days.' : view === 'archived' ? 'Nothing archived.' : 'No notes yet. Start one below.'}</p></div>
       ) : (
-        <div className="notes-scroll">
+        <div className={`notes-scroll ${selected.size ? 'selecting' : ''}`}>
           {pinned.length > 0 && <><h4 className="notes-section">Pinned</h4><div className="notes-grid">{cards(pinned)}</div>{others.length > 0 && <h4 className="notes-section">Others</h4>}</>}
           <div className="notes-grid">{cards(others)}</div>
         </div>
@@ -161,6 +161,8 @@ function NoteCard({ note, small, selected, onSelect, onOpen }: { note: Note; sma
       onPointerDown={() => { held.current = false; if (onSelect) hold.current = setTimeout(() => { held.current = true; onSelect() }, 500) }}
       onPointerUp={() => clearTimeout(hold.current)} onPointerLeave={() => clearTimeout(hold.current)}
       onClick={e => { if (held.current) return; if ((e.ctrlKey || e.metaKey) && onSelect) onSelect(); else onOpen() }}>
+      {/* A check to select by, as on photos: shown on hover, and on every card while choosing. */}
+      {onSelect && <span className="check" title="Select" onClick={e => { e.stopPropagation(); onSelect() }}><Icon name={selected ? 'checked' : 'unchecked'} size={24} /></span>}
       {note.isPinned && !small && <span className="note-pin"><Icon name="pin" size={16} /></span>}
       {note.title && <strong>{note.title}</strong>}
       {preview(note, small ? 3 : 8).map((l, i) => <span key={i} className="note-line">{l}</span>)}
@@ -297,7 +299,13 @@ function NoteEditor({ initial, setDialog, onClose }: {
           </>}
           <span className="bar-fill" />
           {tool('label', 'Tags', tags, meta.labels.length > 0)}
-          {tool('palette', 'Colour', () => setTools(t => !t), tools)}
+          <span className="palette-anchor">
+            {tool('palette', 'Colour', () => setTools(t => !t), tools)}
+  {tools && <div className="palette-pop island">
+            <button className={`swatch none ${meta.color ? '' : 'on'}`} title="No colour" onClick={() => { setMetaNow({ color: undefined }); setTools(false) }} />
+            {COLORS.map(c => <button key={c} className={`swatch ${meta.color === c ? 'on' : ''}`} style={{ background: c }} title={c} onClick={() => { setMetaNow({ color: c }); setTools(false) }} />)}
+          </div>}
+          </span>
           {tool('history', 'History', history)}
           {!checklist && tool(reading ? 'editNote' : 'visibility', reading ? 'Edit' : 'Read', () => setReading(r => !r), reading)}
           {tool('pin', meta.isPinned ? 'Unpin' : 'Pin', () => setMetaNow({ isPinned: !meta.isPinned }), meta.isPinned)}
@@ -305,10 +313,6 @@ function NoteEditor({ initial, setDialog, onClose }: {
           {tool('trash', 'Move to Trash', toTrash)}
         </>}
       </header>
-      {tools && <div className="palette-pop island">
-        <button className={`swatch none ${meta.color ? '' : 'on'}`} title="No colour" onClick={() => { setMetaNow({ color: undefined }); setTools(false) }} />
-        {COLORS.map(c => <button key={c} className={`swatch ${meta.color === c ? 'on' : ''}`} style={{ background: c }} title={c} onClick={() => { setMetaNow({ color: c }); setTools(false) }} />)}
-      </div>}
 
       <div className={`editor-page ${meta.color ? 'tinted' : ''}`}>
         <input className="editor-title" placeholder="Title" value={title} readOnly={trashed} onChange={e => edit({ title: e.target.value }, false, endsWord(title, e.target.value, e.target.selectionStart ?? 0))} />

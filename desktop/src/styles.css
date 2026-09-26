@@ -550,8 +550,10 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .chip-input { width: 130px; padding: 6px 14px; border-radius: 999px; border: 1px dashed var(--muted); background: none; color: var(--text); font: inherit; font-size: 13px; outline: none; }
 
 .note-editor { --note: var(--island); }
-.editor-bar { display: flex; align-items: center; gap: 2px; padding: 4px; margin-bottom: 12px; flex: none; overflow-x: auto; scrollbar-width: none; }
-.palette-pop { position: absolute; top: 60px; right: 12px; z-index: 8; display: flex; flex-wrap: wrap; gap: 8px; width: 244px; padding: 12px; margin-top: 6px; box-shadow: 0 10px 30px #0006; background: var(--bg); border: 1px solid var(--island-2); }
+/* On a narrow window the tools take two, three or four lines rather than hiding (asked 2026-09-26). */
+.editor-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px; margin-bottom: 12px; flex: none; position: relative; z-index: 7; }
+.palette-anchor { position: relative; }
+.palette-pop { position: absolute; top: 100%; right: 0; z-index: 8; display: flex; flex-wrap: wrap; gap: 8px; width: 244px; padding: 12px; margin-top: 6px; box-shadow: 0 10px 30px #0006; background: var(--bg); border: 1px solid var(--island-2); }
 .palette-pop .swatch { width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; }
 .palette-pop .swatch.on { border-color: var(--accent); outline: none; }
 .palette-pop .swatch.none { background: var(--island-2); }
@@ -598,5 +600,10 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .version small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .notes-section { margin: 4px 8px 10px; font-size: 13px; color: var(--muted); font-weight: 600; }
 .note-card.selected { outline: 3px solid var(--accent); outline-offset: -3px; }
+.note-card .check { left: 10px; top: 10px; }
+.note-card:hover .check, .selecting .note-card .check { opacity: 1; }
+.note-card.selected .check { color: var(--accent); background: var(--on-accent); border-radius: 50%; filter: none; }
+.note-card.tinted .check { color: #1b1d1f; filter: none; }
+.selecting .note-card strong, .note-card:hover strong { padding-left: 26px; }
 .island-count { padding: 0 10px 0 2px; }
 .notes-grid + .notes-section { margin-top: 8px; }
