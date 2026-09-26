@@ -106,7 +106,10 @@ test('a date in the name beats a copy date; an EXIF date is never replaced', () 
     add('a/20240325_104816.mp4', copied, copied) // the copy's date: fixed
     add('a/20240320_112124.heic', local(2024, 2, 20, 9, 21), copied) // EXIF: kept
     add('a/20240401_101010.mp4', local(2024, 3, 1, 10, 10, 10), local(2024, 3, 1, 10, 10, 10)) // already right
-    assert.equal(repairDatesFromNames(db), 1)
+    add('a/20200228_224408-ANIMATION.gif', local(2013, 3, 15), local(2013, 3, 15)) // a file date too early: fixed too
+    add('a/IMG-20170705-WA0002.jpg', local(2017, 8, 30), copied) // a messenger's file, another date inside: the name wins
+    assert.equal(repairDatesFromNames(db), 3)
+    assert.equal(db.prepare('SELECT taken_at FROM media WHERE path = ?').get('a/IMG-20170705-WA0002.jpg').taken_at, local(2017, 6, 5, 12))
     assert.equal(db.prepare('SELECT taken_at FROM media WHERE path = ?').get('a/20240325_104816.mp4').taken_at, local(2024, 2, 25, 10, 48, 16))
     assert.equal(db.prepare('SELECT taken_at FROM media WHERE path = ?').get('a/20240320_112124.heic').taken_at, local(2024, 2, 20, 9, 21))
     db.close()

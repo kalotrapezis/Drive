@@ -136,15 +136,29 @@ function dateFromName(rel) {
 }
 
 /**
- * Rows whose date is only the file's date, where that is days after the date in the name: a copy's date, not the
- * photo's. Moved photos too (they are not scanned). The EXIF date is never touched: it is not the file's date then.
+ * A file a messenger saved (WhatsApp's IMG-20170705-WA0002, Facebook-…, FB_IMG_…, received_…, a millisecond name): its
+ * name holds the day it came, and what is inside is not to be trusted — a whole folder of them carried one date an
+ * app wrote later (30 September 2017, found in the import of 26 September). There the name wins over EXIF.
+ */
+const fromMessenger = rel => /^(?:(?:IMG|VID|AUD|PTT|STK)-\d{8}-WA\d+|Facebook-|FB_IMG_|received_|\d{13}(?:\D|$))/i.test(path.basename(String(rel)))
+function takenFrom(rel, exif, mtime) {
+  const name = dateFromName(rel)
+  if (exif && !(name && fromMessenger(rel))) return exif
+  return name ?? exif ?? mtime
+}
+
+/**
+ * Rows whose date is not what their name says, where the name should win: the file's own date (a copy's date, in
+ * either direction), or a messenger's file with some other date inside. Moved photos too (they are not scanned).
+ * A camera's EXIF date is never touched.
  */
 function repairDatesFromNames(db) {
   const fix = db.prepare('UPDATE media SET taken_at = ? WHERE id = ?')
   let n = 0
-  for (const r of db.prepare('SELECT id, path, taken_at, mtime FROM media WHERE taken_at = mtime').all()) {
+  for (const r of db.prepare('SELECT id, path, taken_at, mtime FROM media').all()) {
     const d = dateFromName(r.path)
-    if (d && r.mtime - d > 2 * 86_400_000) { fix.run(d, r.id); n++ }
+    if (!d || Math.abs(r.taken_at - d) <= 2 * 86_400_000) continue
+    if (r.taken_at === r.mtime || fromMessenger(r.path)) { fix.run(d, r.id); n++ }
   }
   return n
 }
@@ -218,7 +232,7 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
     const thumbFile = path.join(dataDir, 'thumbs', hash + '.webp')
     let thumb = fs.existsSync(thumbFile)
     if (!thumb) thumb = await makeThumb(file, isVideo, thumbFile).then(() => true, () => false)
-    insert.run(rel, hash, mime, isVideo ? 1 : 0, st.size, Math.trunc(st.mtimeMs), info.taken_at ?? dateFromName(rel) ?? Math.trunc(st.mtimeMs),
+    insert.run(rel, hash, mime, isVideo ? 1 : 0, st.size, Math.trunc(st.mtimeMs), takenFrom(rel, info.taken_at, Math.trunc(st.mtimeMs)),
       info.width ?? null, info.height ?? null, info.latitude ?? null, info.longitude ?? null, info.camera ?? null, thumb ? 1 : 0)
     onProgress(++done, ++changed)
   }
@@ -493,4 +507,4 @@ function metadataSince(db, since) {
 /** A screenshot, by its name or folder — the same test the phone uses. */
 const isScreenshot = p => /screenshot|στιγμιοτυπο|screen[ _-]?shot|scrnshot/.test(p.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase())
 
-module.exports = { dateFromName, repairDatesFromNames, isScreenshot, open, scan, list, transaction, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
+module.exports = { dateFromName, fromMessenger, takenFrom, repairDatesFromNames, isScreenshot, open, scan, list, transaction, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
