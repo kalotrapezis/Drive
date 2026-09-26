@@ -27,17 +27,17 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
   const [failed, setFailed] = useState(false)
   // Motion photos: the paired video (item.motion) or the one inside the file (Pixel, Samsung), played in place.
   const [motionUrl, setMotionUrl] = useState<string | null>(null)
-  // Motion on: a motion photo plays once by itself when it opens (asked 2026-09-27); off: the still. Remembered here.
-  const [motionOn, setMotionOn] = useState(() => { try { return localStorage.getItem('motion') !== 'off' } catch { return true } })
-  const [ended, setEnded] = useState(false)
-  const playing = motionOn && !ended && !!motionUrl
-  const toggleMotion = () => { const on = !motionOn; setMotionOn(on); setEnded(false); try { localStorage.setItem('motion', on ? 'on' : 'off') } catch {} }
+  // The Motion button plays it now; Settings › Autoplay motion photos (off by default, asked 2026-09-27) plays it on opening.
+  const [autoplay, setAutoplay] = useState(false)
+  useEffect(() => { window.drive.motionAutoplay().then(setAutoplay).catch(() => {}) }, [])
+  const [motionPlay, setMotionPlay] = useState(false)
+  const playing = motionPlay && !!motionUrl
   const stage = useRef<HTMLDivElement>(null)
   const drag = useRef<{ x: number; y: number } | null>(null)
   const strip = useRef<HTMLDivElement>(null)
 
   const go = (i: number) => { if (i >= 0 && i < media.length) setIndex(i) }
-  useEffect(() => { setView(RESET); setFailed(false); setEnded(false) }, [index])
+  useEffect(() => { setView(RESET); setFailed(false); setMotionPlay(autoplay) }, [index, autoplay])
   useEffect(() => {
     setMotionUrl(null)
     if (item.is_video || !fileUrl(item).startsWith('media://file/')) return // not in Hidden or the Trash
@@ -122,7 +122,7 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           {onTrash && <button className="round flat" title="Move to Trash (Delete)" onClick={() => onTrash(item)}><Icon name="trash" /></button>}
           {onTrash && <button className="round flat" title="Show in folder" onClick={() => window.drive.show(item.id)}><Icon name="folder" /></button>}
           <button className={`round flat ${details ? 'on' : ''}`} title="Details (i)" onClick={() => setDetails(d => !d)}><Icon name="info" /></button>
-          {motionUrl && <button className={`round flat ${motionOn ? 'on' : ''}`} title={motionOn ? 'Motion on — click for the still' : 'Motion off — click to play'} onClick={toggleMotion}><Icon name="motion" /></button>}
+          {motionUrl && <button className={`round flat ${playing ? 'on' : ''}`} title={playing ? 'Stop the motion' : 'Play the motion'} onClick={() => setMotionPlay(p => !p)}><Icon name="motion" /></button>}
         </div>
       </div>
 
@@ -133,7 +133,7 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           onPointerMove={e => { if (drag.current) { const d = drag.current; setView(v => ({ ...v, x: e.clientX - d.x, y: e.clientY - d.y })) } }}
           onPointerUp={() => { drag.current = null }}>
           {playing
-            ? <video key={`motion-${item.id}`} src={motionUrl!} autoPlay muted={false} onEnded={() => setEnded(true)} onClick={() => setEnded(true)} />
+            ? <video key={`motion-${item.id}`} src={motionUrl!} autoPlay muted={false} onEnded={() => setMotionPlay(false)} onClick={() => setMotionPlay(false)} />
             : item.is_video && !failed
             ? <video key={item.id} src={fileUrl(item)} controls autoPlay onError={() => setFailed(true)} />
             : <img key={item.id} draggable={false} alt={name}

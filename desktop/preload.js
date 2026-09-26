@@ -47,6 +47,8 @@ contextBridge.exposeInMainWorld('drive', {
   motionSetting: () => ipcRenderer.invoke('settings:motion'),
   setMotionSetting: v => ipcRenderer.invoke('settings:setMotion', v),
   hasMotion: id => ipcRenderer.invoke('photos:hasMotion', id),
+  motionAutoplay: () => ipcRenderer.invoke('settings:motionAutoplay'),
+  setMotionAutoplay: on => ipcRenderer.invoke('settings:setMotionAutoplay', on),
   setTheme: t => ipcRenderer.invoke('settings:setTheme', t),
   onNotesSynced: cb => { const f = (_, s) => cb(s); ipcRenderer.on('notes-synced', f); return () => ipcRenderer.removeListener('notes-synced', f) },
   onNotesChanged: cb => { const f = () => cb(); ipcRenderer.on('notes-changed', f); return () => ipcRenderer.removeListener('notes-changed', f) },

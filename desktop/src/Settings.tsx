@@ -37,6 +37,9 @@ export function SettingsPage() {
   const [motion, setMotion] = useState<'one' | 'remove' | null>(null)
   useEffect(() => { window.drive.motionSetting().then(setMotion) }, [])
   const pickMotion = (v: 'one' | 'remove') => { setMotion(v); window.drive.setMotionSetting(v) }
+  const [autoplay, setAutoplay] = useState(false)
+  useEffect(() => { window.drive.motionAutoplay().then(setAutoplay) }, [])
+  const pickAutoplay = (on: boolean) => { setAutoplay(on); window.drive.setMotionAutoplay(on) }
   return (
     <div className="page-scroll">
       <header className="page-head"><h1>Settings</h1></header>
@@ -57,6 +60,12 @@ export function SettingsPage() {
         <p className="muted">{motion === 'remove'
           ? 'An import leaves out the few seconds of video beside a picture (MVIMG_….MP4 next to MVIMG_….jpg). The picture comes in on its own.'
           : 'A picture and its few seconds of video show as one photo; the Motion button in the viewer plays them. Pictures with the video inside (Pixel, Samsung) play too.'}</p>
+        <h4>Autoplay motion photos</h4>
+        <div className="segmented">
+          {([[false, 'Off'], [true, 'On']] as const).map(([on, name]) =>
+            <button key={name} className={autoplay === on ? 'on' : ''} onClick={() => pickAutoplay(on)}>{name}</button>)}
+        </div>
+        <p className="muted">{autoplay ? 'A motion photo plays its few seconds as soon as it opens.' : 'Motion photos open still; the Motion button plays them.'}</p>
       </section>
     </div>
   )

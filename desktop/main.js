@@ -317,6 +317,8 @@ app.whenReady().then(() => {
   // video half out on import. Pairing what is already in the library happens either way (library.pairMotion).
   ipcMain.handle('settings:motion', () => setting('motionPhotos') || 'one')
   ipcMain.handle('settings:setMotion', (_, v) => { if (['one', 'remove'].includes(v)) setSetting('motionPhotos', v) })
+  ipcMain.handle('settings:motionAutoplay', () => setting('motionAutoplay') === '1')
+  ipcMain.handle('settings:setMotionAutoplay', (_, on) => setSetting('motionAutoplay', on ? '1' : '0'))
   ipcMain.handle('photos:trash', async (_, ids) => {
     const rows = ids.map(id => db.prepare('SELECT path, sha256, size FROM media WHERE id = ?').get(Number(id))).filter(Boolean)
     for (const r of rows) history.record(db, { action: 'trashed', kind: 'photo', name: r.path, sha256: r.sha256, size: r.size })
