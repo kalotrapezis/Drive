@@ -19,7 +19,7 @@ export interface VaultItem { id: string; sha256: string; name: string; rel_path:
 export interface PersonFace { id: string; sha256: string; quality: number; chosen: boolean; takenAt: number }
 export interface SyncConnection { content: 'photos' | 'files'; direction: 'off' | 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing'; keepDays?: number; keepFavorites?: boolean }
 export interface MovePreview { holds: number; onPc: number; go: number; goBytes: number; keep: number; notOnPc: number; lastSeen: number | null }
-export interface DriveRules { role: 'backup' | 'storage'; offload: boolean; percent: number; keep: number; unit: 'day' | 'week' | 'month' | 'year'; copies: number; favorites: boolean }
+export interface DriveRules { role: 'backup' | 'storage'; offload: boolean; percent: number; keep: number; unit: 'day' | 'week' | 'month' | 'year'; copies: number; favorites: boolean; screenshots: boolean }
 export interface OffloadPlan { deviceId: string; name: string; rules: DriveRules; disk: Disk | null; count: number; bytes: number; oldest: number | null; newest: number | null; short?: number }
 export interface Disk { size: number; free: number; percent: number }
 export interface HistoryRow { id: number; at: number; device: string | null; deviceName: string | null; action: string; kind: string | null; name: string | null; sha256: string | null; size: number | null; detail: string | null }
@@ -48,7 +48,7 @@ export interface DriveScan {
 export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[]; overview: SyncOverview; self: SyncSelf; disk: Disk | null; counts: { photos: number; files: number } }
 
 export interface TrashedPhoto { id: string; name: string; path: string; size: number; deletedAt: number }
-export interface Collection { id: string; name: string; count: number; cover: string | null; hidden: boolean; folder?: boolean }
+export interface Collection { id: string; name: string; count: number; cover: string | null; hidden: boolean; folder?: boolean; drive?: boolean }
 export interface PhotoPlace { path: string; name: string; count: number }
 
 declare global {
@@ -81,6 +81,7 @@ declare global {
       setViewSetting(key: 'hideScreenshots' | 'hideDocuments', on: boolean): Promise<void>
       members(id: string): Promise<string[]>
       setMembership(id: string, shas: string[], member: boolean): Promise<void>
+      deleteFromDrive(driveId: string, shas: string[]): Promise<{ deleted: number; failed: string[] }>
       vault: {
         status(): Promise<VaultStatus>
         setup(pass: string): Promise<void>

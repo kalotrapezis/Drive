@@ -32,7 +32,7 @@ const KEEPS = ['everything', 'nothing']
  * person's; the default is the safest one — a backup, nothing released. `copies` counts places that hold it
  * *other than this computer*, the storage drive included, and the drive's copy is read back before each move.
  */
-const DRIVE_RULES = { role: 'backup', offload: false, percent: 80, keep: 1, unit: 'year', copies: 2, favorites: true }
+const DRIVE_RULES = { role: 'backup', offload: false, percent: 80, keep: 1, unit: 'year', copies: 2, favorites: true, screenshots: false }
 const UNIT_MS = { day: 86_400_000, week: 7 * 86_400_000, month: 30 * 86_400_000, year: 365 * 86_400_000 }
 const sha = s => crypto.createHash('sha256').update(s).digest('hex')
 const isHash = h => typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)
@@ -53,6 +53,22 @@ async function identity(dir) {
 
 function lanAddresses() {
   return Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === 'IPv4' && !a.internal).map(a => a.address)
+}
+
+/** Copy src to dest through a .part, hashed on the way; kept only if it is the hash asked for. */
+async function copyVerified(src, dest, expected) {
+  await fsp.mkdir(path.dirname(dest), { recursive: true })
+  const part = dest + '.part'
+  const hash = crypto.createHash('sha256')
+  await new Promise((resolve, reject) => {
+    const read = fs.createReadStream(src)
+    const write = fs.createWriteStream(part)
+    read.on('data', chunk => hash.update(chunk))
+    read.on('error', reject); write.on('error', reject); write.on('finish', resolve)
+    read.pipe(write)
+  })
+  if (hash.digest('hex') !== expected) { await fsp.rm(part, { force: true }); throw new Error('It changed on the way; nothing was kept.') }
+  await fsp.rename(part, dest)
 }
 
 class SyncServer {
@@ -111,6 +127,8 @@ class SyncServer {
     const connCols = db.prepare('PRAGMA table_info(sync_connections)').all().map(c => c.name)
     if (!connCols.includes('keep_days')) db.exec('ALTER TABLE sync_connections ADD COLUMN keep_days INTEGER NOT NULL DEFAULT 30')
     if (!connCols.includes('keep_favorites')) db.exec('ALTER TABLE sync_connections ADD COLUMN keep_favorites INTEGER NOT NULL DEFAULT 1')
+    // Photos taken off a drive by hand, in its collection: backup never puts them back until they are added again.
+    db.exec('CREATE TABLE IF NOT EXISTS drive_removed (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, removed_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256))')
     const held = db.prepare('PRAGMA table_info(device_holdings)').all().map(c => c.name)
     for (const [name, type] of [['name', 'TEXT'], ['size', 'INTEGER'], ['is_video', 'INTEGER'], ['taken_at', 'INTEGER']]) {
       if (!held.includes(name)) db.exec(`ALTER TABLE device_holdings ADD COLUMN ${name} ${type}`)
@@ -241,9 +259,14 @@ class SyncServer {
     const mount = await drives.mountOf(device.volume_uuid)
     if (!mount) throw new Error(`${device.name} is not plugged in.`)
     const root = path.join(mount, 'Tetra', 'Photos')
+    // The folders are made as soon as the drive is, like a phone's: what arrives in Photos is the drive's collection.
+    for (const dir of ['Photos', 'Files']) await fsp.mkdir(path.join(mount, 'Tetra', dir), { recursive: true })
     // The drive's own rules decide what goes: photos, Drive files, or both (the Add-a-drive guide sets them).
     const on = content => ['receive', 'both'].includes(this.db.prepare('SELECT direction FROM sync_connections WHERE device_id = ? AND content = ?').get(device.id, content)?.direction)
-    const rows = on('photos') ? this.db.prepare('SELECT path, sha256, size FROM media WHERE location IS NULL ORDER BY size').all() : []
+    let rows = on('photos') ? this.db.prepare(`SELECT path, sha256, size FROM media m WHERE location IS NULL
+      AND NOT EXISTS(SELECT 1 FROM drive_removed r WHERE r.device_id = ? AND r.sha256 = m.sha256) ORDER BY size`).all(device.id) : []
+    // Screenshots are for a day or a week, not for keeping: backup leaves them out unless the drive's rule says so.
+    if (!this.driveRules(device.id).screenshots) rows = rows.filter(r => !library.isScreenshot(r.path))
     const files = on('files') ? (await this.driveFiles(mount)).filter(f => !f.there) : []
     const total = rows.length + files.length
     const held = this.db.prepare("SELECT 1 FROM device_holdings WHERE device_id = ? AND kind = 'photo' AND sha256 = ?")
@@ -258,18 +281,7 @@ class SyncServer {
       // lesson of 6ag, applied before it can happen here.
       if (held.get(device.id, row.sha256) && fs.existsSync(target) && fs.statSync(target).size === row.size) { already++; present.push(row.sha256); continue }
       try {
-        await fsp.mkdir(path.dirname(target), { recursive: true })
-        const part = target + '.part'
-        const hash = crypto.createHash('sha256')
-        await new Promise((resolve, reject) => {
-          const read = fs.createReadStream(path.join(this.photosRoot, row.path))
-          const write = fs.createWriteStream(part)
-          read.on('data', chunk => hash.update(chunk))
-          read.on('error', reject); write.on('error', reject); write.on('finish', resolve)
-          read.pipe(write)
-        })
-        if (hash.digest('hex') !== row.sha256) { await fsp.rm(part, { force: true }); throw new Error('It changed on the way; nothing was kept.') }
-        await fsp.rename(part, target)
+        await copyVerified(path.join(this.photosRoot, row.path), target, row.sha256)
         this.db.prepare(`INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at, kind)
           VALUES(?,?,?,?,?,'photo')`).run(device.id, row.sha256, row.path, row.size, Date.now())
         present.push(row.sha256)
@@ -290,6 +302,122 @@ class SyncServer {
     this.db.prepare('UPDATE sync_devices SET last_seen = ? WHERE id = ?').run(Date.now(), device.id)
     onProgress({ done: total, total, copied, already })
     return { copied, already, failed, total }
+  }
+
+  /**
+   * A drive is a folder album, like a phone's (asked 2026-09-26): everything this app put on it is its collection,
+   * on this PC only. Photos get there by backup, Move or Add; the only way off is Remove in that collection.
+   */
+  driveMembers(deviceId) {
+    return this.db.prepare(`SELECT sha256 FROM media WHERE location = ?
+      UNION SELECT sha256 FROM sync_receipts WHERE device_id = ? AND kind = 'photo' AND sha256 IN (SELECT sha256 FROM media)`)
+      .all(String(deviceId), String(deviceId)).map(r => r.sha256)
+  }
+
+  /** One collection per drive that holds photos, shaped like library.collections(). */
+  driveAlbums() {
+    return this.db.prepare('SELECT id, name FROM sync_devices WHERE volume_uuid IS NOT NULL ORDER BY paired_at').all().map(d => {
+      const shas = new Set(this.driveMembers(d.id))
+      const cover = shas.size ? this.db.prepare('SELECT sha256 FROM media WHERE thumb = 1 ORDER BY taken_at DESC').all().find(m => shas.has(m.sha256))?.sha256 ?? null : null
+      return { id: `drive:${d.id}`, name: d.name, count: shas.size, cover, hidden: false, drive: true }
+    }).filter(a => a.count)
+  }
+
+  async mountedDrive(deviceId) {
+    const d = this.db.prepare('SELECT id, name, volume_uuid FROM sync_devices WHERE id = ?').get(String(deviceId))
+    if (!d?.volume_uuid) throw new Error('That device is not a drive.')
+    const mount = await drives.mountOf(d.volume_uuid)
+    if (!mount) throw new Error(`Plug in ${d.name} first.`)
+    return { ...d, root: path.join(mount, 'Tetra', 'Photos') }
+  }
+
+  /** Add to a drive's collection: a checked copy on the drive. This PC keeps its own. */
+  async addToDrive(deviceId, shas) {
+    const d = await this.mountedDrive(deviceId)
+    const out = { copied: 0, failed: [] }
+    const receipt = this.db.prepare(`INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at, kind) VALUES(?,?,?,?,?,'photo')`)
+    for (const sha of new Set(shas)) {
+      this.db.prepare('DELETE FROM drive_removed WHERE device_id = ? AND sha256 = ?').run(d.id, sha)
+      const row = this.db.prepare('SELECT path, sha256, size, location FROM media WHERE sha256 = ? ORDER BY location IS NOT NULL').get(sha)
+      if (!row || row.location) { if (row?.location !== d.id) out.failed.push(`${row?.path ?? sha}: not on this PC`); continue }
+      const target = path.join(d.root, row.path)
+      try {
+        if (!(fs.existsSync(target) && fs.statSync(target).size === row.size)) await copyVerified(path.join(this.photosRoot, row.path), target, sha)
+        receipt.run(d.id, sha, row.path, row.size, Date.now())
+        this.holds(d.id, 'photo', [sha])
+        out.copied++
+      } catch (e) { out.failed.push(`${row.path}: ${e.message}`) }
+    }
+    if (out.copied) history.record(this.db, { action: 'added to drive', kind: 'photo', device: d.id, detail: `${out.copied} photos` })
+    return out
+  }
+
+  /**
+   * Remove from a drive's collection, the only way a photo leaves a drive. One that lives only there comes back to
+   * this PC first, checked; a backup copy of one this PC has is deleted from the drive. Either way the drive
+   * remembers, so backup never puts it back. Never the last copy: a photo nowhere else stays.
+   */
+  async removeFromDrive(deviceId, shas) {
+    const d = await this.mountedDrive(deviceId)
+    const out = { removed: 0, broughtBack: 0, failed: [] }
+    for (const sha of new Set(shas)) {
+      const rows = this.db.prepare('SELECT id, path, size, location FROM media WHERE sha256 = ?').all(sha)
+      const there = rows.find(r => r.location === d.id)
+      const here = rows.find(r => !r.location && fs.statSync(path.join(this.photosRoot, r.path), { throwIfNoEntry: false })?.size === r.size)
+      const drivePath = there?.path ?? this.db.prepare('SELECT path FROM sync_receipts WHERE device_id = ? AND sha256 = ?').get(d.id, sha)?.path
+      try {
+        if (!drivePath) continue
+        if (there && !here) {
+          const target = path.join(this.photosRoot, there.path)
+          if (fs.existsSync(target)) throw new Error('another file has its name on this PC')
+          await copyVerified(path.join(d.root, there.path), target, sha)
+          this.db.prepare('UPDATE media SET location = NULL WHERE id = ?').run(there.id)
+          out.broughtBack++
+        } else if (there) this.db.prepare('DELETE FROM media WHERE id = ?').run(there.id) // this PC has it under another name
+        else if (!here) throw new Error('it is on no other place; it stays')
+        await fsp.rm(path.join(d.root, drivePath), { force: true })
+        this.db.prepare('DELETE FROM sync_receipts WHERE device_id = ? AND sha256 = ?').run(d.id, sha)
+        this.db.prepare("DELETE FROM device_holdings WHERE device_id = ? AND kind = 'photo' AND sha256 = ?").run(d.id, sha)
+        this.db.prepare('INSERT OR REPLACE INTO drive_removed(device_id, sha256, removed_at) VALUES(?,?,?)').run(d.id, sha, Date.now())
+        history.record(this.db, { action: there ? 'brought back from drive' : 'removed from drive', kind: 'photo', name: drivePath, sha256: sha, device: d.id })
+        out.removed++
+      } catch (e) { out.failed.push(`${drivePath}: ${e.message}`) }
+    }
+    this.hereAt = 0
+    return out
+  }
+
+  /**
+   * Delete by hand in a drive's collection (asked 2026-09-26, for screenshots that were only for a day): the photo
+   * leaves the library. One copy — the drive's, else this PC's — goes to the purgatory, checked, and waits its days
+   * there; only then are the drive's and this PC's copies deleted. No purgatory reachable: nothing is deleted.
+   */
+  async deleteFromDrive(deviceId, shas) {
+    const d = await this.mountedDrive(deviceId)
+    const pg = await this.purgatoryDrive()
+    if (!pg) throw new Error('The purgatory is not reachable (its drive is unplugged); nothing was deleted.')
+    const out = { deleted: 0, failed: [] }
+    for (const sha of new Set(shas)) {
+      const rows = this.db.prepare('SELECT id, path, size, location FROM media WHERE sha256 = ?').all(sha)
+      const there = rows.find(r => r.location === d.id)
+      const drivePath = there?.path ?? this.db.prepare('SELECT path FROM sync_receipts WHERE device_id = ? AND sha256 = ?').get(d.id, sha)?.path
+      const onDrive = drivePath && path.join(d.root, drivePath)
+      const here = rows.filter(r => !r.location).map(r => path.join(this.photosRoot, r.path)).filter(f => fs.existsSync(f))
+      const source = onDrive && fs.existsSync(onDrive) ? onDrive : here[0]
+      try {
+        if (!source) throw new Error('no copy to keep in the purgatory; it stays')
+        const rel = await this.purgatory.enter(pg.id, pg.mount, 'photo', source, `${d.name.replace(/[\/\0]/g, '_')}/${drivePath ?? rows[0].path}`)
+        if (this.db.prepare('SELECT sha256 FROM purgatory WHERE drive_id = ? AND rel = ?').get(pg.id, rel)?.sha256 !== sha) throw new Error('the purgatory copy is not this photo')
+        for (const f of [onDrive, ...here]) if (f) await fsp.rm(f, { force: true })
+        this.db.prepare('DELETE FROM media WHERE sha256 = ?').run(sha)
+        this.db.prepare('DELETE FROM sync_receipts WHERE device_id = ? AND sha256 = ?').run(d.id, sha)
+        this.db.prepare("DELETE FROM device_holdings WHERE device_id = ? AND kind = 'photo' AND sha256 = ?").run(d.id, sha)
+        history.record(this.db, { action: 'deleted by hand', kind: 'photo', name: drivePath ?? rows[0]?.path, sha256: sha, device: d.id })
+        out.deleted++
+      } catch (e) { out.failed.push(`${drivePath ?? sha}: ${e.message}`) }
+    }
+    this.hereAt = 0
+    return out
   }
 
   /**
@@ -377,6 +505,7 @@ class SyncServer {
     if (UNIT_MS[changes.unit]) r.unit = changes.unit
     if (Number.isInteger(changes.copies) && changes.copies >= 1 && changes.copies <= 5) r.copies = changes.copies
     if (typeof changes.favorites === 'boolean') r.favorites = changes.favorites
+    if (typeof changes.screenshots === 'boolean') r.screenshots = changes.screenshots
     this.db.prepare('UPDATE sync_devices SET rules = ? WHERE id = ? AND volume_uuid IS NOT NULL').run(JSON.stringify(r), String(id))
     return r
   }

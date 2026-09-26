@@ -27,10 +27,10 @@ export function Collections({ system, mine, onOpen, onNew, onDelete }: {
         {mine.map(c => (
           <div key={c.id} className="cover-card">
             <button className="cover" onClick={() => onOpen(c.id, c.name)}>
-              {c.cover ? <img src={`media://thumb/${c.cover}`} alt="" /> : <Icon name="collections" size={48} />}
+              {c.cover ? <img src={`media://thumb/${c.cover}`} alt="" /> : <Icon name={c.drive ? 'database' : 'collections'} size={48} />}
             </button>
             <div className="cover-label"><span>{c.name}</span><small>{c.count}</small></div>
-            <button className="round delete" title={`Delete “${c.name}”`} onClick={() => onDelete(c)}><Icon name="trash" size={20} /></button>
+            {!c.drive && <button className="round delete" title={`Delete “${c.name}”`} onClick={() => onDelete(c)}><Icon name="trash" size={20} /></button>}
           </div>
         ))}
       </div>

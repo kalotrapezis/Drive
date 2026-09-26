@@ -18,7 +18,7 @@ let db, people, documents, photosRoot, modelDir, dataDir
 const engines = {}
 const analysis = { running: false, paused: false, done: 0, total: 0, error: '' }
 const send = () => port.postMessage({ type: 'progress', analysis: { ...analysis } })
-const isScreenshot = p => /screenshot|στιγμιοτυπο|screen[ _-]?shot|scrnshot/.test(p.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase())
+const { isScreenshot } = library
 
 /** `rescan` — 'faces' or 'documents' — reads photos that were read before, because the rules changed since. */
 async function run({ rescan, wantFaces, wantDocs }) {

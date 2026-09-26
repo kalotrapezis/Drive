@@ -458,4 +458,7 @@ function metadataSince(db, since) {
   }
 }
 
-module.exports = { open, scan, list, transaction, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
+/** A screenshot, by its name or folder — the same test the phone uses. */
+const isScreenshot = p => /screenshot|στιγμιοτυπο|screen[ _-]?shot|scrnshot/.test(p.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase())
+
+module.exports = { isScreenshot, open, scan, list, transaction, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }

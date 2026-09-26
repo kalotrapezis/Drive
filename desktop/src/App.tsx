@@ -55,6 +55,8 @@ export function App() {
   const [vault, setVault] = useState<VaultStatus | null>(null)
   const [editing, setEditing] = useState<Media | null>(null)
 
+  // A drive is a collection of what is on it (sync.js driveMembers), on this PC only: photos leave it only by Remove.
+  const driveId = page.kind === 'collection' && page.id.startsWith('drive:') ? page.id.slice(6) : null
   const custom = page.kind === 'collection' && !SYSTEM.some(s => s.id === page.id) ? page.id : null
   const memberSource = custom ? () => window.drive.members(custom) : page.kind === 'person' ? () => window.drive.people.shas(page.id) : null
 
@@ -162,11 +164,23 @@ export function App() {
       say(r.failed.length ? `Moved ${r.moved}; ${r.failed.length} stayed: ${r.failed.slice(0, 2).join(', ')}` : `Moved ${count(r.moved)} to ${dest}`)
     })} />)
   }
-  const uncollect = (list: Media[]) => folderAlbum ? moveTo(list, folderAlbum) : custom && page.kind === 'collection' &&
+  const uncollect = (list: Media[]) => driveId && page.kind === 'collection' ? setDialog(
+    <Confirm title={`Take ${count(list.length)} off ${page.name}?`} action="Take off the drive" danger onClose={close}
+      body={`Any that live only on ${page.name} come back to this PC first, checked. Copies of ones this PC has are deleted from the drive, and backup will not put them back unless you add them again.`}
+      onConfirm={() => run(() => window.drive.setMembership(custom!, list.map(m => m.sha256), false), `Took ${count(list.length)} off ${page.name}`).then(() => setSelected(new Set()))} />)
+    : folderAlbum ? moveTo(list, folderAlbum) : custom && page.kind === 'collection' &&
     run(() => window.drive.setMembership(custom, list.map(m => m.sha256), false), `Removed ${count(list.length)} from “${page.name}”`)
       .then(() => setSelected(new Set()))
 
   function trash(list: Media[]) {
+    // In a drive's collection Delete is by hand and final for the library: to the purgatory, where it waits its days.
+    if (driveId) return setDialog(<Confirm title={`Delete ${count(list.length)}?`} action="Delete" danger onClose={close}
+      body={`They leave the library, from ${page.kind === 'collection' ? page.name : 'the drive'} and from this PC. One copy waits in the purgatory for its days (Devices → Deleted items), then it is gone.`}
+      onConfirm={() => run(async () => {
+        const r = await window.drive.deleteFromDrive(driveId, list.map(m => m.sha256))
+        setSelected(new Set())
+        say(r.failed.length ? `Deleted ${r.deleted}; ${r.failed.length} stayed: ${r.failed.slice(0, 2).join(', ')}` : `Deleted ${count(r.deleted)} to the purgatory`)
+      })} />)
     setDialog(<Confirm title={`Move ${count(list.length)} to Trash?`} action="Move to Trash" danger onClose={close}
       body="They go to the system Trash and can be restored from your file manager. Favorites and collections come back with them."
       onConfirm={() => run(async () => {
@@ -281,7 +295,7 @@ export function App() {
               <label><input type="checkbox" checked={hideDocuments} onChange={e => { setHideDocuments(e.target.checked); window.drive.setViewSetting('hideDocuments', e.target.checked) }} /> Documents</label>
               <span className="menu-head">My albums</span>
               {collections.length === 0 && <small>No albums yet. Create one in Collections with +.</small>}
-              {collections.map(c => (
+              {collections.filter(c => !c.drive).map(c => (
                 <label key={c.id}><input type="checkbox" checked={c.hidden}
                   onChange={e => window.drive.setCollectionHidden(c.id, e.target.checked).then(reload)} /> {c.name}<small className="count">{c.count}</small></label>
               ))}
@@ -349,9 +363,11 @@ export function App() {
             {custom
               ? <button className="round flat" title={folderAlbum ? `Move out of the ${folderAlbum} folder` : 'Remove from this collection'} onClick={() => uncollect(picked)}><Icon name="uncollect" /></button>
               : <button className="round flat" title="Add to collection" onClick={() => collect(picked)}><Icon name="collect" /></button>}
-            <button className="round flat" title="Move to folder…" onClick={() => moveTo(picked)}><Icon name="moveTo" /></button>
-            <button className="round flat" title="Move to Hidden" onClick={() => hide(picked)}><Icon name="lock" /></button>
-            <button className="round flat" title="Move to Trash (Delete)" onClick={() => trash(picked)}><Icon name="trash" /></button>
+            {!driveId && <>
+              <button className="round flat" title="Move to folder…" onClick={() => moveTo(picked)}><Icon name="moveTo" /></button>
+              <button className="round flat" title="Move to Hidden" onClick={() => hide(picked)}><Icon name="lock" /></button>
+            </>}
+            <button className="round flat" title={driveId ? 'Delete to the purgatory (Delete)' : 'Move to Trash (Delete)'} onClick={() => trash(picked)}><Icon name="trash" /></button>
             {page.kind === 'person' && person && (
               <button className="text-button" title="These are not this person" onClick={() => run(async () => {
                 const r = await window.drive.people.detach(person.id, picked.map(m => m.sha256))
@@ -367,8 +383,8 @@ export function App() {
           setIndex={i => setOpen(scoped ? scoped[i] : i)} onClose={() => { setOpen(null); setScope(null) }} people={names[items[open].sha256] ?? []}
           onShowOnMap={m => { setOpen(null); setPage({ kind: 'map', focus: m.sha256 }) }}
           onDocument={(m, on) => run(() => window.drive.documents.set(m.sha256, on), on ? 'Marked as a document' : 'No longer a document')}
-          onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={m => hide([m])} onEdit={setEditing}
-          onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} onMove={m => moveTo([m])}
+          onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={driveId ? undefined : m => hide([m])} onEdit={driveId ? undefined : setEditing}
+          onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} onMove={driveId ? undefined : m => moveTo([m])}
           uncollectTitle={folderAlbum ? `Move out of the ${folderAlbum} folder` : undefined} />
       )}
       {editing && <Editor item={editing} onClose={() => setEditing(null)} onSaved={msg => { setEditing(null); say(msg); reload() }} />}

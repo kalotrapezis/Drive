@@ -737,6 +737,7 @@ function DriveCard({ device, disk, onChange, setDialog }: { device: SyncDevice; 
             {!!plan?.count && <button className="filled-button" onClick={() => setDialog(<OffloadDialog deviceId={device.id} onClose={() => { setDialog(null); onChange() }} />)}>Free {formatBytes(plan.bytes)}…</button>}
           </>
         )}
+        <label className="rule-hint check-row"><input type="checkbox" checked={!!r.screenshots} onChange={e => set({ screenshots: e.target.checked })} /><span>Back up screenshots too (off: they are for a day or a week, and stay on this PC)</span></label>
         {purgatoryHere !== null && <label className="rule-hint check-row"><input type="checkbox" checked={purgatoryHere} disabled={!!moving && moving.endsWith('…')}
           onChange={e => placePurgatory(e.target.checked)} /><span>Keep the purgatory here<br />otherwise it stays on this PC</span></label>}
         {moving && <p className="rule-hint">{moving}</p>}

@@ -273,11 +273,19 @@ app.whenReady().then(() => {
     return r
   })
   // A collection named after an included folder is that folder: taking a photo out of it moves the file.
-  ipcMain.handle('collections:list', () => { const albums = folders.folderAlbums(); return library.collections(db).map(c => ({ ...c, folder: albums.has(c.name.toLowerCase()) })) })
+  ipcMain.handle('collections:list', () => { const albums = folders.folderAlbums(); return [...library.collections(db).map(c => ({ ...c, folder: albums.has(c.name.toLowerCase()) })), ...sync.driveAlbums()] })
   ipcMain.handle('collections:create', (_, name) => library.createCollection(db, name))
   ipcMain.handle('collections:delete', (_, id) => library.deleteCollection(db, id))
-  ipcMain.handle('collections:members', (_, id) => library.members(db, id))
-  ipcMain.handle('collections:set', (_, id, shas, member) => library.setMembership(db, id, shas, member))
+  // A drive's collection is the drive (sync.js driveMembers): adding copies there, removing takes it off.
+  const driveOf = id => String(id).startsWith('drive:') ? String(id).slice(6) : null
+  ipcMain.handle('collections:members', (_, id) => driveOf(id) ? sync.driveMembers(driveOf(id)) : library.members(db, id))
+  ipcMain.handle('collections:set', async (_, id, shas, member) => {
+    if (!driveOf(id)) return library.setMembership(db, id, shas, member)
+    const r = member ? await sync.addToDrive(driveOf(id), shas) : await sync.removeFromDrive(driveOf(id), shas)
+    if (r.failed.length) throw new Error(`${r.failed.length} could not: ${r.failed.slice(0, 2).join('; ')}`)
+    return r
+  })
+  ipcMain.handle('drive:delete', (_, id, shas) => sync.deleteFromDrive(String(id), shas))
   ipcMain.handle('collections:hide', (_, id, hidden) => library.setCollectionHidden(db, id, hidden))
   // Photos Trash is the system's own trash, filtered to what came out of this library.
   ipcMain.handle('trash:list', () => library.trashedPhotos(PHOTOS_ROOT))

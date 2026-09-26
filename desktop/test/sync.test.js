@@ -961,3 +961,101 @@ test('Trash copies of photos already moved to the drive are let go; anything els
     db.close(); fs.rmSync(tmp, { recursive: true, force: true })
   }
 })
+
+test('a drive is a collection: what is on it, added by copying, and taken off only by Remove, remembered', async () => {
+  const drives = require('../drives')
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-album-'))
+  const mount = path.join(tmp, 'T7'); fs.mkdirSync(mount)
+  const uuid = '00000000-dead-4dea-8dea-000000000000' // never a real drive
+  const [list, mountOf] = [drives.list, drives.mountOf]
+  drives.list = async () => [{ uuid, label: 'Test', fstype: 'ext4', mount, sizeBytes: 1e9, freeBytes: 1e9, hotplug: true }]
+  drives.mountOf = async id => id === uuid ? mount : null
+  const db = library.open(path.join(tmp, 'data'))
+  const photos = path.join(tmp, 'Photos'); fs.mkdirSync(path.join(photos, 'x'), { recursive: true })
+  const hash = {}
+  for (const name of ['a.jpg', 'b.jpg', 'c.jpg']) {
+    const bytes = Buffer.from('bytes of ' + name)
+    hash[name] = crypto.createHash('sha256').update(bytes).digest('hex')
+    db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb, meta_v) VALUES(?,?,'image/jpeg',0,?,1,1,1,99)`)
+      .run(`x/${name}`, hash[name], bytes.length)
+    fs.writeFileSync(path.join(photos, 'x', name), bytes)
+  }
+  const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: photos, port: 0 })
+  const onDrive = n => path.join(mount, 'Tetra', 'Photos', 'x', n)
+  try {
+    const drive = server.addDrive({ uuid, label: 'Test' })
+    server.setConnection(drive.id, 'photos', { direction: 'off' })
+    assert.deepEqual(server.driveAlbums(), [], 'no collection until something is on it')
+    await server.backUpToDrive(drive.id)
+    assert.ok(fs.existsSync(path.join(mount, 'Tetra', 'Files')), 'the folders are made when the drive is')
+
+    assert.equal((await server.addToDrive(drive.id, [hash['a.jpg'], hash['b.jpg']])).copied, 2)
+    assert.equal(server.driveAlbums()[0].count, 2)
+    // a.jpg lives only on the drive now, as a Move leaves it.
+    db.prepare('UPDATE media SET location = ? WHERE sha256 = ?').run(drive.id, hash['a.jpg']); fs.rmSync(path.join(photos, 'x', 'a.jpg'))
+
+    const r = await server.removeFromDrive(drive.id, [hash['a.jpg'], hash['b.jpg']])
+    assert.deepEqual({ ...r, failed: r.failed.length }, { removed: 2, broughtBack: 1, failed: 0 })
+    assert.equal(fs.readFileSync(path.join(photos, 'x', 'a.jpg'), 'utf8'), 'bytes of a.jpg', 'brought back, checked')
+    assert.equal(db.prepare('SELECT location FROM media WHERE sha256 = ?').get(hash['a.jpg']).location, null)
+    assert.ok(!fs.existsSync(onDrive('a.jpg')) && !fs.existsSync(onDrive('b.jpg')), 'off the drive')
+    assert.deepEqual(server.driveMembers(drive.id), [])
+
+    server.setConnection(drive.id, 'photos', { direction: 'receive' })
+    await server.backUpToDrive(drive.id)
+    assert.deepEqual(server.driveMembers(drive.id), [hash['c.jpg']], 'backup does not put back what was taken off')
+    await server.addToDrive(drive.id, [hash['a.jpg']])
+    assert.ok(fs.existsSync(onDrive('a.jpg')), 'adding it again undoes that')
+
+    // Never the last copy: gone from this PC and only on the drive by receipt, it stays.
+    fs.rmSync(path.join(photos, 'x', 'c.jpg'))
+    assert.equal((await server.removeFromDrive(drive.id, [hash['c.jpg']])).failed.length, 1)
+    assert.ok(fs.existsSync(onDrive('c.jpg')))
+  } finally {
+    Object.assign(drives, { list, mountOf })
+    db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('Delete in a drive collection sends one checked copy to the purgatory; backup leaves screenshots out', async () => {
+  const drives = require('../drives')
+  const { Purgatory } = require('../purgatory')
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-delete-'))
+  const mount = path.join(tmp, 'T7'); fs.mkdirSync(mount)
+  const uuid = '00000000-dead-4dea-8dea-000000000001'
+  const [list, mountOf] = [drives.list, drives.mountOf]
+  drives.list = async () => [{ uuid, label: 'Test', fstype: 'ext4', mount, sizeBytes: 1e9, freeBytes: 1e9, hotplug: true }]
+  drives.mountOf = async id => id === uuid ? mount : null
+  const db = library.open(path.join(tmp, 'data'))
+  const photos = path.join(tmp, 'Photos'); fs.mkdirSync(path.join(photos, 'Screenshots'), { recursive: true })
+  const hash = {}
+  for (const name of ['Screenshots/s.png', 'Screenshots/t.png']) {
+    const bytes = Buffer.from('bytes of ' + name)
+    hash[name] = crypto.createHash('sha256').update(bytes).digest('hex')
+    db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb, meta_v) VALUES(?,?,'image/png',0,?,1,1,1,99)`).run(name, hash[name], bytes.length)
+    fs.writeFileSync(path.join(photos, name), bytes)
+  }
+  const purgatory = new Purgatory({ db, photosRoot: photos, serverBase: path.join(tmp, 'server') })
+  const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: photos, port: 0, purgatory })
+  try {
+    const drive = server.addDrive({ uuid, label: 'Test' })
+    await server.backUpToDrive(drive.id)
+    assert.deepEqual(server.driveMembers(drive.id), [], 'screenshots are not backed up by default')
+    await server.addToDrive(drive.id, [hash['Screenshots/s.png']])
+    const r = await server.deleteFromDrive(drive.id, [hash['Screenshots/s.png']])
+    assert.deepEqual(r, { deleted: 1, failed: [] })
+    assert.ok(!fs.existsSync(path.join(photos, 'Screenshots/s.png')) && !fs.existsSync(path.join(mount, 'Tetra/Photos/Screenshots/s.png')), 'both copies gone')
+    assert.equal(db.prepare('SELECT COUNT(*) n FROM media WHERE sha256 = ?').get(hash['Screenshots/s.png']).n, 0)
+    const [row] = db.prepare('SELECT * FROM purgatory').all()
+    assert.equal(row.sha256, hash['Screenshots/s.png'])
+    assert.equal(fs.readFileSync(path.join(tmp, 'server/Tetra/.purgatory', row.rel), 'utf8'), 'bytes of Screenshots/s.png')
+    server.setDriveRules(drive.id, { screenshots: true })
+    await server.backUpToDrive(drive.id)
+    assert.deepEqual(server.driveMembers(drive.id), [hash['Screenshots/t.png']], 'unless the rule says so')
+  } finally {
+    Object.assign(drives, { list, mountOf })
+    db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})

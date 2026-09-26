@@ -1933,6 +1933,105 @@ Needed in code: a storage role for a drive next to backup; per-content rules (ph
 rule per device; a released ledger per device that syncs; photos known to the library but not on this disk
 (thumbnail kept, "plug in T7-TEO" to open); Drive files to a drive (backUpToDrive is photos only today).
 
+### D3, built on the computer (25 September, morning)
+
+- **Location.** `media.location`: NULL is this PC's Photos folder, otherwise the storage drive's device id, at the
+  same relative path under `<drive>/Tetra/Photos`. The row stays, so thumbnails (cached by hash), People,
+  collections and search never lose it. The scan only reads and only deletes rows with no location, and a file
+  found in the folder again (restored from the Trash) clears it. Analysis skips moved photos.
+- **Opening.** `SyncServer.locate(row)` gives the drive path when it is plugged in and "Plug in T7-TEO to open
+  this" when not; the Viewer shows that over the thumbnail. A cached HEIC preview still opens without the drive.
+  Editing a moved photo and hiding one are refused, not guessed at.
+- **"Do you have it?"** is answered for the library: `have()` is true for a moved photo, so no device sends it
+  back. `here_now`, the overview and the copies bar count this disk only, so a moved photo is drive + devices.
+  `toSend` does not offer moved photos to devices (ponytail: fetch from the drive when asked, later).
+- **Drive rules** (`sync_devices.rules`, JSON, every one a setting, default Backup): role Backup / Storage,
+  Offload on (keep the disk under N %) or off (keep the last N days/weeks/months/years), copies required
+  (places *other than this PC*, the drive included, default 2), favorites stay (default on).
+- **Offload plan**: oldest first, only what the drive holds and `copies` places hold, never a favorite.
+  **Move**: each drive copy is read back and hashed; only a match lets this PC's copy go, to the system Trash.
+- **Said out loud**: once a minute, a storage drive plugged in with something to free raises a notification
+  (at most every 12 h) and a tray item; clicking opens "Free 21 GB? … Yes / Try 10 first". A disk past the
+  Offload line, or 90 %, is always said (at most every 6 h). Nothing moves without the Yes.
+- **Found on the way**: `backUpToDrive` recorded holdings only for what it copied that run, and `holds()`
+  forgets what is not repeated within a day, so after one day the drive looked like it held almost nothing and
+  nothing would ever have been offered. It now repeats everything the drive holds.
+- **Measured on a copy of the real library**: *2,664 photos older than a year, 21 GB, safe on T7-TEO (2008 →
+  Sept 2025)*. The disk is 94 % of 1 TB and photos are 31 GB, so "under 80 %" cannot be reached by photos alone —
+  the dialog says so.
+
+Not yet: Files showing the drive as a location (documents stay full copy, so nothing leaves Files); bringing a
+photo back from the drive; phones releasing (MANAGE_MEDIA) and the released ledger; Offload acting without a Yes.
+
+### D6. Trash → Purgatory → gone (agreed 2026-09-25, simplified the same afternoon)
+
+The server (the computer) makes the rules and keeps everything safe on its storage drive. Deleting has a grace
+period of about **60 days**, the same for Photos and Files, on every device:
+
+1. **Trash, 30 days** — as now, restorable, on the device where it was deleted.
+2. **After its 30 days, an item is not deleted: it goes to the purgatory** — a hidden `.purgatory` folder on the
+   storage drive (`<drive>/Tetra/.purgatory`), sent through the server when the server and drive are reachable.
+3. **Purgatory, 30 days** (a setting: days / weeks / months, or never), then the server deletes it.
+4. **Emptying the Trash by hand is a plain delete.** The user chose it; nothing goes to the purgatory.
+
+What the platforms do by themselves, and how that is handled:
+- **Android** deletes a trashed item by itself once its 30 days are up (MediaStore `DATE_EXPIRES`). So the app
+  sends items that are close to expiry to the server's purgatory at sync time. An item the server cannot take yet
+  (not reachable, drive unplugged) is put back and trashed again, which starts Android's clock again — it is never
+  let expire unsent. (Needs Media management, which is on; to be confirmed on the phone.)
+- **The computer's** trash is the system's own and does not expire by itself (unless the desktop is set to);
+  after 30 days the app moves the item to the purgatory. With the drive unplugged it waits in the Trash.
+
+By sync rule: **Both ways** — a photo trashed on a device is trashed on the server too, and follows the same
+steps there. **Move** — the server keeps its copy in the library; the device's Trash only concerns its own copy.
+**Hidden on a phone** is Hidden on the server too, the next time Hidden is unlocked there, and out of the gallery
+until then.
+
+Every step is written to the history (what went where, when, from which device), so any deletion can be read back.
+
+### D6, built (25 September, afternoon)
+
+- **Computer**: `purgatory.js` — hourly, with a set-up drive plugged in (the storage drive first): Photos Trash
+  (the system trash, filtered to the library) and `Files/Trash/` items past `trashDays` (30) are copied to
+  `<drive>/Tetra/.purgatory/{photos,files}/<day>/<origin>`, hashed while written and read back, then removed from
+  the Trash; purgatory items past `purgatoryDays` (30; 0 = never) are deleted. Settings and a **History** on the
+  Devices page ("Deleted items"). Emptying a Trash by hand is recorded and stays a plain delete.
+- **Where the purgatory lives** (user, same afternoon): on the server by default (`~/Tetra/.purgatory`); a drive
+  only when chosen — a checkbox in the Add-a-drive guide and on the drive's card ("Keep the purgatory here").
+  Choosing moves what it holds, each item copied, read back, then removed; items on an unplugged drive move when it
+  comes back. A drive holding the purgatory cannot be forgotten. With the chosen drive unplugged, Trash items wait.
+- **History** (`history.js`): received, sent, backed up to drive, moved to drive, moved to folder, trashed,
+  restored, emptied by hand, to purgatory, deleted from purgatory — with the device.
+- **Phone**: at each sync, trashed photos/videos within 3 days of Android's own deletion are PUT to
+  `/purgatory/<sha>` (the computer writes them to the drive and checks the hash; 503 without a drive); Files'
+  Trash items past 30 days likewise, then deleted on the phone. With no drive, a trashed photo is trashed again to
+  restart Android's clock — **not yet verified on a device** that Android allows this for another app's photo.
+- **Not built yet**: a Both-ways device trashing a photo → the computer trashes its copy; Hidden on a phone →
+  Hidden on the computer; the phone's own History view.
+
+### Move, as agreed and built (25 September, afternoon)
+
+- **A Move always keeps a window** on the device — the last X days / weeks / months / years (default 1 month),
+  and favorites unless unticked. Keeping everything would be a Copy, so it cannot be chosen.
+- **Choosing it opens a dialog first** (the Devices card): what will happen, step by step, and in numbers from
+  what the device last listed — would move, stays, not on the PC yet. Nothing changes until "Start the Move".
+- **What is offered**: everything the computer confirmed holding in that sync (its /have answer, checked against
+  its disk), older than the window — not only what the device once sent (before: 285 of ~3,970 on the tablet).
+- **Photos**: offered on the device's Sync page, into Android's Trash on a tap. **Files** (both, as asked): at each
+  sync into the device's own Trash under the same folder path (Trash/Work/plan.pdf); files in system folders move,
+  the system folders (Trash, Documents, Documents/Scanned Documents) always stay; regular folders left empty go.
+- **The computer keeps everything** of a Move device: it does not follow that device's files into its Trash.
+- **Deleted, not trashed** (user, same afternoon: "why the recycle bin — we know they are on the computer"): a
+  Trash is on the same disk and only keeps the room, so what a Move lets go — photos, files, and the PC's copies
+  freed to a storage drive — is deleted once the other side holds a checked copy. Android asks per 2,000.
+- **Nothing is sent that the server or its backup already holds**: a device's expiring Trash is only handed to the
+  purgatory if `/held` says the server has no copy (library, moved to a drive, or on a backup drive); the PC's own
+  Trash likewise skips the purgatory for photos held safely. The 2,795 copies trashed by the first Free space are
+  let go at start (`releaseTrashedMoved`).
+
+Next (asked the same afternoon): a **first-run guide** — download for Android → add devices by QR → set the rules
+card by card, what to keep on each device → All ready, Sync now.
+
 ### D2. A tablet is not a big phone (asked 2026-09-24)
 
 The tablet is 1164dp across in landscape, 777dp in portrait — nearly three phones
@@ -2002,6 +2101,23 @@ presses the button. That answers what made it dangerous.
 
 Steps 1 and 2 are worth doing whatever happens to the age rule: they are what make
 Keep-nothing safe, and it is already shipped.
+
+### D5b. A drive is a folder album (asked and built 2026-09-26)
+
+A drive works like a phone's folder album: everything this app put on it (`<drive>/Tetra/Photos`, by backup,
+Move, Free space or Add) is **its collection**, named after the drive, on this PC only — it does not sync. The folders
+(`Tetra/Photos`, `Tetra/Files`) are made the moment the drive is backed up to. Answers from the user:
+
+- Members: everything on the drive — moved photos and backup copies (receipts), `sync.driveMembers`.
+- **Remove is the only way off the drive.** A photo that lives only there comes back to this PC first, checked; a
+  backup copy of one this PC has is deleted from the drive. Either way `drive_removed` remembers it and backup never
+  puts it back — **Add** to the collection (copies it there, checked) is what undoes that. Never the last copy.
+- **Delete** (the Trash button and the Delete key, in that collection): the photo leaves the library — one copy, the
+  drive's or else this PC's, goes to the purgatory checked (`sync.deleteFromDrive`), then both copies are deleted.
+  No purgatory reachable: nothing is deleted. Asked for the screenshots that were only for a day or a week.
+- **Screenshots are not backed up** (drive rule `screenshots`, default off, a checkbox on the drive's card). The 408
+  already on T7-TEO stay until deleted or removed by hand. Not backed up also means Free space never moves them.
+- Otherwise read-only: no Hidden, Edit or Move to folder inside a drive's collection.
 
 ### D5. External storage as a device (asked 2026-09-24)
 
