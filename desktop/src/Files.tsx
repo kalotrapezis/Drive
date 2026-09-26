@@ -20,11 +20,11 @@ const date = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', 
 const parentOf = (p: string) => p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : ''
 
 interface Props {
-  mode: FilesMode; folder: string; go: (mode: FilesMode, folder: string) => void
+  mode: FilesMode; folder: string; go: (mode: FilesMode, folder: string) => void; dock?: ReactNode
   setDialog: (d: ReactNode) => void; say: (t: string) => void
 }
 
-export function Files({ mode, folder, go, setDialog, say }: Props) {
+export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
   const setFolder = (f: string) => go('browse', f)
   const [items, setItems] = useState<DriveItem[] | null>(null)
   const [query, setQuery] = useState('')
@@ -287,6 +287,7 @@ export function Files({ mode, folder, go, setDialog, say }: Props) {
         ))}
       </div>
 
+      {picked.length === 0 && dock}
       {picked.length > 0 && (
         <div className="island selection-bar">
           <button className="round flat" title="Clear selection (Esc)" onClick={() => setSelected(new Set())}><Icon name="close" /></button>

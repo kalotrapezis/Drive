@@ -243,11 +243,35 @@ export function App() {
     <button className={`nav-item ${active ? 'active' : ''}`} onClick={() => setPage(target)}><Icon name={icon} />{label}</button>
   )
   const filesMode = page.kind === 'files' && !(page.mode === 'browse' && page.folder.startsWith('Trash')) ? page.mode : null
+  const inFilesTrash = page.kind === 'files' && page.mode === 'browse' && page.folder.startsWith('Trash')
+  const section = page.kind === 'files' ? 'files' : driveId ? 'drive' : ['photos', 'collections', 'collection', 'people', 'person', 'review', 'map', 'hidden', 'photoTrash'].includes(page.kind) ? 'photos' : null
+  const item = (target: Page, on: boolean, icon: IconName, label: string) => (
+    <button className={`island-item ${on ? 'on' : ''}`} onClick={() => setPage(target)}><Icon name={icon} size={20} /><span>{label}</span></button>
+  )
+  const dock = section && (
+    <div className="notes-dock"><nav className="notes-island island">
+      {section === 'photos' && <>
+        {item({ kind: 'photos' }, page.kind === 'photos', 'photos', 'Gallery')}
+        {item({ kind: 'collections' }, page.kind !== 'photos', 'collections', 'Collections')}
+      </>}
+      {section === 'files' && <>
+        {item({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
+        {item({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
+        {item({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', 'Recent')}
+        {item({ kind: 'files', mode: 'browse', folder: 'Trash' }, inFilesTrash, 'trash', 'Trash')}
+      </>}
+      {section === 'drive' && <>
+        {item({ kind: 'collection', id: `drive:${driveId}`, name: driveName }, !driveFilter, 'photos', 'Gallery')}
+        {item({ kind: 'collection', id: `drive:${driveId}:screenshots`, name: `${driveName} · Screenshots` }, driveFilter === 'screenshots', 'screenshot', 'Screenshots')}
+        {item({ kind: 'collection', id: `drive:${driveId}:documents`, name: `${driveName} · Documents` }, driveFilter === 'documents', 'document', 'Documents')}
+      </>}
+    </nav></div>
+  )
 
   const loading = !media || (media.length === 0 && scan)
   let content: ReactNode
   // Pages that do not depend on the photo library come first: an empty library must not hide Devices, Files or Hidden.
-  if (page.kind === 'files') content = <Files mode={page.mode} folder={page.folder} go={(mode, folder) => setPage({ kind: 'files', mode, folder })} setDialog={setDialog} say={say} />
+  if (page.kind === 'files') content = <Files mode={page.mode} folder={page.folder} go={(mode, folder) => setPage({ kind: 'files', mode, folder })} setDialog={setDialog} say={say} dock={dock} />
   else if (page.kind === 'sync') content = <SyncPage setDialog={setDialog} />
   else if (page.kind === 'notes') content = <NotesPage setDialog={setDialog} say={say} />
   else if (page.kind === 'photoTrash') content = <TrashPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
@@ -280,7 +304,7 @@ export function App() {
         title={page.kind === 'person'
           ? <><button className="round flat" title="Back to People" onClick={() => setPage({ kind: 'people' })}><Icon name="back" /></button><h1>{page.name}</h1></>
           : inCollection
-          ? <><button className="round flat" title="Back to Collections" onClick={() => setPage({ kind: 'collections' })}><Icon name="back" /></button><h1>{page.name}</h1></>
+          ? <>{!driveId && <button className="round flat" title="Back to Collections" onClick={() => setPage({ kind: 'collections' })}><Icon name="back" /></button>}<h1>{driveId ? driveName : page.name}</h1></>
           : <h1>Photos</h1>}
         banner={undefined /* "Find documents" hidden for now: desktop increasingly just receives the phone's classification via sync, SYNC_PLAN.md phase 6a */}
         empty={query ? `Nothing matches “${query}”.` : inCollection ? 'Nothing here yet.' : 'Every item is hidden by Photos tools.'}
@@ -327,23 +351,11 @@ export function App() {
     <div className="app">
       <nav className="rail island">
         <div className="brand"><img src="./icon.png" alt="" />Tetra</div>
-        <small className="rail-head">Photos</small>
-        {nav({ kind: 'photos' }, page.kind === 'photos', 'photos', 'Photos')}
-        {nav({ kind: 'collections' }, !driveId && ['collections', 'collection', 'people', 'person', 'review', 'map', 'hidden'].includes(page.kind), 'collections', 'Collections')}
-        {collections.some(c => c.drive) && <small className="rail-head">Drives</small>}
-        {collections.filter(c => c.drive).map(c => <div key={c.id} className="rail-group">
-          {nav({ kind: 'collection', id: c.id, name: c.name }, page.kind === 'collection' && page.id === c.id, 'database', c.name)}
-          {nav({ kind: 'collection', id: `${c.id}:screenshots`, name: `${c.name} · Screenshots` }, page.kind === 'collection' && page.id === `${c.id}:screenshots`, 'screenshot', 'Screenshots')}
-          {nav({ kind: 'collection', id: `${c.id}:documents`, name: `${c.name} · Documents` }, page.kind === 'collection' && page.id === `${c.id}:documents`, 'document', 'Documents')}
-        </div>)}
-        <small className="rail-head">Files</small>
-        {nav({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
-        {nav({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
-        {nav({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', 'Recent')}
-        {nav({ kind: 'files', mode: 'browse', folder: 'Trash' }, filesMode === 'browse' && page.kind === 'files' && page.folder.startsWith('Trash'), 'trash', 'Trash')}
-        <small className="rail-head">Notes</small>
+        {/* One entry each; their parts are an island at the bottom of the page (asked 2026-09-26). */}
+        {nav({ kind: 'photos' }, section === 'photos', 'photos', 'Photos')}
+        {nav({ kind: 'files', mode: 'browse', folder: '' }, section === 'files', 'drive', 'Files')}
         {nav({ kind: 'notes' }, page.kind === 'notes', 'notes', 'Notes')}
-        <small className="rail-head">Sync</small>
+        {collections.filter(c => c.drive).map(c => <div key={c.id}>{nav({ kind: 'collection', id: c.id, name: c.name }, driveId === c.id.slice(6), 'database', c.name)}</div>)}
         {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Devices')}
         {analysis?.running && (
           <div className="rail-progress">
@@ -358,6 +370,7 @@ export function App() {
       </nav>
       <main className="content">
         {content}
+        {section && section !== 'files' && ['photos', 'collections', 'collection'].includes(page.kind) && picked.length === 0 && dock}
         {page.kind === 'person' && person && picked.length === 0 && (
           <div className="island selection-bar person-bar">
             <button className="text-button" onClick={() => combine(person)}><Icon name="merge" size={20} />Combine</button>
