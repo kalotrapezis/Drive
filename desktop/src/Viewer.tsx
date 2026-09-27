@@ -122,7 +122,7 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           {onTrash && <button className="round flat" title="Move to Trash (Delete)" onClick={() => onTrash(item)}><Icon name="trash" /></button>}
           {onTrash && <button className="round flat" title="Show in folder" onClick={() => window.drive.show(item.id)}><Icon name="folder" /></button>}
           <button className={`round flat ${details ? 'on' : ''}`} title="Details (i)" onClick={() => setDetails(d => !d)}><Icon name="info" /></button>
-          {motionUrl && <button className={`round flat ${playing ? 'on' : ''}`} title={playing ? 'Stop the motion' : 'Play the motion'} onClick={() => setMotionPlay(p => !p)}><Icon name="motion" /></button>}
+          {motionUrl && <button className={`round flat ${playing ? 'on' : ''}`} title={playing ? 'Stop the motion' : 'Play the motion'} onClick={() => setMotionPlay(p => !p)}><Icon name={playing ? 'motion' : 'motionOff'} /></button>}
         </div>
       </div>
 

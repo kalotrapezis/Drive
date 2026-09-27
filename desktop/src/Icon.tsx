@@ -1,3 +1,4 @@
+import { useId } from 'react'
 // Material Symbols Outlined 400 (Apache 2.0), the phone's icon family. Generated from @material-symbols/svg-400.
 const PATHS = {
   photos: 'M180-120q-24 0-42-18t-18-42v-600q0-24 18-42t42-18h600q24 0 42 18t18 42v600q0 24-18 42t-42 18H180Zm0-60h600v-600H180v600Zm56-97h489L578-473 446-302l-93-127-117 152Zm-56 97v-600 600Z',
@@ -121,6 +122,14 @@ Object.assign(PATHS, NOTE_PATHS)
 
 export type IconName = keyof typeof PATHS | keyof typeof NOTE_PATHS | 'folderDocuments' | 'folderScans'
 
-export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
+// Motion off (asked 2026-09-27, "like the real thing"): the Motion icon with a gap cut along a slash, then the slash.
+const MOTION_GAP = 'M64-960H960V-64ZM0-896V0H896Z', MOTION_SLASH = 'M161-841L841-161L799-119L119-799Z'
+
+export function Icon({ name, size = 22 }: { name: IconName | 'motionOff'; size?: number }) {
+  const clip = useId()
+  if (name === 'motionOff') return <svg width={size} height={size} viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">
+    <defs><clipPath id={clip}><path d={MOTION_GAP} /></clipPath></defs>
+    <path clipPath={`url(#${clip})`} d={PATHS.motion} /><path d={MOTION_SLASH} />
+  </svg>
   return <svg width={size} height={size} viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path fillRule={name === 'folderScans' ? 'evenodd' : undefined} d={(PATHS as Record<string, string>)[name]} /></svg>
 }
