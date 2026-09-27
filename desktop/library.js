@@ -268,6 +268,36 @@ function list(db) {
     FROM media m LEFT JOIN photo_state s ON s.sha256 = m.sha256 LEFT JOIN photo_ai a ON a.sha256 = m.sha256 ORDER BY m.taken_at DESC, m.path`).all()
 }
 
+/**
+ * Motion photos, shown as one (asked 2026-09-26): an export splits a motion photo into a picture and a few seconds of
+ * video of the same name in the same folder — MVIMG_1.jpg + MVIMG_1.MP4, 20230529_201908.heic +
+ * 20230529_201908(2).MP4, PXL_1.MP.jpg + PXL_1.mp4. The video leaves the list and its picture carries `motion`, its id.
+ */
+const VIDEO_EXT = /\.(mp4|mov|m4v|3gp|mkv|webm|avi)$/i
+const isVideoPath = p => VIDEO_EXT.test(p)
+const motionStem = p => path.join(path.dirname(p), path.basename(p).replace(/\.[^.]+$/, '').replace(/\.MP$/i, '').replace(/(\(\d+\)|~\d+)$/, '').toLowerCase())
+function pairMotion(items) {
+  const pictures = new Map()
+  for (const m of items) if (!m.is_video) pictures.set(motionStem(m.path), m)
+  const halves = new Map() // video id → its picture
+  for (const m of items) if (m.is_video) { const p = pictures.get(motionStem(m.path)); if (p && !p.motion) { p.motion = m.id; halves.set(m.id, p) } }
+  return halves.size ? items.filter(m => !halves.has(m.id)) : items
+}
+
+/**
+ * Where the video inside a motion photo starts (Pixel "MicroVideo"/"MotionPhoto", Samsung): the picture's file ends
+ * with an MP4, whose first box is `ftyp` after a 4-byte size. -1 when there is none. A HEIC's own `ftyp` is at 4,
+ * so the search starts past it; the brand check keeps a stray "ftyp" in the picture's data from counting.
+ */
+const MP4_BRANDS = new Set(['mp41', 'mp42', 'isom', 'iso2', 'iso4', 'iso5', 'iso6', 'avc1', 'qt  ', 'M4V ', 'MSNV'])
+function embeddedVideoOffset(buf) {
+  for (let i = buf.indexOf('ftyp', 16, 'latin1'); i !== -1; i = buf.indexOf('ftyp', i + 4, 'latin1')) {
+    const size = buf.readUInt32BE(i - 4)
+    if (size >= 16 && size <= 256 && MP4_BRANDS.has(buf.toString('latin1', i + 4, i + 8))) return i - 4
+  }
+  return -1
+}
+
 function transaction(db, fn) {
   db.exec('BEGIN')
   try { const r = fn(); db.exec('COMMIT'); return r } catch (e) { db.exec('ROLLBACK'); throw e }
@@ -507,4 +537,4 @@ function metadataSince(db, since) {
 /** A screenshot, by its name or folder — the same test the phone uses. */
 const isScreenshot = p => /screenshot|στιγμιοτυπο|screen[ _-]?shot|scrnshot/.test(p.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase())
 
-module.exports = { dateFromName, fromMessenger, takenFrom, repairDatesFromNames, isScreenshot, open, scan, list, transaction, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }
+module.exports = { pairMotion, embeddedVideoOffset, motionStem, isVideoPath, dateFromName, fromMessenger, takenFrom, repairDatesFromNames, isScreenshot, open, scan, list, transaction, sha256, trash, image, preview, isHeic, isRaw, needsPreview, setFavorite, collectionName, collections, createCollection, deleteCollection, setMembership, members, setCollectionHidden, trashedPhotos, restoreTrashed, emptyPhotoTrash, applyFavorite, applyCollection, applyCollectionItem, applyLabels, metadataSince }

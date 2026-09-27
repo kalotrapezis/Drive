@@ -1,3 +1,4 @@
+import { useId } from 'react'
 // Material Symbols Outlined 400 (Apache 2.0), the phone's icon family. Generated from @material-symbols/svg-400.
 const PATHS = {
   photos: 'M180-120q-24 0-42-18t-18-42v-600q0-24 18-42t42-18h600q24 0 42 18t18 42v600q0 24-18 42t-42 18H180Zm0-60h600v-600H180v600Zm56-97h489L578-473 446-302l-93-127-117 152Zm-56 97v-600 600Z',
@@ -16,6 +17,7 @@ const PATHS = {
   trash: 'M261-120q-24.75 0-42.37-17.63Q201-155.25 201-180v-570h-41v-60h188v-30h264v30h188v60h-41v570q0 24-18 42t-42 18H261Zm438-630H261v570h438v-570ZM367-266h60v-399h-60v399Zm166 0h60v-399h-60v399ZM261-750v570-570Z',
   add: 'M450-450H200v-60h250v-250h60v250h250v60H510v250h-60v-250Z',
   collections: 'M345-377h391L609-548 506-413l-68-87-93 123Zm-85 177q-24 0-42-18t-18-42v-560q0-24 18-42t42-18h560q24 0 42 18t18 42v560q0 24-18 42t-42 18H260Zm0-60h560v-560H260v560ZM140-80q-24 0-42-18t-18-42v-620h60v620h620v60H140Zm120-740v560-560Z',
+  motion: 'M480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-60q142 0 241-99t99-241q0-142-99-241t-241-99q-142 0-241 99t-99 241q0 142 99 241t241 99Zm-80-170 240-170-240-170v340Z',
   video: 'M140-160q-24 0-42-18t-18-42v-520q0-24 18-42t42-18h520q24 0 42 18t18 42v215l160-160v410L720-435v215q0 24-18 42t-42 18H140Zm0-60h520v-520H140v520Zm0 0v-520 520Z',
   screenshot: 'M600-320h160v-160h-40v120H600v40ZM200-560h40v-120h120v-40H200v160Zm130 440v-80H140q-24 0-42-18t-18-42v-520q0-24 18-42t42-18h680q24 0 42 18t18 42v520q0 24-18 42t-42 18H630v80H330ZM140-260h680v-520H140v520Zm0 0v-520 520Z',
   checked: 'm421-298 283-283-46-45-237 237-120-120-45 45 165 166Zm59 218q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-83 31.5-156t86-127Q252-817 325-848.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 82-31.5 155T763-197.5q-54 54.5-127 86T480-80Z',
@@ -120,6 +122,14 @@ Object.assign(PATHS, NOTE_PATHS)
 
 export type IconName = keyof typeof PATHS | keyof typeof NOTE_PATHS | 'folderDocuments' | 'folderScans'
 
-export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
+// Motion off (asked 2026-09-27, "like the real thing"): the Motion icon with a gap cut along a slash, then the slash.
+const MOTION_GAP = 'M64-960H960V-64ZM0-896V0H896Z', MOTION_SLASH = 'M161-841L841-161L799-119L119-799Z'
+
+export function Icon({ name, size = 22 }: { name: IconName | 'motionOff'; size?: number }) {
+  const clip = useId()
+  if (name === 'motionOff') return <svg width={size} height={size} viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">
+    <defs><clipPath id={clip}><path d={MOTION_GAP} /></clipPath></defs>
+    <path clipPath={`url(#${clip})`} d={PATHS.motion} /><path d={MOTION_SLASH} />
+  </svg>
   return <svg width={size} height={size} viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path fillRule={name === 'folderScans' ? 'evenodd' : undefined} d={(PATHS as Record<string, string>)[name]} /></svg>
 }

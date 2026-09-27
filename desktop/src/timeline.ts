@@ -8,6 +8,8 @@ export interface Media {
   place: string | null; place_names: string | null; document?: number; labels?: string | null
   /** Set when the photo lives on a storage drive: the drive's id, and its name. */
   location?: string | null; drive?: string
+  /** A motion photo's video half (library.pairMotion): its id, played by the viewer's Motion button. */
+  motion?: number
 }
 
 export interface Group<T> { key: string; label: string; items: T[] }

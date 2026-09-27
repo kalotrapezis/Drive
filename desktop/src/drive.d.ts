@@ -158,6 +158,11 @@ declare global {
       }
       theme(): Promise<'system' | 'light' | 'dark'>
       setTheme(t: 'system' | 'light' | 'dark'): Promise<void>
+      motionSetting(): Promise<'one' | 'remove'>
+      setMotionSetting(v: 'one' | 'remove'): Promise<void>
+      hasMotion(id: number): Promise<boolean>
+      motionAutoplay(): Promise<boolean>
+      setMotionAutoplay(on: boolean): Promise<void>
       onNotesSynced(cb: (s: { at: number; device: string }) => void): () => void
       files: {
         root(): Promise<string>

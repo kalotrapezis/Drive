@@ -628,8 +628,15 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .notice p { margin: 4px 0 0; color: var(--muted); }
 .notice small { color: var(--muted); white-space: nowrap; }
 .notice.unread { outline: 2px solid var(--accent); outline-offset: -2px; }
-.settings-card { max-width: 560px; padding: 20px 24px; }
-.settings-card h3 { margin: 0 0 12px; }
+.settings-card { max-width: 560px; padding: 20px 24px; margin-bottom: 16px; }
+.settings-card h4 { margin: 20px 0 10px; }
+.settings-card h3 { margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
+/* The parts of Tetra (asked 2026-09-27): colour is a label — a symbol beside a title — the same in light and dark.
+   The phone's Category enum has the same five. */
+:root { --cat-photos: #3DA35D; --cat-files: #4F86E8; --cat-notes: #F2B705; --cat-scanner: #D32F2F; --cat-office: #8E5BD8; }
+.cat { display: inline-flex; }
+.cat.photos { color: var(--cat-photos); } .cat.files { color: var(--cat-files); } .cat.notes { color: var(--cat-notes); }
+.cat.scanner { color: var(--cat-scanner); } .cat.office { color: var(--cat-office); }
 .segmented { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--island-2); }
 .segmented button { padding: 8px 20px; border-radius: 999px; }
 .segmented button.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
