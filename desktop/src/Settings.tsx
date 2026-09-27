@@ -52,7 +52,7 @@ export function SettingsPage() {
         <p className="muted">Auto follows the system's light or dark setting.</p>
       </section>
       <section className="settings-card island">
-        <h3>Motion photos</h3>
+        <h3><span className="cat photos"><Icon name="photos" size={20} /></span>Motion photos</h3>
         <div className="segmented">
           {([['one', 'Show as one'], ['remove', 'Remove on import']] as const).map(([id, name]) =>
             <button key={id} className={motion === id ? 'on' : ''} onClick={() => pickMotion(id)}>{name}</button>)}
