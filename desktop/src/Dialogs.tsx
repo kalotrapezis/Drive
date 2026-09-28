@@ -105,7 +105,7 @@ export function FolderPicker({ count, leaving, onPick, onClose }: { count: numbe
 export const errorText = (e: unknown) => String((e as Error)?.message ?? e).replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, '')
 
 /** Choose tags or create one (Files, and Notes' labels): a set replaces what was there on Save. */
-export function TagsDialog({ title, hint, initial, known, onSave, onClose }: { title: string; hint?: string; initial: string[]; known: string[]; onSave: (t: string[]) => Promise<void>; onClose: () => void }) {
+export function TagsDialog({ title, hint, noun = 'tag', initial, known, onSave, onClose }: { title: string; hint?: string; noun?: string; initial: string[]; known: string[]; onSave: (t: string[]) => Promise<void>; onClose: () => void }) {
   const [chosen, setChosen] = useState(new Set(initial))
   const [all, setAll] = useState([...new Set([...known, ...initial])].sort((a, b) => a.localeCompare(b)))
   const [draft, setDraft] = useState('')
@@ -114,7 +114,7 @@ export function TagsDialog({ title, hint, initial, known, onSave, onClose }: { t
   function add(e: React.FormEvent) {
     e.preventDefault()
     const t = draft.trim()
-    if (!t || t.length > 32 || t.includes(',')) return setError('Tags must be 1\u201332 characters and cannot contain commas.')
+    if (!t || t.length > 32 || t.includes(',')) return setError(`${noun[0].toUpperCase()}${noun.slice(1)}s must be 1\u201332 characters and cannot contain commas.`)
     const existing = all.find(x => x.toLowerCase() === t.toLowerCase())
     if (!existing) setAll(a => [...a, t])
     setChosen(s => new Set(s).add(existing ?? t)); setDraft(''); setError('')
@@ -125,8 +125,8 @@ export function TagsDialog({ title, hint, initial, known, onSave, onClose }: { t
       {hint && <p className="hint">{hint}</p>}
       <div className="chips wrap">{all.map(t => <button key={t} className={`chip ${chosen.has(t) ? 'on' : ''}`} onClick={() => toggle(t)}>{t}</button>)}</div>
       <form onSubmit={add} className="tag-add">
-        <input className="field" placeholder="New tag" maxLength={32} value={draft} onChange={e => { setDraft(e.target.value); setError('') }} />
-        <button className="round" title="Add tag" disabled={!draft.trim()}><Icon name="add" /></button>
+        <input className="field" placeholder={`New ${noun}`} maxLength={32} value={draft} onChange={e => { setDraft(e.target.value); setError('') }} />
+        <button className="round" title={`Add ${noun}`} disabled={!draft.trim()}><Icon name="add" /></button>
       </form>
       {error && <p className="error">{error}</p>}
       <div className="dialog-actions">
