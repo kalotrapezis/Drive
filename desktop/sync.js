@@ -1327,13 +1327,27 @@ class SyncServer {
       await new Promise((resolve, reject) => out.end(err => err ? reject(err) : resolve()))
       if (hash.digest('hex') !== expected) throw Object.assign(new Error('The file changed in transit; nothing was kept.'), { status: 422, expose: true })
       let kept = target
-      const { dir, name, ext } = path.parse(target)
-      for (let n = 2; fs.existsSync(kept); n++) kept = path.join(dir, `${name} (${n})${ext}`)
-      await fsp.link(part, kept)
-      await fsp.rm(part)
+      // An edit the device made (files.reconcile said so): it replaces the file, if that is still the version the
+      // device edited — the old one kept in "Files history", outside Drive, as a drive backup keeps it. Anything
+      // else of the same name stays, and the newcomer lands beside it.
+      const replaces = this.files.pendingUpdate(device.id, rel, expected)
+      if (replaces && fs.existsSync(target) && await this.files.hash(rel) === replaces) {
+        const old = path.join(this.dataDir, 'Files history', String(Date.now()), ...rel.split('/'))
+        await fsp.mkdir(path.dirname(old), { recursive: true })
+        await fsp.copyFile(target, old)
+        await fsp.rename(part, target)
+        this.files.updated(device.id, rel)
+        history.record(this.db, { action: 'updated', kind: 'file', name: rel, sha256: expected, device: device.id, detail: `was ${replaces}` })
+      } else {
+        const { dir, name, ext } = path.parse(target)
+        for (let n = 2; fs.existsSync(kept); n++) kept = path.join(dir, `${name} (${n})${ext}`)
+        await fsp.link(part, kept)
+        await fsp.rm(part)
+      }
       const modified = Number(params.get('modified'))
       if (Number.isFinite(modified) && modified > 0) await fsp.utimes(kept, new Date(), new Date(modified))
       const relKept = this.files.rel(kept)
+      this.files.received(device.id, relKept, expected)
       history.record(this.db, { action: 'received', kind: 'file', name: relKept, sha256: expected, device: device.id })
       this.db.prepare(`INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at, kind) VALUES(?,?,?,?,?,'file')`)
         .run(device.id, expected, relKept, (await fsp.stat(kept)).size, Date.now())

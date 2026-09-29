@@ -282,7 +282,16 @@ class Files {
     const offered = new Map()
     for (const e of entries ?? []) if (isSafeRel(e?.path) && /^[0-9a-f]{64}$/.test(e?.sha256 ?? '')) offered.set(e.path, e.sha256)
     const before = new Map(this.db.prepare('SELECT path, sha256 FROM sync_manifest WHERE device_id = ?').all(deviceId).map(r => [r.path, r.sha256]))
-    const mineBefore = new Map(this.db.prepare("SELECT path, sha256 FROM sync_manifest WHERE device_id = 'self'").all().map(r => [r.path, r.sha256]))
+    // What this computer held when it last agreed with *this* device (29 September: one snapshot shared by every
+    // device was overwritten by the phone's sync, so the tablet's old copy of an edit looked like a conflict). The
+    // shared 'self' is only the starting point for a device synced before there was one of its own.
+    const mineRows = this.db.prepare('SELECT path, sha256 FROM sync_manifest WHERE device_id = ?').all(`self:${deviceId}`)
+    const mineBefore = new Map((mineRows.length ? mineRows : this.db.prepare("SELECT path, sha256 FROM sync_manifest WHERE device_id = 'self'").all()).map(r => [r.path, r.sha256]))
+    // What this computer offered the device last time: it fetches those after sending its list, so the list said
+    // nothing about them. When it now holds exactly those bytes there, that is the version both sides agreed on.
+    this.updatesTable()
+    const offeredBefore = new Map(this.db.prepare('SELECT path, sha256 FROM file_offered WHERE device_id = ?').all(deviceId).map(r => [r.path, r.sha256]))
+    const lastTheirs = rel => offered.get(rel) !== undefined && offeredBefore.get(rel) === offered.get(rel) ? offered.get(rel) : before.get(rel)
     const mine = new Map() // sha256 → the paths this device holds
     const minePaths = new Map() // path → sha256, as this computer holds it now
     for (const rel of await this.walk('')) {
@@ -298,15 +307,19 @@ class Files {
     this.db.exec('CREATE TABLE IF NOT EXISTS file_deleted_here (sha256 TEXT PRIMARY KEY, at INTEGER NOT NULL)')
     const forget = this.db.prepare('INSERT OR IGNORE INTO file_deleted_here(sha256, at) VALUES(?,?)')
     // An empty Drive where 20+ files were is a missing folder, not a deletion (the photo scan's guard too).
-    if (mine.size || mineBefore.size < 20) for (const sha of mineBefore.values()) if (!mine.has(sha)) forget.run(sha, Date.now())
+    // A path still here with other bytes was edited, not deleted: its old version is not a deletion to remember.
+    if (mine.size || mineBefore.size < 20) for (const [rel, sha] of mineBefore) if (!mine.has(sha) && !minePaths.has(rel)) forget.run(sha, Date.now())
     const back = this.db.prepare('DELETE FROM file_deleted_here WHERE sha256 = ?')
     for (const sha of mine.keys()) back.run(sha)
     const deletedHere = new Set(this.db.prepare('SELECT sha256 FROM file_deleted_here').all().map(r => r.sha256))
-    const want = [], moved = []
+    const want = [], moved = [], updates = []
     for (const [rel, sha] of offered) {
       if (!followTrash && inTrash(rel)) continue
       if (deletedHere.has(sha)) continue
       if (mine.get(sha)?.includes(rel)) continue // already here, at this very path
+      // The device's copy is the version both held last time and this computer has edited it since: the new
+      // version goes to the device (have), and its old one is not asked for.
+      if (lastTheirs(rel) === sha && mineBefore.get(rel) === sha && minePaths.has(rel)) continue
       // The phone kept these bytes here last time and does not any more: it moved them, so follow.
       const elsewhere = (mine.get(sha) ?? []).find(other => before.get(other) === sha && !offered.has(other))
       if (elsewhere) {
@@ -318,7 +331,16 @@ class Files {
         minePaths.delete(elsewhere)
         minePaths.set(rel, sha)
         moved.push({ from: elsewhere, to: rel })
-      } else want.push(rel)
+      } else {
+        // An edit: the device held what this computer holds here now, last time, and offers other bytes now — only
+        // it changed the file, so what it sends replaces this one (the old version kept aside). Both changed (or
+        // the first sync): no memory to say so, and both are kept, as before — once: when those bytes are already
+        // here (kept beside it last time), asking again only made "(3)", "(4)"… on every sync (29 September).
+        const here = minePaths.get(rel)
+        if (here && here !== sha && lastTheirs(rel) === here) updates.push({ path: rel, sha256: sha, replaces: here })
+        else if (here && mine.has(sha)) continue
+        want.push(rel)
+      }
     }
     // The same question asked the other way round.
     const offeredShas = new Map() // sha256 → the paths the device holds
@@ -329,12 +351,21 @@ class Files {
     const have = [], moveTo = []
     for (const [rel, sha] of minePaths) {
       if (offered.get(rel) === sha) continue // the device has these bytes at this very path
+      // This computer edited it and the device has not touched its copy since: the new version replaces it there.
+      const theirsHere = offered.get(rel)
+      if (theirsHere && lastTheirs(rel) === theirsHere && mineBefore.get(rel) === theirsHere) {
+        have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel), replaces: theirsHere })
+        continue
+      }
       const theirs = offeredShas.get(sha) ?? []
       // Offering a copy is safe on any sync, including the first: it adds, it never rearranges.
       if (!theirs.length) { if (gone.has(sha)) continue; have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel) }); continue }
       // This computer moved it, and the device still has it where it was: mirror the move rather than send it.
       const from = theirs.find(other => mineBefore.get(other) === sha && !minePaths.has(other))
       if (from && !offered.has(rel)) moveTo.push({ from, to: rel })
+      // Not a move: the device keeps these bytes under another name, and this computer has them here too — a copy,
+      // as the device's own copies reach this computer (a document copied into a new folder, 29 September).
+      else if (!offered.has(rel)) have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel) })
     }
     // A path the device is being told to *move* must not also be asked for. Both answers are true on their own
     // — this computer does not hold those bytes at that path, and it moved them itself — and sending both made
@@ -346,14 +377,39 @@ class Files {
     this.db.exec('BEGIN')
     try {
       this.db.prepare('DELETE FROM sync_manifest WHERE device_id = ?').run(deviceId)
-      this.db.prepare("DELETE FROM sync_manifest WHERE device_id = 'self'").run()
+      this.db.prepare("DELETE FROM sync_manifest WHERE device_id IN ('self', ?)").run(`self:${deviceId}`)
       const put = this.db.prepare('INSERT INTO sync_manifest(device_id, path, sha256) VALUES(?,?,?)')
       for (const [rel, sha] of offered) put.run(deviceId, rel, sha)
-      for (const [rel, sha] of minePaths) put.run('self', rel, sha)
+      for (const [rel, sha] of minePaths) { put.run('self', rel, sha); put.run(`self:${deviceId}`, rel, sha) }
+      // What the device is about to send as an edit: its upload replaces this file rather than landing beside it.
+      this.updatesTable()
+      this.db.prepare('DELETE FROM file_updates WHERE device_id = ?').run(deviceId)
+      const edit = this.db.prepare('INSERT INTO file_updates(device_id, path, sha256, replaces) VALUES(?,?,?,?)')
+      for (const u of updates) if (wanted.includes(u.path)) edit.run(deviceId, u.path, u.sha256, u.replaces)
+      this.db.prepare('DELETE FROM file_offered WHERE device_id = ?').run(deviceId)
+      const offer = this.db.prepare('INSERT OR REPLACE INTO file_offered(device_id, path, sha256) VALUES(?,?,?)')
+      for (const h of have) offer.run(deviceId, h.path, h.sha256)
       this.db.exec('COMMIT')
     } catch (e) { this.db.exec('ROLLBACK'); throw e }
     return { want: wanted, moved, have, moveTo }
   }
+
+  updatesTable() {
+    this.db.exec(`CREATE TABLE IF NOT EXISTS file_updates (device_id TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, replaces TEXT NOT NULL, PRIMARY KEY(device_id, path));
+      CREATE TABLE IF NOT EXISTS file_offered (device_id TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, PRIMARY KEY(device_id, path))`)
+  }
+  /**
+   * A file the device just sent is here now: this computer's snapshot for that device says so at once, so an edit made
+   * here before the next sync is known as this computer's (it looked like a conflict).
+   */
+  received(deviceId, rel, sha) {
+    const put = this.db.prepare('INSERT OR REPLACE INTO sync_manifest(device_id, path, sha256) VALUES(?,?,?)')
+    put.run(`self:${deviceId}`, rel, sha)
+    put.run('self', rel, sha)
+  }
+  /** The bytes an upload of [sha] at [rel] from [deviceId] is an edit of (reconcile said so), or null: then it is a new file. */
+  pendingUpdate(deviceId, rel, sha) { this.updatesTable(); return this.db.prepare('SELECT replaces FROM file_updates WHERE device_id = ? AND path = ? AND sha256 = ?').get(deviceId, rel, sha)?.replaces ?? null }
+  updated(deviceId, rel) { this.updatesTable(); this.db.prepare('DELETE FROM file_updates WHERE device_id = ? AND path = ?').run(deviceId, rel) }
 
   async sizeOf(rel) { return (await fsp.stat(path.join(this.root, rel)).catch(() => null))?.size ?? 0 }
   async mtimeOf(rel) { return Math.round((await fsp.stat(path.join(this.root, rel)).catch(() => null))?.mtimeMs ?? 0) }
