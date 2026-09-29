@@ -1791,7 +1791,12 @@ received between two syncs then edited, a conflict kept once, a copy under anoth
 pair (source build of the desktop, tablet with the new APK): the tablet received the four Test-Words files it lacked;
 Border test.docx edited in Writer on the tablet → the computer's copy replaced (history "updated", old version in Files
 history), no "(2)"; a text file edited on the computer → the tablet's copy replaced in place, old one in its Files
-history. **Not yet on the phone** (not connected). The installed desktop (/opt/Tetra, Beta 2) still has the old rule.
+history. **Phone** (same day, 17:20): the new APK's first sync brought it the 8 Test-Words files it lacked; HF test.docx
+edited in Writer on the phone → the computer's copy replaced (history "updated", old version in Files history), no
+"(2)"; a second sync moved nothing; phone and computer then held the same 18 files but one — HF test.odt, which the
+bug had left different on the two sides (phone: the Writer save; computer: the copy before it, the save beside it as
+"(2)"), with no memory of which is newer: kept both, as a conflict should be. The installed desktop (/opt/Tetra,
+Beta 2) still has the old rule until a new build is installed.
 
 ## Roadmap (set 2026-09-24)
 
