@@ -701,6 +701,25 @@ test('the computer can only say "there is something new"; the phone it says it t
       server.ask('127.0.0.1', { peer_fp: 'f'.repeat(64), peer_port: phone.address().port, peer_token: token }).then(resolve, e => resolve(e.message))
     })), 'That is not the paired device.', '…and its answer is refused')
 
+    // It moved to another network and nobody is at its old address: the beacon finds it, and the new address is kept.
+    asked.length = 0
+    db.prepare('DELETE FROM sync_devices').run()
+    row(phoneId.fingerprint)
+    db.prepare("UPDATE sync_devices SET peer_hosts = '127.0.0.2', peer_port = 1").run()
+    const beacon = dgram.createSocket('udp4')
+    beacon.on('message', (msg, from) => {
+      if (JSON.parse(msg.toString()).fp === phoneId.fingerprint) beacon.send(JSON.stringify({ v: 1, port: phone.address().port }), from.port, from.address)
+    })
+    await new Promise(r => beacon.bind(0, '127.0.0.1', r))
+    const find = server.find.bind(server)
+    const beaconPort = beacon.address().port
+    server.find = fp => find(fp, ['127.0.0.1'], beaconPort, 300)
+    await server.nudge()
+    beacon.close()
+    assert.equal(asked.length, 1, 'the phone is told, at the address the beacon gave')
+    assert.deepEqual({ ...db.prepare('SELECT peer_hosts, peer_port FROM sync_devices').get() }, { peer_hosts: '127.0.0.1,127.0.0.2', peer_port: phone.address().port })
+    assert.deepEqual(await find(phoneId.fingerprint, ['127.0.0.1'], beaconPort, 100), [], 'a closed beacon finds no one')
+
     // A device that only ever sends is not told anything: there is nothing here for it.
     asked.length = 0
     const only = db.prepare('SELECT id FROM sync_devices').get().id
@@ -1205,6 +1224,21 @@ test('Both ways: a photo in a two-way device Trash goes to this computer Trash; 
     assert.equal(db.prepare('SELECT COUNT(*) n FROM deleted_here').get().n, 0, 'not declined: restored on the phone, it may come back')
   } finally {
     server.stop?.(); db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('editor tabs: the newer open or close of each file wins, and nothing unsafe is kept', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-tabs-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos') })
+  try {
+    server.mergeEditorTabs([{ path: 'Documents/Schools.txt', open: true, at: 10 }, { path: '../etc/passwd', open: true, at: 10 }, { path: 'a.txt', open: 'yes', at: 1 }])
+    const tablet = server.mergeEditorTabs([{ path: 'Documents/Schools.txt', open: false, at: 5 }, { path: 'Notes.txt', open: true, at: 7 }])
+    assert.deepEqual(tablet, [{ path: 'Documents/Schools.txt', open: true, at: 10 }, { path: 'Notes.txt', open: true, at: 7 }], 'an older close does not win')
+    assert.deepEqual(server.mergeEditorTabs([{ path: 'Documents/Schools.txt', open: false, at: 20 }])[0], { path: 'Documents/Schools.txt', open: false, at: 20 })
+  } finally {
+    db.close()
     fs.rmSync(tmp, { recursive: true, force: true })
   }
 })

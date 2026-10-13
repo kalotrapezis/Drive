@@ -10,7 +10,7 @@ const places = require('./places')
 const { Vault } = require('./vault')
 const editor = require('./editor')
 const docs = require('./documents')
-const { SyncServer } = require('./sync')
+const { SyncServer, lanAddresses } = require('./sync')
 const { Folders } = require('./folders')
 const { Purgatory } = require('./purgatory')
 const history = require('./history')
@@ -258,6 +258,15 @@ app.whenReady().then(() => {
   // A drive plugged in is noticed within a minute. Never from a hidden QA copy (scripts/shot.js): it would back up
   // and notify from a database that is not the real one.
   if (!process.env.DRIVE_HIDDEN) setInterval(() => backUpPluggedDrives().then(checkSpace).then(sweepPurgatory).catch(e => console.warn('[space]', e.message)), 60_000)
+  // This computer moved to another network (or the router gave it a new address): the devices have not been told,
+  // so say "there is something new" — nudge() finds a device that moved too, and its sync brings both up to date.
+  let lan = lanAddresses().join()
+  if (!process.env.DRIVE_HIDDEN) setInterval(() => {
+    const now = lanAddresses().join()
+    if (now === lan) return
+    lan = now
+    if (now) sync.nudge().catch(() => {})
+  }, 15_000)
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
   // The Notes app's vault moves in once (its folders become labels); the old one is only read, never changed.
   if (!process.env.DRIVE_HIDDEN && !setting('notesImported')) {
@@ -459,7 +468,7 @@ app.whenReady().then(() => {
     return { photos: db.prepare('SELECT COUNT(*) n FROM media WHERE location IS NULL').get().n, files: filesCount.n }
   }
   ipcMain.handle('sync:status', async () => ({ counts: await selfCounts(), port: sync.port, fingerprint: sync.fingerprint, error: sync.error ?? null,
-    addresses: require('node:os').networkInterfaces && Object.values(require('node:os').networkInterfaces()).flat().filter(a => a?.family === 'IPv4' && !a.internal).map(a => a.address),
+    addresses: lanAddresses(),
     devices: sync.devices(), overview: sync.overview(), self: sync.self(), disk: sync.disk() }))
   ipcMain.handle('sync:pair', async () => {
     const payload = sync.startPairing()
