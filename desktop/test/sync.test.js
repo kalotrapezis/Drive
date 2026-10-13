@@ -422,6 +422,94 @@ test('drive files: the computer asks only for what it lacks, and follows a move 
   }
 })
 
+test('an edited file replaces the older version on the other side; only a real conflict keeps both', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-edit-'))
+  const root = path.join(tmp, 'Drive')
+  fs.mkdirSync(path.join(root, 'Work'), { recursive: true })
+  const db = library.open(path.join(tmp, 'data'))
+  const files = new Files(db, root)
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
+    dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex')
+  const read = rel => fs.readFileSync(path.join(root, rel), 'utf8')
+  try {
+    const pair = async name => {
+      const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name } })).body
+      server.setConnection(paired.deviceId, 'files', { direction: 'both', keep: 'everything' }) // both ways, as the user sets them
+      return paired.token
+    }
+    const phone = await pair('Xiaomi 15'), tablet = await pair('Tablet')
+    const manifest = (token, list) => call('POST', '/files/manifest', { token, json: { files: list.map(([p, b]) => ({ path: p, sha256: sha(b), size: b.length })) } })
+    const put = (token, rel, b) => call('PUT', `/file/${sha(b)}?path=${encodeURIComponent(rel)}`, { token, body: b })
+    const v1 = Buffer.from('HF test, as copied'), v2 = Buffer.from('HF test, saved in Writer')
+
+    // The phone has the first version: it arrives, and the tablet (which keeps the same bytes under another name) gets a copy too.
+    assert.deepEqual((await manifest(phone, [['Work/HF test.odt', v1]])).body.want, ['Work/HF test.odt'])
+    await put(phone, 'Work/HF test.odt', v1)
+    let r = await manifest(tablet, [['Elsewhere/Original.odt', v1]])
+    assert.deepEqual(r.body.have.map(h => h.path), ['Work/HF test.odt'], 'a copy the tablet keeps under another name still arrives here')
+    assert.deepEqual(r.body.moveTo, [])
+    r = await manifest(tablet, [['Elsewhere/Original.odt', v1], ['Work/HF test.odt', v1]]) // the tablet took it
+
+    // Saved over on the phone: an edit, so it replaces the computer's copy, the old version kept outside Drive.
+    r = await manifest(phone, [['Work/HF test.odt', v2]])
+    assert.deepEqual(r.body.want, ['Work/HF test.odt'])
+    r = await put(phone, 'Work/HF test.odt', v2)
+    assert.equal(r.body.path, 'Work/HF test.odt', 'no "(2)"')
+    assert.equal(read('Work/HF test.odt'), v2.toString())
+    assert.equal(fs.existsSync(path.join(root, 'Work/HF test (2).odt')), false)
+    const kept = path.join(tmp, 'data', 'Files history')
+    assert.equal(fs.readFileSync(path.join(kept, fs.readdirSync(kept)[0], 'Work', 'HF test.odt'), 'utf8'), v1.toString(), 'the old version is kept')
+    assert.deepEqual((await manifest(phone, [['Work/HF test.odt', v2]])).body, { want: [], moved: [], have: [], moveTo: [] })
+
+    // The tablet still has the first version, untouched: the new one replaces it there.
+    r = await manifest(tablet, [['Elsewhere/Original.odt', v1], ['Work/HF test.odt', v1]])
+    assert.deepEqual(r.body.have.map(h => [h.path, h.sha256, h.replaces]), [['Work/HF test.odt', sha(v2), sha(v1)]])
+
+    // Edited on this computer while the phone had not touched it: offered to the phone as a replacement.
+    const v3 = Buffer.from('HF test, edited on the computer')
+    fs.writeFileSync(path.join(root, 'Work/HF test.odt'), v3)
+    r = await manifest(phone, [['Work/HF test.odt', v2]])
+    assert.deepEqual(r.body.have.map(h => [h.path, h.replaces]), [['Work/HF test.odt', sha(v2)]])
+    assert.deepEqual(r.body.want, [], 'the phone\'s unchanged copy is not asked for')
+
+    // A file this computer made reaches the device after the device sent its list; edited here next, it still
+    // replaces the device's copy (the device's list never said it had it — found on the tablet, 29 September).
+    const n1 = Buffer.from('made on the computer'), n2 = Buffer.from('made on the computer, then edited')
+    fs.writeFileSync(path.join(root, 'Work/new.txt'), n1)
+    r = await manifest(tablet, [['Elsewhere/Original.odt', v1], ['Work/HF test.odt', v1]])
+    assert.ok(r.body.have.some(h => h.path === 'Work/new.txt'))
+    fs.writeFileSync(path.join(root, 'Work/new.txt'), n2)
+    r = await manifest(tablet, [['Elsewhere/Original.odt', v1], ['Work/HF test.odt', v1], ['Work/new.txt', n1]])
+    assert.ok(!r.body.want.includes('Work/new.txt'), 'its older copy is not asked for')
+    assert.deepEqual(r.body.have.filter(h => h.path === 'Work/new.txt').map(h => h.replaces), [sha(n1)])
+    // …and a file the device sent, edited here before the next sync, the same.
+    const m1 = Buffer.from('made on the tablet'), m2 = Buffer.from('made on the tablet, edited here')
+    r = await manifest(tablet, [['Elsewhere/Original.odt', v1], ['Work/HF test.odt', v1], ['Work/new.txt', n2], ['Work/theirs.txt', m1]])
+    assert.ok(r.body.want.includes('Work/theirs.txt'))
+    await put(tablet, 'Work/theirs.txt', m1)
+    fs.writeFileSync(path.join(root, 'Work/theirs.txt'), m2)
+    r = await manifest(tablet, [['Elsewhere/Original.odt', v1], ['Work/HF test.odt', v1], ['Work/new.txt', n2], ['Work/theirs.txt', m1]])
+    assert.ok(!r.body.want.includes('Work/theirs.txt'))
+    assert.deepEqual(r.body.have.filter(h => h.path === 'Work/theirs.txt').map(h => h.replaces), [sha(m1)])
+
+    // Both changed it since they last agreed: a real conflict, so both are kept, as ever.
+    fs.writeFileSync(path.join(root, 'Work/HF test.odt'), 'the computer again')
+    const theirs = Buffer.from('the phone again')
+    r = await manifest(phone, [['Work/HF test.odt', theirs]])
+    assert.deepEqual(r.body.want, ['Work/HF test.odt'])
+    assert.equal((await put(phone, 'Work/HF test.odt', theirs)).body.path, 'Work/HF test (2).odt')
+    assert.equal(read('Work/HF test.odt'), 'the computer again')
+    // …once: the next sync does not ask for it again (it made "(3)", "(4)"… on every sync).
+    assert.deepEqual((await manifest(phone, [['Work/HF test.odt', theirs]])).body.want, [])
+    assert.equal(fs.existsSync(path.join(root, 'Work/HF test (3).odt')), false)
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
 test('settings: only what describes the library crosses; a hidden album travels with the album', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-settings-'))
   const db = library.open(path.join(tmp, 'data'))
@@ -612,6 +700,25 @@ test('the computer can only say "there is something new"; the phone it says it t
     assert.equal((await new Promise(resolve => {
       server.ask('127.0.0.1', { peer_fp: 'f'.repeat(64), peer_port: phone.address().port, peer_token: token }).then(resolve, e => resolve(e.message))
     })), 'That is not the paired device.', '…and its answer is refused')
+
+    // It moved to another network and nobody is at its old address: the beacon finds it, and the new address is kept.
+    asked.length = 0
+    db.prepare('DELETE FROM sync_devices').run()
+    row(phoneId.fingerprint)
+    db.prepare("UPDATE sync_devices SET peer_hosts = '127.0.0.2', peer_port = 1").run()
+    const beacon = dgram.createSocket('udp4')
+    beacon.on('message', (msg, from) => {
+      if (JSON.parse(msg.toString()).fp === phoneId.fingerprint) beacon.send(JSON.stringify({ v: 1, port: phone.address().port }), from.port, from.address)
+    })
+    await new Promise(r => beacon.bind(0, '127.0.0.1', r))
+    const find = server.find.bind(server)
+    const beaconPort = beacon.address().port
+    server.find = fp => find(fp, ['127.0.0.1'], beaconPort, 300)
+    await server.nudge()
+    beacon.close()
+    assert.equal(asked.length, 1, 'the phone is told, at the address the beacon gave')
+    assert.deepEqual({ ...db.prepare('SELECT peer_hosts, peer_port FROM sync_devices').get() }, { peer_hosts: '127.0.0.1,127.0.0.2', peer_port: phone.address().port })
+    assert.deepEqual(await find(phoneId.fingerprint, ['127.0.0.1'], beaconPort, 100), [], 'a closed beacon finds no one')
 
     // A device that only ever sends is not told anything: there is nothing here for it.
     asked.length = 0
@@ -1117,6 +1224,21 @@ test('Both ways: a photo in a two-way device Trash goes to this computer Trash; 
     assert.equal(db.prepare('SELECT COUNT(*) n FROM deleted_here').get().n, 0, 'not declined: restored on the phone, it may come back')
   } finally {
     server.stop?.(); db.close()
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('editor tabs: the newer open or close of each file wins, and nothing unsafe is kept', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-tabs-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos') })
+  try {
+    server.mergeEditorTabs([{ path: 'Documents/Schools.txt', open: true, at: 10 }, { path: '../etc/passwd', open: true, at: 10 }, { path: 'a.txt', open: 'yes', at: 1 }])
+    const tablet = server.mergeEditorTabs([{ path: 'Documents/Schools.txt', open: false, at: 5 }, { path: 'Notes.txt', open: true, at: 7 }])
+    assert.deepEqual(tablet, [{ path: 'Documents/Schools.txt', open: true, at: 10 }, { path: 'Notes.txt', open: true, at: 7 }], 'an older close does not win')
+    assert.deepEqual(server.mergeEditorTabs([{ path: 'Documents/Schools.txt', open: false, at: 20 }])[0], { path: 'Documents/Schools.txt', open: false, at: 20 })
+  } finally {
+    db.close()
     fs.rmSync(tmp, { recursive: true, force: true })
   }
 })

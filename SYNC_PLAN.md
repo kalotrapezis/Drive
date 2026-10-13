@@ -688,6 +688,16 @@ Three steps, cheapest first:
    timeout. Not built — worth it only if step 2 is seen to fail on a real
    network.
 
+**From the computer's side too (2026-10-13).** A nudge that finds nobody at any
+address it knows sends the same probe for the *device's* fingerprint (`SyncServer.find`)
+and keeps the address that answers; a change in the computer's own addresses is a
+nudge by itself. And Android's periodic `SyncJob` runs at the interval chosen in
+Settings › Sync (Off, 15, 30, 60 min) on *any* local network: it used to wait for
+unmetered Wi-Fi, and a phone's hotspot is metered, so on one it never ran. A sync
+only talks to private LAN addresses, which mobile data does not carry. Checked on the
+Xiaomi 15 as the hotspot: the job's probe reached the computer and both sides kept
+the new addresses.
+
 **Discovery is a hint, never trust.** Any answer may be a lie; the pinned
 certificate alone decides whether a sync happens. That is what makes it safe to
 be careless about how an address is found.
@@ -1757,6 +1767,58 @@ free) scans as *1,816 photos, 29.28 GB to copy, room for it, writable*.
 **Not built yet:** the copy has never been run for real; Drive files (photos only so
 far); starting by itself when the drive appears; and a drive as a *source*, which the
 card can already express but nothing reads.
+
+### 6ak. An edit replaces; only a real conflict keeps both (found and fixed 2026-09-29)
+
+**What happened.** A document saved over in Writer on the phone reached the computer as `HF test (2).odt` beside the
+old `HF test.odt`, and every later sync sent it again: `(3)` at 15:40, `(4)` at 15:42. The tablet got only the
+"(2)", not the other new files of the folder.
+
+**Why.** (1) 6e's rule "a file that arrives never replaces one that is there" had no notion of an *edit*, so every
+edit was a second file. (2) The computer asked for the phone's version on every sync, because it never held those
+bytes at that path — each answer landed as another "(n)". (3) The computer offered a device only bytes the device held
+nowhere, so a copy of something the tablet already had under another name (HF test.odt = Πάτερ Ημών Άσκηση.odt) never
+went. (4) The computer's memory of what it held ("self" in `sync_manifest`) was one snapshot shared by every device, so
+the phone's sync overwrote what the tablet's needed. (5) A file fetched *after* a device sent its list, or received
+*after* the computer answered, was missing from the memory of what the two sides last agreed on.
+
+**The rule now** (`files.js reconcile`): per path, the version both sides last agreed on decides.
+- The device changed it and this computer did not → an **update**: the upload replaces the file here
+  (`file_updates`), the old version kept in `Files history/<time>/<path>` in the app's data, outside Drive.
+- This computer changed it and the device did not → `have` carries `replaces`; the phone replaces its copy if it is
+  still exactly that version, the old one kept in its app's `Files history` (SyncClient.receiveFile).
+- Both changed it (or there is no memory: first sync) → a **conflict**: both kept, as before — **once**: bytes
+  already here beside it are not asked for again.
+- A copy the device keeps under another name still arrives (as the device's copies always reached the computer).
+- Memory per device: `self:<device>` rows; the shared `self` stays for movePreview and as the first starting point.
+  What the computer offered a device is remembered (`file_offered`); what it received goes into its snapshot at once.
+- A path still here with other bytes is an edit, not a deletion (`file_deleted_here` no longer records the old version).
+- Writer stamps the save time on the file (the phone's storage was seen keeping the old mtime; the hash cache is keyed
+  by size and time, so a same-size edit could have gone unseen).
+
+**Checked:** `desktop/test/sync.test.js` "an edited file replaces…" (device edit, computer edit, a file fetched or
+received between two syncs then edited, a conflict kept once, a copy under another name); all 86 desktop tests. Real
+pair (source build of the desktop, tablet with the new APK): the tablet received the four Test-Words files it lacked;
+Border test.docx edited in Writer on the tablet → the computer's copy replaced (history "updated", old version in Files
+history), no "(2)"; a text file edited on the computer → the tablet's copy replaced in place, old one in its Files
+history. **Phone** (same day, 17:20): the new APK's first sync brought it the 8 Test-Words files it lacked; HF test.docx
+edited in Writer on the phone → the computer's copy replaced (history "updated", old version in Files history), no
+"(2)"; a second sync moved nothing; phone and computer then held the same 18 files but one — HF test.odt, which the
+bug had left different on the two sides (phone: the Writer save; computer: the copy before it, the save beside it as
+"(2)"), with no memory of which is newer: kept both, as a conflict should be. The installed desktop (/opt/Tetra,
+Beta 2) still has the old rule until a new build is installed.
+
+### 6al. The text editor's open tabs cross too (2026-10-13)
+
+Asked for the school-locations file that stays open on the phone. A tab crosses by
+its **path in Tetra**: the file itself already travels with Files (history,
+conflicts and all), so only "open" or "closed", and when, needs to. Each device
+keeps the newest of each path (`TextEditorStore.mark`, `applySynced`); the computer
+has no text editor and only relays them (`editor_tabs`, `POST /editor-tabs`, the
+newer `at` wins). A tab with unsaved text is never closed from elsewhere. A file
+outside Tetra — Downloads, another app's — stays on its device: *Save as* puts it in
+Tetra/Documents, and from then it crosses. Built on both sides; not yet seen going
+between two real devices (the computer needs the new build).
 
 ## Roadmap (set 2026-09-24)
 

@@ -35,20 +35,27 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
   useEffect(() => { reload() }, [])
   useEffect(() => window.drive.onNotesChanged(reload), []) // a device's change, shown as it lands
   const close = () => setDialog(null)
+  // A page of its own: the search and the label, which look everywhere, give way to it.
+  const go = (v: View) => { setView(v); setLabel(null); setQuery(''); setDrawer(false) }
 
   const labels = useMemo(() => {
     const count = new Map<string, number>()
     for (const n of notes ?? []) if (!n.trashedAt) for (const l of n.labels ?? []) count.set(l, (count.get(l) ?? 0) + 1)
     return [...count].sort((a, b) => a[0].localeCompare(b[0]))
   }, [notes])
+  // A label no note carries any more is gone, so it cannot stay chosen either.
+  useEffect(() => { if (notes && label && !labels.some(([l]) => l === label)) setLabel(null) }, [labels])
+  // A search or a label looks through every note but the Trash, whichever page it starts from (asked 2026-09-28).
+  const everywhere = !!query.trim() || !!label
+  const trash = view === 'trash' && !everywhere
   const shown = useMemo(() => {
     const q = fold(query.trim())
-    return (notes ?? []).filter(n => inView(n, view) && (!label || n.labels?.includes(label))
+    return (notes ?? []).filter(n => (everywhere ? !n.trashedAt : inView(n, view)) && (!label || n.labels?.includes(label))
       && (!q || fold([n.title, n.content, ...(n.labels ?? []), ...(n.checklistItems ?? []).map(i => i.text)].join(' ')).includes(q)))
-      .sort((a, b) => view === 'trash' ? (b.trashedAt ?? 0) - (a.trashedAt ?? 0) : b.updatedAt - a.updatedAt)
-  }, [notes, view, label, query])
+      .sort((a, b) => trash ? (b.trashedAt ?? 0) - (a.trashedAt ?? 0) : b.updatedAt - a.updatedAt)
+  }, [notes, view, label, query, everywhere, trash])
   // Pinned on top of Home, the rest below (asked 2026-09-26).
-  const pinned = view === 'home' ? shown.filter(n => n.isPinned) : []
+  const pinned = view === 'home' || everywhere ? shown.filter(n => n.isPinned) : []
   const others = shown.filter(n => !pinned.includes(n))
   // Long press (or Ctrl+click) selects; then a click adds or takes away.
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -87,14 +94,14 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
   return (
     <div className="notes">
       <header className="notes-top">
-        <h1>{label ?? VIEWS.find(v => v.id === view)!.name}</h1>
+        <h1>{label ?? (everywhere ? 'All notes' : VIEWS.find(v => v.id === view)!.name)}</h1>
         {label && <button className="chip on" title="Show every label" onClick={() => setLabel(null)}>{label} ✕</button>}
         <label className="notes-search island"><Icon name="search" size={20} />
           <input placeholder="Search notes" value={query} onChange={e => setQuery(e.target.value)} /></label>
-        {view === 'trash' && shown.length > 0 && <button className="text-button" onClick={emptyTrash}>Empty Trash</button>}
+        {trash && shown.length > 0 && <button className="text-button" onClick={emptyTrash}>Empty Trash</button>}
       </header>
       {!notes ? <div className="empty">Loading…</div> : shown.length === 0 ? (
-        <div className="empty"><p>{query ? 'No note matches.' : view === 'trash' ? 'The Trash is empty. Notes stay here 30 days.' : view === 'archived' ? 'Nothing archived.' : 'No notes yet. Start one below.'}</p></div>
+        <div className="empty"><p>{query ? 'No note matches.' : trash ? 'The Trash is empty. Notes stay here 30 days.' : view === 'archived' ? 'Nothing archived.' : 'No notes yet. Start one below.'}</p></div>
       ) : (
         <div className={`notes-scroll ${selected.size ? 'selecting' : ''}`}>
           {pinned.length > 0 && <><h4 className="notes-section">Pinned</h4><div className="notes-grid">{cards(pinned)}</div>{others.length > 0 && <h4 className="notes-section">Others</h4>}</>}
@@ -114,13 +121,13 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
           <nav className="notes-island island">
             <button className="round flat" title="Clear selection (Esc)" onClick={() => setSelected(new Set())}><Icon name="close" /></button>
             <strong className="island-count">{selected.size}</strong>
-            {view === 'trash' ? <>
+            {trash ? <>
               <button className="island-item" onClick={() => act('Restored', { trashedAt: null })}><Icon name="undo" size={20} /><span>Restore</span></button>
               <button className="island-item" onClick={() => setDialog(<Confirm title={`Delete ${picked.length} for good?`} action="Delete" danger onClose={close}
                 body="Their saved versions stay in the history folder." onConfirm={async () => { for (const n of picked) await call('remove', n.id); setSelected(new Set()); reload(); say('Deleted') }} />)}><Icon name="deleteForever" size={20} /><span>Delete</span></button>
             </> : <>
               <button className="island-item" onClick={() => { const all = picked.every(n => n.isPinned); act(all ? 'Unpinned' : 'Pinned', { isPinned: !all }) }}><Icon name="pin" size={20} /><span>{picked.every(n => n.isPinned) ? 'Unpin' : 'Pin'}</span></button>
-              {view === 'archived' ? <button className="island-item" onClick={() => act('Unarchived', { archivedAt: null })}><Icon name="unarchive" size={20} /><span>Unarchive</span></button>
+              {picked.every(n => n.archivedAt) ? <button className="island-item" onClick={() => act('Unarchived', { archivedAt: null })}><Icon name="unarchive" size={20} /><span>Unarchive</span></button>
                 : <button className="island-item" onClick={() => act('Archived', { archivedAt: Date.now() })}><Icon name="archive" size={20} /><span>Archive</span></button>}
               <button className="island-item" onClick={() => act('Moved to Trash', { trashedAt: Date.now() })}><Icon name="trash" size={20} /><span>Trash</span></button>
             </>}
@@ -128,11 +135,11 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
         ) : (
           <nav className="notes-island island">
             {/* Home, the two ways to start, then Archived and Trash; pulled up, the labels. */}
-            <button className={`island-item ${view === 'home' ? 'on' : ''}`} onClick={() => { setView('home'); setDrawer(false) }}><Icon name="home" size={20} /><span>Home</span></button>
+            <button className={`island-item ${view === 'home' ? 'on' : ''}`} onClick={() => go('home')}><Icon name="home" size={20} /><span>Home</span></button>
             <button className="island-item" title="New note (Ctrl+N)" onClick={() => create('TEXT')}><Icon name="noteAdd" size={20} /><span>Note</span></button>
             <button className="island-item" title="New checklist (Ctrl+Shift+N)" onClick={() => create('CHECKLIST')}><Icon name="checklist" size={20} /><span>Checklist</span></button>
             <span className="island-gap" />
-            {VIEWS.filter(v => v.id !== 'home').map(v => <button key={v.id} className={`island-item ${view === v.id ? 'on' : ''}`} onClick={() => { setView(v.id); setDrawer(false) }}>
+            {VIEWS.filter(v => v.id !== 'home').map(v => <button key={v.id} className={`island-item ${view === v.id ? 'on' : ''}`} onClick={() => go(v.id)}>
               <Icon name={v.icon} size={20} /><span>{v.name}</span></button>)}
             {/* The labels open from a button of their own (asked 2026-09-26: a grip to drag is not how a computer works). */}
             <button className={`island-item ${drawer ? 'on' : ''}`} aria-expanded={drawer} onClick={() => setDrawer(d => !d)}><Icon name="label" size={20} /><span>{label ?? 'Labels'}</span></button>
@@ -264,9 +271,10 @@ function NoteEditor({ initial, setDialog, onClose }: {
   }
 
   const history = () => setDialog(<HistoryDialog id={initial.id} onClose={close} onRestore={n => edit({ title: n.title, content: n.content ?? '', items: n.checklistItems ?? [] }, true)} />)
-  // Tags, chosen or created in the same dialog as Files' (asked 2026-09-26).
-  const tags = () => call<Note[]>('list').then(all => setDialog(<TagsDialog title={`Tags for \u201c${title || 'Untitled'}\u201d`} initial={meta.labels}
-    known={all.flatMap(n => n.labels ?? [])} onClose={close} onSave={async labels => { await setMetaNow({ labels }) }} />))
+  // Labels, chosen or created in the same dialog as Files' tags (asked 2026-09-26); only those a note outside the Trash
+  // carries are offered, so one taken off its last note is gone (asked 2026-09-28).
+  const tags = () => call<Note[]>('list').then(all => setDialog(<TagsDialog noun="label" title={`Labels for \u201c${title || 'Untitled'}\u201d`} initial={meta.labels}
+    known={all.filter(n => !n.trashedAt && n.id !== initial.id).flatMap(n => n.labels ?? [])} onClose={close} onSave={async labels => { await setMetaNow({ labels }) }} />))
   const toTrash = () => { changed.current = true; flush.current().then(() => call('save', initial.id, { trashedAt: Date.now() })).then(() => leave('Note moved to Trash', () => call('save', initial.id, { trashedAt: null }))) }
   const archive = () => {
     const on = !meta.archivedAt
@@ -291,7 +299,7 @@ function NoteEditor({ initial, setDialog, onClose }: {
           <button className="text-button danger" onClick={() => setDialog(<Confirm title="Delete this note for good?" action="Delete" danger onClose={close}
             body="Its saved versions stay in the history folder." onConfirm={() => { left.current = true; return call('remove', initial.id).then(() => onClose(null, 'Note deleted')) }} />)}>Delete for good</button>
         </> : <>
-          {tool('label', 'Tags', tags, meta.labels.length > 0)}
+          {tool('label', 'Labels', tags, meta.labels.length > 0)}
           <span className="palette-anchor">
             {tool('palette', 'Colour', () => setTools(t => !t), tools)}
             {tools && <div className="palette-pop island">

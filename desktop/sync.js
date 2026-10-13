@@ -55,6 +55,14 @@ function lanAddresses() {
   return Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === 'IPv4' && !a.internal).map(a => a.address)
 }
 
+/** Every IPv4 broadcast address this computer can reach, and the limited one for good measure. */
+function broadcastAddresses() {
+  const nets = Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === 'IPv4' && !a.internal)
+  const ip = s => s.split('.').reduce((n, b) => (n << 8 | +b) >>> 0, 0)
+  const str = n => [24, 16, 8, 0].map(k => n >>> k & 255).join('.')
+  return [...new Set([...nets.map(a => str((ip(a.address) | ~ip(a.netmask)) >>> 0)), '255.255.255.255'])]
+}
+
 /** Copy src to dest through a .part, hashed on the way; kept only if it is the hash asked for. */
 async function copyVerified(src, dest, expected) {
   await fsp.mkdir(path.dirname(dest), { recursive: true })
@@ -77,6 +85,9 @@ class SyncServer {
     Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, port, beaconPort, trashItem, purgatory })
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+      -- The text editor's open tabs, by path in the synced files: the newest open or close of each, from any device.
+      -- This computer has no text editor; it only passes them between devices (SYNC_PLAN.md 6al).
+      CREATE TABLE IF NOT EXISTS editor_tabs (path TEXT PRIMARY KEY, open INTEGER NOT NULL, at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS sync_devices (id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, paired_at INTEGER NOT NULL, last_seen INTEGER);
       -- Who still HOLDS what, as opposed to who once sent it (sync_receipts). Every sync already tells this
       -- computer the answer — /have and /library/manifest are a device listing what it has — and until now it
@@ -687,11 +698,51 @@ class SyncServer {
     await Promise.all(devices.map(async d => {
       const ways = [this.connection(d.id, 'photos').direction, this.connection(d.id, 'files').direction]
       if (ways.every(w => w === 'send' || w === 'off')) return // nothing here is for that device
-      for (const host of String(d.peer_hosts ?? '').split(',').filter(Boolean)) {
-        const reached = await this.ask(host, d).catch(() => false)
+      const hosts = String(d.peer_hosts ?? '').split(',').filter(Boolean)
+      let there = false // its certificate answered, whatever it said: it has not moved
+      for (const host of hosts) {
+        const reached = await this.ask(host, d).catch(() => null)
         if (reached) return
+        there ||= reached === false
+      }
+      if (there) return
+      // Nobody was at any address it had: it changed network and has not called since, so ask out loud who holds
+      // its certificate now — the beacon of 6k, from this side. The answer is a hint; ask() still pins the cert.
+      for (const [host, port] of await this.find(d.peer_fp)) {
+        if (await this.ask(host, { ...d, peer_port: port }).catch(() => null) == null) continue
+        this.db.prepare('UPDATE sync_devices SET peer_hosts = ?, peer_port = ? WHERE id = ?').run([...new Set([host, ...hosts])].slice(0, 4).join(','), port, d.id)
+        return
       }
     }))
+  }
+
+  /** Keeps the newer open/close of each path; answers with every path's newest. */
+  mergeEditorTabs(tabs) {
+    const keep = this.db.prepare(`INSERT INTO editor_tabs(path, open, at) VALUES(?, ?, ?)
+      ON CONFLICT(path) DO UPDATE SET open = excluded.open, at = excluded.at WHERE excluded.at > editor_tabs.at`)
+    for (const t of Array.isArray(tabs) ? tabs.slice(0, 1000) : []) {
+      if (safeRel(t?.path) && t.path !== '' && typeof t.open === 'boolean' && Number.isSafeInteger(t.at)) keep.run(t.path, t.open ? 1 : 0, t.at)
+    }
+    return this.db.prepare('SELECT path, open, at FROM editor_tabs').all().map(r => ({ path: r.path, open: !!r.open, at: r.at }))
+  }
+
+  /** Addresses that answered a probe for this fingerprint, with the port each listens on (SyncDiscovery.find on Android). */
+  find(fp, targets = broadcastAddresses(), port = BEACON_PORT, ms = 900) {
+    return new Promise(resolve => {
+      const found = new Map()
+      const sock = dgram.createSocket('udp4')
+      const done = () => { try { sock.close() } catch {} resolve([...found]) }
+      sock.on('error', done)
+      sock.on('message', (msg, from) => {
+        try { const a = JSON.parse(msg.toString('utf8')); if (a?.v === 1 && a.port > 0 && a.port < 65536) found.set(from.address, a.port) } catch {}
+      })
+      sock.bind(0, () => {
+        sock.setBroadcast(true)
+        const probe = Buffer.from(JSON.stringify({ v: 1, fp }))
+        for (const t of targets) sock.send(probe, port, t, () => {})
+        setTimeout(done, ms)
+      })
+    })
   }
 
   ask(host, device) {
@@ -1153,6 +1204,11 @@ class SyncServer {
       this.onNotesSynced(this.notesSynced)
       return this.send(res, 200, answer)
     }
+    // Editor tabs (6al) cross with Files: a tab is a file the other device has too.
+    if (req.method === 'POST' && url.pathname === '/editor-tabs') {
+      if (this.connection(device.id, 'files').direction === 'off') return this.send(res, 200, { tabs: [], off: true })
+      return this.send(res, 200, { tabs: this.mergeEditorTabs((await this.json(req)).tabs) })
+    }
     // Both ways (SYNC_PLAN D6): what a two-way device has in its Trash goes to this computer's Trash too — restorable
     // for its 30 days, then the purgatory. Photos that live on a storage drive stay: the drive is the archive.
     if (req.method === 'POST' && url.pathname === '/trashed') {
@@ -1327,13 +1383,27 @@ class SyncServer {
       await new Promise((resolve, reject) => out.end(err => err ? reject(err) : resolve()))
       if (hash.digest('hex') !== expected) throw Object.assign(new Error('The file changed in transit; nothing was kept.'), { status: 422, expose: true })
       let kept = target
-      const { dir, name, ext } = path.parse(target)
-      for (let n = 2; fs.existsSync(kept); n++) kept = path.join(dir, `${name} (${n})${ext}`)
-      await fsp.link(part, kept)
-      await fsp.rm(part)
+      // An edit the device made (files.reconcile said so): it replaces the file, if that is still the version the
+      // device edited — the old one kept in "Files history", outside Drive, as a drive backup keeps it. Anything
+      // else of the same name stays, and the newcomer lands beside it.
+      const replaces = this.files.pendingUpdate(device.id, rel, expected)
+      if (replaces && fs.existsSync(target) && await this.files.hash(rel) === replaces) {
+        const old = path.join(this.dataDir, 'Files history', String(Date.now()), ...rel.split('/'))
+        await fsp.mkdir(path.dirname(old), { recursive: true })
+        await fsp.copyFile(target, old)
+        await fsp.rename(part, target)
+        this.files.updated(device.id, rel)
+        history.record(this.db, { action: 'updated', kind: 'file', name: rel, sha256: expected, device: device.id, detail: `was ${replaces}` })
+      } else {
+        const { dir, name, ext } = path.parse(target)
+        for (let n = 2; fs.existsSync(kept); n++) kept = path.join(dir, `${name} (${n})${ext}`)
+        await fsp.link(part, kept)
+        await fsp.rm(part)
+      }
       const modified = Number(params.get('modified'))
       if (Number.isFinite(modified) && modified > 0) await fsp.utimes(kept, new Date(), new Date(modified))
       const relKept = this.files.rel(kept)
+      this.files.received(device.id, relKept, expected)
       history.record(this.db, { action: 'received', kind: 'file', name: relKept, sha256: expected, device: device.id })
       this.db.prepare(`INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at, kind) VALUES(?,?,?,?,?,'file')`)
         .run(device.id, expected, relKept, (await fsp.stat(kept)).size, Date.now())
@@ -1351,4 +1421,4 @@ class SyncServer {
   }
 }
 
-module.exports = { SyncServer, identity, PORT }
+module.exports = { SyncServer, identity, lanAddresses, PORT }

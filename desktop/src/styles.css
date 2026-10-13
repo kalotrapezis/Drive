@@ -523,9 +523,12 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .note-card:hover { background: var(--island-2); }
 .note-card.tinted, .note-card.tinted:hover { color: #1b1d1f; border-color: transparent; }
 .note-card.tinted:hover { filter: brightness(1.05); }
-.note-card strong { font-size: 16px; padding-right: 20px; }
+/* A header row the select circle (24px at 10px) and the pin sit in, there whether the circle shows or not: showing it
+   on hover no longer pushes the title over and re-flows the grid (asked 2026-09-28). */
+.note-card:not(.small) { padding-top: 40px; }
+.note-card strong { font-size: 16px; }
 .note-line { font-size: 14px; opacity: .85; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.note-pin { position: absolute; top: 12px; right: 12px; opacity: .7; }
+.note-pin { position: absolute; top: 14px; right: 14px; opacity: .7; }
 .note-labels { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .note-labels small { padding: 3px 10px; border-radius: 999px; background: #8883; font-size: 12px; }
 .note-card.small { width: 200px; flex: none; margin: 0; max-height: 150px; }
@@ -604,7 +607,6 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .note-card:hover .check, .selecting .note-card .check { opacity: 1; }
 .note-card.selected .check { color: var(--accent); background: var(--on-accent); border-radius: 50%; filter: none; }
 .note-card.tinted .check { color: #1b1d1f; filter: none; }
-.selecting .note-card strong, .note-card:hover strong { padding-left: 26px; }
 .island-count { padding: 0 10px 0 2px; }
 .notes-grid + .notes-section { margin-top: 8px; }
 /* The drawer's labels, bigger (asked 2026-09-26). */
@@ -633,10 +635,10 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .settings-card h3 { margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
 /* The parts of Tetra (asked 2026-09-27): colour is a label — a symbol beside a title — the same in light and dark.
    The phone's Category enum has the same five. */
-:root { --cat-photos: #3DA35D; --cat-files: #4F86E8; --cat-notes: #F2B705; --cat-scanner: #D32F2F; --cat-office: #8E5BD8; }
+:root { --cat-photos: #3DA35D; --cat-files: #4F86E8; --cat-notes: #F2B705; --cat-scanner: #D32F2F; --cat-office: #F76002; --cat-text: #8E5BD8; }
 .cat { display: inline-flex; }
 .cat.photos { color: var(--cat-photos); } .cat.files { color: var(--cat-files); } .cat.notes { color: var(--cat-notes); }
-.cat.scanner { color: var(--cat-scanner); } .cat.office { color: var(--cat-office); }
+.cat.scanner { color: var(--cat-scanner); } .cat.office { color: var(--cat-office); } .cat.text { color: var(--cat-text); }
 .segmented { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--island-2); }
 .segmented button { padding: 8px 20px; border-radius: 999px; }
 .segmented button.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
