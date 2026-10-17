@@ -190,6 +190,14 @@ test('metadata sync: favorites, collections, labels, people and faces cross over
     assert.deepEqual([...pulled.labels[0].labels].sort(), ['Beach', 'Scene: harbour', 'Scene: seashore'])
     assert.deepEqual((await call('GET', `/metadata?since=${Date.now() + 1000}`, { token })).body.labels, [], 'nothing after the cursor')
     assert.deepEqual((await call('GET', `/metadata?since=${Date.now() + 1000}`, { token })).body.people, [])
+    // The phone's System folders, chosen before there were times (0), are system folders here too; a name that is
+    // not one of the thirteen is ignored, and the whole set goes back with every pull.
+    await push({ systemFolders: [{ name: 'Music', chosen: true, updatedAt: 0 }, { name: '../Escape', chosen: true, updatedAt: 9 }] })
+    assert.ok(files.isSystem('Music') && fs.statSync(path.join(files.root, 'Music')).isDirectory())
+    assert.ok(!fs.existsSync(path.join(files.root, '..', 'Escape')))
+    const folders = (await call('GET', '/metadata?since=0', { token })).body.systemFolders
+    assert.equal(folders.length, 13)
+    assert.deepEqual(folders.filter(f => f.chosen).map(f => f.name), ['Music'])
   } finally {
     await server.stop()
     fs.rmSync(tmp, { recursive: true })

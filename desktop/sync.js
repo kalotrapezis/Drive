@@ -1247,7 +1247,7 @@ class SyncServer {
       return this.send(res, 200, {
         documents: this.documents.changedSince(since), ...library.metadataSince(this.db, since), ...this.people.changedSince(since),
         files: this.files?.metadataSince(since) ?? [], fileRecents: this.files?.recentsAll() ?? [],
-        viewSettings: this.viewSettings(),
+        viewSettings: this.viewSettings(), systemFolders: this.files?.systemFolderRecords() ?? [],
       })
     }
     this.send(res, 404, { error: 'Unknown request.' })
@@ -1274,6 +1274,8 @@ class SyncServer {
     each('people', p => this.people.applyPerson(String(p.uuid), library.collectionName(p.name), at(p), p.cover ? String(p.cover) : null, !!p.hidden))
     each('reviews', r => { if (this.people.applyReview(String(r.face), String(r.person), String(r.state), at(r))) reviewChanged = true })
     each('files', f => this.files?.applyMetadata({ ...f, path: String(f.path), updatedAt: at(f) }))
+    // Files tools › System folders, folder by folder: the later choice wins, so neither device's set is lost or fought over.
+    each('systemFolders', f => this.files?.applySystemFolder(f))
     if (body?.viewSettings) try { this.applyViewSettings(body.viewSettings) } catch (e) { skipped.push(`viewSettings: ${e.message}`) }
     if (Array.isArray(body?.fileRecents)) try { this.files?.mergeRecents(body.fileRecents) } catch (e) { skipped.push(`fileRecents: ${e.message}`) }
     each('faces', forPhoto(f => this.people.applyFace({

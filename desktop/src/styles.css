@@ -647,3 +647,11 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .import-list li button { margin-left: auto; width: 32px; height: 32px; }
 .import-head { margin: 16px 0 8px; font-size: 14px; }
 .dialog .check-row { margin: 6px 0; }
+
+/* Files tools › System folders: the phone's tiles, tinted with each folder's own colour when chosen. */
+.system-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 16px; }
+.system-folders button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; border-radius: 16px;
+  border: 1px solid var(--hover); background: var(--hover); font-weight: 600; }
+.system-folders button.on { border: 2px solid var(--tint); background: color-mix(in srgb, var(--tint) 28%, transparent); }
+.system-folders .emblem { position: relative; color: var(--tint); display: flex; }
+.system-folders .tick { position: absolute; top: -4px; right: -8px; display: flex; border-radius: 50%; background: var(--island); }

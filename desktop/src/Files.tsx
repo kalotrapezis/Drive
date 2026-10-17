@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DriveItem } from './drive'
-import { Icon, type IconName } from './Icon'
+import { Icon, SYSTEM_FOLDER_ICONS, type IconName } from './Icon'
 import { Confirm, Modal, TagsDialog, errorText } from './Dialogs'
 import { formatBytes } from './timeline'
 
@@ -68,7 +68,7 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
     if (!items) return []
     if (mode === 'recent' && !query && !tag) return items
     const byName = (a: DriveItem, b: DriveItem) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-    return [...items].sort((a, b) => Number(b.path in SYSTEM_ICON) - Number(a.path in SYSTEM_ICON) || Number(b.dir) - Number(a.dir) || (sort === 'date' ? b.mtime - a.mtime : byName(a, b)))
+    return [...items].sort((a, b) => Number(b.system) - Number(a.system) || Number(b.dir) - Number(a.dir) || (sort === 'date' ? b.mtime - a.mtime : byName(a, b)))
   }, [items, sort, mode, query, tag])
 
   async function act(fn: () => Promise<unknown>, done?: string) {
@@ -122,7 +122,7 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
 
   function sheet(item: DriveItem) {
     const trashed = item.path === TRASH || item.path.startsWith(TRASH + '/')
-    const system = SYSTEM_ICON[item.path] !== undefined
+    const system = item.system
     const row = (icon: IconName, label: string, fn: () => void, danger = false) =>
       <button className={`sheet-row ${danger ? 'danger' : ''}`} onClick={() => { close(); fn() }}><Icon name={icon} />{label}</button>
     setDialog(
@@ -212,6 +212,13 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
       )
     } catch (e) { say(errorText(e)) }
   }
+  async function chooseSystemFolders() {
+    try {
+      const chosen = await call<string[]>('chosenFolders')
+      setDialog(<SystemFoldersDialog initial={chosen} onClose={close}
+        onSave={names => { close(); act(() => call('chooseSystemFolders', names), 'System folders saved') }} />)
+    } catch (e) { say(errorText(e)) }
+  }
   function emptyTrash() {
     setDialog(<Confirm title="Empty Trash?" action="Empty Trash permanently" danger onClose={close}
       body="Everything in Drive › Trash is deleted permanently. This cannot be undone."
@@ -248,6 +255,7 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
               <div className="seg-row"><span>Sort</span>
                 <div className="mini-seg">{(['name', 'date'] as const).map(s => <button key={s} className={sort === s ? 'on' : ''} onClick={() => setSort(s)}>{s === 'name' ? 'Name' : 'Modified'}</button>)}</div></div>
               <button className="sheet-row" onClick={() => act(() => window.drive.files.open(folder))}><Icon name="folder" />Open in file manager</button>
+              <button className="sheet-row" onClick={chooseSystemFolders}><Icon name="folderOthers" />System folders</button>
               {usage && <Usage usage={usage} />}
             </div>
           </details>
@@ -311,13 +319,40 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
   )
 }
 
-/** Files' system folders (files.js SYSTEM_FOLDERS), each with its emblem drawn into the folder. */
+/** Files' system folders (files.js), each with its emblem drawn into the folder; the optional ones in their own colour too. */
 const SYSTEM_ICON: Record<string, IconName> = { Documents: 'folderDocuments', 'Documents/Scanned Documents': 'folderScans' }
+const systemLook = (item: DriveItem) => item.system ? SYSTEM_FOLDER_ICONS[item.path] : undefined
 
 function ItemIcon({ item, size }: { item: DriveItem; size: number }) {
-  return <span className="file-icon" style={{ color: item.dir ? (item.color ? FOLDER_COLORS[item.color] : undefined) : undefined }}>
-    <Icon name={item.path === TRASH ? 'trash' : SYSTEM_ICON[item.path] ?? TYPE_ICON[item.type] ?? 'file'} size={size} />
+  return <span className="file-icon" style={{ color: item.dir ? (item.color ? FOLDER_COLORS[item.color] : systemLook(item)?.[1]) : undefined }}>
+    <Icon name={item.path === TRASH ? 'trash' : SYSTEM_ICON[item.path] ?? systemLook(item)?.[0] ?? TYPE_ICON[item.type] ?? 'file'} size={size} />
   </span>
+}
+
+/** Files tools › System folders: every folder's emblem, click to choose or leave it, OK to keep the choice (the phone's sheet). */
+function SystemFoldersDialog({ initial, onClose, onSave }: { initial: string[]; onClose: () => void; onSave: (names: string[]) => void }) {
+  const [chosen, setChosen] = useState(() => new Set(initial))
+  const flip = (name: string) => setChosen(c => { const n = new Set(c); n.has(name) ? n.delete(name) : n.add(name); return n })
+  return (
+    <Modal onClose={onClose}>
+      <h3>System folders</h3>
+      <p className="hint">Folders Tetra keeps in Files for sorting things into, each with its own picture. Documents is always there.
+        A folder left out later stays, as an ordinary folder, with everything in it.</p>
+      <div className="system-folders">
+        {Object.entries(SYSTEM_FOLDER_ICONS).map(([name, [icon, tint]]) => (
+          <button key={name} className={chosen.has(name) ? 'on' : ''} style={{ '--tint': tint } as React.CSSProperties}
+            aria-pressed={chosen.has(name)} onClick={() => flip(name)}>
+            <span className="emblem"><Icon name={icon} size={44} />{chosen.has(name) && <span className="tick"><Icon name="checked" size={20} /></span>}</span>
+            {name}
+          </button>
+        ))}
+      </div>
+      <div className="dialog-actions">
+        <button className="text-button" onClick={onClose}>Cancel</button>
+        <button className="filled-button" onClick={() => onSave([...chosen])}>OK</button>
+      </div>
+    </Modal>
+  )
 }
 
 function Usage({ usage }: { usage: Record<string, number> }) {

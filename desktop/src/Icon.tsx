@@ -79,10 +79,25 @@ const PATHS = {
 
 // The two system folders of Files, with their emblem drawn into the folder (Material "topic", and the same folder
 // with scan brackets cut into it — the phone's ic_folder_documents / ic_folder_scans).
-Object.assign(PATHS, {
+const FOLDER_EMBLEMS = {
   folderDocuments: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140Zm110-180h300v-60H250v60Zm0-160h460v-60H250v60Z',
   folderScans: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM325 -575L425 -575L425 -535L365 -535L365 -475L325 -475ZM635 -575L535 -575L535 -535L595 -535L595 -475L635 -475ZM325 -265L425 -265L425 -305L365 -305L365 -365L325 -365ZM635 -265L535 -265L535 -305L595 -305L595 -365L635 -365ZM290 -440H670V-400H290Z',
-})
+  // The phone's System folders' emblems (ic_folder_*.xml, asked 16 Oct), each cut out of the folder (evenodd).
+  folderMusic: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM370,-330A50,50 0 1 0 470,-330A50,50 0 1 0 370,-330ZM470,-330V-560H580V-510H500V-330Z',
+  folderVideos: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM420,-520L590,-420L420,-320Z',
+  folderFinance: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM320,-520H640V-320H320ZM425,-420A55,55 0 1 0 535,-420A55,55 0 1 0 425,-420Z',
+  folderWork: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM340,-500H620V-300H340ZM420,-560H540V-500H420ZM450,-535H510V-500H450Z',
+  folderEducation: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM480,-570L650,-495L480,-420L310,-495ZM390,-450V-360Q480,-310 570,-360V-450L480,-410Z',
+  folderGames: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM390,-500H570A80,80 0 0 1 570,-340H390A80,80 0 0 1 390,-500ZM370,-432H392V-454H418V-432H440V-408H418V-386H392V-408H370ZM544,-440A16,16 0 1 0 576,-440A16,16 0 1 0 544,-440ZM579,-400A16,16 0 1 0 611,-400A16,16 0 1 0 579,-400Z',
+  folderDevelopment: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM410,-530L445,-495L370,-420L445,-345L410,-310L300,-420ZM550,-530L660,-420L550,-310L515,-345L590,-420L515,-495Z',
+  folderAI: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM480,-580Q500,-440 640,-420Q500,-400 480,-260Q460,-400 320,-420Q460,-440 480,-580ZM610,-590Q616,-556 650,-550Q616,-544 610,-510Q604,-544 570,-550Q604,-556 610,-590Z',
+  folderHealth: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM440,-560H520V-460H620V-380H520V-280H440V-380H340V-460H440Z',
+  folderTravel: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM480,-580A120,120 0 0 1 600,-460C600,-380 480,-270 480,-270C480,-270 360,-380 360,-460A120,120 0 0 1 480,-580ZM438,-460A42,42 0 1 0 522,-460A42,42 0 1 0 438,-460Z',
+  folderFamily: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM480,-580L640,-455H595V-280H520V-370H440V-280H365V-455H320Z',
+  folderBooks: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM320,-540Q400,-560 470,-525V-300Q400,-335 320,-315ZM490,-525Q560,-560 640,-540V-315Q560,-335 490,-300Z',
+  folderOthers: 'M140-160q-24 0-42-18.5T80-220v-520q0-23 18-41.5t42-18.5h281l60 60h339q23 0 41.5 18.5T880-680v460q0 23-18.5 41.5T820-160H140ZM346,-420A34,34 0 1 0 414,-420A34,34 0 1 0 346,-420ZM446,-420A34,34 0 1 0 514,-420A34,34 0 1 0 446,-420ZM546,-420A34,34 0 1 0 614,-420A34,34 0 1 0 546,-420Z',
+}
+Object.assign(PATHS, FOLDER_EMBLEMS)
 
 // Notes (2026-09-26), from the same set.
 const NOTE_PATHS = {
@@ -120,10 +135,19 @@ const NOTE_PATHS = {
 }
 Object.assign(PATHS, NOTE_PATHS)
 
-export type IconName = keyof typeof PATHS | keyof typeof NOTE_PATHS | 'folderDocuments' | 'folderScans'
+export type IconName = keyof typeof PATHS | keyof typeof NOTE_PATHS | keyof typeof FOLDER_EMBLEMS
 
 // Motion off (asked 2026-09-27, "like the real thing"): the Motion icon with a gap cut along a slash, then the slash.
 const MOTION_GAP = 'M64-960H960V-64ZM0-896V0H896Z', MOTION_SLASH = 'M161-841L841-161L799-119L119-799Z'
+
+/** The optional system folders' emblems by folder name, with the phone's colours (MainActivity systemFolderLook). */
+export const SYSTEM_FOLDER_ICONS: Record<string, [IconName, string]> = {
+  Music: ['folderMusic', '#E5739D'], Videos: ['folderVideos', '#E3685F'], Finance: ['folderFinance', '#55A96B'],
+  Work: ['folderWork', '#A1887F'], Education: ['folderEducation', '#4F86E8'], Games: ['folderGames', '#9C7BE0'],
+  Development: ['folderDevelopment', '#4DB6AC'], AI: ['folderAI', '#D08CE8'], Health: ['folderHealth', '#EF5350'],
+  Travel: ['folderTravel', '#29B6F6'], Family: ['folderFamily', '#E0A030'], Books: ['folderBooks', '#C0884F'], Others: ['folderOthers', '#9AA3A4'],
+}
+const EVEN_ODD = new Set<string>(['folderScans', ...Object.values(SYSTEM_FOLDER_ICONS).map(([icon]) => icon)])
 
 export function Icon({ name, size = 22 }: { name: IconName | 'motionOff'; size?: number }) {
   const clip = useId()
@@ -131,5 +155,5 @@ export function Icon({ name, size = 22 }: { name: IconName | 'motionOff'; size?:
     <defs><clipPath id={clip}><path d={MOTION_GAP} /></clipPath></defs>
     <path clipPath={`url(#${clip})`} d={PATHS.motion} /><path d={MOTION_SLASH} />
   </svg>
-  return <svg width={size} height={size} viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path fillRule={name === 'folderScans' ? 'evenodd' : undefined} d={(PATHS as Record<string, string>)[name]} /></svg>
+  return <svg width={size} height={size} viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path fillRule={EVEN_ODD.has(name) ? 'evenodd' : undefined} d={(PATHS as Record<string, string>)[name]} /></svg>
 }

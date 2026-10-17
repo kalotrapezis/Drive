@@ -10,8 +10,19 @@ const TRASH = 'Trash'
  * Folders the apps rely on: the phone's scanner saves into Scanned Documents, and both sync by these paths. Always
  * there, marked with an emblem, and never renamed, moved or put in the Trash — their contents can be.
  */
-const SYSTEM_FOLDERS = ['Documents', 'Documents/Scanned Documents']
-const isSystem = rel => SYSTEM_FOLDERS.includes(rel)
+const REQUIRED_FOLDERS = ['Documents', 'Documents/Scanned Documents']
+/**
+ * Folders to sort things into, each with its own emblem (the phone's, asked 16 Oct), chosen in Files tools › System
+ * folders. A chosen one is a system folder like Documents; one no longer chosen stays, as an ordinary folder.
+ */
+const OPTIONAL_FOLDERS = ['Music', 'Videos', 'Finance', 'Work', 'Education', 'Games', 'Development', 'AI',
+  'Health', 'Travel', 'Family', 'Books', 'Others']
+/**
+ * Each device keeps when every folder was last chosen or left out; the later answer wins, and on a tie (a choice
+ * made before there were times) chosen wins — so a folder made on either side is a system folder on both, and
+ * leaving one out on either side is not undone by the other (SYNC_PLAN.md 6g). The phone has the same rule.
+ */
+const incomingWins = (local, incoming) => incoming.updatedAt > local.updatedAt || (incoming.updatedAt === local.updatedAt && incoming.chosen && !local.chosen)
 const systemFail = rel => fail(`${rel.split('/').pop()} is a system folder and stays where it is.`)
 const RECENTS_LIMIT = 50
 const COLORS = ['Blue', 'Green', 'Yellow', 'Red', 'Purple']
@@ -20,7 +31,8 @@ function openMeta(db) {
   db.exec(`CREATE TABLE IF NOT EXISTS file_meta (path TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, color TEXT, updated_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS file_tags (path TEXT NOT NULL, tag TEXT NOT NULL, updated_at INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(path, tag));
     CREATE TABLE IF NOT EXISTS known_tags (name TEXT PRIMARY KEY COLLATE NOCASE);
-    CREATE TABLE IF NOT EXISTS file_recents (path TEXT PRIMARY KEY, opened_at INTEGER NOT NULL);`)
+    CREATE TABLE IF NOT EXISTS file_recents (path TEXT PRIMARY KEY, opened_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS system_folders (name TEXT PRIMARY KEY, chosen INTEGER NOT NULL, updated_at INTEGER NOT NULL);`)
 }
 
 const fail = message => { throw new Error(message) }
@@ -48,8 +60,35 @@ class Files {
     this.db = db
     fs.mkdirSync(root, { recursive: true }) // created only when absent, like the phone
     this.root = fs.realpathSync(root)
-    for (const f of SYSTEM_FOLDERS) fs.mkdirSync(path.join(this.root, f), { recursive: true })
     openMeta(db)
+    for (const f of this.systemFolders()) fs.mkdirSync(path.join(this.root, f), { recursive: true })
+  }
+
+  systemFolders() { return [...REQUIRED_FOLDERS, ...this.chosenFolders()] }
+  isSystem(rel) { return this.systemFolders().includes(rel) }
+  chosenFolders() { return this.systemFolderRecords().filter(r => r.chosen).map(r => r.name) }
+  /** Every optional folder's choice and when it was made: the chooser's ticks, and what sync sends. */
+  systemFolderRecords() {
+    const rows = new Map(this.db.prepare('SELECT name, chosen, updated_at FROM system_folders').all().map(r => [r.name, r]))
+    return OPTIONAL_FOLDERS.map(name => ({ name, chosen: !!rows.get(name)?.chosen, updatedAt: rows.get(name)?.updated_at ?? 0 }))
+  }
+  /** Files tools › System folders, OK: the chosen ones are made; one left out keeps its folder and everything in it. */
+  chooseSystemFolders(names) {
+    const wanted = new Set(Array.isArray(names) ? names : [])
+    const now = Date.now()
+    for (const r of this.systemFolderRecords()) if (wanted.has(r.name) !== r.chosen) this.setSystemFolder(r.name, !r.chosen, now)
+    return this.chosenFolders()
+  }
+  /** One folder's choice from another device (sync); a name that is not one of the thirteen is ignored. */
+  applySystemFolder({ name, chosen, updatedAt }) {
+    const local = this.systemFolderRecords().find(r => r.name === name)
+    const incoming = { chosen: chosen === true, updatedAt: Number(updatedAt) || 0 }
+    if (local && incomingWins(local, incoming)) this.setSystemFolder(name, incoming.chosen, incoming.updatedAt)
+  }
+  setSystemFolder(name, chosen, at) {
+    if (chosen) fs.mkdirSync(path.join(this.root, name), { recursive: true }) // first, so a file of that name refuses it
+    this.db.prepare(`INSERT INTO system_folders(name, chosen, updated_at) VALUES(?,?,?)
+      ON CONFLICT(name) DO UPDATE SET chosen = excluded.chosen, updated_at = excluded.updated_at`).run(name, chosen ? 1 : 0, at)
   }
 
   /** Absolute path for a relative one, after resolving symlinks, refusing anything outside the root. */
@@ -68,7 +107,7 @@ class Files {
     const meta = this.db.prepare('SELECT favorite, color FROM file_meta WHERE path = ?').get(rel)
     const tags = this.db.prepare('SELECT tag FROM file_tags WHERE path = ? AND deleted = 0 ORDER BY tag COLLATE NOCASE').all(rel).map(r => r.tag)
     return { name: path.basename(full), path: rel, dir: st.isDirectory(), size: st.isDirectory() ? 0 : st.size, mtime: Math.trunc(st.mtimeMs),
-      type: st.isDirectory() ? 'Folder' : typeGroup(full), favorite: !!meta?.favorite, color: meta?.color ?? null, tags }
+      type: st.isDirectory() ? 'Folder' : typeGroup(full), system: st.isDirectory() && this.isSystem(rel), favorite: !!meta?.favorite, color: meta?.color ?? null, tags }
   }
 
   async list(rel) {
@@ -149,7 +188,7 @@ class Files {
   async move(rel, destRel) {
     const src = this.resolve(rel)
     if (src === this.root) fail('Drive itself cannot be moved.')
-    if (isSystem(rel)) systemFail(rel)
+    if (this.isSystem(rel)) systemFail(rel)
     return this.moveTo(src, this.target(src, destRel))
   }
 
@@ -157,7 +196,7 @@ class Files {
     if (!isSafeName(name)) fail('Invalid name.')
     const src = this.resolve(rel)
     if (src === this.root) fail('Drive itself cannot be renamed.')
-    if (isSystem(rel)) systemFail(rel)
+    if (this.isSystem(rel)) systemFail(rel)
     const target = path.join(path.dirname(src), name)
     if (target === src) return rel
     return this.moveTo(src, target)
@@ -168,7 +207,7 @@ class Files {
     if (inTrash(rel)) fail('This item is already in Trash.')
     const src = this.resolve(rel)
     if (src === this.root) fail('Drive itself cannot be moved.')
-    if (isSystem(rel)) systemFail(rel)
+    if (this.isSystem(rel)) systemFail(rel)
     await fsp.mkdir(path.join(this.root, TRASH), { recursive: true })
     // A name already in Trash never blocks a delete: the newcomer becomes "name (2)", as everywhere in Drive.
     const { name, ext } = path.parse(src)
@@ -516,4 +555,4 @@ class Files {
   }
 }
 
-module.exports = { Files, TRASH, SYSTEM_FOLDERS, isSystem, COLORS, typeGroup, isSafeRel, isSafeName }
+module.exports = { Files, TRASH, OPTIONAL_FOLDERS, COLORS, typeGroup, isSafeRel, isSafeName }

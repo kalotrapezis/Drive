@@ -2,7 +2,7 @@
 import type { Media } from './timeline'
 
 export interface DriveItem {
-  name: string; path: string; dir: boolean; size: number; mtime: number; type: string
+  name: string; path: string; dir: boolean; size: number; mtime: number; type: string; system: boolean
   favorite: boolean; color: string | null; tags: string[]; openedAt?: number
 }
 

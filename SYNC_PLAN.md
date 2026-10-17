@@ -472,6 +472,7 @@ Crosses (done 2026-09-23):
 | Hide Screenshots from Photos | It is a statement about the library, and the same library is on both devices. Sent as `viewSettings`, last-write-wins as a pair. |
 | Hide Documents from Photos | Same. |
 | Hide an album from Photos | Belongs to the *album*, not to a device, so it moved out of preferences onto the collection row (phone schema v16, desktop `collections.hidden`) and travels with it. This also took the desktop's copy out of `localStorage`. |
+| System folders (Files tools › System folders, asked 17 Oct) | Which of the thirteen (Music … Others) are system folders describes the Files tree, the same on both. Sent as `systemFolders`, all thirteen each time, **per folder** with when it was chosen or left out: the later answer wins, a tie goes to chosen. So a folder chosen on either side becomes a system folder on both (made there at once, so it is never an ordinary folder that a Move or a rename could take away), and leaving one out on either side is not undone by the other. The phone's choices from before there were times count as time 0, so they still cross. One left out stays as an ordinary folder with everything in it. |
 
 Stays local, on purpose:
 

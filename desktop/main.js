@@ -50,7 +50,7 @@ async function embeddedMotion(id) {
 }
 let notes, db, files, people, documents, folders, vault, sync, purgatory, win, scanning = null
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
-  'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage']
+  'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage', 'chosenFolders', 'chooseSystemFolders']
 const NOTE_CALLS = ['list', 'create', 'save', 'snapshot', 'history', 'restoreVersion', 'remove']
 
 const setting = key => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value
