@@ -72,18 +72,37 @@ class Files {
     const rows = new Map(this.db.prepare('SELECT name, chosen, updated_at FROM system_folders').all().map(r => [r.name, r]))
     return OPTIONAL_FOLDERS.map(name => ({ name, chosen: !!rows.get(name)?.chosen, updatedAt: rows.get(name)?.updated_at ?? 0 }))
   }
-  /** Files tools › System folders, OK: the chosen ones are made; one left out keeps its folder and everything in it. */
-  chooseSystemFolders(names) {
+  /**
+   * Files tools › System folders, OK: the chosen ones are made. One left out goes if it is empty; what is in one
+   * goes, as the user answered (asked 17 Oct), 'out' to the top of Tetra or 'trash' to the Trash. Documents is
+   * never among them: it is not one of the thirteen.
+   */
+  async chooseSystemFolders(names, contents = 'out') {
+    if (contents !== 'out' && contents !== 'trash') fail('Choose where their contents go.')
     const wanted = new Set(Array.isArray(names) ? names : [])
     const now = Date.now()
-    for (const r of this.systemFolderRecords()) if (wanted.has(r.name) !== r.chosen) this.setSystemFolder(r.name, !r.chosen, now)
+    const leftOut = []
+    for (const r of this.systemFolderRecords()) if (wanted.has(r.name) !== r.chosen) {
+      this.setSystemFolder(r.name, !r.chosen, now)
+      if (r.chosen) leftOut.push(r.name)
+    }
+    for (const name of leftOut) {
+      const dir = path.join(this.root, name)
+      if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue
+      if (contents === 'trash' && fs.readdirSync(dir).length) { await this.trash(name); continue }
+      for (const entry of fs.readdirSync(dir)) await this.moveTo(path.join(dir, entry), this.freeTarget(this.root, entry))
+      fs.rmdirSync(dir)
+    }
     return this.chosenFolders()
   }
   /** One folder's choice from another device (sync); a name that is not one of the thirteen is ignored. */
   applySystemFolder({ name, chosen, updatedAt }) {
     const local = this.systemFolderRecords().find(r => r.name === name)
     const incoming = { chosen: chosen === true, updatedAt: Number(updatedAt) || 0 }
-    if (local && incomingWins(local, incoming)) this.setSystemFolder(name, incoming.chosen, incoming.updatedAt)
+    if (!local || !incomingWins(local, incoming)) return
+    this.setSystemFolder(name, incoming.chosen, incoming.updatedAt)
+    // Left out over there: an empty one goes here too; one with files stays, an ordinary folder, until its files follow.
+    if (!incoming.chosen) try { fs.rmdirSync(path.join(this.root, name)) } catch {}
   }
   setSystemFolder(name, chosen, at) {
     if (chosen) fs.mkdirSync(path.join(this.root, name), { recursive: true }) // first, so a file of that name refuses it
@@ -209,11 +228,15 @@ class Files {
     if (src === this.root) fail('Drive itself cannot be moved.')
     if (this.isSystem(rel)) systemFail(rel)
     await fsp.mkdir(path.join(this.root, TRASH), { recursive: true })
-    // A name already in Trash never blocks a delete: the newcomer becomes "name (2)", as everywhere in Drive.
-    const { name, ext } = path.parse(src)
-    let target = path.join(this.resolve(TRASH), path.basename(src))
-    for (let n = 2; fs.existsSync(target); n++) target = path.join(this.resolve(TRASH), `${name} (${n})${ext}`)
-    return this.moveTo(src, target)
+    return this.moveTo(src, this.freeTarget(this.resolve(TRASH), path.basename(src)))
+  }
+
+  /** A name already there never blocks a move into [dir]: the newcomer becomes "name (2)", as everywhere in Drive. */
+  freeTarget(dir, base) {
+    const { name, ext } = path.parse(base)
+    let target = path.join(dir, base)
+    for (let n = 2; fs.existsSync(target); n++) target = path.join(dir, `${name} (${n})${ext}`)
+    return target
   }
 
   /** The only permanent delete; the UI confirms first. */

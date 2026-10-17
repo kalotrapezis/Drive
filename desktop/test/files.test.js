@@ -93,24 +93,32 @@ test('the system folders are always there and stay put, while what is inside the
   fs.rmSync(tmp, { recursive: true })
 })
 
-test('a chosen System folder is made and kept like Documents; left out, it stays as an ordinary folder', async () => {
+test('a chosen System folder is made and kept like Documents; left out, it goes, its contents out or to the Trash', async () => {
   const { tmp, root, files } = setup()
-  assert.deepEqual(files.chooseSystemFolders(['Music', 'AI', 'Nonsense']), ['Music', 'AI'])
+  assert.deepEqual(await files.chooseSystemFolders(['Music', 'AI', 'Work', 'Books', 'Nonsense']), ['Music', 'Work', 'AI', 'Books'])
   assert.ok(fs.statSync(path.join(root, 'AI')).isDirectory())
   assert.equal((await files.list('')).find(i => i.path === 'Music').system, true)
   await assert.rejects(files.trash('Music'), /system folder/)
   fs.writeFileSync(path.join(root, 'Music', 'song.mp3'), 'x')
-  files.chooseSystemFolders(['AI'])
-  assert.equal(files.isSystem('Music'), false)
-  assert.ok(fs.existsSync(path.join(root, 'Music', 'song.mp3')))
-  assert.equal(await files.rename('Music', 'Songs'), 'Songs')
-  // Another device's choices: the later one wins, a tie goes to chosen, an older one changes nothing.
+  fs.mkdirSync(path.join(root, 'Music', 'Docs'))
+  fs.writeFileSync(path.join(root, 'Work', 'plan.pdf'), 'x')
+  await assert.rejects(files.chooseSystemFolders(['AI'], 'nowhere'), /contents/)
+  // Out: what was inside is at the top, a name already there becoming "(2)"; the empty folder is gone.
+  await files.chooseSystemFolders(['AI', 'Work', 'Books'], 'out')
+  assert.ok(!fs.existsSync(path.join(root, 'Music')) && fs.existsSync(path.join(root, 'song.mp3')))
+  assert.ok(fs.existsSync(path.join(root, 'Docs (2)')) && fs.existsSync(path.join(root, 'Docs', 'a.txt')))
+  // Trash: the folder goes to the Trash whole; an empty one left out just goes.
+  await files.chooseSystemFolders(['AI'], 'trash')
+  assert.ok(fs.existsSync(path.join(root, 'Trash', 'Work', 'plan.pdf')) && !fs.existsSync(path.join(root, 'Books')))
+  assert.ok(fs.existsSync(path.join(root, 'Documents')))
+  // Another device's choices: the later one wins, a tie goes to chosen, an older one changes nothing; left out
+  // over there, an empty folder goes here too.
   const at = files.systemFolderRecords().find(r => r.name === 'AI').updatedAt
   files.applySystemFolder({ name: 'AI', chosen: false, updatedAt: at - 1 })
   assert.ok(files.isSystem('AI'))
   files.applySystemFolder({ name: 'AI', chosen: false, updatedAt: at + 1 })
-  assert.ok(!files.isSystem('AI') && fs.existsSync(path.join(root, 'AI')))
-  files.applySystemFolder({ name: 'Books', chosen: true, updatedAt: 0 })
+  assert.ok(!files.isSystem('AI') && !fs.existsSync(path.join(root, 'AI')))
+  files.applySystemFolder({ name: 'Books', chosen: true, updatedAt: Date.now() + 1000 })
   assert.ok(files.isSystem('Books'))
   // Kept across restarts: a new Files on the same database knows the choice.
   assert.deepEqual(new Files(files.db, root).chosenFolders(), ['Books'])

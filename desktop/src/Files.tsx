@@ -215,8 +215,26 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
   async function chooseSystemFolders() {
     try {
       const chosen = await call<string[]>('chosenFolders')
-      setDialog(<SystemFoldersDialog initial={chosen} onClose={close}
-        onSave={names => { close(); act(() => call('chooseSystemFolders', names), 'System folders saved') }} />)
+      const save = (names: string[], contents = 'out') => { close(); act(() => call('chooseSystemFolders', names, contents), 'System folders saved') }
+      setDialog(<SystemFoldersDialog initial={chosen} onClose={close} onSave={async names => {
+        // A folder left out goes; one with something in it asks first where that goes (asked 17 Oct).
+        const leftOut = chosen.filter(n => !names.includes(n))
+        const full = (await Promise.all(leftOut.map(n => call<DriveItem[]>('list', n).then(l => l.length ? n : null, () => null)))).filter(n => n !== null)
+        if (!full.length) return save(names)
+        const which = full.length === 1 ? `\u201c${full[0]}\u201d has` : `${full.slice(0, -1).join(', ')} and ${full.at(-1)} have`
+        setDialog(
+          <Modal onClose={close}>
+            <h3>{which} files in {full.length === 1 ? 'it' : 'them'}</h3>
+            <p>Move what is inside to the top of Tetra, or move {full.length === 1 ? 'the folder' : 'the folders'} with everything in {full.length === 1 ? 'it' : 'them'} to Trash.
+              Empty folders left out simply go.</p>
+            <div className="dialog-actions">
+              <button className="text-button" onClick={close}>Cancel</button>
+              <button className="text-button" onClick={() => save(names, 'trash')}>Move to Trash</button>
+              <button className="filled-button" autoFocus onClick={() => save(names, 'out')}>Move files out</button>
+            </div>
+          </Modal>,
+        )
+      }} />)
     } catch (e) { say(errorText(e)) }
   }
   function emptyTrash() {
@@ -330,14 +348,14 @@ function ItemIcon({ item, size }: { item: DriveItem; size: number }) {
 }
 
 /** Files tools › System folders: every folder's emblem, click to choose or leave it, OK to keep the choice (the phone's sheet). */
-function SystemFoldersDialog({ initial, onClose, onSave }: { initial: string[]; onClose: () => void; onSave: (names: string[]) => void }) {
+function SystemFoldersDialog({ initial, onClose, onSave }: { initial: string[]; onClose: () => void; onSave: (names: string[]) => unknown }) {
   const [chosen, setChosen] = useState(() => new Set(initial))
   const flip = (name: string) => setChosen(c => { const n = new Set(c); n.has(name) ? n.delete(name) : n.add(name); return n })
   return (
     <Modal onClose={onClose}>
       <h3>System folders</h3>
       <p className="hint">Folders Tetra keeps in Files for sorting things into, each with its own picture. Documents is always there.
-        A folder left out later stays, as an ordinary folder, with everything in it.</p>
+        A folder left out later goes; if it has files in it, you choose where they go.</p>
       <div className="system-folders">
         {Object.entries(SYSTEM_FOLDER_ICONS).map(([name, [icon, tint]]) => (
           <button key={name} className={chosen.has(name) ? 'on' : ''} style={{ '--tint': tint } as React.CSSProperties}
