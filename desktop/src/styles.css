@@ -815,3 +815,14 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .cal-chips button.on { background: var(--cal-pink); color: #fff; }
 .cal-side .cal-two { flex-wrap: wrap; }
 .cal-share-head { margin: 14px 4px 2px; font-size: 14px; }
+
+/* a wide window's bottom (18 Oct): the views' island at the left, ‹ Today › and + together at the right, by the hand */
+.cal-dock { position: absolute; left: 284px; right: 12px; bottom: 12px; z-index: 6; display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none; }
+.cal-dock > * { pointer-events: auto; }
+.cal-dock-right { display: flex; gap: 8px; align-items: flex-end; }
+.cal-dock .cal-nav { min-height: 56px; padding: 6px; box-shadow: 0 8px 30px #0006; }
+.cal-plus { position: relative; }
+.cal-plus .cal-kinds { position: absolute; right: 0; bottom: 64px; flex-direction: column; align-items: stretch; margin: 0; }
+.cal-plus-button { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; box-shadow: 0 8px 30px #0006; }
+.cal-plus-button.on, .cal-plus-button:hover { background: var(--island-2); }
+.cal.wide .cal-main { padding-bottom: 88px; }

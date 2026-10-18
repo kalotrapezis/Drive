@@ -286,6 +286,11 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
       <button className="text-button" onClick={() => window.drive.calendarSkillInstall().then(p => say('Installed for Claude Code in ' + p), e => say('Not installed: ' + errorText(e)))}>Copy to ~/.claude/skills</button>
     </div>
   </>
+  const nav = <div className="island title-island cal-nav">
+    <button className="round flat" title="Previous" onClick={() => step(-1)}><Icon name="back" /></button>
+    <button className="text-button" onClick={() => setSelected(today)}>Today</button>
+    <button className="round flat" title="Next" onClick={() => step(1)}><Icon name="forward" /></button>
+  </div>
   const main = <>
     {view === 'month' && <MonthGrid selected={selected} today={today} byDay={byDay} color={color} pick={d => setSelected(d)} create={create} open={open} />}
     {(view === 'week' || view === 'day' || view === 'three') && <TimeGrid dates={view === 'week' ? weekOf(selected) : view === 'three' ? [0, 1, 2].map(i => addDays(selected, i)) : [selected]} today={today} byDay={byDay} color={color} open={open} create={create} />}
@@ -297,11 +302,7 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
       {/* Files' own top: the title in an island, the dates' controls in one beside it */}
       <header className="topbar cal-topbar">
         <div className="island title-island"><Icon name="calendar" /><h1>{title}</h1></div>
-        <div className="island title-island cal-nav">
-          <button className="text-button" onClick={() => setSelected(today)}>Today</button>
-          <button className="round flat" title="Previous" onClick={() => step(-1)}><Icon name="back" /></button>
-          <button className="round flat" title="Next" onClick={() => step(1)}><Icon name="forward" /></button>
-        </div>
+        {!wide && nav}
       </header>
       {wide ? <div className="cal-body">
         <aside className="cal-side">
@@ -316,7 +317,23 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
       <div className={`notes-drawer island cal-drawer ${drawer ? 'open' : ''}`} aria-hidden={!drawer}>
         {wide ? <div className="cal-drawer-list">{settingsList}</div> : <div className="cal-drawer-list">{calendarList}{settingsList}</div>}
       </div>
-      <div className="notes-dock">
+      {/* the user, 18 Oct: a wide window has Today and ‹ › at the bottom, in their own island next to the + */}
+      {wide ? <div className="cal-dock">
+        <nav className="notes-island island">
+          {views.map(([v, label, icon]) => <button key={v} className={`island-item ${view === v ? 'on' : ''}`} onClick={() => { go(v); setDrawer(false) }}><Icon name={icon as never} size={20} /><span>{label}</span></button>)}
+          <span className="island-gap" />
+          <button className={`island-item ${drawer ? 'on' : ''}`} aria-expanded={drawer} onClick={() => { setKinds(false); setDrawer(d => !d) }}><Icon name="tune" size={20} /><span>Settings</span></button>
+        </nav>
+        <div className="cal-dock-right">
+          {nav}
+          <div className="cal-plus">
+            {kinds && <div className="island cal-kinds">
+              {KINDS.map(([k, label, icon]) => <button key={k} className="island-item" onClick={() => start(k)}><Icon name={icon as never} size={20} /><span>{label}</span></button>)}
+            </div>}
+            <button className={`island cal-plus-button ${kinds ? 'on' : ''}`} title="New event, schedule, birthday or reminder" onClick={() => { setDrawer(false); setKinds(k => !k) }}><Icon name="add" /></button>
+          </div>
+        </div>
+      </div> : <div className="notes-dock">
         {kinds && <div className="island cal-kinds">
           {KINDS.map(([k, label, icon]) => <button key={k} className="island-item" onClick={() => start(k)}><Icon name={icon as never} size={20} /><span>{label}</span></button>)}
         </div>}
@@ -325,9 +342,9 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
           <span className="island-gap" />
           <button className={`island-item ${kinds ? 'on' : ''}`} title="New event, schedule, birthday or reminder" onClick={() => { setDrawer(false); setKinds(k => !k) }}><Icon name="add" size={20} /><span>New</span></button>
           <button className={`island-item ${drawer ? 'on' : ''}`} aria-expanded={drawer} onClick={() => { setKinds(false); setDrawer(d => !d) }}>
-            <Icon name={wide ? 'tune' : 'calendar'} size={20} /><span>{wide ? 'Settings' : 'Calendars'}</span></button>
+            <Icon name="calendar" size={20} /><span>Calendars</span></button>
         </nav>
-      </div>
+      </div>}
     </div>
   )
 }
