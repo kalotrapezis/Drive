@@ -689,6 +689,16 @@ Three steps, cheapest first:
    timeout. Not built — worth it only if step 2 is seen to fail on a real
    network.
 
+**From the computer's side too (2026-10-13).** A nudge that finds nobody at any
+address it knows sends the same probe for the *device's* fingerprint (`SyncServer.find`)
+and keeps the address that answers; a change in the computer's own addresses is a
+nudge by itself. And Android's periodic `SyncJob` runs at the interval chosen in
+Settings › Sync (Off, 15, 30, 60 min) on *any* local network: it used to wait for
+unmetered Wi-Fi, and a phone's hotspot is metered, so on one it never ran. A sync
+only talks to private LAN addresses, which mobile data does not carry. Checked on the
+Xiaomi 15 as the hotspot: the job's probe reached the computer and both sides kept
+the new addresses.
+
 **Discovery is a hint, never trust.** Any answer may be a lie; the pinned
 certificate alone decides whether a sync happens. That is what makes it safe to
 be careless about how an address is found.
@@ -1798,6 +1808,18 @@ edited in Writer on the phone → the computer's copy replaced (history "updated
 bug had left different on the two sides (phone: the Writer save; computer: the copy before it, the save beside it as
 "(2)"), with no memory of which is newer: kept both, as a conflict should be. The installed desktop (/opt/Tetra,
 Beta 2) still has the old rule until a new build is installed.
+
+### 6al. The text editor's open tabs cross too (2026-10-13)
+
+Asked for the school-locations file that stays open on the phone. A tab crosses by
+its **path in Tetra**: the file itself already travels with Files (history,
+conflicts and all), so only "open" or "closed", and when, needs to. Each device
+keeps the newest of each path (`TextEditorStore.mark`, `applySynced`); the computer
+has no text editor and only relays them (`editor_tabs`, `POST /editor-tabs`, the
+newer `at` wins). A tab with unsaved text is never closed from elsewhere. A file
+outside Tetra — Downloads, another app's — stays on its device: *Save as* puts it in
+Tetra/Documents, and from then it crosses. Built on both sides; not yet seen going
+between two real devices (the computer needs the new build).
 
 ## Roadmap (set 2026-09-24)
 
