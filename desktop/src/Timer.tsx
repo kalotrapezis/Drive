@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { TimerItem } from './drive'
+import type { TimerAction, TimerItem } from './drive'
 import { ClockFace } from './Calendar'
 import { errorText } from './Dialogs'
 import { Icon } from './Icon'
@@ -32,13 +32,17 @@ export function useTimers() {
   return list
 }
 
-function TimerCard({ t, act }: { t: TimerItem; act: (id: string, a: 'pause' | 'resume' | 'stop' | 'ok') => void }) {
+/** A timer's card: the pin (top left) keeps it when stopped or done, ready to start again; the trash (top right) takes it away. */
+function TimerCard({ t, act }: { t: TimerItem; act: (id: string, a: TimerAction) => void }) {
   return (
     <div className={`timer-card island ${t.ringing ? 'ringing' : ''}`}>
-      <div className="timer-left">{t.ringing ? "Time's up" : clockText(t.leftMs)}</div>
+      <button className={`round flat timer-pin ${t.pinned ? 'on' : ''}`} title={t.pinned ? 'Unpin' : 'Pin: keep this timer'} onClick={() => act(t.id, t.pinned ? 'unpin' : 'pin')}><Icon name="pin" size={18} /></button>
+      <button className="round flat timer-trash" title="Delete" onClick={() => act(t.id, 'trash')}><Icon name="trash" size={18} /></button>
+      <div className="timer-left">{t.ringing ? "Time's up" : clockText(t.ready ? t.seconds * 1000 : t.leftMs)}</div>
       <div className="timer-name">{t.label || durationText(t.seconds)}{t.state === 'paused' ? ' · paused' : ''}</div>
       <div className="timer-buttons">
-        {t.ringing ? <button className="filled-button" onClick={() => act(t.id, 'ok')}>OK</button> : <>
+        {t.ringing ? <button className="filled-button" onClick={() => act(t.id, 'ok')}>OK</button>
+          : t.ready ? <button className="filled-button" onClick={() => act(t.id, 'restart')}><Icon name="play" size={18} /> Start</button> : <>
           {t.state === 'paused'
             ? <button className="filled-button" onClick={() => act(t.id, 'resume')}><Icon name="play" size={18} /> Resume</button>
             : <button className="filled-button" onClick={() => act(t.id, 'pause')}><Icon name="pause" size={18} /> Pause</button>}
@@ -59,7 +63,7 @@ export function TimerPage({ say }: { say: (text: string) => void }) {
   useEffect(() => { loadPrefs().then(p => { const s = p.recent[0]; if (s) { setH(Math.min(23, Math.floor(s / 3600))); setM(Math.floor(s % 3600 / 60)) } }) }, [])
   const chosen = h * 3600 + m * 60
   const start = (s: number) => s > 0 && window.drive.timer.start(s).then(loadPrefs, e => say('Not started: ' + errorText(e)))
-  const act = (id: string, a: 'pause' | 'resume' | 'stop' | 'ok') => window.drive.timer.change(id, a).catch(e => say(errorText(e)))
+  const act = (id: string, a: TimerAction) => window.drive.timer.change(id, a).catch(e => say(errorText(e)))
   const list = [...prefs.pinned, ...prefs.recent.filter(s => !prefs.pinned.includes(s))]
   return (
     <div className="timer">

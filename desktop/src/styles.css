@@ -850,7 +850,7 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .timer-start { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; min-width: 200px; justify-content: center; }
 .timer-clock .timer-start svg { width: 20px; margin: 0; } /* not the clock face's .cal-clock svg */
 .timer-cards { flex: 1 1 100%; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(max(220px, (100% - 24px) / 3), 1fr)); }
-.timer-card { padding: 12px 16px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.timer-card { position: relative; padding: 12px 16px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .timer-card.ringing { background: var(--timer-teal); color: #fff; }
 .timer-left { font-size: 34px; font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
 .timer-buttons { display: flex; gap: 8px; margin-top: 4px; }
@@ -865,3 +865,8 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .timer .notes-drawer p { max-width: 640px; color: var(--muted); }
 .timer-bell { position: fixed; top: 16px; left: 50%; translate: -50% 0; z-index: 50; display: flex; align-items: center; gap: 14px; padding: 12px 14px 12px 20px;
   border-radius: 999px; background: var(--timer-teal); color: #fff; box-shadow: 0 8px 30px #0008; }
+.timer-pin, .timer-trash { position: absolute; top: 6px; width: 34px; height: 34px; opacity: .55; }
+.timer-pin { left: 6px; } .timer-trash { right: 6px; }
+.timer-pin.on { opacity: 1; color: var(--timer-teal); }
+.timer-card.ringing .timer-pin.on { color: #fff; }
+.timer-pin:hover, .timer-trash:hover { opacity: 1; }

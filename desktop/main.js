@@ -622,15 +622,17 @@ app.whenReady().then(() => {
   })
   // The Timer: what runs, and its buttons; the watcher shows the change and tells the other devices
   const timerList = key => { try { const v = JSON.parse(setting(key) || '[]'); return Array.isArray(v) ? v.filter(Number.isSafeInteger) : [] } catch { return [] } }
-  ipcMain.handle('timer:active', () => timers.active())
+  ipcMain.handle('timer:active', () => timers.cards())
   ipcMain.handle('timer:start', (_, seconds) => {
     const r = timers.start(seconds)
     setSetting('timerRecent', JSON.stringify(timer.used(timerList('timerRecent'), r.seconds)))
     planTimer()
   })
   ipcMain.handle('timer:change', (_, id, action) => {
-    if (!['pause', 'resume', 'stop', 'ok'].includes(action)) throw new Error('Unknown Timer action.')
+    if (!['pause', 'resume', 'stop', 'ok', 'restart', 'pin', 'unpin', 'trash'].includes(action)) throw new Error('Unknown Timer action.')
+    const r = timers.read().find(t => t.id === String(id))
     timers.change(String(id), action)
+    if (action === 'restart' && r) setSetting('timerRecent', JSON.stringify(timer.used(timerList('timerRecent'), r.seconds)))
     planTimer()
   })
   ipcMain.handle('timer:prefs', () => ({ recent: timerList('timerRecent'), pinned: timerList('timerPinned') }))

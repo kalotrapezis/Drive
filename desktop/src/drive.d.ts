@@ -12,8 +12,9 @@ export interface Person { id: string; name: string; count: number; cover: string
 export interface Review { faceId: string; personId: string; sha256: string; name: string; personFace: string | null }
 export interface Analysis { running: boolean; paused: boolean; done: number; total: number; error: string; enabled?: boolean; documentsEnabled?: boolean; reviews?: number }
 export interface MergeUndo { sourceId: string; faceIds: string[] }
+export type TimerAction = 'pause' | 'resume' | 'stop' | 'ok' | 'restart' | 'pin' | 'unpin' | 'trash'
 /** A timer as the computer counts it (timer.js active()). */
-export interface TimerItem { id: string; seconds: number; label: string; state: 'running' | 'paused' | 'stopped'; ends: number | null; left: number; rev: number; by: string; leftMs: number; ringing: boolean }
+export interface TimerItem { id: string; seconds: number; label: string; state: 'running' | 'paused' | 'stopped'; ends: number | null; left: number; rev: number; by: string; pinned: boolean; leftMs: number; ringing: boolean; ready: boolean }
 
 export interface VaultStatus { configured: boolean; unlocked: boolean; count: number }
 export interface VaultItem { id: string; sha256: string; name: string; rel_path: string; mime: string; is_video: number; size: number; taken_at: number; has_thumb: number }
@@ -162,7 +163,7 @@ declare global {
       timer: {
         active(): Promise<TimerItem[]>
         start(seconds: number): Promise<void>
-        change(id: string, action: 'pause' | 'resume' | 'stop' | 'ok'): Promise<void>
+        change(id: string, action: TimerAction): Promise<void>
         prefs(): Promise<{ recent: number[]; pinned: number[] }>
         pin(seconds: number): Promise<void>
         clearRecent(): Promise<void>

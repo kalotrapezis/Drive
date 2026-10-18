@@ -92,6 +92,29 @@ test('a new timer takes the file of one that is over', () => {
   assert.equal(tablet.active(t0 + 101_000).length, 2)
 })
 
+test('a pinned card stays ready; the trash takes it away everywhere', () => {
+  const [tablet, computer] = pair()
+  const { id } = tablet.start(900, t0)
+  tablet.change(id, 'pin', t0); tablet.change(id, 'stop', t0)
+  assert.equal(tablet.active(t0).length, 0)
+  const [c] = tablet.cards(t0)
+  assert.ok(c.pinned && c.ready)
+  assert.notEqual(tablet.start(60, t0).file, c.file) // a pinned card's file is not taken
+  tablet.change(id, 'restart', t0 + 10_000)
+  assert.equal(tablet.read().find(r => r.id === id).ends, t0 + 910_000)
+  carry(tablet, computer)
+  computer.change(id, 'trash', t0 + 20_000)
+  carry(computer, tablet)
+  assert.ok(!tablet.cards(t0 + 20_000).some(r => r.id === id))
+})
+
+test('nine timers at most', () => {
+  const [tablet] = pair()
+  for (let i = 0; i < 9; i++) tablet.start(60 + i, t0)
+  assert.throws(() => tablet.start(30, t0), /Nine timers/)
+  assert.equal(tablet.cards(t0).length, 9)
+})
+
 test('a timer Claude writes by hand is read; anything else is not a timer', () => {
   const [tablet] = pair()
   fs.mkdirSync(tablet.root, { recursive: true })

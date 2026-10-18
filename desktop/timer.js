@@ -4,8 +4,9 @@
  * one small JSON file in ~/Tetra/Files/Timer, synced as files are, at once (files.js SCOPES.timer). Every device counts
  * down by itself from the end time in it; only Start, Pause, Resume, Stop and OK write the file:
  *
- *   {"id":"k3f9a2","seconds":300,"label":"","state":"running","ends":"2026-10-18T16:05:00Z","left":0,"rev":1,"by":"Tablet"}
+ *   {"id":"k3f9a2","seconds":300,"label":"","state":"running","ends":"2026-10-18T16:05:00Z","left":0,"rev":1,"by":"Tablet","pinned":false}
  *
+ * `pinned`: the card stays when stopped or done, ready to start again; the trash takes it away (on every device).
  * state: running (to `ends`), paused (`left` seconds remain), stopped. `rev` goes up by one each change; the highest wins,
  * equal ones stopped first, so clocks a few seconds apart decide nothing. Claude starts one by writing such a file.
  */
@@ -16,6 +17,7 @@ const crypto = require('node:crypto')
 const RUNNING = 'running', PAUSED = 'paused', STOPPED = 'stopped'
 const ORDER = [RUNNING, PAUSED, STOPPED]
 const UNANSWERED_MS = 10 * 60_000 // a timer nobody answered rings ten minutes at most
+const MAX = 9 // the screen holds nine (the user, 18 Oct)
 
 function parse(text, file = null) {
   try {
@@ -28,12 +30,13 @@ function parse(text, file = null) {
     const id = typeof o.id === 'string' && o.id ? o.id : file ? path.basename(file, '.json') : null
     if (!id) return null
     return { id, seconds: Math.max(0, Math.trunc(+o.seconds || 0)), label: typeof o.label === 'string' ? o.label : '', state, ends,
-      left: Number.isFinite(+o.left) ? +o.left : 0, rev: Number.isSafeInteger(o.rev) ? o.rev : 0, by: typeof o.by === 'string' ? o.by : '', file }
+      left: Number.isFinite(+o.left) ? +o.left : 0, rev: Number.isSafeInteger(o.rev) ? o.rev : 0, by: typeof o.by === 'string' ? o.by : '', file, pinned: o.pinned === true }
   } catch { return null }
 }
 
 const leftMs = (r, now) => r.state === RUNNING ? Math.max(0, (r.ends ?? 0) - now) : r.state === PAUSED ? Math.round(r.left * 1000) : 0
 const over = (r, now) => r.state === STOPPED || (r.state === RUNNING && (r.ends == null || now > r.ends + UNANSWERED_MS))
+const card = (r, now) => !over(r, now) || r.pinned
 const ringing = (r, now) => r.state === RUNNING && r.ends != null && now >= r.ends && !over(r, now)
 
 /** One record per id: a timer changed on two devices between syncs comes as "x (2).json" beside "x.json". */
@@ -46,7 +49,7 @@ function winners(all) {
 }
 
 const json = r => JSON.stringify({ id: r.id, seconds: r.seconds, label: r.label, state: r.state, ends: r.ends == null ? null : new Date(r.ends).toISOString(),
-  left: r.left, rev: r.rev, by: r.by }, null, 1) + '\n'
+  left: r.left, rev: r.rev, by: r.by, pinned: !!r.pinned }, null, 1) + '\n'
 
 class Timers {
   constructor(root, by = 'Computer') { this.root = root; this.by = by }
@@ -65,6 +68,12 @@ class Timers {
     return this.read().filter(r => !over(r, now)).map(r => ({ ...r, leftMs: leftMs(r, now), ringing: ringing(r, now) })).sort((a, b) => a.leftMs - b.leftMs)
   }
 
+  /** The cards on the screen: the active ones, then the pinned ones ready to start again (`ready`), nine at most. */
+  cards(now = Date.now()) {
+    return this.read().filter(r => card(r, now)).map(r => ({ ...r, leftMs: leftMs(r, now), ringing: ringing(r, now), ready: over(r, now) }))
+      .sort((a, b) => a.ready - b.ready || a.leftMs - b.leftMs || a.seconds - b.seconds).slice(0, MAX)
+  }
+
   /** Written beside, then renamed over: nobody reads half a timer. */
   write(r) {
     fs.mkdirSync(this.root, { recursive: true })
@@ -79,12 +88,14 @@ class Timers {
   start(seconds, now = Date.now(), label = '') {
     seconds = Math.trunc(+seconds)
     if (!(seconds > 0 && seconds < 100 * 3600)) throw new Error('A timer is from a second to 99 hours.')
-    const free = this.read().filter(r => over(r, now)).sort((a, b) => String(a.file).localeCompare(String(b.file)))[0]
+    const all = this.read()
+    if (all.filter(r => card(r, now)).length >= MAX) throw new Error('Nine timers at most: stop or delete one first.')
+    const free = all.filter(r => over(r, now) && !r.pinned).sort((a, b) => String(a.file).localeCompare(String(b.file)))[0]
     return this.write({ id: free?.id ?? crypto.randomBytes(3).toString('hex'), seconds, label, state: RUNNING, ends: now + seconds * 1000, left: 0,
       rev: (free?.rev ?? 0) + 1, by: this.by, file: free?.file ?? null })
   }
 
-  /** Pause, resume, stop or ok on [id], as its file is now; answers whether anything changed. */
+  /** Pause, resume, stop, ok, restart, pin, unpin or trash on [id], as its file is now; answers whether anything changed. */
   change(id, action, now = Date.now()) {
     const r = this.read().find(t => t.id === id)
     if (!r) return false
@@ -92,6 +103,9 @@ class Timers {
     if (action === 'pause' && r.state === RUNNING) next = { ...r, state: PAUSED, left: leftMs(r, now) / 1000, ends: null }
     else if (action === 'resume' && r.state === PAUSED) next = { ...r, state: RUNNING, ends: now + Math.round(r.left * 1000), left: 0 }
     else if ((action === 'stop' || action === 'ok') && r.state !== STOPPED) next = { ...r, state: STOPPED, ends: null, left: 0 }
+    else if (action === 'restart') next = { ...r, state: RUNNING, ends: now + r.seconds * 1000, left: 0 }
+    else if (action === 'pin' || action === 'unpin') { if (r.pinned !== (action === 'pin')) next = { ...r, pinned: action === 'pin' } }
+    else if (action === 'trash') next = { ...r, state: STOPPED, ends: null, left: 0, pinned: false }
     if (!next) return false
     this.write({ ...next, rev: r.rev + 1, by: this.by })
     return true
@@ -114,4 +128,4 @@ function durationText(seconds) {
   return [h && `${h} h`, m && `${m} min`, (s || !seconds) && `${s} s`].filter(Boolean).join(' ')
 }
 
-module.exports = { Timers, parse, winners, leftMs, over, ringing, used, shown, durationText, UNANSWERED_MS }
+module.exports = { Timers, parse, winners, leftMs, over, ringing, used, shown, durationText, UNANSWERED_MS, MAX }
