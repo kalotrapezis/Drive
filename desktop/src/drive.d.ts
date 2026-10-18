@@ -146,6 +146,14 @@ declare global {
         onProgress(fn: (a: Analysis) => void): () => void
       }
       notes<T = unknown>(method: string, ...args: unknown[]): Promise<T>
+      calendar<T = unknown>(method: string, ...args: unknown[]): Promise<T>
+      calendarPickImport(): Promise<{ index: number; name: string; color: string | null; count: number }[] | null>
+      calendarImport(choices: { index: number; into: string }[]): Promise<{ added: number; updated: number }>
+      calendarExport(id: string | null): Promise<string | null>
+      calendarSettings(): Promise<{ reminders: boolean; autostart: boolean }>
+      calendarSetReminders(on: boolean): Promise<void>
+      calendarSetAutostart(on: boolean): Promise<void>
+      onCalendarChanged(cb: () => void): () => void
       onNotesChanged(cb: () => void): () => void
       notesSynced(): Promise<{ at: number; device: string } | null>
       notifications: { list(): Promise<AppNotification[]>; read(): Promise<void>; clear(): Promise<void>; onChange(cb: () => void): () => void }

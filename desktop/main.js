@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification, nativeTheme, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification, nativeTheme, dialog, powerMonitor } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
@@ -15,6 +15,7 @@ const { Folders } = require('./folders')
 const { Purgatory } = require('./purgatory')
 const history = require('./history')
 const { Notes } = require('./notes')
+const { Calendar } = require('./calendar')
 const importer = require('./importer')
 
 const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'local-drive-desktop')
@@ -52,6 +53,50 @@ let notes, db, files, people, documents, folders, vault, sync, purgatory, win, s
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage', 'chosenFolders', 'chooseSystemFolders']
 const NOTE_CALLS = ['list', 'create', 'save', 'snapshot', 'history', 'restoreVersion', 'remove']
+const CALENDAR_CALLS = ['calendars', 'occurrences', 'save', 'saveDay', 'skipDay', 'endBefore', 'trash', 'move', 'keep', 'newCalendar', 'setCalendar', 'deleteCalendar']
+let calendar = null, reminderTimer = null, calendarNudge = null, calendarIncoming = []
+
+// The Calendar's reminders (Drive-Android Plan.md § Calendar): one timer for the next, the plan made again from the files
+// whenever they change, a reminder is due, the computer wakes or Tetra starts. What came due while it was closed or asleep
+// (up to a day) is shown as missed. Every device reminds; "Reminders on this computer" turns this one off.
+const dayTime = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+const clock = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' })
+function reminderText(r) {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const day = new Date(r.start); day.setHours(0, 0, 0, 0)
+  const n = Math.round((day - today) / 86400000)
+  const words = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : dayTime.format(r.start)
+  return (r.allDay ? `${words}, all day` : `${words} ${clock.format(r.start)} – ${clock.format(r.end)}`) + (r.place ? ` · ${r.place}` : '')
+}
+function planReminders() {
+  clearTimeout(reminderTimer)
+  if (!calendar || !db) return
+  const now = Date.now(), on = setting('calendarReminders') !== 'off'
+  const upTo = Math.max(+(setting('calendarUpTo') || now), now - 86_400_000)
+  if (on) for (const r of calendar.reminders(upTo, now + 1000)) notify(r.title || '(No title)', (now - r.at > 300_000 ? 'Missed · ' : '') + reminderText(r))
+  setSetting('calendarUpTo', String(now + 1000))
+  if (!on) return
+  const next = calendar.reminders(now + 1000, now + 120 * 86_400_000)[0]
+  reminderTimer = setTimeout(planReminders, Math.max(1000, Math.min(next ? next.at - now : Infinity, 6 * HOURS)))
+}
+function watchCalendar() {
+  let settle = null
+  try {
+    fs.watch(calendar.root, { recursive: true }, (_, name) => {
+      if (name && path.basename(String(name)).startsWith('.')) return // a write in progress (.part)
+      clearTimeout(settle)
+      settle = setTimeout(() => { win?.webContents.send('calendar-changed'); planReminders() }, 300)
+    })
+  } catch (e) { console.warn('[calendar] cannot watch', e.message) }
+}
+// Start at login (Linux autostart): Tetra in the tray, so reminders ring and the phone can sync whenever the computer is on.
+const AUTOSTART = path.join(os.homedir(), '.config', 'autostart', 'tetra.desktop')
+function setAutostart(on) {
+  if (!on) { try { fs.unlinkSync(AUTOSTART) } catch {} return }
+  const exec = process.env.APPIMAGE ? `"${process.env.APPIMAGE}"` : app.isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`
+  fs.mkdirSync(path.dirname(AUTOSTART), { recursive: true })
+  fs.writeFileSync(AUTOSTART, `[Desktop Entry]\nType=Application\nName=Tetra\nComment=Tetra in the tray: sync and calendar reminders\nExec=${exec} --hidden\nIcon=${path.join(__dirname, 'public', 'icon.png')}\nX-GNOME-Autostart-enabled=true\n`)
+}
 
 const setting = key => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value
 const setSetting = (key, value) => db.prepare('INSERT INTO settings(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value)
@@ -239,6 +284,9 @@ app.whenReady().then(() => {
   files = new Files(db, FILES_ROOT)
   // Notes live in a hidden folder of Files (notes.js), and sync through their own step, newest edit wins.
   notes = new Notes(path.join(FILES_ROOT, '.notes'), 'tetra-desktop')
+  // The Calendar is a folder of Files (synced as files); deleting goes to Files' Trash, as everywhere.
+  calendar = new Calendar(path.join(FILES_ROOT, 'Calendar'), path.join(FILES_ROOT, 'Trash'))
+  try { fs.mkdirSync(calendar.root, { recursive: true }) } catch {}
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
@@ -532,6 +580,39 @@ app.whenReady().then(() => {
   // Appearance: Auto follows the system, or Light / Dark whatever it says. The page's colours follow nativeTheme.
   ipcMain.handle('settings:theme', () => setting('theme') || 'system')
   ipcMain.handle('settings:setTheme', (_, t) => { if (!['system', 'light', 'dark'].includes(t)) return; setSetting('theme', t); nativeTheme.themeSource = t })
+  ipcMain.handle('calendar:call', (_, method, ...args) => {
+    if (!CALENDAR_CALLS.includes(method)) throw new Error('Unknown Calendar action.')
+    const result = calendar[method](...args)
+    if (!['calendars', 'occurrences'].includes(method)) {
+      planReminders()
+      clearTimeout(calendarNudge)
+      calendarNudge = setTimeout(() => sync.nudge().catch(() => {}), 2500) // the phone hears of it soon
+    }
+    return result
+  })
+  ipcMain.handle('calendar:pickImport', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Import calendars', filters: [{ name: 'Calendars (.ics, Google Takeout .zip)', extensions: ['ics', 'zip'] }], properties: ['openFile'] })
+    if (r.canceled || !r.filePaths[0]) return null
+    calendarIncoming = Calendar.readImport(r.filePaths[0]).filter(i => i.events.size)
+    return calendarIncoming.map((i, index) => ({ index, name: i.name, color: i.color, count: i.events.size }))
+  })
+  ipcMain.handle('calendar:import', (_, choices) => {
+    let added = 0, updated = 0
+    for (const { index, into } of choices) { const r = calendar.importInto(calendarIncoming[index], into); added += r.added; updated += r.updated }
+    calendarIncoming = []
+    planReminders()
+    return { added, updated }
+  })
+  ipcMain.handle('calendar:export', async (_, id) => {
+    const all = id == null
+    const r = await dialog.showSaveDialog(win, { title: all ? 'Export all calendars' : 'Export calendar', defaultPath: path.join(app.getPath('downloads'), all ? 'Tetra calendars.zip' : `${id}.ics`) })
+    if (r.canceled || !r.filePath) return null
+    fs.writeFileSync(r.filePath, all ? calendar.exportAll() : calendar.exportCalendar(id))
+    return r.filePath
+  })
+  ipcMain.handle('calendar:settings', () => ({ reminders: setting('calendarReminders') !== 'off', autostart: fs.existsSync(AUTOSTART) }))
+  ipcMain.handle('calendar:setReminders', (_, on) => { setSetting('calendarReminders', on ? 'on' : 'off'); planReminders() })
+  ipcMain.handle('calendar:setAutostart', (_, on) => setAutostart(!!on))
   ipcMain.handle('notes:call', (_, method, ...args) => {
     if (!NOTE_CALLS.includes(method)) throw new Error('Unknown Notes action.')
     const result = notes[method](...args)
@@ -560,7 +641,7 @@ app.whenReady().then(() => {
     backgroundColor: '#121416', title: 'Tetra',
     icon: path.join(__dirname, 'public', 'icon.png'),
     autoHideMenuBar: true,
-    show: !process.env.DRIVE_HIDDEN, // visual QA (scripts/shot.js) renders without appearing on the desktop
+    show: !process.env.DRIVE_HIDDEN && !process.argv.includes('--hidden'), // visual QA renders unseen; at login Tetra starts in the tray
     webPreferences: { preload: path.join(__dirname, 'preload.js'), offscreen: !!process.env.DRIVE_HIDDEN },
   })
   // Right-click on text: the usual Cut / Copy / Paste / Select all, and spelling suggestions (asked 2026-09-26; Electron
@@ -573,6 +654,9 @@ app.whenReady().then(() => {
     else if (p.selectionText.trim()) items.push({ role: 'copy' })
     if (items.length) Menu.buildFromTemplate(items).popup({ window: win })
   })
+  watchCalendar()
+  planReminders()
+  powerMonitor.on('resume', planReminders) // a timer does not run while the computer sleeps
   if (process.env.VITE_DEV_URL) win.loadURL(process.env.VITE_DEV_URL)
   else win.loadFile(path.join(__dirname, 'dist', 'index.html'))
   if (!process.env.DRIVE_HIDDEN) {

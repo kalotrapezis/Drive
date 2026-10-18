@@ -14,11 +14,12 @@ import { HiddenPage, VaultGate } from './Hidden'
 import { Editor } from './Editor'
 import { OffloadDialog, SyncPage } from './Sync'
 import { NotesPage } from './Notes'
+import { CalendarPage } from './Calendar'
 import { NotificationsPage, SettingsPage } from './Settings'
 import { ImportDialog } from './Import'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
-  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' } | { kind: 'notifications' } | { kind: 'settings' }
+  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' } | { kind: 'calendar' } | { kind: 'notifications' } | { kind: 'settings' }
 
 const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
@@ -285,6 +286,7 @@ export function App() {
   if (page.kind === 'files') content = <Files mode={page.mode} folder={page.folder} go={(mode, folder) => setPage({ kind: 'files', mode, folder })} setDialog={setDialog} say={say} dock={dock} />
   else if (page.kind === 'sync') content = <SyncPage setDialog={setDialog} />
   else if (page.kind === 'notes') content = <NotesPage setDialog={setDialog} say={say} />
+  else if (page.kind === 'calendar') content = <CalendarPage setDialog={setDialog} say={say} />
   else if (page.kind === 'notifications') content = <NotificationsPage />
   else if (page.kind === 'settings') content = <SettingsPage />
   else if (page.kind === 'photoTrash') content = <TrashPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
@@ -368,6 +370,7 @@ export function App() {
         {nav({ kind: 'photos' }, section === 'photos', 'photos', 'Photos')}
         {nav({ kind: 'files', mode: 'browse', folder: '' }, section === 'files', 'drive', 'Files')}
         {nav({ kind: 'notes' }, page.kind === 'notes', 'notes', 'Notes')}
+        {nav({ kind: 'calendar' }, page.kind === 'calendar', 'calendar', 'Calendar')}
         {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Devices')}
         {/* A drive is a device: its photos sit under Devices (asked 2026-09-26). */}
         {collections.filter(c => c.drive).map(c => <div key={c.id} className="rail-group">{nav({ kind: 'collection', id: c.id, name: c.name }, driveId === c.id.slice(6), 'database', c.name)}</div>)}

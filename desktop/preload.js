@@ -29,6 +29,13 @@ contextBridge.exposeInMainWorld('drive', {
   setMembership: (id, shas, member) => ipcRenderer.invoke('collections:set', id, shas, member),
   deleteFromDrive: (id, shas) => ipcRenderer.invoke('drive:delete', id, shas),
   notes: (method, ...args) => ipcRenderer.invoke('notes:call', method, ...args),
+  calendar: (method, ...args) => ipcRenderer.invoke('calendar:call', method, ...args),
+  calendarPickImport: () => ipcRenderer.invoke('calendar:pickImport'),
+  calendarImport: choices => ipcRenderer.invoke('calendar:import', choices),
+  calendarExport: id => ipcRenderer.invoke('calendar:export', id),
+  calendarSettings: () => ipcRenderer.invoke('calendar:settings'),
+  calendarSetReminders: on => ipcRenderer.invoke('calendar:setReminders', on),
+  calendarSetAutostart: on => ipcRenderer.invoke('calendar:setAutostart', on),
   notesSynced: () => ipcRenderer.invoke('notes:synced'),
   notifications: {
     list: () => ipcRenderer.invoke('notifications:list'),
@@ -52,6 +59,7 @@ contextBridge.exposeInMainWorld('drive', {
   setTheme: t => ipcRenderer.invoke('settings:setTheme', t),
   onNotesSynced: cb => { const f = (_, s) => cb(s); ipcRenderer.on('notes-synced', f); return () => ipcRenderer.removeListener('notes-synced', f) },
   onNotesChanged: cb => { const f = () => cb(); ipcRenderer.on('notes-changed', f); return () => ipcRenderer.removeListener('notes-changed', f) },
+  onCalendarChanged: cb => { const f = () => cb(); ipcRenderer.on('calendar-changed', f); return () => ipcRenderer.removeListener('calendar-changed', f) },
   files: {
     root: () => ipcRenderer.invoke('files:root'),
     call: (method, ...args) => ipcRenderer.invoke('files:call', method, ...args),
