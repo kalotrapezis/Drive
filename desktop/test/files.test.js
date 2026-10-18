@@ -23,7 +23,12 @@ test('paths cannot leave Drive', async () => {
   const { tmp, files } = setup()
   for (const bad of ['../secret.txt', '/etc/passwd', 'Docs/../../secret.txt', 'Docs//a.txt', './Docs']) assert.throws(() => files.resolve(bad), /Invalid/)
   assert.throws(() => files.resolve('link.txt'), /outside Drive/) // symlink escaping the root
-  assert.deepEqual((await files.list('')).map(i => i.name).sort(), ['Calendar', 'Docs', 'Documents', 'Ελληνικά.pdf']) // links are not listed; the required folders are always there
+  assert.deepEqual((await files.list('')).map(i => i.name).sort(), ['Docs', 'Documents', 'Ελληνικά.pdf']) // links are not listed; the required folders are always there
+  // the Calendar's and the Timer's folders are there and sync, but Files does not show them (the user, 18 Oct)
+  fs.mkdirSync(path.join(files.root, 'Timer'))
+  assert.ok(fs.existsSync(path.join(files.root, 'Calendar')))
+  assert.ok(!(await files.list('')).some(i => i.name === 'Calendar' || i.name === 'Timer'))
+  assert.ok(!(await files.destinations()).some(d => d.startsWith('Calendar') || d.startsWith('Timer')))
   await assert.rejects(files.rename('Docs/a.txt', '../x.txt'), /Invalid name/)
   await assert.rejects(files.rename('Docs/a.txt', ' x.txt'), /Invalid name/)
   fs.rmSync(tmp, { recursive: true })

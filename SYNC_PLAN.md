@@ -2334,7 +2334,9 @@ available". Notes travel at once through their own endpoint; the Calendar is fil
 so it goes through Files sync's own requests and rules — only for its part, so it takes seconds:
 
 - **A scope** names the part: `calendar` = `Calendar/` and the Trash's `.ics` (a deleted event is a move into Trash).
-  Phone `DriveScope`, computer `files.js SCOPES`; the Timer will add its own line in each.
+  Phone `DriveScope`, computer `files.js SCOPES`. `timer` = `Timer/` (18 Oct, branches `timer`; nothing of it goes to
+  the Trash): a Start, Pause, Stop or OK on a phone goes at once (no 2.5 s wait), the computer's watcher on Files/Timer
+  nudges every paired device, and each looks every 30 s while a timer exists (Drive-Android Plan.md § Timer).
 - **The request**: `POST /files/manifest/scoped` with `{ scope, files }` — the same answer as `/files/manifest` (want,
   moved, have, moveTo), computed by the same `reconcile`, but the memory (`sync_manifest`, `file_offered`,
   `file_updates`) is read and replaced for that part only, deletions are only remembered for bytes found nowhere else

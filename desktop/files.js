@@ -40,7 +40,9 @@ const isSafeRel = rel => typeof rel === 'string' && (rel === '' || (!rel.startsW
 const isSafeName = name => typeof name === 'string' && name.trim() === name && name !== '' && name !== '.' && name !== '..' && !/[/\\\0]/.test(name)
 const inTrash = rel => rel === TRASH || rel.startsWith(TRASH + '/')
 /** A part of Drive that syncs on its own, at once (the Calendar, 18 Oct): its folders, and its kinds of file in the Trash. */
-const SCOPES = { calendar: { dirs: ['Calendar'], trashExts: ['.ics'] } }
+const SCOPES = { calendar: { dirs: ['Calendar'], trashExts: ['.ics'] }, timer: { dirs: ['Timer'], trashExts: [] } }
+/** The Calendar's and the Timer's folders: synced as files, kept out of Files' lists, search and Move (the user, 18 Oct). */
+const APP_FOLDERS = ['Calendar', 'Timer']
 function scopeTest(scope) {
   if (!scope) return () => true
   const s = SCOPES[scope]
@@ -143,7 +145,7 @@ class Files {
     const out = []
     for (const e of await fsp.readdir(dir, { withFileTypes: true })) {
       if (e.isSymbolicLink() || e.name.startsWith('.')) continue // never follow links out of Drive; dotfiles stay hidden like in file managers
-      if (rel === '' && e.name === TRASH) continue // Trash has its own place in the sidebar, not a folder to open by accident
+      if (rel === '' && (e.name === TRASH || APP_FOLDERS.includes(e.name))) continue // Trash has its own place in the sidebar, not a folder to open by accident
       const full = path.join(dir, e.name)
       out.push(this.item(full, await fsp.stat(full)))
     }
@@ -157,7 +159,7 @@ class Files {
       for (const e of await fsp.readdir(dir, { withFileTypes: true })) {
         if (e.isSymbolicLink() || e.name.startsWith('.')) continue
         const full = path.join(dir, e.name)
-        if (dir === this.root && e.name === TRASH) continue
+        if (dir === this.root && (e.name === TRASH || APP_FOLDERS.includes(e.name))) continue
         if (e.isDirectory()) { out.push(this.item(full, await fsp.stat(full))); await walk(full) }
         else if (!foldersOnly && e.isFile()) out.push(this.item(full, await fsp.stat(full)))
       }

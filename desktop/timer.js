@@ -1,0 +1,117 @@
+'use strict'
+/**
+ * Tetra's Timer on the computer (Drive-Android Plan.md § Timer; Timer.kt is the phone's twin, the same rules). A timer is
+ * one small JSON file in ~/Tetra/Files/Timer, synced as files are, at once (files.js SCOPES.timer). Every device counts
+ * down by itself from the end time in it; only Start, Pause, Resume, Stop and OK write the file:
+ *
+ *   {"id":"k3f9a2","seconds":300,"label":"","state":"running","ends":"2026-10-18T16:05:00Z","left":0,"rev":1,"by":"Tablet"}
+ *
+ * state: running (to `ends`), paused (`left` seconds remain), stopped. `rev` goes up by one each change; the highest wins,
+ * equal ones stopped first, so clocks a few seconds apart decide nothing. Claude starts one by writing such a file.
+ */
+const fs = require('node:fs')
+const path = require('node:path')
+const crypto = require('node:crypto')
+
+const RUNNING = 'running', PAUSED = 'paused', STOPPED = 'stopped'
+const ORDER = [RUNNING, PAUSED, STOPPED]
+const UNANSWERED_MS = 10 * 60_000 // a timer nobody answered rings ten minutes at most
+
+function parse(text, file = null) {
+  try {
+    const o = JSON.parse(text)
+    if (!o || typeof o !== 'object') return null
+    const state = String(o.state ?? RUNNING).toLowerCase()
+    if (!ORDER.includes(state)) return null
+    const ends = typeof o.ends === 'string' && o.ends ? Date.parse(o.ends) : null
+    if (Number.isNaN(ends)) return null
+    const id = typeof o.id === 'string' && o.id ? o.id : file ? path.basename(file, '.json') : null
+    if (!id) return null
+    return { id, seconds: Math.max(0, Math.trunc(+o.seconds || 0)), label: typeof o.label === 'string' ? o.label : '', state, ends,
+      left: Number.isFinite(+o.left) ? +o.left : 0, rev: Number.isSafeInteger(o.rev) ? o.rev : 0, by: typeof o.by === 'string' ? o.by : '', file }
+  } catch { return null }
+}
+
+const leftMs = (r, now) => r.state === RUNNING ? Math.max(0, (r.ends ?? 0) - now) : r.state === PAUSED ? Math.round(r.left * 1000) : 0
+const over = (r, now) => r.state === STOPPED || (r.state === RUNNING && (r.ends == null || now > r.ends + UNANSWERED_MS))
+const ringing = (r, now) => r.state === RUNNING && r.ends != null && now >= r.ends && !over(r, now)
+
+/** One record per id: a timer changed on two devices between syncs comes as "x (2).json" beside "x.json". */
+function winners(all) {
+  const best = new Map()
+  const rank = r => [r.rev, ORDER.indexOf(r.state), -(r.file ? path.basename(r.file).length : 0)]
+  const better = (a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false }
+  for (const r of all) if (!best.has(r.id) || better(r, best.get(r.id))) best.set(r.id, r)
+  return [...best.values()]
+}
+
+const json = r => JSON.stringify({ id: r.id, seconds: r.seconds, label: r.label, state: r.state, ends: r.ends == null ? null : new Date(r.ends).toISOString(),
+  left: r.left, rev: r.rev, by: r.by }, null, 1) + '\n'
+
+class Timers {
+  constructor(root, by = 'Computer') { this.root = root; this.by = by }
+
+  read() {
+    let names = []
+    try { names = fs.readdirSync(this.root) } catch { return [] }
+    return winners(names.filter(n => !n.startsWith('.') && n.toLowerCase().endsWith('.json')).map(n => {
+      const f = path.join(this.root, n)
+      try { return fs.statSync(f).isFile() ? parse(fs.readFileSync(f, 'utf8'), f) : null } catch { return null }
+    }).filter(Boolean))
+  }
+
+  /** The timers to show, the one ending first on top, each with its time left by this computer's clock. */
+  active(now = Date.now()) {
+    return this.read().filter(r => !over(r, now)).map(r => ({ ...r, leftMs: leftMs(r, now), ringing: ringing(r, now) })).sort((a, b) => a.leftMs - b.leftMs)
+  }
+
+  /** Written beside, then renamed over: nobody reads half a timer. */
+  write(r) {
+    fs.mkdirSync(this.root, { recursive: true })
+    const to = r.file ?? path.join(this.root, `${r.id}.json`)
+    const part = path.join(this.root, `.${path.basename(to)}.part`)
+    fs.writeFileSync(part, json(r))
+    fs.renameSync(part, to)
+    return { ...r, file: to }
+  }
+
+  /** A new timer, in the file of one that is over if there is one (its id on, a higher rev): files = timers at once. */
+  start(seconds, now = Date.now(), label = '') {
+    seconds = Math.trunc(+seconds)
+    if (!(seconds > 0 && seconds < 100 * 3600)) throw new Error('A timer is from a second to 99 hours.')
+    const free = this.read().filter(r => over(r, now)).sort((a, b) => String(a.file).localeCompare(String(b.file)))[0]
+    return this.write({ id: free?.id ?? crypto.randomBytes(3).toString('hex'), seconds, label, state: RUNNING, ends: now + seconds * 1000, left: 0,
+      rev: (free?.rev ?? 0) + 1, by: this.by, file: free?.file ?? null })
+  }
+
+  /** Pause, resume, stop or ok on [id], as its file is now; answers whether anything changed. */
+  change(id, action, now = Date.now()) {
+    const r = this.read().find(t => t.id === id)
+    if (!r) return false
+    let next = null
+    if (action === 'pause' && r.state === RUNNING) next = { ...r, state: PAUSED, left: leftMs(r, now) / 1000, ends: null }
+    else if (action === 'resume' && r.state === PAUSED) next = { ...r, state: RUNNING, ends: now + Math.round(r.left * 1000), left: 0 }
+    else if ((action === 'stop' || action === 'ok') && r.state !== STOPPED) next = { ...r, state: STOPPED, ends: null, left: 0 }
+    if (!next) return false
+    this.write({ ...next, rev: r.rev + 1, by: this.by })
+    return true
+  }
+
+  /** When the next running timer ends (for the alarm), or null. */
+  nextEnd(now = Date.now()) {
+    const ends = this.read().filter(r => r.state === RUNNING && r.ends != null && r.ends > now).map(r => r.ends)
+    return ends.length ? Math.min(...ends) : null
+  }
+}
+
+/** Recently used durations, newest first, a handful; the pinned ones first in the list under the clock. */
+const used = (list, seconds) => [seconds, ...list.filter(s => s !== seconds)].slice(0, 6)
+const shown = (pinned, recent) => [...pinned, ...recent.filter(s => !pinned.includes(s))]
+
+/** "5 min", "1 h 30 min", "45 s": as the phone's durationText. */
+function durationText(seconds) {
+  const h = Math.floor(seconds / 3600), m = Math.floor(seconds % 3600 / 60), s = seconds % 60
+  return [h && `${h} h`, m && `${m} min`, (s || !seconds) && `${s} s`].filter(Boolean).join(' ')
+}
+
+module.exports = { Timers, parse, winners, leftMs, over, ringing, used, shown, durationText, UNANSWERED_MS }

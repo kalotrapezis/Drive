@@ -57,6 +57,7 @@
       "drives.js",
       "home.js",
       "purgatory.js",
+      "timer.js",
       "history.js",
       "notes.js",
       "calendar.js",

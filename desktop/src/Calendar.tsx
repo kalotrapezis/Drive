@@ -853,6 +853,19 @@ function TimeField({ value, set }: { value: string; set: (t: string) => void }) 
 function ClockDialog({ value, onClose, onSet }: { value: string; onClose: () => void; onSet: (t: string) => void }) {
   const [h, setH] = useState(+value.slice(0, 2))
   const [m, setM] = useState(+value.slice(3, 5))
+  return (
+    <Modal onClose={onClose}>
+      <div className="cal-clock">
+        <h3>Time</h3>
+        <ClockFace h={h} m={m} setH={setH} setM={setM} />
+        <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" onClick={() => onSet(`${pad(h)}:${pad(m)}`)}>OK</button></div>
+      </div>
+    </Modal>
+  )
+}
+
+/** The clock itself, the hours and minutes typed above it — the Calendar's dialog and the Timer's page (hours, minutes long). */
+export function ClockFace({ h, m, setH, setM }: { h: number; m: number; setH: (n: number) => void; setM: (n: number) => void }) {
   const [hours, setHours] = useState(true)
   const R = 100, IN = 66
   const spot = (i: number, of: number, r: number) => { const a = i / of * 2 * Math.PI; return [128 + r * Math.sin(a), 128 - r * Math.cos(a)] }
@@ -868,22 +881,16 @@ function ClockDialog({ value, onClose, onSet }: { value: string; onClose: () => 
   const num = (v: number, max: number, setV: (n: number) => void, on: boolean, onFocus: () => void) =>
     <input className={on ? 'on' : ''} inputMode="numeric" value={pad(v)} onFocus={e => { onFocus(); e.target.select() }}
       onChange={e => { const d = e.target.value.replace(/\D/g, '').slice(-2); setV(+d <= max ? +d : +d.slice(-1)) }} />
-  return (
-    <Modal onClose={onClose}>
-      <div className="cal-clock">
-        <h3>Time</h3>
-        <div className="cal-clock-head">{num(h, 23, setH, hours, () => setHours(true))}<span>:</span>{num(m, 59, setM, !hours, () => setHours(false))}</div>
-        <svg viewBox="0 0 256 256" onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); pick(e, false) }} onPointerMove={e => pick(e, false)} onPointerUp={e => pick(e, true)}>
-          <circle cx="128" cy="128" r="124" className="face" />
-          <line x1="128" y1="128" x2={hx} y2={hy} className="hand" /><circle cx="128" cy="128" r="4" className="hub" /><circle cx={hx} cy={hy} r="18" className="hub" />
-          {hours
-            ? Array.from({ length: 24 }, (_, i) => { const [x, y] = spot(i % 12, 12, i >= 12 ? IN : R); return <text key={i} x={x} y={y} className={`${i >= 12 ? 'inner' : ''} ${i === h ? 'on' : ''}`}>{pad(i)}</text> })
-            : Array.from({ length: 12 }, (_, i) => { const [x, y] = spot(i * 5, 60, R); return <text key={i} x={x} y={y} className={i * 5 === m ? 'on' : ''}>{pad(i * 5)}</text> })}
-        </svg>
-        <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" onClick={() => onSet(`${pad(h)}:${pad(m)}`)}>OK</button></div>
-      </div>
-    </Modal>
-  )
+  return <>
+    <div className="cal-clock-head">{num(h, 23, setH, hours, () => setHours(true))}<span>:</span>{num(m, 59, setM, !hours, () => setHours(false))}</div>
+    <svg viewBox="0 0 256 256" onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); pick(e, false) }} onPointerMove={e => pick(e, false)} onPointerUp={e => pick(e, true)}>
+      <circle cx="128" cy="128" r="124" className="face" />
+      <line x1="128" y1="128" x2={hx} y2={hy} className="hand" /><circle cx="128" cy="128" r="4" className="hub" /><circle cx={hx} cy={hy} r="18" className="hub" />
+      {hours
+        ? Array.from({ length: 24 }, (_, i) => { const [x, y] = spot(i % 12, 12, i >= 12 ? IN : R); return <text key={i} x={x} y={y} className={`${i >= 12 ? 'inner' : ''} ${i === h ? 'on' : ''}`}>{pad(i)}</text> })
+        : Array.from({ length: 12 }, (_, i) => { const [x, y] = spot(i * 5, 60, R); return <text key={i} x={x} y={y} className={i * 5 === m ? 'on' : ''}>{pad(i * 5)}</text> })}
+    </svg>
+  </>
 }
 
 /** A date, picked on a month as the phone's DatePicker (the user, 18 Oct: "why is the date not a calendar"); the year jumps for birthdays. */

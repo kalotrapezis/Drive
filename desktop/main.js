@@ -16,6 +16,7 @@ const { Purgatory } = require('./purgatory')
 const history = require('./history')
 const { Notes } = require('./notes')
 const { Calendar } = require('./calendar')
+const timer = require('./timer')
 const importer = require('./importer')
 
 const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'local-drive-desktop')
@@ -78,6 +79,36 @@ function planReminders() {
   if (!on) return
   const next = calendar.reminders(now + 1000, now + 120 * 86_400_000)[0]
   reminderTimer = setTimeout(planReminders, Math.max(1000, Math.min(next ? next.at - now : Infinity, 6 * HOURS)))
+}
+// The Timer (Drive-Android Plan.md § Timer): a file per timer in Files/Timer. This computer counts down from the end time
+// in it, as every device does; at the end it notifies and the window rings (TimerBell) until OK here or on any device.
+// The files are read again at each end and every 30 s (the user: "sync check every 30 sec"), and at once when one lands.
+let timers = null, timerAlarm = null
+const timerRung = new Set()
+function planTimer() {
+  clearTimeout(timerAlarm)
+  if (!timers) return
+  const now = Date.now()
+  for (const t of timers.active(now)) if (t.ringing && !timerRung.has(`${t.id}|${t.rev}`)) {
+    timerRung.add(`${t.id}|${t.rev}`)
+    notify("Time's up", t.label || `${timer.durationText(t.seconds)} timer`)
+    win?.webContents.send('timer-changed')
+  }
+  const next = timers.nextEnd(now)
+  timerAlarm = setTimeout(planTimer, Math.max(250, Math.min(next ? next - now : Infinity, 30_000)))
+}
+function watchTimer() {
+  let settle = null
+  try {
+    fs.mkdirSync(timers.root, { recursive: true })
+    fs.watch(timers.root, (_, name) => {
+      if (name && String(name).startsWith('.')) return // a write in progress
+      clearTimeout(settle)
+      // a timer changed here, by a phone or by Claude: shown, planned, and the other devices told at once — the
+      // computer is where they all meet, so this nudge is how a stop on the tablet reaches the phone
+      settle = setTimeout(() => { win?.webContents.send('timer-changed'); planTimer(); sync?.nudge().catch(() => {}) }, 150)
+    })
+  } catch (e) { console.warn('[timer] cannot watch', e.message) }
 }
 function watchCalendar() {
   let settle = null
@@ -289,6 +320,7 @@ app.whenReady().then(() => {
   // The Calendar is a folder of Files (synced as files); deleting goes to Files' Trash, as everywhere.
   calendar = new Calendar(path.join(FILES_ROOT, 'Calendar'), path.join(FILES_ROOT, 'Trash'))
   try { fs.mkdirSync(calendar.root, { recursive: true }) } catch {}
+  timers = new timer.Timers(path.join(FILES_ROOT, 'Timer'), os.hostname() || 'Computer')
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
@@ -588,6 +620,25 @@ app.whenReady().then(() => {
     if (!['calendars', 'occurrences', 'scheduleEvent', 'trashed'].includes(method)) planReminders() // the watcher nudges the phone
     return result
   })
+  // The Timer: what runs, and its buttons; the watcher shows the change and tells the other devices
+  const timerList = key => { try { const v = JSON.parse(setting(key) || '[]'); return Array.isArray(v) ? v.filter(Number.isSafeInteger) : [] } catch { return [] } }
+  ipcMain.handle('timer:active', () => timers.active())
+  ipcMain.handle('timer:start', (_, seconds) => {
+    const r = timers.start(seconds)
+    setSetting('timerRecent', JSON.stringify(timer.used(timerList('timerRecent'), r.seconds)))
+    planTimer()
+  })
+  ipcMain.handle('timer:change', (_, id, action) => {
+    if (!['pause', 'resume', 'stop', 'ok'].includes(action)) throw new Error('Unknown Timer action.')
+    timers.change(String(id), action)
+    planTimer()
+  })
+  ipcMain.handle('timer:prefs', () => ({ recent: timerList('timerRecent'), pinned: timerList('timerPinned') }))
+  ipcMain.handle('timer:pin', (_, seconds) => {
+    const p = timerList('timerPinned')
+    setSetting('timerPinned', JSON.stringify(p.includes(seconds) ? p.filter(s => s !== seconds) : [...p, Math.trunc(+seconds)].filter(Number.isSafeInteger)))
+  })
+  ipcMain.handle('timer:clearRecent', () => setSetting('timerRecent', '[]'))
   // Refresh: the phones and tablets are asked to sync now; what they bring shows through the watcher
   ipcMain.handle('calendar:refresh', () => sync.nudge())
   ipcMain.handle('calendar:pickImport', async () => {
@@ -657,7 +708,7 @@ app.whenReady().then(() => {
     icon: path.join(__dirname, 'public', 'icon.png'),
     autoHideMenuBar: true,
     show: !process.env.DRIVE_HIDDEN && !process.argv.includes('--hidden'), // visual QA renders unseen; at login Tetra starts in the tray
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), offscreen: !!process.env.DRIVE_HIDDEN },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), offscreen: !!process.env.DRIVE_HIDDEN, autoplayPolicy: 'no-user-gesture-required' }, // the Timer's alarm rings unasked
   })
   // Right-click on text: the usual Cut / Copy / Paste / Select all, and spelling suggestions (asked 2026-09-26; Electron
   // gives none by itself). Undo and Redo stay the note's own, by the word — the built-in ones would not know about it.
@@ -671,6 +722,9 @@ app.whenReady().then(() => {
   })
   watchCalendar()
   planReminders()
+  watchTimer()
+  planTimer()
+  powerMonitor.on('resume', planTimer)
   powerMonitor.on('resume', planReminders) // a timer does not run while the computer sleeps
   if (process.env.VITE_DEV_URL) win.loadURL(process.env.VITE_DEV_URL)
   else win.loadFile(path.join(__dirname, 'dist', 'index.html'))
