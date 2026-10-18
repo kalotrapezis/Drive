@@ -602,8 +602,27 @@ class Calendar {
     fs.renameSync(from, to)
     return to
   }
-  move(rel, calendar) {
-    const from = this.file(rel), dir = this.dir(calendar)
+  /** The Calendar's part of the Trash (asked 18 Oct), newest first; `at`: when it went in (a move changes the ctime only). */
+  trashed() {
+    let names = []
+    try { names = fs.readdirSync(this.trashDir).filter(n => n.toLowerCase().endsWith('.ics') && !n.startsWith('.')) } catch {}
+    return names.map(name => {
+      const file = path.join(this.trashDir, name), f = readFile(file), e = f.master || f.overrides[0]
+      let at = 0
+      try { at = fs.statSync(file).ctimeMs } catch {}
+      return { name, title: e?.title || '', start: e?.start.ms ?? null, allDay: !!e?.allDay, at }
+    }).sort((a, b) => b.at - a.at)
+  }
+  /** An event from the Trash back into a calendar. */
+  restore(name, calendar) {
+    const from = path.resolve(this.trashDir, String(name))
+    if (path.dirname(from) !== path.resolve(this.trashDir) || !from.toLowerCase().endsWith('.ics')) throw new Error('Not an event in the Trash.')
+    return this.into(from, calendar)
+  }
+  move(rel, calendar) { return this.into(this.file(rel), calendar) }
+  /** A checked path into a calendar's folder (a name there already: "name (2)"); not open to the window. */
+  into(from, calendar) {
+    const dir = this.dir(calendar)
     const ext = path.extname(from), base = path.basename(from, ext)
     let to = path.join(dir, base + ext)
     for (let n = 2; fs.existsSync(to); n++) to = path.join(dir, `${base} (${n})${ext}`)

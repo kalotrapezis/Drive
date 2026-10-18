@@ -100,6 +100,13 @@ test('calendar: a new event written and read back; a conflict shown once; Trash,
     assert.ok(fs.existsSync(path.join(tmp, 'Trash', 'staff-meeting.ics')))
     cal.trash(rel)
     assert.ok(!fs.existsSync(path.join(root, rel)) && fs.readdirSync(path.join(tmp, 'Trash')).some(n => n.startsWith('school-trip')))
+    // the Calendar's Trash: its events only, Restore into a calendar, nothing outside the Trash
+    fs.writeFileSync(path.join(tmp, 'Trash', 'notes.txt'), 'not an event')
+    const trashed = cal.trashed()
+    assert.deepEqual(trashed.map(t => t.name).sort(), ['school-trip-delphi-' + rel.slice(-12, -4) + '.ics', 'staff-meeting.ics'])
+    assert.equal(trashed.find(t => t.name.startsWith('school')).title, 'School trip; Delphi')
+    assert.equal(cal.restore(path.basename(rel), 'Work'), rel)
+    assert.throws(() => cal.restore('../Calendar/Work/staff-meeting (2).ics', 'Work'), /Not an event in the Trash/)
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
 

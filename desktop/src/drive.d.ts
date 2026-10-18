@@ -147,6 +147,7 @@ declare global {
       }
       notes<T = unknown>(method: string, ...args: unknown[]): Promise<T>
       calendar<T = unknown>(method: string, ...args: unknown[]): Promise<T>
+      calendarRefresh(): Promise<number>
       calendarPickImport(): Promise<{ index: number; name: string; color: string | null; count: number }[] | null>
       calendarImport(choices: { index: number; into: string }[]): Promise<{ added: number; updated: number }>
       calendarExport(id: string | null): Promise<string | null>

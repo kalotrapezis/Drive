@@ -792,6 +792,17 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .cal .island-item { white-space: nowrap; }
 
 .cal-topbar { position: static; margin: 0; padding: 12px 12px 8px; background: none; }
+.cal-tools { margin-left: auto; }
+.cal-settings { width: 340px; }
+.cal-trash { display: grid; gap: 4px; max-height: 50vh; overflow-y: auto; margin: 8px 0; }
+.cal-trash-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
+.cal-trash-row > div { flex: 1; display: grid; min-width: 0; }
+.cal-trash-row strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-trash-to { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.cal-trash-to select { flex: 1; }
+.cal-settings .cal-two button { white-space: nowrap; }
+.cal-refresh[aria-busy="true"] svg { animation: spin 1s linear infinite; }
+.cal-said { padding: 0 18px; min-height: 44px; display: flex; align-items: center; font-size: 14px; }
 .cal-nav { gap: 2px; padding: 4px 6px; }
 .cal-nav .round.flat { margin: 0; }
 

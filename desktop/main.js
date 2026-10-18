@@ -53,8 +53,8 @@ let notes, db, files, people, documents, folders, vault, sync, purgatory, win, s
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage', 'chosenFolders', 'chooseSystemFolders']
 const NOTE_CALLS = ['list', 'create', 'save', 'snapshot', 'history', 'restoreVersion', 'remove']
-const CALENDAR_CALLS = ['calendars', 'occurrences', 'save', 'saveDay', 'skipDay', 'endBefore', 'split', 'trash', 'move', 'keep', 'newCalendar', 'setCalendar', 'deleteCalendar', 'scheduleEvent']
-let calendar = null, reminderTimer = null, calendarNudge = null, calendarIncoming = []
+const CALENDAR_CALLS = ['calendars', 'occurrences', 'save', 'saveDay', 'skipDay', 'endBefore', 'split', 'trash', 'move', 'keep', 'newCalendar', 'setCalendar', 'deleteCalendar', 'scheduleEvent', 'trashed', 'restore']
+let calendar = null, reminderTimer = null, calendarIncoming = []
 
 // The Calendar's reminders (Drive-Android Plan.md § Calendar): one timer for the next, the plan made again from the files
 // whenever they change, a reminder is due, the computer wakes or Tetra starts. What came due while it was closed or asleep
@@ -85,10 +85,9 @@ function watchCalendar() {
     fs.watch(calendar.root, { recursive: true }, (_, name) => {
       if (name && path.basename(String(name)).startsWith('.')) return // a write in progress (.part)
       clearTimeout(settle)
-      settle = setTimeout(() => { win?.webContents.send('calendar-changed'); planReminders() }, 300)
-      // and to the phones and tablets at once, as a note is (18 Oct): the nudge has them sync the Calendar's part
-      clearTimeout(calendarNudge)
-      calendarNudge = setTimeout(() => sync?.nudge().catch(() => {}), 2500)
+      // and to the phones and tablets at once (the user, 18 Oct: "no delay"): the nudge has them sync the Calendar's
+      // part. Tetra's own saves land here too, so this one nudge covers them and Claude's.
+      settle = setTimeout(() => { win?.webContents.send('calendar-changed'); planReminders(); sync?.nudge().catch(() => {}) }, 300)
     })
   } catch (e) { console.warn('[calendar] cannot watch', e.message) }
 }
@@ -586,13 +585,11 @@ app.whenReady().then(() => {
   ipcMain.handle('calendar:call', (_, method, ...args) => {
     if (!CALENDAR_CALLS.includes(method)) throw new Error('Unknown Calendar action.')
     const result = calendar[method](...args)
-    if (!['calendars', 'occurrences', 'scheduleEvent'].includes(method)) {
-      planReminders()
-      clearTimeout(calendarNudge)
-      calendarNudge = setTimeout(() => sync.nudge().catch(() => {}), 2500) // the phone hears of it soon
-    }
+    if (!['calendars', 'occurrences', 'scheduleEvent', 'trashed'].includes(method)) planReminders() // the watcher nudges the phone
     return result
   })
+  // Refresh: the phones and tablets are asked to sync now; what they bring shows through the watcher
+  ipcMain.handle('calendar:refresh', () => sync.nudge())
   ipcMain.handle('calendar:pickImport', async () => {
     const r = await dialog.showOpenDialog(win, { title: 'Import calendars', filters: [{ name: 'Calendars (.ics, Google Takeout .zip)', extensions: ['ics', 'zip'] }], properties: ['openFile'] })
     if (r.canceled || !r.filePaths[0]) return null

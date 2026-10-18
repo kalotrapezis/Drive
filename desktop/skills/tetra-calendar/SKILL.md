@@ -131,7 +131,8 @@ one VEVENT (with its RECURRENCE-ID changes) per file, the file's own VTIMEZONE b
 
 ## After a change
 1. `python3 $C check` — fix anything it reports.
-2. Say what you changed, and that the phone and tablet see it after their next sync (every 30 minutes by default, or at
-   once when Tetra is opened there). Tetra on the computer shows it immediately; reminders ring on every device.
+2. Say what you changed, and that the phone and tablet get it within seconds while Tetra is open there (otherwise at
+   their next sync, or Refresh at the top of their Calendar). Tetra on the computer shows it immediately; reminders ring
+   on every device. A deleted event stays 30 days in the Trash (Calendar's trash button restores it), then goes.
 3. Two files with the same UID in one calendar is a sync conflict (`name (2).ics`): Tetra shows the newer and offers
    "Keep this one"; you may move the older to the Trash after checking which is right.

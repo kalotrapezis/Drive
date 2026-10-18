@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('drive', {
   deleteFromDrive: (id, shas) => ipcRenderer.invoke('drive:delete', id, shas),
   notes: (method, ...args) => ipcRenderer.invoke('notes:call', method, ...args),
   calendar: (method, ...args) => ipcRenderer.invoke('calendar:call', method, ...args),
+  calendarRefresh: () => ipcRenderer.invoke('calendar:refresh'),
   calendarPickImport: () => ipcRenderer.invoke('calendar:pickImport'),
   calendarImport: choices => ipcRenderer.invoke('calendar:import', choices),
   calendarExport: id => ipcRenderer.invoke('calendar:export', id),

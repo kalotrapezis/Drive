@@ -693,7 +693,9 @@ class SyncServer {
    *
    * The device's own certificate, from pairing, is pinned exactly as the phone pins ours.
    */
+  /** Answers how many devices said yes (Calendar's Refresh). */
   async nudge() {
+    let asked = 0
     const devices = this.db.prepare('SELECT id, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL').all()
     await Promise.all(devices.map(async d => {
       const ways = [this.connection(d.id, 'photos').direction, this.connection(d.id, 'files').direction]
@@ -702,18 +704,21 @@ class SyncServer {
       let there = false // its certificate answered, whatever it said: it has not moved
       for (const host of hosts) {
         const reached = await this.ask(host, d).catch(() => null)
-        if (reached) return
+        if (reached) return void asked++
         there ||= reached === false
       }
       if (there) return
       // Nobody was at any address it had: it changed network and has not called since, so ask out loud who holds
       // its certificate now — the beacon of 6k, from this side. The answer is a hint; ask() still pins the cert.
       for (const [host, port] of await this.find(d.peer_fp)) {
-        if (await this.ask(host, { ...d, peer_port: port }).catch(() => null) == null) continue
+        const reached = await this.ask(host, { ...d, peer_port: port }).catch(() => null)
+        if (reached == null) continue
+        if (reached) asked++
         this.db.prepare('UPDATE sync_devices SET peer_hosts = ?, peer_port = ? WHERE id = ?').run([...new Set([host, ...hosts])].slice(0, 4).join(','), port, d.id)
         return
       }
     }))
+    return asked
   }
 
   /** Keeps the newer open/close of each path; answers with every path's newest. */

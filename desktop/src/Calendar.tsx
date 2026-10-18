@@ -124,6 +124,17 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
   const [version, setVersion] = useState(0)
   const [settings, setSettings] = useState<{ reminders: boolean; autostart: boolean } | null>(null)
   const close = () => setDialog(null)
+  // Refresh (the user, 18 Oct): the phones and tablets are asked to sync now; what they bring arrives through the watcher
+  const [syncing, setSyncing] = useState(false)
+  const [said, setSaid] = useState('')
+  const refresh = async () => {
+    if (syncing) return
+    setSyncing(true)
+    const n = await window.drive.calendarRefresh().catch(() => 0)
+    setSyncing(false)
+    setSaid(n ? `Syncing with ${n} device${n === 1 ? '' : 's'}` : 'No phone or tablet answered')
+    setTimeout(() => setSaid(''), 4000)
+  }
   // the user, 18 Oct: a wide window keeps the small month and the calendars in sight and its island holds Day · Week ·
   // Month · Year; a narrow one has the events on top and a small calendar at the bottom (the phone's way)
   const root = useRef<HTMLDivElement>(null)
@@ -303,6 +314,16 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
       <header className="topbar cal-topbar">
         <div className="island title-island"><Icon name="calendar" /><h1>{title}</h1></div>
         {!wide && nav}
+        <div className="tools cal-tools">
+          {said && <div className="island cal-said" role="status">{said}</div>}
+          {/* the user, 18 Oct: the Trash beside sync, and Settings at the top like Gallery's */}
+          <button className="round" title="Trash" onClick={() => setDialog(<CalendarTrash cals={cals} onClose={close} restore={(name, to) => act(() => call('restore', name, to.id), `Restored to ${to.name}`)} />)}><Icon name="trash" /></button>
+          <button className="round cal-refresh" title="Sync now" aria-busy={syncing} onClick={refresh}><Icon name="refresh" /></button>
+          <details className="menu">
+            <summary className="round" title="Calendar settings"><Icon name="tune" /></summary>
+            <div className="island menu-body cal-settings">{settingsList}</div>
+          </details>
+        </div>
       </header>
       {wide ? <div className="cal-body">
         <aside className="cal-side">
@@ -315,14 +336,12 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
         {view !== 'month' && <BottomStrip selected={selected} today={today} busy={byDay} weeks={strip} setWeeks={n => { setStrip(n); store('calendarStrip', String(n)) }} pick={setSelected} />}
       </>}
       <div className={`notes-drawer island cal-drawer ${drawer ? 'open' : ''}`} aria-hidden={!drawer}>
-        {wide ? <div className="cal-drawer-list">{settingsList}</div> : <div className="cal-drawer-list">{calendarList}{settingsList}</div>}
+        <div className="cal-drawer-list">{calendarList}</div>
       </div>
       {/* the user, 18 Oct: a wide window has Today and ‹ › at the bottom, in their own island next to the + */}
       {wide ? <div className="cal-dock">
         <nav className="notes-island island">
           {views.map(([v, label, icon]) => <button key={v} className={`island-item ${view === v ? 'on' : ''}`} onClick={() => { go(v); setDrawer(false) }}><Icon name={icon as never} size={20} /><span>{label}</span></button>)}
-          <span className="island-gap" />
-          <button className={`island-item ${drawer ? 'on' : ''}`} aria-expanded={drawer} onClick={() => { setKinds(false); setDrawer(d => !d) }}><Icon name="tune" size={20} /><span>Settings</span></button>
         </nav>
         <div className="cal-dock-right">
           {nav}
@@ -735,6 +754,31 @@ function CustomAlarm({ allDay, start, onCancel, onAdd }: { allDay: boolean; star
       <div className="dialog-actions"><button className="text-button" onClick={onCancel}>Cancel</button><button className="filled-button" onClick={add}>Add</button></div>
     </div>
   )
+}
+
+/** Deleted events (asked 18 Oct): each with its day and days left, and Restore into the calendar chosen. */
+function CalendarTrash({ cals, onClose, restore }: { cals: Cal[]; onClose: () => void; restore: (name: string, to: Cal) => Promise<void> }) {
+  type Item = { name: string; title: string; start: number | null; allDay: boolean; at: number }
+  const [items, setItems] = useState<Item[] | null>(null)
+  const [to, setTo] = useState(cals[0]?.id ?? '')
+  const load = () => call<Item[]>('trashed').then(setItems, () => setItems([]))
+  useEffect(() => { load() }, [])
+  const when = (i: Item) => i.start == null ? '' : new Date(i.start).toLocaleString('en-GB', i.allDay
+    ? { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } : { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const left = (i: Item) => { const n = Math.max(0, 30 - Math.floor((Date.now() - i.at) / 86_400_000)); return n === 1 ? '1 day left' : `${n} days left` }
+  return <Modal onClose={onClose}>
+    <h3>Trash</h3>
+    <p className="muted">Deleted events stay here 30 days, then they are deleted for good.</p>
+    {cals.length > 1 && <label className="cal-trash-to">Restore into <select className="field" value={to} onChange={e => setTo(e.target.value)}>{cals.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+    <div className="cal-trash">
+      {items?.length === 0 && <p>The Trash has no events.</p>}
+      {items?.map(i => <div key={i.name} className="cal-trash-row">
+        <div><strong>{i.title || '(No title)'}</strong><small className="muted">{[when(i), left(i)].filter(Boolean).join(' · ')}</small></div>
+        <button className="text-button" disabled={!to} onClick={() => restore(i.name, cals.find(c => c.id === to)!).then(load)}>Restore</button>
+      </div>)}
+    </div>
+    <div className="dialog-actions"><button className="filled-button" onClick={onClose}>Close</button></div>
+  </Modal>
 }
 
 function CalendarDialog({ cal, taken, onClose, onSave, onExport, onDelete }: { cal: Cal | null; taken: string[]; onClose: () => void; onSave: (name: string, color: string) => void; onExport: () => void; onDelete: () => void }) {
