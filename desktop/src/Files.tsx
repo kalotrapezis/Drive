@@ -338,7 +338,7 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
 }
 
 /** Files' system folders (files.js), each with its emblem drawn into the folder; the optional ones in their own colour too. */
-const SYSTEM_ICON: Record<string, IconName> = { Documents: 'folderDocuments', 'Documents/Scanned Documents': 'folderScans' }
+const SYSTEM_ICON: Record<string, IconName> = { Documents: 'folderDocuments', 'Documents/Scanned Documents': 'folderScans', Calendar: 'calendar' }
 const systemLook = (item: DriveItem) => item.system ? SYSTEM_FOLDER_ICONS[item.path] : undefined
 
 function ItemIcon({ item, size }: { item: DriveItem; size: number }) {

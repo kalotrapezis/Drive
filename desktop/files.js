@@ -10,7 +10,7 @@ const TRASH = 'Trash'
  * Folders the apps rely on: the phone's scanner saves into Scanned Documents, and both sync by these paths. Always
  * there, marked with an emblem, and never renamed, moved or put in the Trash — their contents can be.
  */
-const REQUIRED_FOLDERS = ['Documents', 'Documents/Scanned Documents']
+const REQUIRED_FOLDERS = ['Documents', 'Documents/Scanned Documents', 'Calendar'] // Calendar: its calendars are the folders in it
 /**
  * Folders to sort things into, each with its own emblem (the phone's, asked 16 Oct), chosen in Files tools › System
  * folders. A chosen one is a system folder like Documents; one no longer chosen stays, as an ordinary folder.

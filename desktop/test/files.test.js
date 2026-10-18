@@ -23,7 +23,7 @@ test('paths cannot leave Drive', async () => {
   const { tmp, files } = setup()
   for (const bad of ['../secret.txt', '/etc/passwd', 'Docs/../../secret.txt', 'Docs//a.txt', './Docs']) assert.throws(() => files.resolve(bad), /Invalid/)
   assert.throws(() => files.resolve('link.txt'), /outside Drive/) // symlink escaping the root
-  assert.deepEqual((await files.list('')).map(i => i.name).sort(), ['Docs', 'Documents', 'Ελληνικά.pdf']) // links are not listed
+  assert.deepEqual((await files.list('')).map(i => i.name).sort(), ['Calendar', 'Docs', 'Documents', 'Ελληνικά.pdf']) // links are not listed; the required folders are always there
   await assert.rejects(files.rename('Docs/a.txt', '../x.txt'), /Invalid name/)
   await assert.rejects(files.rename('Docs/a.txt', ' x.txt'), /Invalid name/)
   fs.rmSync(tmp, { recursive: true })
