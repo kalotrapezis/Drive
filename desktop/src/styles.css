@@ -657,19 +657,13 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .system-folders .tick { position: absolute; top: -4px; right: -8px; display: flex; border-radius: 50%; background: var(--island); }
 
 /* Calendar (Drive-Android Plan.md § Calendar): Google Calendar on the web — the side panel, the month, week and day. */
-.cal { height: 100%; display: flex; flex-direction: column; --cal-pink: #F41879; --cal-line: #ffffff1f; }
+.cal { height: 100%; display: flex; flex-direction: column; position: relative; --cal-pink: #F41879; --cal-line: #ffffff1f; }
 @media (prefers-color-scheme: light) { .cal { --cal-line: #0000001f; } }
 .cal-top { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
-.cal-top h1 { margin: 0 16px 0 4px; font-size: 22px; font-weight: 500; }
-.cal-top h2 { margin: 0 0 0 8px; font-size: 22px; font-weight: 400; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-top h2 { margin: 0 0 0 8px; font-size: 24px; font-weight: 500; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outline-button { padding: 8px 20px; border-radius: 999px; border: 1px solid var(--cal-line); font-weight: 600; }
 .outline-button:hover { background: var(--hover); }
-.cal-view { width: auto; padding: 8px 14px; }
-.cal-body { flex: 1; display: flex; min-height: 0; }
-.cal-panel { width: 264px; flex: none; overflow-y: auto; padding: 4px 12px 24px; display: flex; flex-direction: column; gap: 6px; }
-.cal-panel h3 { margin: 12px 4px 2px; font-size: 14px; font-weight: 600; }
-.cal-panel .muted, .cal .muted { color: var(--muted); font-size: 13px; }
-.cal-create { display: flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 18px; background: var(--cal-pink); color: #fff; font-weight: 600; align-self: flex-start; box-shadow: 0 2px 8px #0005; margin-bottom: 10px; }
+.cal .muted { color: var(--muted); font-size: 13px; }
 .cal-mini-head { display: flex; align-items: center; gap: 2px; padding-left: 6px; }
 .cal-mini-head span { flex: 1; font-weight: 600; font-size: 14px; }
 .cal-mini-head .round { background: none; }
@@ -688,7 +682,10 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .cal-left { display: flex; align-items: center; gap: 8px; align-self: flex-start; padding-left: 8px; }
 .cal-two { display: flex; gap: 4px; }
 .cal-switch { display: flex; align-items: flex-start; gap: 10px; padding: 6px 4px; font-size: 13px; color: var(--muted); cursor: pointer; }
-.cal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0 12px 12px 0; }
+.cal-main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 12px 84px 12px; } /* the island floats below */
+.cal-drawer { display: flex; gap: 32px; align-items: flex-start; }
+.cal-drawer .cal-mini { width: 260px; flex: none; }
+.cal-drawer-list { flex: 1; max-width: 520px; display: flex; flex-direction: column; gap: 4px; }
 .cal-month { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .cal-weekdays, .cal-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .cal-weekdays span { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0; }
@@ -764,3 +761,4 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .cal-palette button { width: 32px; height: 32px; border-radius: 50%; }
 .cal-palette button.on { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--text); }
 .danger-text { color: #ff7a6b; }
+.cal .island-item { white-space: nowrap; }

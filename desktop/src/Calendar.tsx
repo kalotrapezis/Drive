@@ -119,7 +119,7 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
   const [cals, setCals] = useState<Cal[]>([])
   const [occ, setOcc] = useState<Occ[]>([])
   const [hidden, setHidden] = useState<Set<string>>(() => new Set(JSON.parse(stored('calendarHidden') || '[]')))
-  const [panel, setPanel] = useState(true)
+  const [drawer, setDrawer] = useState(false)
   const [version, setVersion] = useState(0)
   const [settings, setSettings] = useState<{ reminders: boolean; autostart: boolean } | null>(null)
   const close = () => setDialog(null)
@@ -213,46 +213,51 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
     }} />)
   }
 
+  // Tetra's island at the bottom (as Notes and Files): the views, New event and Calendars, which opens the drawer with
+  // the rest — the user, 18 Oct: "not hamburger menu an island that is close to the UX we are using to the rest".
+  const VIEWS: [View, string, string][] = [['day', 'Day', 'tablet'], ['week', 'Week', 'grid'], ['month', 'Month', 'calendar'], ['agenda', 'Agenda', 'list']]
   return (
     <div className="cal">
       <header className="cal-top">
-        <button className="round" title={panel ? 'Hide the side panel' : 'Show the side panel'} onClick={() => setPanel(p => !p)}><Icon name="menu" /></button>
-        <h1>Calendar</h1>
+        <h2>{title}</h2>
         <button className="outline-button" onClick={() => setSelected(today)}>Today</button>
         <button className="round" title="Previous" onClick={() => step(-1)}><Icon name="back" /></button>
         <button className="round" title="Next" onClick={() => step(1)}><Icon name="forward" /></button>
-        <h2>{title}</h2>
-        <select className="field cal-view" value={view} onChange={e => go(e.target.value as View)}>
-          {(['day', 'week', 'month', 'agenda'] as View[]).map(v => <option key={v} value={v}>{v[0].toUpperCase() + v.slice(1)}</option>)}
-        </select>
       </header>
-      <div className="cal-body">
-        {panel && <aside className="cal-panel">
-          <button className="cal-create" onClick={() => create(selected)}><Icon name="add" />Create</button>
-          <MiniMonth selected={selected} today={today} busy={byDay} pick={setSelected} />
-          <h3>My calendars</h3>
+      <section className="cal-main">
+        {view === 'month' && <MonthGrid selected={selected} today={today} byDay={byDay} color={color} pick={d => setSelected(d)} create={create} open={open} />}
+        {(view === 'week' || view === 'day') && <TimeGrid dates={view === 'week' ? weekOf(selected) : [selected]} today={today} byDay={byDay} color={color} open={open} create={create} />}
+        {view === 'agenda' && <Agenda from={selected} today={today} byDay={byDay} color={color} open={open} />}
+      </section>
+      <div className={`notes-drawer island cal-drawer ${drawer ? 'open' : ''}`} aria-hidden={!drawer}>
+        <MiniMonth selected={selected} today={today} busy={byDay} pick={d => { setSelected(d); setDrawer(false) }} />
+        <div className="cal-drawer-list">
+          <h4><Icon name="calendar" size={18} />My calendars</h4>
           {cals.length === 0 && <p className="muted">No calendars yet. Each folder in Files › Calendar is one.</p>}
           {cals.map(c => (
             <div key={c.id} className="cal-row">
               <label><input type="checkbox" checked={!hidden.has(c.id)} onChange={() => toggle(c.id)} style={{ accentColor: c.color }} />{c.name}</label>
-              <button className="round small" title={`${c.name}: colour, name, export, delete`} onClick={() => editCalendar(c)}><Icon name="more" size={18} /></button>
+              <button className="round small" title={`${c.name}: colour, name, export, delete`} onClick={() => { setDrawer(false); editCalendar(c) }}><Icon name="more" size={18} /></button>
             </div>
           ))}
-          <button className="text-button cal-left" onClick={() => editCalendar(null)}><Icon name="add" size={18} />New calendar</button>
           <div className="cal-two">
-            <button className="text-button" onClick={importFile}>Import</button>
-            {cals.length > 0 && <button className="text-button" onClick={() => window.drive.calendarExport(null).then(p => p && say('Exported to ' + p))}>Export all</button>}
+            <button className="text-button cal-left" onClick={() => { setDrawer(false); editCalendar(null) }}><Icon name="add" size={18} />New calendar</button>
+            <button className="text-button" onClick={() => { setDrawer(false); importFile() }}>Import</button>
+            {cals.length > 0 && <button className="text-button" onClick={() => { setDrawer(false); window.drive.calendarExport(null).then(p => p && say('Exported to ' + p)) }}>Export all</button>}
           </div>
           {settings && <>
             <label className="cal-switch"><input type="checkbox" checked={settings.reminders} onChange={e => { const on = e.target.checked; setSettings({ ...settings, reminders: on }); window.drive.calendarSetReminders(on) }} />Reminders on this computer</label>
             <label className="cal-switch"><input type="checkbox" checked={settings.autostart} onChange={e => { const on = e.target.checked; setSettings({ ...settings, autostart: on }); window.drive.calendarSetAutostart(on) }} />Start Tetra when I log in, in the tray, so reminders ring</label>
           </>}
-        </aside>}
-        <section className="cal-main">
-          {view === 'month' && <MonthGrid selected={selected} today={today} byDay={byDay} color={color} pick={d => setSelected(d)} create={create} open={open} />}
-          {(view === 'week' || view === 'day') && <TimeGrid dates={view === 'week' ? weekOf(selected) : [selected]} today={today} byDay={byDay} color={color} open={open} create={create} />}
-          {view === 'agenda' && <Agenda from={selected} today={today} byDay={byDay} color={color} open={open} />}
-        </section>
+        </div>
+      </div>
+      <div className="notes-dock">
+        <nav className="notes-island island">
+          {VIEWS.map(([v, label, icon]) => <button key={v} className={`island-item ${view === v ? 'on' : ''}`} onClick={() => { go(v); setDrawer(false) }}><Icon name={icon as never} size={20} /><span>{label}</span></button>)}
+          <span className="island-gap" />
+          <button className="island-item" title="New event" onClick={() => { setDrawer(false); create(selected) }}><Icon name="add" size={20} /><span>New event</span></button>
+          <button className={`island-item ${drawer ? 'on' : ''}`} aria-expanded={drawer} onClick={() => setDrawer(d => !d)}><Icon name="calendar" size={20} /><span>Calendars</span></button>
+        </nav>
       </div>
     </div>
   )
