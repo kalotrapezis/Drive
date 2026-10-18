@@ -131,3 +131,36 @@ test('a name already in Trash never blocks a delete: the newcomer becomes "name 
   assert.deepEqual(fs.readdirSync(path.join(root, 'Trash')).sort(), ['QA', 'QA (2)', 'a (2).txt', 'a.txt'])
   fs.rmSync(tmp, { recursive: true })
 })
+
+test('a scoped sync (the Calendar) answers for its part and leaves the memory of the rest as it was', async () => {
+  const { tmp, root, files } = setup()
+  try {
+    const crypto = require('node:crypto')
+    const sha = b => crypto.createHash('sha256').update(b).digest('hex')
+    fs.mkdirSync(path.join(root, 'Calendar', 'Work'), { recursive: true })
+    fs.writeFileSync(path.join(root, 'Calendar', 'Work', 'a.ics'), 'BEGIN:VCALENDAR')
+    // a whole sync: the device has Docs/a.txt and Calendar/Work/a.ics
+    const all = [{ path: 'Docs/a.txt', sha256: sha('alpha') }, { path: 'Calendar/Work/a.ics', sha256: sha('BEGIN:VCALENDAR') }, { path: 'Docs/Inner/b.md', sha256: sha('beta') }, { path: 'Ελληνικά.pdf', sha256: sha('pdf') }]
+    await files.reconcile(all, 'tab')
+    const memory = () => files.db.prepare("SELECT device_id, path, sha256 FROM sync_manifest WHERE path NOT LIKE 'Calendar/%' ORDER BY device_id, path").all()
+    const before = JSON.stringify(memory())
+    // the device made an event: only the Calendar is sent, and it is asked for
+    const ev = 'BEGIN:VCALENDAR new'
+    let r = await files.reconcile([{ path: 'Calendar/Work/a.ics', sha256: sha('BEGIN:VCALENDAR') }, { path: 'Calendar/Work/new.ics', sha256: sha(ev) }, { path: 'Docs/a.txt', sha256: sha('alpha') }], 'tab', { scope: 'calendar' })
+    assert.deepEqual(r.want, ['Calendar/Work/new.ics']) // Docs/a.txt is out of scope: ignored
+    assert.deepEqual(r.have, [])
+    assert.equal(JSON.stringify(memory()), before, 'the rest of the memory is untouched')
+    // this computer edited an event (the skill): offered to the device as a replacement, at once
+    fs.writeFileSync(path.join(root, 'Calendar', 'Work', 'a.ics'), 'BEGIN:VCALENDAR edited')
+    r = await files.reconcile([{ path: 'Calendar/Work/a.ics', sha256: sha('BEGIN:VCALENDAR') }], 'tab', { scope: 'calendar' })
+    assert.equal(r.have.length, 1); assert.equal(r.have[0].path, 'Calendar/Work/a.ics'); assert.equal(r.have[0].replaces, sha('BEGIN:VCALENDAR'))
+    // the device received it; then deleted the event, which is a move into Trash: followed here
+    await files.reconcile([{ path: 'Calendar/Work/a.ics', sha256: sha('BEGIN:VCALENDAR edited') }], 'tab', { scope: 'calendar' })
+    r = await files.reconcile([{ path: 'Trash/a.ics', sha256: sha('BEGIN:VCALENDAR edited') }], 'tab', { scope: 'calendar' })
+    assert.deepEqual(r.moved, [{ from: 'Calendar/Work/a.ics', to: 'Trash/a.ics' }])
+    assert.ok(fs.existsSync(path.join(root, 'Trash', 'a.ics')))
+    // and the next whole sync finds nothing amiss with the rest
+    r = await files.reconcile(all.filter(f => !f.path.startsWith('Calendar/')).concat([{ path: 'Trash/a.ics', sha256: sha('BEGIN:VCALENDAR edited') }]), 'tab')
+    assert.deepEqual(r.moved, []); assert.deepEqual(r.want, [])
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})

@@ -39,6 +39,14 @@ const fail = message => { throw new Error(message) }
 const isSafeRel = rel => typeof rel === 'string' && (rel === '' || (!rel.startsWith('/') && rel.split('/').every(p => p && p !== '.' && p !== '..')))
 const isSafeName = name => typeof name === 'string' && name.trim() === name && name !== '' && name !== '.' && name !== '..' && !/[/\\\0]/.test(name)
 const inTrash = rel => rel === TRASH || rel.startsWith(TRASH + '/')
+/** A part of Drive that syncs on its own, at once (the Calendar, 18 Oct): its folders, and its kinds of file in the Trash. */
+const SCOPES = { calendar: { dirs: ['Calendar'], trashExts: ['.ics'] } }
+function scopeTest(scope) {
+  if (!scope) return () => true
+  const s = SCOPES[scope]
+  if (!s) throw Object.assign(new Error('Unknown scope.'), { status: 400, expose: true })
+  return rel => s.dirs.some(d => rel.startsWith(d + '/')) || (inTrash(rel) && s.trashExts.some(e => rel.toLowerCase().endsWith(e)))
+}
 
 function tagName(value) {
   const name = String(value ?? '').trim()
@@ -339,24 +347,31 @@ class Files {
    * `followTrash: false` is a Move device (SYNC_PLAN.md D6): what it puts in its Trash is its own business — this
    * computer keeps its copy, so it neither follows that move nor asks for the Trash's contents.
    */
-  async reconcile(entries, deviceId = 'phone', { followTrash = true } = {}) {
+  /**
+   * `scope` (18 Oct: the Calendar's changes travel at once, as Notes' do): a sync of part of Drive only — the folders
+   * named, and the Trash's files of the extensions named (an event deleted is a move into Trash). The same rules on
+   * that part; the memory of every other path is left exactly as it was, so the next whole sync sees nothing amiss.
+   */
+  async reconcile(entries, deviceId = 'phone', { followTrash = true, scope = null } = {}) {
     this.db.exec('CREATE TABLE IF NOT EXISTS sync_manifest (device_id TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, PRIMARY KEY(device_id, path))')
+    const inScope = scopeTest(scope)
     const offered = new Map()
-    for (const e of entries ?? []) if (isSafeRel(e?.path) && /^[0-9a-f]{64}$/.test(e?.sha256 ?? '')) offered.set(e.path, e.sha256)
-    const before = new Map(this.db.prepare('SELECT path, sha256 FROM sync_manifest WHERE device_id = ?').all(deviceId).map(r => [r.path, r.sha256]))
+    for (const e of entries ?? []) if (isSafeRel(e?.path) && /^[0-9a-f]{64}$/.test(e?.sha256 ?? '') && inScope(e.path)) offered.set(e.path, e.sha256)
+    const before = new Map(this.db.prepare('SELECT path, sha256 FROM sync_manifest WHERE device_id = ?').all(deviceId).filter(r => inScope(r.path)).map(r => [r.path, r.sha256]))
     // What this computer held when it last agreed with *this* device (29 September: one snapshot shared by every
     // device was overwritten by the phone's sync, so the tablet's old copy of an edit looked like a conflict). The
     // shared 'self' is only the starting point for a device synced before there was one of its own.
     const mineRows = this.db.prepare('SELECT path, sha256 FROM sync_manifest WHERE device_id = ?').all(`self:${deviceId}`)
-    const mineBefore = new Map((mineRows.length ? mineRows : this.db.prepare("SELECT path, sha256 FROM sync_manifest WHERE device_id = 'self'").all()).map(r => [r.path, r.sha256]))
+    const mineBefore = new Map((mineRows.length ? mineRows : this.db.prepare("SELECT path, sha256 FROM sync_manifest WHERE device_id = 'self'").all()).filter(r => inScope(r.path)).map(r => [r.path, r.sha256]))
     // What this computer offered the device last time: it fetches those after sending its list, so the list said
     // nothing about them. When it now holds exactly those bytes there, that is the version both sides agreed on.
     this.updatesTable()
-    const offeredBefore = new Map(this.db.prepare('SELECT path, sha256 FROM file_offered WHERE device_id = ?').all(deviceId).map(r => [r.path, r.sha256]))
+    const offeredBefore = new Map(this.db.prepare('SELECT path, sha256 FROM file_offered WHERE device_id = ?').all(deviceId).filter(r => inScope(r.path)).map(r => [r.path, r.sha256]))
     const lastTheirs = rel => offered.get(rel) !== undefined && offeredBefore.get(rel) === offered.get(rel) ? offered.get(rel) : before.get(rel)
     const mine = new Map() // sha256 → the paths this device holds
     const minePaths = new Map() // path → sha256, as this computer holds it now
     for (const rel of await this.walk('')) {
+      if (!inScope(rel)) continue
       const sha = await this.hash(rel)
       if (!sha) continue
       if (!mine.has(sha)) mine.set(sha, [])
@@ -368,9 +383,11 @@ class Files {
     // so it is remembered, like photos' deleted_here, until the same bytes are back here.
     this.db.exec('CREATE TABLE IF NOT EXISTS file_deleted_here (sha256 TEXT PRIMARY KEY, at INTEGER NOT NULL)')
     const forget = this.db.prepare('INSERT OR IGNORE INTO file_deleted_here(sha256, at) VALUES(?,?)')
-    // An empty Drive where 20+ files were is a missing folder, not a deletion (the photo scan's guard too).
+    // An empty Drive where 20+ files were is a missing folder, not a deletion (the photo scan's guard too). A scoped
+    // sync sees only its part, so the bytes of a file found anywhere else here are not deleted either.
+    const elsewhere = scope ? new Set((await Promise.all((await this.walk('')).filter(r => !inScope(r)).map(r => this.hash(r)))).filter(Boolean)) : new Set()
     // A path still here with other bytes was edited, not deleted: its old version is not a deletion to remember.
-    if (mine.size || mineBefore.size < 20) for (const [rel, sha] of mineBefore) if (!mine.has(sha) && !minePaths.has(rel)) forget.run(sha, Date.now())
+    if (mine.size || mineBefore.size < 20) for (const [rel, sha] of mineBefore) if (!mine.has(sha) && !minePaths.has(rel) && !elsewhere.has(sha)) forget.run(sha, Date.now())
     const back = this.db.prepare('DELETE FROM file_deleted_here WHERE sha256 = ?')
     for (const sha of mine.keys()) back.run(sha)
     const deletedHere = new Set(this.db.prepare('SELECT sha256 FROM file_deleted_here').all().map(r => r.sha256))
@@ -438,17 +455,25 @@ class Files {
 
     this.db.exec('BEGIN')
     try {
-      this.db.prepare('DELETE FROM sync_manifest WHERE device_id = ?').run(deviceId)
-      this.db.prepare("DELETE FROM sync_manifest WHERE device_id IN ('self', ?)").run(`self:${deviceId}`)
+      if (scope) { // only this part's memory is replaced
+        const drop = this.db.prepare('DELETE FROM sync_manifest WHERE device_id = ? AND path = ?')
+        for (const id of [deviceId, 'self', `self:${deviceId}`]) for (const r of this.db.prepare('SELECT path FROM sync_manifest WHERE device_id = ?').all(id)) if (inScope(r.path)) drop.run(id, r.path)
+      } else {
+        this.db.prepare('DELETE FROM sync_manifest WHERE device_id = ?').run(deviceId)
+        this.db.prepare("DELETE FROM sync_manifest WHERE device_id IN ('self', ?)").run(`self:${deviceId}`)
+      }
       const put = this.db.prepare('INSERT INTO sync_manifest(device_id, path, sha256) VALUES(?,?,?)')
       for (const [rel, sha] of offered) put.run(deviceId, rel, sha)
       for (const [rel, sha] of minePaths) { put.run('self', rel, sha); put.run(`self:${deviceId}`, rel, sha) }
       // What the device is about to send as an edit: its upload replaces this file rather than landing beside it.
       this.updatesTable()
-      this.db.prepare('DELETE FROM file_updates WHERE device_id = ?').run(deviceId)
+      for (const table of ['file_updates', 'file_offered']) {
+        if (!scope) { this.db.prepare(`DELETE FROM ${table} WHERE device_id = ?`).run(deviceId); continue }
+        const drop = this.db.prepare(`DELETE FROM ${table} WHERE device_id = ? AND path = ?`)
+        for (const r of this.db.prepare(`SELECT path FROM ${table} WHERE device_id = ?`).all(deviceId)) if (inScope(r.path)) drop.run(deviceId, r.path)
+      }
       const edit = this.db.prepare('INSERT INTO file_updates(device_id, path, sha256, replaces) VALUES(?,?,?,?)')
       for (const u of updates) if (wanted.includes(u.path)) edit.run(deviceId, u.path, u.sha256, u.replaces)
-      this.db.prepare('DELETE FROM file_offered WHERE device_id = ?').run(deviceId)
       const offer = this.db.prepare('INSERT OR REPLACE INTO file_offered(device_id, path, sha256) VALUES(?,?,?)')
       for (const h of have) offer.run(deviceId, h.path, h.sha256)
       this.db.exec('COMMIT')

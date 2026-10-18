@@ -929,14 +929,14 @@ class SyncServer {
    * ponytail: a day is a guess, and a stale row overcounts copies. Good enough to *show* — each device's
    * numbers are displayed "as of" its last sync — but a release (6ac) must demand a sweep newer than itself.
    */
-  holds(deviceId, kind, hashes) {
+  holds(deviceId, kind, hashes, prune = true) {
     if (!hashes.length) return
     const now = Date.now()
     const add = this.db.prepare('INSERT INTO device_holdings(device_id, kind, sha256, seen_at) VALUES(?,?,?,?) ON CONFLICT(device_id, kind, sha256) DO UPDATE SET seen_at = excluded.seen_at')
     this.db.exec('BEGIN')
     try {
       for (const h of hashes) add.run(deviceId, kind, h, now)
-      this.db.prepare('DELETE FROM device_holdings WHERE device_id = ? AND kind = ? AND seen_at < ?').run(deviceId, kind, now - 86_400_000)
+      if (prune) this.db.prepare('DELETE FROM device_holdings WHERE device_id = ? AND kind = ? AND seen_at < ?').run(deviceId, kind, now - 86_400_000)
       this.db.exec('COMMIT')
     } catch (e) { this.db.exec('ROLLBACK'); throw e }
   }
@@ -1217,16 +1217,21 @@ class SyncServer {
       if (this.connection(device.id, 'photos').direction !== 'both' || !this.trashItem) return this.send(res, 200, { trashed: 0 })
       return this.send(res, 200, { trashed: await this.trashFromDevice(device, hashes) })
     }
-    if (req.method === 'POST' && url.pathname === '/files/manifest') {
+    // '/files/manifest/scoped': one part of Drive alone (the Calendar, at once). Its own address, so a phone never sends a
+    // part's list to a computer too old to know it is a part — that one would take it for the whole Drive.
+    if (req.method === 'POST' && (url.pathname === '/files/manifest' || url.pathname === '/files/manifest/scoped')) {
       if (!this.files) return this.send(res, 200, { want: [], moved: [], have: [], moveTo: [] })
-      const { files: offered } = await this.json(req, 1 << 24)
+      const body = await this.json(req, 1 << 24)
+      const offered = body.files
+      const scope = url.pathname === '/files/manifest/scoped' ? (typeof body.scope === 'string' ? body.scope : '?') : null
       const list = Array.isArray(offered) ? offered : []
-      this.holds(device.id, 'file', list.map(f => f && f.sha256).filter(isHash))
+      this.holds(device.id, 'file', list.map(f => f && f.sha256).filter(isHash), !scope) // a part's list says nothing of the rest
       // Name, size and date of each, so a Move can be shown in numbers before it is chosen (movePreview).
       const describe = this.db.prepare("UPDATE device_holdings SET name = ?, size = ?, taken_at = ? WHERE device_id = ? AND kind = 'file' AND sha256 = ?")
       for (const f of list) if (f && isHash(f.sha256)) describe.run(String(f.path ?? '').slice(0, 300) || null, Number(f.size) || null, Number(f.modified) || null, device.id, f.sha256)
       const rule = this.connection(device.id, 'files')
-      const answer = await this.files.reconcile(list, device.id, { followTrash: !(rule.direction === 'send' && rule.keep === 'nothing') })
+      // scope: a part of Drive alone (the Calendar's changes, at once); its memory only, the rest untouched
+      const answer = await this.files.reconcile(list, device.id, { followTrash: !(rule.direction === 'send' && rule.keep === 'nothing'), scope })
       // 'want' and 'moved' are what this computer does; 'have' and 'moveTo' are what it offers the device.
       const direction = this.connection(device.id, 'files').direction
       return this.send(res, 200, direction === 'send' || direction === 'off' ? { ...answer, have: [], moveTo: [] } : answer)

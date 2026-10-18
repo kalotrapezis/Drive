@@ -1250,3 +1250,39 @@ test('editor tabs: the newer open or close of each file wins, and nothing unsafe
     fs.rmSync(tmp, { recursive: true, force: true })
   }
 })
+
+test('the Calendar travels on its own (scope "calendar"): a new event is asked for, one made here is offered, the rest untouched', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-calendar-'))
+  const root = path.join(tmp, 'Drive')
+  fs.mkdirSync(path.join(root, 'Calendar', 'Work'), { recursive: true })
+  fs.mkdirSync(path.join(root, 'Docs'), { recursive: true })
+  fs.writeFileSync(path.join(root, 'Docs', 'big.pdf'), 'a document the phone does not have')
+  const db = library.open(path.join(tmp, 'data'))
+  const files = new Files(db, root)
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
+    dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex')
+  try {
+    const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Tablet' } })).body
+    const { token } = paired
+    server.setConnection(paired.deviceId, 'files', { direction: 'both', keep: 'everything' }) // both ways, as the user sets them
+    const ev = Buffer.from('BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n')
+    // the skill made an event here: offered to the tablet at once, and nothing outside the Calendar is
+    fs.writeFileSync(path.join(root, 'Calendar', 'Work', 'skill.ics'), 'BEGIN:VCALENDAR from Claude')
+    let r = await call('POST', '/files/manifest/scoped', { token, json: { scope: 'calendar', files: [{ path: 'Calendar/Work/tab.ics', sha256: sha(ev), size: ev.length }] } })
+    assert.deepEqual(r.body.want, ['Calendar/Work/tab.ics'])
+    assert.deepEqual(r.body.have.map(h => h.path), ['Calendar/Work/skill.ics'])
+    assert.ok(!JSON.stringify(r.body).includes('big.pdf'))
+    assert.equal((await call('PUT', `/file/${sha(ev)}?path=Calendar/Work/tab.ics`, { token, body: ev })).body.verified, true)
+    // an unknown scope is refused, not taken as the whole Drive
+    r = await call('POST', '/files/manifest/scoped', { token, json: { scope: 'everything', files: [] } })
+    assert.equal(r.status, 400)
+    // and the whole sync's address ignores a scope: a part's list is never read as one there
+    r = await call('POST', '/files/manifest', { token, json: { scope: 'calendar', files: [] } })
+    assert.ok(r.body.have.some(h => h.path === 'Docs/big.pdf'))
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})

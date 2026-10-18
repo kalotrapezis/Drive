@@ -86,6 +86,9 @@ function watchCalendar() {
       if (name && path.basename(String(name)).startsWith('.')) return // a write in progress (.part)
       clearTimeout(settle)
       settle = setTimeout(() => { win?.webContents.send('calendar-changed'); planReminders() }, 300)
+      // and to the phones and tablets at once, as a note is (18 Oct): the nudge has them sync the Calendar's part
+      clearTimeout(calendarNudge)
+      calendarNudge = setTimeout(() => sync?.nudge().catch(() => {}), 2500)
     })
   } catch (e) { console.warn('[calendar] cannot watch', e.message) }
 }
