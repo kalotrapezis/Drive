@@ -162,7 +162,7 @@ declare global {
       onCalendarChanged(cb: () => void): () => void
       timer: {
         active(): Promise<TimerItem[]>
-        start(seconds: number): Promise<void>
+        start(seconds: number): Promise<string>
         change(id: string, action: TimerAction): Promise<void>
         last(): Promise<number>
       }

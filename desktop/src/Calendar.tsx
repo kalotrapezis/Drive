@@ -864,8 +864,11 @@ function ClockDialog({ value, onClose, onSet }: { value: string; onClose: () => 
   )
 }
 
-/** The clock itself, the hours and minutes typed above it — the Calendar's dialog and the Timer's page (hours, minutes long). */
-export function ClockFace({ h, m, setH, setM }: { h: number; m: number; setH: (n: number) => void; setM: (n: number) => void }) {
+/**
+ * The clock itself, the hours and minutes typed above it — the Calendar's dialog and the Timer's page (hours, minutes long;
+ * there the boxes go [below] the clock and [onDone] is the minute let go, or Enter in a box: the timer starts).
+ */
+export function ClockFace({ h, m, setH, setM, below = false, onDone }: { h: number; m: number; setH: (n: number) => void; setM: (n: number) => void; below?: boolean; onDone?: (h: number, m: number) => void }) {
   const [hours, setHours] = useState(true)
   const R = 100, IN = 66
   const spot = (i: number, of: number, r: number) => { const a = i / of * 2 * Math.PI; return [128 + r * Math.sin(a), 128 - r * Math.cos(a)] }
@@ -875,14 +878,16 @@ export function ClockFace({ h, m, setH, setM }: { h: number; m: number; setH: (n
     const x = (e.clientX - b.left) * k - 128, y = (e.clientY - b.top) * k - 128
     const a = (Math.atan2(x, -y) + 2 * Math.PI) % (2 * Math.PI)
     if (hours) { const i = Math.round(a / (Math.PI / 6)) % 12; setH(Math.hypot(x, y) < (R + IN) / 2 ? i + 12 : i); if (done) setHours(false) }
-    else setM(Math.round(a / (Math.PI / 30)) % 60)
+    else { const v = Math.round(a / (Math.PI / 30)) % 60; setM(v); if (done && onDone) { onDone(h, v); setHours(true) } }
   }
   const [hx, hy] = hours ? spot(h % 12, 12, h >= 12 ? IN : R) : spot(m, 60, R)
   const num = (v: number, max: number, setV: (n: number) => void, on: boolean, onFocus: () => void) =>
     <input className={on ? 'on' : ''} inputMode="numeric" value={pad(v)} onFocus={e => { onFocus(); e.target.select() }}
+      onKeyDown={e => { if (e.key === 'Enter' && onDone) { e.preventDefault(); onDone(h, m) } }}
       onChange={e => { const d = e.target.value.replace(/\D/g, '').slice(-2); setV(+d <= max ? +d : +d.slice(-1)) }} />
+  const head = <div className="cal-clock-head">{num(h, 23, setH, hours, () => setHours(true))}<span>:</span>{num(m, 59, setM, !hours, () => setHours(false))}</div>
   return <>
-    <div className="cal-clock-head">{num(h, 23, setH, hours, () => setHours(true))}<span>:</span>{num(m, 59, setM, !hours, () => setHours(false))}</div>
+    {!below && head}
     <svg viewBox="0 0 256 256" onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); pick(e, false) }} onPointerMove={e => pick(e, false)} onPointerUp={e => pick(e, true)}>
       <circle cx="128" cy="128" r="124" className="face" />
       <line x1="128" y1="128" x2={hx} y2={hy} className="hand" /><circle cx="128" cy="128" r="4" className="hub" /><circle cx={hx} cy={hy} r="18" className="hub" />
@@ -890,6 +895,7 @@ export function ClockFace({ h, m, setH, setM }: { h: number; m: number; setH: (n
         ? Array.from({ length: 24 }, (_, i) => { const [x, y] = spot(i % 12, 12, i >= 12 ? IN : R); return <text key={i} x={x} y={y} className={`${i >= 12 ? 'inner' : ''} ${i === h ? 'on' : ''}`}>{pad(i)}</text> })
         : Array.from({ length: 12 }, (_, i) => { const [x, y] = spot(i * 5, 60, R); return <text key={i} x={x} y={y} className={i * 5 === m ? 'on' : ''}>{pad(i * 5)}</text> })}
     </svg>
+    {below && head}
   </>
 }
 

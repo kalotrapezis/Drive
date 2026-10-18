@@ -57,41 +57,35 @@ export function TimerPage({ say }: { say: (text: string) => void }) {
   const timers = useTimers()
   const [h, setH] = useState(0)
   const [m, setM] = useState(5)
-  const [drawer, setDrawer] = useState(false)
+  const [lastId, setLastId] = useState<string | null>(null)
   // the clock opens on the length last started here
   useEffect(() => { window.drive.timer.last().then(s => { if (s) { setH(Math.min(23, Math.floor(s / 3600))); setM(Math.floor(s % 3600 / 60)) } }) }, [])
-  const chosen = h * 3600 + m * 60
-  const start = (s: number) => s > 0 && window.drive.timer.start(s).catch(e => say('Not started: ' + errorText(e)))
+  // the user, 18 Oct: "play is not needed as soon as I set a timer starts" — the minute let go (or Enter) starts it
+  const start = (hh: number, mm: number) => { const s = hh * 3600 + mm * 60; if (s > 0) window.drive.timer.start(s).then(setLastId, e => say('Not started: ' + errorText(e))) }
   const act = (id: string, a: TimerAction) => window.drive.timer.change(id, a).catch(e => say(errorText(e)))
-  // the user, 18 Oct: "a clock with hands and the timer with play pause stop" — the clock, and the cards beside it
+  // Pause and Stop under the clock: the timer last started here, else the one ending first
+  const live = timers.filter(t => !t.ready && !t.ringing)
+  const current = live.find(t => t.id === lastId) ?? live[0]
+  // the user's sketch, 18 Oct: the clock, HH and MM under it, Pause and Stop under those; the timers' cards beside, no island
   return (
     <div className="timer">
       <header className="topbar"><div className="island title-island"><Icon name="timer" /><h1>Timer</h1></div></header>
       <div className="timer-body">
         <section className="timer-main">
           <div className="cal-clock timer-clock">
-            <p className="muted">Hours and minutes</p>
-            <ClockFace h={h} m={m} setH={setH} setM={setM} />
-            <button className="filled-button timer-start" disabled={!chosen} onClick={() => start(chosen)}><Icon name="play" size={20} /> Start {chosen ? durationText(chosen) : ''}</button>
+            <ClockFace h={h} m={m} setH={setH} setM={setM} below onDone={start} />
+            <div className="timer-controls">
+              {current?.state === 'paused'
+                ? <button className="filled-button" onClick={() => act(current.id, 'resume')}><Icon name="play" size={18} /> Resume</button>
+                : <button className="filled-button" disabled={!current} onClick={() => current && act(current.id, 'pause')}><Icon name="pause" size={18} /> Pause</button>}
+              <button className="outline-button" disabled={!current} onClick={() => current && act(current.id, 'stop')}><Icon name="close" size={18} /> Stop</button>
+            </div>
           </div>
         </section>
-        {/* the user, 18 Oct: small cards, three to a row, fewer as the window narrows; nine at most */}
         <section className="timer-cards">
           {timers.map(t => <TimerCard key={t.id} t={t} act={act} />)}
-          {!timers.length && <p className="muted">Pick a length on the clock and Start. Pin a timer to keep it here, ready to start again.</p>}
+          {!timers.length && <p className="muted">Set hours and minutes on the clock: the timer starts when the minute hand is let go. Pin a timer to keep it here, ready to start again.</p>}
         </section>
-      </div>
-      <div className={`notes-drawer island ${drawer ? 'open' : ''}`} aria-hidden={!drawer}>
-        <p>A timer runs on every device you sync with: started, paused or stopped on one, it is on all of them at once, and OK on one stops the alarm everywhere. A pinned one stays, ready to start again. Each is a small file in Tetra/Files/Timer, so Claude can start one too.</p>
-      </div>
-      {/* Tetra's island at the bottom, Start in it; the handle opens the drawer */}
-      <div className="notes-dock">
-        <button className="notes-handle" title={drawer ? 'Close' : 'More'} onClick={() => setDrawer(d => !d)}><span /></button>
-        <nav className="notes-island island">
-          <button className="island-item on"><Icon name="timer" size={20} /><span>Timer</span></button>
-          <span className="island-gap" />
-          <button className="island-item" disabled={!chosen} onClick={() => start(chosen)}><Icon name="play" size={20} /><span>Start</span></button>
-        </nav>
       </div>
     </div>
   )

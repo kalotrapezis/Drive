@@ -627,6 +627,7 @@ app.whenReady().then(() => {
     const r = timers.start(seconds)
     setSetting('timerLast', String(r.seconds))
     planTimer()
+    return r.id
   })
   ipcMain.handle('timer:change', (_, id, action) => {
     if (!['pause', 'resume', 'stop', 'ok', 'restart', 'pin', 'unpin', 'trash'].includes(action)) throw new Error('Unknown Timer action.')
