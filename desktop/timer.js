@@ -48,6 +48,13 @@ function winners(all) {
   return [...best.values()]
 }
 
+/**
+ * Each device writes only its own file of a timer, `<id>.<device>.json`, and the highest rev among them is the timer: two
+ * devices never change one file, so sync never keeps two versions side by side ("x (3) (3).json", 18 Oct). A record with no
+ * device (written by hand) keeps "<id>.json". As the phone's TimerFiles.fileName.
+ */
+const fileName = (id, by) => { const tag = String(by ?? '').replace(/[^A-Za-z0-9_-]/g, ''); return tag ? `${id}.${tag}.json` : `${id}.json` }
+
 const json = r => JSON.stringify({ id: r.id, seconds: r.seconds, label: r.label, state: r.state, ends: r.ends == null ? null : new Date(r.ends).toISOString(),
   left: r.left, rev: r.rev, by: r.by, pinned: !!r.pinned }, null, 1) + '\n'
 
@@ -77,7 +84,7 @@ class Timers {
   /** Written beside, then renamed over: nobody reads half a timer. */
   write(r) {
     fs.mkdirSync(this.root, { recursive: true })
-    const to = r.file ?? path.join(this.root, `${r.id}.json`)
+    const to = path.join(this.root, fileName(r.id, r.by))
     const part = path.join(this.root, `.${path.basename(to)}.part`)
     fs.writeFileSync(part, json(r))
     fs.renameSync(part, to)
@@ -92,7 +99,7 @@ class Timers {
     if (all.filter(r => card(r, now)).length >= MAX) throw new Error('Nine timers at most: stop or delete one first.')
     const free = all.filter(r => over(r, now) && !r.pinned).sort((a, b) => String(a.file).localeCompare(String(b.file)))[0]
     return this.write({ id: free?.id ?? crypto.randomBytes(3).toString('hex'), seconds, label, state: RUNNING, ends: now + seconds * 1000, left: 0,
-      rev: (free?.rev ?? 0) + 1, by: this.by, file: free?.file ?? null })
+      rev: (free?.rev ?? 0) + 1, by: this.by, file: null })
   }
 
   /** Pause, resume, stop, ok, restart, pin, unpin or trash on [id], as its file is now; answers whether anything changed. */
@@ -124,4 +131,4 @@ function durationText(seconds) {
   return [h && `${h} h`, m && `${m} min`, (s || !seconds) && `${s} s`].filter(Boolean).join(' ')
 }
 
-module.exports = { Timers, parse, winners, leftMs, over, ringing, durationText, UNANSWERED_MS, MAX }
+module.exports = { Timers, fileName, parse, winners, leftMs, over, ringing, durationText, UNANSWERED_MS, MAX }

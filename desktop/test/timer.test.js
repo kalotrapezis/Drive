@@ -12,10 +12,10 @@ function pair() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'timer-'))
   return [new Timers(path.join(tmp, 'tablet', 'Timer'), 'Tablet'), new Timers(path.join(tmp, 'computer', 'Timer'), 'Computer')]
 }
-/** What sync does with a changed file: the other copy replaced (both changed: both kept, the second as "x (2)"). */
-function carry(from, to, conflict = false) {
+/** What sync does with a changed file: the other side's copy replaced. */
+function carry(from, to) {
   fs.mkdirSync(to.root, { recursive: true })
-  for (const n of fs.readdirSync(from.root).filter(n => n.endsWith('.json'))) fs.copyFileSync(path.join(from.root, n), path.join(to.root, conflict ? n.replace('.json', ' (2).json') : n))
+  for (const n of fs.readdirSync(from.root).filter(n => n.endsWith('.json'))) fs.copyFileSync(path.join(from.root, n), path.join(to.root, n))
 }
 
 test('time left counts down to the end, rings, and is over unanswered after ten minutes', () => {
@@ -41,27 +41,31 @@ test('pause keeps what is left; resume counts from then', () => {
   assert.equal(r.rev, 3)
 })
 
-test('stop or OK on one device stops it on the others', () => {
+test('OK on one device stops the ringing on the others', () => {
   const [tablet, computer] = pair()
   const { id } = tablet.start(600, t0)
   carry(tablet, computer)
-  assert.equal(computer.active(t0)[0].id, id)
+  assert.equal(tablet.active(t0 + 600_000)[0].ringing, true) // both ring at the end
   assert.ok(computer.change(id, 'ok', t0 + 600_000))
+  // written in the computer's own file; the tablet's is left as it was
+  assert.deepEqual(fs.readdirSync(computer.root).sort(), [`${id}.Computer.json`, `${id}.Tablet.json`])
   carry(computer, tablet)
-  assert.equal(tablet.active(t0 + 600_000).length, 0)
+  assert.equal(tablet.active(t0 + 605_000).length, 0)
 })
 
-test('two changes at once: stopping wins, a later change wins over that', () => {
+test('two changes at once make no copies, and stopping wins', () => {
   const [tablet, computer] = pair()
   const { id } = tablet.start(600, t0)
   carry(tablet, computer)
   tablet.change(id, 'pause', t0 + 10_000)
   computer.change(id, 'stop', t0 + 10_000)
-  carry(tablet, computer, true)
-  assert.equal(fs.readdirSync(computer.root).length, 2)
+  carry(tablet, computer); carry(computer, tablet) // each changed only its own file: nothing kept twice
+  for (const d of [tablet, computer]) { assert.equal(fs.readdirSync(d.root).length, 2); assert.equal(d.active(t0 + 20_000).length, 0) }
+  // a copy left by the old one-file-per-timer sync ("x (2).json") still reads as the same timer
+  fs.copyFileSync(path.join(computer.root, `${id}.Tablet.json`), path.join(computer.root, `${id}.Tablet (2).json`))
   assert.equal(computer.active(t0 + 20_000).length, 0)
   const r = computer.read()[0]
-  computer.write({ ...r, state: 'running', ends: t0 + 900_000, rev: r.rev + 1 })
+  computer.write({ ...r, state: 'running', ends: t0 + 900_000, rev: r.rev + 1, by: 'Phone' })
   assert.equal(computer.active(t0 + 20_000)[0].state, 'running')
 })
 
