@@ -218,11 +218,14 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
   const VIEWS: [View, string, string][] = [['day', 'Day', 'tablet'], ['week', 'Week', 'grid'], ['month', 'Month', 'calendar'], ['agenda', 'Agenda', 'list']]
   return (
     <div className="cal">
-      <header className="cal-top">
-        <h2>{title}</h2>
-        <button className="outline-button" onClick={() => setSelected(today)}>Today</button>
-        <button className="round" title="Previous" onClick={() => step(-1)}><Icon name="back" /></button>
-        <button className="round" title="Next" onClick={() => step(1)}><Icon name="forward" /></button>
+      {/* Files' own top: the title in an island, the dates' controls in one beside it */}
+      <header className="topbar cal-topbar">
+        <div className="island title-island"><Icon name="calendar" /><h1>{title}</h1></div>
+        <div className="island title-island cal-nav">
+          <button className="text-button" onClick={() => setSelected(today)}>Today</button>
+          <button className="round flat" title="Previous" onClick={() => step(-1)}><Icon name="back" /></button>
+          <button className="round flat" title="Next" onClick={() => step(1)}><Icon name="forward" /></button>
+        </div>
       </header>
       <section className="cal-main">
         {view === 'month' && <MonthGrid selected={selected} today={today} byDay={byDay} color={color} pick={d => setSelected(d)} create={create} open={open} />}
@@ -316,26 +319,29 @@ function MonthGrid({ selected, today, byDay, color, pick, create, open }: { sele
   )
 }
 
-/** Overlapping events side by side, as Google lays them out. */
+/**
+ * The day's timed events laid out as Google does, so every title stays readable: starts within a quarter of an hour
+ * share the width side by side; a later one cascades over a longer one, indented; under half an hour is a small chip
+ * that never takes width from a long one. (The phone's dayBlocks, the same.)
+ */
 function blocks(day: string, list: Occ[]) {
   const s0 = parse(day).getTime()
   const b = list.map(o => {
     const from = Math.max(0, Math.min(1440, Math.round((o.start - s0) / 60000)))
     const to = Math.max(0, Math.min(1440, Math.round((o.end - s0) / 60000)))
-    return { o, from, to: Math.min(Math.max(to, from + 20), 1440), col: 0, cols: 1 }
+    return { o, from, to: Math.min(Math.max(to, from + 22), 1440), short: to - from < 30, left: 0, width: 1 }
   }).sort((a, z) => a.from - z.from || z.to - a.to)
-  let cluster: typeof b = [], end = -1
-  const shut = () => { const n = Math.max(0, ...cluster.map(x => x.col)) + 1; cluster.forEach(x => x.cols = n); cluster = [] }
+  const groups: (typeof b)[] = []
   for (const x of b) {
-    if (x.from >= end) { shut(); end = -1 }
-    const ends: number[] = []
-    for (const c of cluster) ends[c.col] = Math.max(ends[c.col] ?? -1, c.to)
-    let col = 0
-    while ((ends[col] ?? -1) > x.from) col++
-    x.col = col
-    cluster.push(x); end = Math.max(end, x.to)
+    const g = groups[groups.length - 1]
+    if (g && x.short === g[0].short && x.from - g[g.length - 1].from < 15 && x.from < Math.max(...g.map(y => y.to))) g.push(x)
+    else groups.push([x])
   }
-  shut()
+  groups.forEach((g, i) => {
+    const depth = Math.min(3, groups.slice(0, i).filter(e => Math.max(...e.map(y => y.to)) > g[0].from).length)
+    const left = depth * 0.14
+    g.forEach((x, k) => { x.left = left + (1 - left) * k / g.length; x.width = (1 - left) / g.length })
+  })
   return b
 }
 
@@ -361,9 +367,9 @@ function TimeGrid({ dates, today, byDay, color, open, create }: { dates: string[
               {blocks(d, (byDay.get(d) ?? []).filter(o => !o.allDay)).map(b => {
                 const c = color(b.o.calendar)
                 return (
-                  <button key={b.o.file + b.o.start} className="cal-block" onClick={e => { e.stopPropagation(); open(b.o) }}
-                    style={{ top: b.from / 60 * HOUR, height: (b.to - b.from) / 60 * HOUR - 2, left: `${b.col / b.cols * 100}%`, width: `calc(${100 / b.cols}% - 3px)`, background: c, color: onColor(c) }}>
-                    <b>{b.o.title || '(No title)'}</b>{b.to - b.from >= 40 && <span>{time(b.o.start)} – {time(b.o.end)}</span>}
+                  <button key={b.o.file + b.o.start} className={`cal-block ${b.short ? 'short' : ''}`} onClick={e => { e.stopPropagation(); open(b.o) }} title={`${b.o.title} · ${time(b.o.start)} – ${time(b.o.end)}`}
+                    style={{ top: b.from / 60 * HOUR, height: b.short ? 20 : (b.to - b.from) / 60 * HOUR - 2, left: `${b.left * 100}%`, width: `calc(${b.width * 100}% - 2px)`, background: c, color: onColor(c) }}>
+                    <b>{b.o.title || '(No title)'}{b.short ? `, ${time(b.o.start)}` : ''}</b>{!b.short && b.to - b.from >= 40 && <span>{time(b.o.start)} – {time(b.o.end)}</span>}
                   </button>
                 )
               })}
