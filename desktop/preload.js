@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld('drive', {
   calendarImport: choices => ipcRenderer.invoke('calendar:import', choices),
   calendarExport: id => ipcRenderer.invoke('calendar:export', id),
   calendarSettings: () => ipcRenderer.invoke('calendar:settings'),
+  calendarSkillSave: () => ipcRenderer.invoke('calendar:skillSave'),
+  calendarSkillInstall: () => ipcRenderer.invoke('calendar:skillInstall'),
   calendarSetReminders: on => ipcRenderer.invoke('calendar:setReminders', on),
   calendarSetAutostart: on => ipcRenderer.invoke('calendar:setAutostart', on),
   notesSynced: () => ipcRenderer.invoke('notes:synced'),

@@ -151,6 +151,8 @@ declare global {
       calendarImport(choices: { index: number; into: string }[]): Promise<{ added: number; updated: number }>
       calendarExport(id: string | null): Promise<string | null>
       calendarSettings(): Promise<{ reminders: boolean; autostart: boolean }>
+      calendarSkillSave(): Promise<string | null>
+      calendarSkillInstall(): Promise<string>
       calendarSetReminders(on: boolean): Promise<void>
       calendarSetAutostart(on: boolean): Promise<void>
       onCalendarChanged(cb: () => void): () => void

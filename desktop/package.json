@@ -5,10 +5,10 @@
   "main": "main.js",
   "scripts": {
     "dev": "vite & sleep 2; VITE_DEV_URL=http://localhost:5199 electron .; kill %1",
-    "start": "vite build && electron .",
+    "start": "node scripts/copy-skill.js && vite build && electron .",
     "check": "tsc -p .",
     "test": "node --test src/*.test.ts test/*.test.js",
-    "dist": "vite build && electron-builder --linux AppImage deb"
+    "dist": "node scripts/copy-skill.js && vite build && electron-builder --linux AppImage deb"
   },
   "author": "Theologos Kalotrapezis <kalotrapezis@gmail.com>",
   "devDependencies": {
@@ -60,6 +60,7 @@
       "history.js",
       "notes.js",
       "calendar.js",
+      "skills/**",
       "importer.js",
       "models/*.onnx",
       "dist/**",

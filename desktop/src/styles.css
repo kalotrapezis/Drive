@@ -786,3 +786,4 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .cal-chips button { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--cal-pink); font-size: 13px; }
 .cal-chips button.on { background: var(--cal-pink); color: #fff; }
 .cal-side .cal-two { flex-wrap: wrap; }
+.cal-share-head { margin: 14px 4px 2px; font-size: 14px; }

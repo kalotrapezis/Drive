@@ -95,7 +95,7 @@ function setAutostart(on) {
   if (!on) { try { fs.unlinkSync(AUTOSTART) } catch {} return }
   const exec = process.env.APPIMAGE ? `"${process.env.APPIMAGE}"` : app.isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`
   fs.mkdirSync(path.dirname(AUTOSTART), { recursive: true })
-  fs.writeFileSync(AUTOSTART, `[Desktop Entry]\nType=Application\nName=Tetra\nComment=Tetra in the tray: sync and calendar reminders\nExec=${exec} --hidden\nIcon=${path.join(__dirname, 'public', 'icon.png')}\nX-GNOME-Autostart-enabled=true\n`)
+  fs.writeFileSync(AUTOSTART, `[Desktop Entry]\nType=Application\nName=Tetra\nComment=Tetra in the tray: sync and calendar reminders\nExec=${exec} --hidden\nIcon=${app.isPackaged ? 'local-drive-desktop' : path.join(__dirname, 'public', 'icon.png')}\nX-GNOME-Autostart-enabled=true\n`)
 }
 
 const setting = key => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value
@@ -609,6 +609,21 @@ app.whenReady().then(() => {
     if (r.canceled || !r.filePath) return null
     fs.writeFileSync(r.filePath, all ? calendar.exportAll() : calendar.exportCalendar(id))
     return r.filePath
+  })
+  // Share with Claude (asked 18 Oct): the tetra-calendar skill the app was built with (desktop/skills, copied from Drive-Android's)
+  const SKILL = path.join(__dirname, 'skills', 'tetra-calendar')
+  const skillFiles = () => fs.readdirSync(SKILL).filter(n => !n.startsWith('.') && fs.statSync(path.join(SKILL, n)).isFile())
+  ipcMain.handle('calendar:skillSave', async () => {
+    const r = await dialog.showSaveDialog(win, { title: 'Save the Calendar skill for Claude', defaultPath: path.join(app.getPath('downloads'), 'tetra-calendar.zip') })
+    if (r.canceled || !r.filePath) return null
+    fs.writeFileSync(r.filePath, require('./calendar').zip(skillFiles().map(n => ({ name: `tetra-calendar/${n}`, data: fs.readFileSync(path.join(SKILL, n)) }))))
+    return r.filePath
+  })
+  ipcMain.handle('calendar:skillInstall', () => { // for Claude Code on this computer
+    const to = path.join(os.homedir(), '.claude', 'skills', 'tetra-calendar')
+    fs.mkdirSync(to, { recursive: true })
+    for (const n of skillFiles()) fs.copyFileSync(path.join(SKILL, n), path.join(to, n))
+    return to
   })
   ipcMain.handle('calendar:settings', () => ({ reminders: setting('calendarReminders') !== 'off', autostart: fs.existsSync(AUTOSTART) }))
   ipcMain.handle('calendar:setReminders', (_, on) => { setSetting('calendarReminders', on ? 'on' : 'off'); planReminders() })

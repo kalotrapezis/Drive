@@ -279,6 +279,13 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
   const settingsList = settings && <>
     <label className="cal-switch"><input type="checkbox" checked={settings.reminders} onChange={e => { const on = e.target.checked; setSettings({ ...settings, reminders: on }); window.drive.calendarSetReminders(on) }} />Reminders on this computer</label>
     <label className="cal-switch"><input type="checkbox" checked={settings.autostart} onChange={e => { const on = e.target.checked; setSettings({ ...settings, autostart: on }); window.drive.calendarSetAutostart(on) }} />Start Tetra when I log in, in the tray, so reminders ring</label>
+    {/* Share with Claude (asked 18 Oct): the skill the app was built with */}
+    <h4 className="cal-share-head">Share with Claude</h4>
+    <p className="muted">Lets Claude read and change this calendar by editing its files.</p>
+    <div className="cal-two">
+      <button className="text-button" onClick={() => window.drive.calendarSkillSave().then(p => p && say('Saved to ' + p), e => say('Not saved: ' + errorText(e)))}>Save as…</button>
+      <button className="text-button" onClick={() => window.drive.calendarSkillInstall().then(p => say('Installed for Claude Code in ' + p), e => say('Not installed: ' + errorText(e)))}>Copy to ~/.claude/skills</button>
+    </div>
   </>
   const main = <>
     {view === 'month' && <MonthGrid selected={selected} today={today} byDay={byDay} color={color} pick={d => setSelected(d)} create={create} open={open} />}
