@@ -72,7 +72,7 @@ test('calendar: a new event written and read back; a conflict shown once; Trash,
   try {
     const rel = cal.save(null, 'Work', { title: 'School trip; Delphi', place: 'Delphi', notes: 'Bring lunch,\nand water', allDay: true,
       start: { date: '2026-11-02' }, end: { date: '2026-11-03' }, alarms: [{ days: -3, seconds: 9 * 3600, repeat: 2, every: 86400 }] })
-    assert.match(rel, /^Work\/school-trip-delphi-[0-9a-f]{6}\.ics$/)
+    assert.match(rel, /^Work\/school-trip-delphi-[0-9a-f]{8}\.ics$/)
     const text = fs.readFileSync(path.join(root, rel), 'utf8')
     assert.match(text, /DTSTART;VALUE=DATE:20261102/); assert.match(text, /DTEND;VALUE=DATE:20261104/); assert.match(text, /TRIGGER:-P2DT15H/)
     const o = cal.occurrences(new Date('2026-11-01T00:00+02:00').getTime(), new Date('2026-11-05T00:00+02:00').getTime()).find(x => x.file === rel)
@@ -107,5 +107,17 @@ test('calendar: Google export and Takeout zip imported, again without doubles; E
     const work = back[1].data.toString()
     assert.match(work, /X-WR-CALNAME:Work/); assert.match(work, /X-APPLE-CALENDAR-COLOR:#33B679/)
     assert.equal(Calendar.incoming(work, 'x').events.size, 4)
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})
+
+test('calendar: two events of one title whose UIDs begin alike get two files (the user\'s import lost two, 18 Oct)', () => {
+  const { tmp, root, cal } = setup()
+  try {
+    const ics = uid => `BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nDTSTAMP:20261018T000000Z\r\nSUMMARY:Lesson\r\nDTSTART:20261020T080000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`
+    const long = '_60q30c1g60o30e1i60o4ac1g60rj8gpl88rj2c1h84s34h9g64o30c1g60o30c1g70o30c1g6ksk2e1n6sp3gc1g64o30c1g60o30c1g6os3achm6gpjcdi36l0j0d9m8l'
+    const inc = Calendar.incoming(ics(long + '0@google.com') + ics(long + '1@google.com'), 'x')
+    assert.deepEqual(cal.importInto(inc, 'Google'), { added: 2, updated: 0 })
+    assert.equal(fs.readdirSync(path.join(root, 'Google')).filter(n => n.endsWith('.ics')).length, 2)
+    assert.deepEqual(cal.importInto(inc, 'Google'), { added: 0, updated: 2 })
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })

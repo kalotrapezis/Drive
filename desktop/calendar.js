@@ -440,9 +440,17 @@ class Calendar {
     }
   }
 
+  /** A new event's name: its title and eight letters of its UID's hash (Google's UIDs of a series begin alike). */
   static slug(title, uid) {
     const s = (title || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '') || 'event'
-    return `${s}-${uid.replace(/[^0-9a-z]/gi, '').slice(0, 6).toLowerCase()}.ics`
+    return `${s}-${crypto.createHash('sha1').update(uid).digest('hex').slice(0, 8)}.ics`
+  }
+  /** A new event's file in [dir]: never another event's ("name (2)" when taken). */
+  static freeFile(dir, title, uid) {
+    const name = Calendar.slug(title, uid)
+    let f = path.join(dir, name)
+    for (let n = 2; fs.existsSync(f); n++) f = path.join(dir, name.replace(/\.ics$/, ` (${n}).ics`))
+    return f
   }
 
   /** A new event in [calendar], or [rel]'s event written over (every line the editor does not know kept). */
@@ -451,7 +459,7 @@ class Calendar {
       const uid = ev.uid || crypto.randomUUID()
       const v = { name: 'VEVENT', items: [] }
       this.fill(v, { ...ev, uid }, now, true)
-      const file = path.join(this.dir(calendar), Calendar.slug(ev.title, uid))
+      const file = Calendar.freeFile(this.dir(calendar), ev.title, uid)
       fs.mkdirSync(path.dirname(file), { recursive: true })
       this.put(file, write([{ name: 'VCALENDAR', items: [{ name: 'VERSION', params: '', value: '2.0' }, { name: 'PRODID', params: '', value: '-//Tetra//Calendar//EN' }, v] }]))
       return path.relative(this.root, file)
@@ -587,7 +595,7 @@ class Calendar {
       const items = [{ name: 'VERSION', params: '', value: '2.0' }, { name: 'PRODID', params: '', value: '-//Tetra//Calendar//EN' }, ...[...used].map(z => inc.zones.get(z)).filter(Boolean),
         ...vevents.slice().sort((a, b) => (prop(a, 'RECURRENCE-ID') ? 1 : 0) - (prop(b, 'RECURRENCE-ID') ? 1 : 0))]
       const title = vevents.map(v => prop(v, 'SUMMARY')).find(Boolean)
-      const file = existing.get(uid) || path.join(dir, Calendar.slug(title ? unescape(title.value) : '', uid))
+      const file = existing.get(uid) || Calendar.freeFile(dir, title ? unescape(title.value) : '', uid)
       fs.existsSync(file) ? updated++ : added++
       this.put(file, write([{ name: 'VCALENDAR', items }]))
     }
