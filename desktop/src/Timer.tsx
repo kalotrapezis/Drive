@@ -65,8 +65,9 @@ export function TimerPage({ say }: { say: (text: string) => void }) {
     <div className="timer">
       <header className="topbar"><div className="island title-island"><Icon name="timer" /><h1>Timer</h1></div></header>
       <div className="timer-body">
+        {/* the user, 18 Oct: small cards, three to a row, fewer as the window narrows */}
+        {timers.length > 0 && <section className="timer-cards">{timers.map(t => <TimerCard key={t.id} t={t} act={act} />)}</section>}
         <section className="timer-main">
-          {timers.map(t => <TimerCard key={t.id} t={t} act={act} />)}
           <div className="cal-clock timer-clock">
             <p className="muted">Hours and minutes</p>
             <ClockFace h={h} m={m} setH={setH} setM={setM} />
