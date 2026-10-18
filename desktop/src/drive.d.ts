@@ -164,9 +164,7 @@ declare global {
         active(): Promise<TimerItem[]>
         start(seconds: number): Promise<void>
         change(id: string, action: TimerAction): Promise<void>
-        prefs(): Promise<{ recent: number[]; pinned: number[] }>
-        pin(seconds: number): Promise<void>
-        clearRecent(): Promise<void>
+        last(): Promise<number>
       }
       onTimerChanged(cb: () => void): () => void
       onNotesChanged(cb: () => void): () => void

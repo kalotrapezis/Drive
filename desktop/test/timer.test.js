@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { Timers, parse, leftMs, used, shown, UNANSWERED_MS } = require('../timer')
+const { Timers, parse, leftMs, UNANSWERED_MS } = require('../timer')
 
 const t0 = Date.parse('2026-10-18T16:00:00Z')
 function pair() {
@@ -126,11 +126,4 @@ test('a timer Claude writes by hand is read; anything else is not a timer', () =
   assert.equal(parse('{"state":"exploded"}'), null)
   // and a file Tetra on the phone writes reads the same (Timer.kt's json(): ends as an ISO instant, left in seconds)
   assert.equal(parse('{"id":"k3f9a2","seconds":300,"label":"","state":"paused","ends":null,"left":200.5,"rev":2,"by":"Tablet"}').left, 200.5)
-})
-
-test('recent times newest first, pinned on top', () => {
-  let recent = []
-  for (const s of [300, 600, 300, 60, 90, 120, 180, 240]) recent = used(recent, s)
-  assert.deepEqual(recent, [240, 180, 120, 90, 60, 300])
-  assert.deepEqual(shown([600, 120], recent), [600, 120, 240, 180, 90, 60, 300])
 })

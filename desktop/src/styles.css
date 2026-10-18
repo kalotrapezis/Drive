@@ -842,14 +842,12 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 :root { --timer-teal: #26A69A; }
 .timer { height: 100%; display: flex; flex-direction: column; position: relative; }
 .timer-body { flex: 1; overflow-y: auto; display: flex; gap: 40px; padding: 8px 32px 120px; flex-wrap: wrap; align-items: flex-start; }
-.timer-main { flex: 1 1 340px; max-width: 460px; display: flex; flex-direction: column; gap: 16px; }
-.timer-times { flex: 1 1 280px; max-width: 420px; display: flex; flex-direction: column; gap: 8px; }
-.timer-times h4 { margin: 8px 0; }
+.timer-main { flex: 0 1 380px; display: flex; flex-direction: column; gap: 16px; }
 .timer-clock { --cal-pink: var(--timer-teal); display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .timer-clock .muted { margin: 0; color: var(--muted); font-size: 13px; }
 .timer-start { display: inline-flex; align-items: center; gap: 8px; margin-top: 12px; min-width: 200px; justify-content: center; }
 .timer-clock .timer-start svg { width: 20px; margin: 0; } /* not the clock face's .cal-clock svg */
-.timer-cards { flex: 1 1 100%; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(max(220px, (100% - 24px) / 3), 1fr)); }
+.timer-cards { flex: 1 1 480px; align-content: start; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(max(180px, (100% - 24px) / 3), 1fr)); }
 .timer-card { position: relative; padding: 12px 16px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .timer-card.ringing { background: var(--timer-teal); color: #fff; }
 .timer-left { font-size: 34px; font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
@@ -857,11 +855,6 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .timer-name { font-size: 13px; color: var(--muted); }
 .timer-card.ringing .timer-name { color: #fff; }
 .timer-buttons button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 13px; }
-.timer-time { display: flex; align-items: center; padding: 4px 4px 4px 0; border-radius: 20px; }
-.timer-time-start { flex: 1; display: flex; align-items: center; gap: 12px; padding: 10px 18px; font-size: 16px; text-align: left; color: var(--timer-teal); }
-.timer-time-start span { color: var(--text); }
-.timer-time .pinned { color: var(--timer-teal); }
-.timer-time .round:not(.pinned) { opacity: .5; }
 .timer .notes-drawer p { max-width: 640px; color: var(--muted); }
 .timer-bell { position: fixed; top: 16px; left: 50%; translate: -50% 0; z-index: 50; display: flex; align-items: center; gap: 14px; padding: 12px 14px 12px 20px;
   border-radius: 999px; background: var(--timer-teal); color: #fff; box-shadow: 0 8px 30px #0008; }

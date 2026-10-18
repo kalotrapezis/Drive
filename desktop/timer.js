@@ -118,14 +118,10 @@ class Timers {
   }
 }
 
-/** Recently used durations, newest first, a handful; the pinned ones first in the list under the clock. */
-const used = (list, seconds) => [seconds, ...list.filter(s => s !== seconds)].slice(0, 6)
-const shown = (pinned, recent) => [...pinned, ...recent.filter(s => !pinned.includes(s))]
-
 /** "5 min", "1 h 30 min", "45 s": as the phone's durationText. */
 function durationText(seconds) {
   const h = Math.floor(seconds / 3600), m = Math.floor(seconds % 3600 / 60), s = seconds % 60
   return [h && `${h} h`, m && `${m} min`, (s || !seconds) && `${s} s`].filter(Boolean).join(' ')
 }
 
-module.exports = { Timers, parse, winners, leftMs, over, ringing, used, shown, durationText, UNANSWERED_MS, MAX }
+module.exports = { Timers, parse, winners, leftMs, over, ringing, durationText, UNANSWERED_MS, MAX }
