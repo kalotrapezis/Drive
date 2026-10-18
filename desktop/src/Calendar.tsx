@@ -392,7 +392,7 @@ function BirthdayDialog({ onClose, onSave }: { onClose: () => void; onSave: (nam
     <Modal onClose={onClose}>
       <h3>Birthday</h3>
       <input className="field" autoFocus placeholder="Whose birthday" value={name} onChange={e => setName(e.target.value)} />
-      <div className="cal-inline" style={{ marginTop: 10 }}>Date <input type="date" className="field" value={date} onChange={e => e.target.value && setDate(e.target.value)} /></div>
+      <div className="cal-inline" style={{ marginTop: 10 }}>Date <DateField value={date} set={setDate} /></div>
       <label className="cal-switch"><input type="checkbox" checked={yearKnown} onChange={e => setYearKnown(e.target.checked)} />I know the year (to show the age)</label>
       <p className="muted">All day, every year, in the Birthdays calendar; reminded on the day at 9:00.</p>
       <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" disabled={!name.trim()} onClick={() => onSave(name.trim(), date, yearKnown)}>Save</button></div>
@@ -419,8 +419,8 @@ function ScheduleDialog({ cals, calendar, holidays, today, onClose, onSave }: { 
         <input className="field" autoFocus placeholder="What (e.g. Lessons)" value={a.title} onChange={e => set({ title: e.target.value })} />
         <div className="cal-chips">{TEMPLATES.map(([label, s, e], i) => <button key={label} className={template === i ? 'on' : ''} onClick={() => { setTemplate(i); set({ from: `${y}-${s}`, to: `${y + 1}-${e}` }) }}>{label}</button>)}</div>
         <div className="cal-days">{DAYS.map((d, i) => <button key={d} className={a.days.includes(d) ? 'on' : ''} onClick={() => set({ days: a.days.includes(d) ? a.days.filter(x => x !== d) : [...a.days, d] })}>{DAY_NAMES[i][0]}</button>)}</div>
-        <div className="cal-inline">From <TimeSelect value={a.at} set={t => set({ at: t })} /> to <TimeSelect value={a.until} set={t => set({ until: t })} /></div>
-        <div className="cal-inline">Starts <input type="date" className="field" value={a.from} onChange={e => e.target.value && set({ from: e.target.value })} /> Ends <input type="date" className="field" value={a.to} onChange={e => e.target.value && set({ to: e.target.value })} /></div>
+        <div className="cal-inline">From <TimeField value={a.at} set={t => set({ at: t })} /> to <TimeField value={a.until} set={t => set({ until: t })} /></div>
+        <div className="cal-inline">Starts <DateField value={a.from} set={d => set({ from: d })} /> Ends <DateField value={a.to} set={d => set({ to: d })} /></div>
         {template === 1 && <p className="error">The high school year's end is a guess (15 June): set the right date.</p>}
         {holidays && <label className="cal-switch"><input type="checkbox" checked={skip} onChange={e => setSkip(e.target.checked)} />Skip the days in the Holidays calendar</label>}
         <input className="field" placeholder="Place" value={a.place} onChange={e => set({ place: e.target.value })} />
@@ -642,10 +642,10 @@ function EventEditor({ draft, cals, calendar, isNew, heading, onClose, onSave }:
           </select></label>
         <label className="cal-switch"><input type="checkbox" checked={d.allDay} onChange={e => set({ allDay: e.target.checked, alarms: defaultAlarms(e.target.checked, startTime), start: { date: d.start.date, time: d.start.time ?? '09:00' }, end: { date: d.end.date, time: d.end.time ?? '10:00' } })} />All day</label>
         <div className="cal-when">
-          <span>Starts</span><input type="date" className="field" value={d.start.date} onChange={e => e.target.value && setStart({ ...d.start, date: e.target.value })} />
-          {!d.allDay && <TimeSelect value={d.start.time!} set={t => setStart({ ...d.start, time: t })} />}
-          <span>Ends</span><input type="date" className="field" value={d.end.date} onChange={e => e.target.value && set({ end: { ...d.end, date: e.target.value } })} />
-          {!d.allDay && <TimeSelect value={d.end.time!} set={t => set({ end: { ...d.end, time: t } })} />}
+          <span>Starts</span><DateField value={d.start.date} set={x => setStart({ ...d.start, date: x })} />
+          {!d.allDay && <TimeField value={d.start.time!} set={t => setStart({ ...d.start, time: t })} />}
+          <span>Ends</span><DateField value={d.end.date} set={x => set({ end: { ...d.end, date: x } })} />
+          {!d.allDay && <TimeField value={d.end.time!} set={t => set({ end: { ...d.end, time: t } })} />}
         </div>
         {late && <p className="error">The end is before the start; it will be an hour long.</p>}
         <select className="field" value={presets.some(p => p[0] === d.rrule) ? d.rrule ?? '' : 'custom'} onChange={e => e.target.value === 'custom!' ? setCustom('repeat') : set({ rrule: e.target.value || null })}>
@@ -696,7 +696,7 @@ function CustomRepeat({ rule, date, onCancel, onSet }: { rule: string | null; da
         <select className="field" value={unit} onChange={e => setUnit(e.target.value)}>{[['DAILY', 'days'], ['WEEKLY', 'weeks'], ['MONTHLY', 'months'], ['YEARLY', 'years']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
       {unit === 'WEEKLY' && <div className="cal-days">{DAYS.map((x, i) => <button key={x} className={days.has(x) ? 'on' : ''} onClick={() => setDays(s => { const n = new Set(s); n.has(x) ? n.delete(x) : n.add(x); return n })}>{DAY_NAMES[i][0]}</button>)}</div>}
       <label className="cal-radio"><input type="radio" checked={ends === 'never'} onChange={() => setEnds('never')} />Never ends</label>
-      <label className="cal-radio"><input type="radio" checked={ends === 'until'} onChange={() => setEnds('until')} />Ends on <input type="date" className="field" value={until} onChange={e => { setUntil(e.target.value); setEnds('until') }} /></label>
+      <label className="cal-radio"><input type="radio" checked={ends === 'until'} onChange={() => setEnds('until')} />Ends on <DateField value={until} set={x => { setUntil(x); setEnds('until') }} /></label>
       <label className="cal-radio"><input type="radio" checked={ends === 'count'} onChange={() => setEnds('count')} />After <input className="field num" type="number" min={1} value={count} onChange={e => { setCount(e.target.value); setEnds('count') }} /> times</label>
       <div className="dialog-actions"><button className="text-button" onClick={onCancel}>Cancel</button><button className="filled-button" onClick={ok}>OK</button></div>
     </div>
@@ -714,7 +714,7 @@ function CustomAlarm({ allDay, start, onCancel, onAdd }: { allDay: boolean; star
     <div className="cal-custom">
       <div className="cal-inline"><input className="field num" type="number" min={0} value={n} onChange={e => setN(e.target.value)} />
         <select className="field" value={unit} onChange={e => setUnit(e.target.value)}>{(allDay ? ['days', 'weeks'] : ['minutes', 'hours', 'days', 'weeks']).map(u => <option key={u}>{u}</option>)}</select> before
-        {(unit === 'days' || unit === 'weeks') && <> at <TimeSelect value={at} set={setAt} /></>}</div>
+        {(unit === 'days' || unit === 'weeks') && <> at <TimeField value={at} set={setAt} /></>}</div>
       {(unit === 'days' || unit === 'weeks') && <label className="cal-switch"><input type="checkbox" checked={daily} onChange={e => setDaily(e.target.checked)} />And every day after it, until the event</label>}
       <div className="dialog-actions"><button className="text-button" onClick={onCancel}>Cancel</button><button className="filled-button" onClick={add}>Add</button></div>
     </div>
@@ -766,9 +766,102 @@ function ImportDialog({ found, cals, onClose, onImport }: { found: { index: numb
   )
 }
 
-/** A time of day as Google offers it: every quarter of an hour, in English whatever the system's language; the event's own if between. */
-function TimeSelect({ value, set }: { value: string; set: (t: string) => void }) {
-  const times = Array.from({ length: 96 }, (_, i) => `${pad(Math.floor(i / 4))}:${pad(i % 4 * 15)}`)
-  if (!times.includes(value)) times.push(value), times.sort()
-  return <select className="field cal-time-pick" value={value} onChange={e => set(e.target.value)}>{times.map(t => <option key={t} value={t}>{t}</option>)}</select>
+/** "12:25", "12.25", "1225", "925" or "9" as "HH:MM"; null when it is not a time. */
+function typedTime(text: string): string | null {
+  const m = /^\s*(\d{1,2})(?:\s*[:.\s]?\s*(\d{2}))?\s*$/.exec(text)
+  if (!m || +m[1] > 23 || +(m[2] ?? 0) > 59) return null
+  return `${pad(+m[1])}:${pad(+(m[2] ?? 0))}`
+}
+
+/** A time of day, any minute (the user, 18 Oct: "why a list and not a clock"): typed, or picked on the clock as the phone's. */
+function TimeField({ value, set }: { value: string; set: (t: string) => void }) {
+  const [text, setText] = useState(value)
+  const [clock, setClock] = useState(false)
+  useEffect(() => setText(value), [value])
+  const commit = () => { const t = typedTime(text); if (t && t !== value) set(t); else setText(value) }
+  return (
+    <span className="cal-pick">
+      <input className="field" aria-label="Time" inputMode="numeric" value={text} onChange={e => setText(e.target.value)} onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); commit() } }} />
+      <button className="round small flat" title="Pick on the clock" onClick={() => setClock(true)}><Icon name="recent" size={20} /></button>
+      {clock && <ClockDialog value={value} onClose={() => setClock(false)} onSet={t => { setClock(false); set(t) }} />}
+    </span>
+  )
+}
+
+/** Material's clock, as the phone's TimePicker: hours (00–11 outside, 12–23 inside), then minutes, any of them. */
+function ClockDialog({ value, onClose, onSet }: { value: string; onClose: () => void; onSet: (t: string) => void }) {
+  const [h, setH] = useState(+value.slice(0, 2))
+  const [m, setM] = useState(+value.slice(3, 5))
+  const [hours, setHours] = useState(true)
+  const R = 100, IN = 66
+  const spot = (i: number, of: number, r: number) => { const a = i / of * 2 * Math.PI; return [128 + r * Math.sin(a), 128 - r * Math.cos(a)] }
+  function pick(e: React.PointerEvent<SVGSVGElement>, done: boolean) {
+    if (e.type === 'pointermove' && !e.buttons) return
+    const b = e.currentTarget.getBoundingClientRect(), k = 256 / b.width
+    const x = (e.clientX - b.left) * k - 128, y = (e.clientY - b.top) * k - 128
+    const a = (Math.atan2(x, -y) + 2 * Math.PI) % (2 * Math.PI)
+    if (hours) { const i = Math.round(a / (Math.PI / 6)) % 12; setH(Math.hypot(x, y) < (R + IN) / 2 ? i + 12 : i); if (done) setHours(false) }
+    else setM(Math.round(a / (Math.PI / 30)) % 60)
+  }
+  const [hx, hy] = hours ? spot(h % 12, 12, h >= 12 ? IN : R) : spot(m, 60, R)
+  const num = (v: number, max: number, setV: (n: number) => void, on: boolean, onFocus: () => void) =>
+    <input className={on ? 'on' : ''} inputMode="numeric" value={pad(v)} onFocus={e => { onFocus(); e.target.select() }}
+      onChange={e => { const d = e.target.value.replace(/\D/g, '').slice(-2); setV(+d <= max ? +d : +d.slice(-1)) }} />
+  return (
+    <Modal onClose={onClose}>
+      <div className="cal-clock">
+        <h3>Time</h3>
+        <div className="cal-clock-head">{num(h, 23, setH, hours, () => setHours(true))}<span>:</span>{num(m, 59, setM, !hours, () => setHours(false))}</div>
+        <svg viewBox="0 0 256 256" onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); pick(e, false) }} onPointerMove={e => pick(e, false)} onPointerUp={e => pick(e, true)}>
+          <circle cx="128" cy="128" r="124" className="face" />
+          <line x1="128" y1="128" x2={hx} y2={hy} className="hand" /><circle cx="128" cy="128" r="4" className="hub" /><circle cx={hx} cy={hy} r="18" className="hub" />
+          {hours
+            ? Array.from({ length: 24 }, (_, i) => { const [x, y] = spot(i % 12, 12, i >= 12 ? IN : R); return <text key={i} x={x} y={y} className={`${i >= 12 ? 'inner' : ''} ${i === h ? 'on' : ''}`}>{pad(i)}</text> })
+            : Array.from({ length: 12 }, (_, i) => { const [x, y] = spot(i * 5, 60, R); return <text key={i} x={x} y={y} className={i * 5 === m ? 'on' : ''}>{pad(i * 5)}</text> })}
+        </svg>
+        <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" onClick={() => onSet(`${pad(h)}:${pad(m)}`)}>OK</button></div>
+      </div>
+    </Modal>
+  )
+}
+
+/** A date, picked on a month as the phone's DatePicker (the user, 18 Oct: "why is the date not a calendar"); the year jumps for birthdays. */
+function DateField({ value, set }: { value: string; set: (d: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return <>
+    <button className="field cal-date" onClick={() => setOpen(true)}><Icon name="calendar" size={18} />{fmt(value, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</button>
+    {open && <DateDialog value={value} onClose={() => setOpen(false)} onSet={d => { setOpen(false); set(d) }} />}
+  </>
+}
+
+function DateDialog({ value, onClose, onSet }: { value: string; onClose: () => void; onSet: (d: string) => void }) {
+  const [day, setDay] = useState(value)
+  const [month, setMonth] = useState(value)
+  const [years, setYears] = useState(false)
+  const today = key(new Date())
+  const yearsRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (years) yearsRef.current?.querySelector('.on')?.scrollIntoView({ block: 'center' }) }, [years])
+  const toYear = (y: number) => { const d = `${y}${month.slice(4)}`; setMonth(d); setDay(`${y}${day.slice(4, 8)}${Math.min(+day.slice(8), new Date(y, +day.slice(5, 7), 0).getDate()).toString().padStart(2, '0')}`); setYears(false) }
+  return (
+    <Modal onClose={onClose}>
+      <div className="cal-datepick">
+        <p className="muted">Date</p>
+        <h3>{fmt(day, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</h3>
+        <div className="cal-mini">
+          <div className="cal-mini-head"><button className="text-button" onClick={() => setYears(y => !y)}>{fmt(month, { month: 'long', year: 'numeric' })} ▾</button><span />
+            {!years && <><button className="round small" title="Previous month" onClick={() => setMonth(x => addMonths(x, -1))}><Icon name="back" size={18} /></button>
+              <button className="round small" title="Next month" onClick={() => setMonth(x => addMonths(x, 1))}><Icon name="forward" size={18} /></button></>}</div>
+          {years
+            ? <div className="cal-years" ref={yearsRef}>{Array.from({ length: 201 }, (_, i) => 1900 + i).map(y => <button key={y} className={y === +month.slice(0, 4) ? 'on' : ''} onClick={() => toYear(y)}>{y}</button>)}</div>
+            : <div className="cal-mini-grid">
+              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i} className="muted">{d}</span>)}
+              {monthCells(month).map(d => <button key={d} className={`${d === day ? 'on' : ''} ${d === today ? 'today' : ''} ${d.slice(5, 7) !== month.slice(5, 7) ? 'out' : ''}`} onClick={() => { setDay(d); setMonth(d) }} onDoubleClick={() => onSet(d)}>{+d.slice(8)}</button>)}
+            </div>}
+        </div>
+        <div className="dialog-actions"><button className="text-button" onClick={() => { setDay(today); setMonth(today); setYears(false) }}>Today</button><span style={{ flex: 1 }} />
+          <button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" onClick={() => onSet(day)}>OK</button></div>
+      </div>
+    </Modal>
+  )
 }

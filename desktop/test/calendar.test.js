@@ -137,3 +137,20 @@ test('calendar: a school timetable is one weekly event, its holidays skipped; a 
     assert.equal(o.startDate, '2027-03-12'); assert.equal(o.birthYear, 1980)
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
+
+test('calendar: a repeat moved to another time keeps its cancelled and changed days (the user\'s ΤΠΕ, 18 Oct)', () => {
+  const { tmp, root, cal } = setup()
+  try {
+    const rel = 'Work/staff-meeting.ics'
+    const all = () => staff(cal, at('2026-10-01T00:00'), new Date('2026-12-01T00:00+02:00').getTime()).map(o => local(o.start))
+    cal.save(rel, 'Work', { title: 'Staff meeting', place: '', notes: '', allDay: false, start: { date: '2026-10-06', time: '11:50' }, end: { date: '2026-10-06', time: '12:25' } })
+    assert.deepEqual(all(), ['2026-10-06T11:50', '2026-10-13T11:50', '2026-10-27T12:00', '2026-11-03T11:50', '2026-11-10T11:50'])
+    const text = fs.readFileSync(path.join(root, rel), 'utf8')
+    assert.match(text, /EXDATE;TZID=Europe\/Athens:20261020T115000/)
+    assert.match(text, /RECURRENCE-ID;TZID=Europe\/Athens:20261027T115000/)
+    cal.save(rel, 'Work', { title: 'Staff meeting', place: '', notes: '', allDay: false, start: { date: '2026-10-07', time: '11:45' }, end: { date: '2026-10-07', time: '12:20' } })
+    assert.match(fs.readFileSync(path.join(root, rel), 'utf8'), /EXDATE;TZID=Europe\/Athens:20261021T114500/)
+    cal.save(rel, 'Work', { title: 'Staff meeting', place: '', notes: '', allDay: true, start: { date: '2026-10-07' }, end: { date: '2026-10-07' } })
+    assert.match(fs.readFileSync(path.join(root, rel), 'utf8'), /EXDATE;VALUE=DATE:20261021/)
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})

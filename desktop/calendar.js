@@ -176,6 +176,30 @@ function eventOf(c) {
   }
 }
 
+/**
+ * A repeat's start moved ([was] → [now], e.g. 11:50 → 11:45): its EXDATEs and its changed days' RECURRENCE-IDs move
+ * by as much, or they match no day and a cancelled day comes back (the user's timetable, 18 Oct). The phone's the same.
+ */
+function shiftRepeat(cal, m, was, now) {
+  const sod = t => t.h * 3600 + t.mi * 60 + t.s
+  const days = daysBetween(was.date, now.date), secs = sod(now) - sod(was), mixed = was.allDay !== now.allDay
+  if (!days && !secs && !mixed) return
+  const redo = p => {
+    const out = p.value.split(',').map(x => {
+      const t = timeOf({ ...p, value: x })
+      let sec = mixed ? sod(now) : sod(t) + secs // all day ↔ a time: the day kept, at the new start's time
+      const date = addDays(t.date, days + Math.floor(sec / 86400)), tz = mixed ? now.tz : t.tz
+      sec = ((sec % 86400) + 86400) % 86400
+      const [y, mo, d] = date.split('-').map(Number)
+      return timeValue({ date, tz, ms: instant(y, mo, d, Math.floor(sec / 3600), Math.floor(sec / 60) % 60, sec % 60, tz) }, now.allDay)
+    })
+    p.value = out.map(x => x[0]).join(',')
+    p.params = (p.params || '').replace(/;(TZID|VALUE)=("[^"]*"|[^;]*)/gi, '') + out[0][1]
+  }
+  props(m, 'EXDATE').forEach(redo)
+  for (const v of subs(cal, 'VEVENT')) if (v !== m && prop(v, 'RECURRENCE-ID')) redo(prop(v, 'RECURRENCE-ID'))
+}
+
 function readFile(file) {
   let text = ''
   try { text = fs.readFileSync(file, 'utf8') } catch {}
@@ -502,7 +526,9 @@ class Calendar {
     this.rewrite(file, cal => {
       const v = subs(cal, 'VEVENT').find(x => !prop(x, 'RECURRENCE-ID'))
       const uid = prop(v, 'UID')?.value || ev.uid
+      const was = prop(v, 'DTSTART') && timeOf(prop(v, 'DTSTART'))
       this.fill(v, { ...ev, uid, rrule: ev.rrule === undefined ? prop(v, 'RRULE')?.value : ev.rrule }, now, false)
+      if (was && !ev.exdates) shiftRepeat(cal, v, was, timeOf(prop(v, 'DTSTART')))
     })
     return calendar && path.dirname(rel) !== calendar ? this.move(rel, calendar) : rel
   }
