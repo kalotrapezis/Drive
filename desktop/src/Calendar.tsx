@@ -838,28 +838,30 @@ function DateField({ value, set }: { value: string; set: (d: string) => void }) 
 function DateDialog({ value, onClose, onSet }: { value: string; onClose: () => void; onSet: (d: string) => void }) {
   const [day, setDay] = useState(value)
   const [month, setMonth] = useState(value)
-  const [years, setYears] = useState(false)
+  const [decade, setDecade] = useState<number | null>(null) // the year list: one decade a page (the user, 18 Oct)
+  const years = decade != null
   const today = key(new Date())
-  const yearsRef = useRef<HTMLDivElement>(null)
-  useEffect(() => { if (years) yearsRef.current?.querySelector('.on')?.scrollIntoView({ block: 'center' }) }, [years])
-  const toYear = (y: number) => { const d = `${y}${month.slice(4)}`; setMonth(d); setDay(`${y}${day.slice(4, 8)}${Math.min(+day.slice(8), new Date(y, +day.slice(5, 7), 0).getDate()).toString().padStart(2, '0')}`); setYears(false) }
+  const toYear = (y: number) => { const d = `${y}${month.slice(4)}`; setMonth(d); setDay(`${y}${day.slice(4, 8)}${Math.min(+day.slice(8), new Date(y, +day.slice(5, 7), 0).getDate()).toString().padStart(2, '0')}`); setDecade(null) }
   return (
     <Modal onClose={onClose}>
       <div className="cal-datepick">
         <p className="muted">Date</p>
         <h3>{fmt(day, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</h3>
         <div className="cal-mini">
-          <div className="cal-mini-head"><button className="text-button" onClick={() => setYears(y => !y)}>{fmt(month, { month: 'long', year: 'numeric' })} ▾</button><span />
-            {!years && <><button className="round small" title="Previous month" onClick={() => setMonth(x => addMonths(x, -1))}><Icon name="back" size={18} /></button>
-              <button className="round small" title="Next month" onClick={() => setMonth(x => addMonths(x, 1))}><Icon name="forward" size={18} /></button></>}</div>
+          <div className="cal-mini-head"><button className="text-button" onClick={() => setDecade(years ? null : Math.floor(+month.slice(0, 4) / 10) * 10)}>{years ? `${decade}–${decade + 9}` : fmt(month, { month: 'long', year: 'numeric' })} ▾</button><span />
+            {years
+              ? <><button className="round small" title="Previous ten years" onClick={() => setDecade(d => d! - 10)}><Icon name="back" size={18} /></button>
+                <button className="round small" title="Next ten years" onClick={() => setDecade(d => d! + 10)}><Icon name="forward" size={18} /></button></>
+              : <><button className="round small" title="Previous month" onClick={() => setMonth(x => addMonths(x, -1))}><Icon name="back" size={18} /></button>
+                <button className="round small" title="Next month" onClick={() => setMonth(x => addMonths(x, 1))}><Icon name="forward" size={18} /></button></>}</div>
           {years
-            ? <div className="cal-years" ref={yearsRef}>{Array.from({ length: 201 }, (_, i) => 1900 + i).map(y => <button key={y} className={y === +month.slice(0, 4) ? 'on' : ''} onClick={() => toYear(y)}>{y}</button>)}</div>
+            ? <div className="cal-years">{Array.from({ length: 10 }, (_, i) => decade! + i).map(y => <button key={y} title={String(y)} className={`${y === +month.slice(0, 4) ? 'on' : ''} ${y === +today.slice(0, 4) ? 'today' : ''}`} onClick={() => toYear(y)}>{pad(y % 100)}</button>)}</div>
             : <div className="cal-mini-grid">
               {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i} className="muted">{d}</span>)}
               {monthCells(month).map(d => <button key={d} className={`${d === day ? 'on' : ''} ${d === today ? 'today' : ''} ${d.slice(5, 7) !== month.slice(5, 7) ? 'out' : ''}`} onClick={() => { setDay(d); setMonth(d) }} onDoubleClick={() => onSet(d)}>{+d.slice(8)}</button>)}
             </div>}
         </div>
-        <div className="dialog-actions"><button className="text-button" onClick={() => { setDay(today); setMonth(today); setYears(false) }}>Today</button><span style={{ flex: 1 }} />
+        <div className="dialog-actions"><button className="text-button" onClick={() => { setDay(today); setMonth(today); setDecade(null) }}>Today</button><span style={{ flex: 1 }} />
           <button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" onClick={() => onSet(day)}>OK</button></div>
       </div>
     </Modal>

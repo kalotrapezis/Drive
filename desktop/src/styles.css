@@ -763,8 +763,9 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .cal-clock text.on { fill: #fff; }
 .cal-datepick .cal-mini-head .text-button { padding: 6px 10px; }
 .cal-datepick .cal-mini-grid button { width: 36px; height: 36px; font-size: 13px; }
-.cal-years { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; height: 252px; overflow-y: auto; }
-.cal-years button { padding: 8px 0; border-radius: 999px; }
+.cal-years { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; padding: 12px 0; }
+.cal-years button { height: 48px; border-radius: 999px; font-size: 16px; }
+.cal-years button.today { box-shadow: inset 0 0 0 1.5px var(--cal-pink); }
 .cal-years button:hover { background: var(--hover); }
 .cal-years button.on { background: var(--cal-pink); color: #fff; }
 .cal-alarms { display: flex; flex-direction: column; gap: 4px; }
