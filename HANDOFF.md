@@ -1,3 +1,13 @@
+> **Calendar (18 Oct 2026, branch `calendar`, worktree Drive-worktrees/calendar; not merged, not pushed).** The plan is
+> Drive-Android's Plan.md § Calendar. The desktop part: `desktop/calendar.js` reads and writes `~/Tetra/Files/Calendar`
+> itself — a folder per calendar (`color` file), one `.ics` per event — on every look, with **no database copy**, so a
+> change made by editing the files (the `tetra-calendar` skill, Claude, a person) shows at once (fs.watch →
+> `calendar-changed`) and reaches the phone and tablet through ordinary Files sync. Reminders: one timer in main,
+> `notify()`; "Start Tetra when I log in" writes `~/.config/autostart/tetra.desktop` (`--hidden`: tray only).
+> `src/Calendar.tsx`: Notes' island (Day, Week, Month, Agenda, New event, Calendars) and drawer, no side panel.
+> Tests: `test/calendar.test.js` (the phone's fixtures and answers). `desktop/node_modules` in the worktree is a symlink
+> to Drive/desktop's — don't commit it. Still to do: merge into bidirectional-sync, run on the real pair.
+
 # Handoff — end of 24 September 2026
 
 Read `SYNC_PLAN.md` for *why* anything is the way it is. This is the first ten
