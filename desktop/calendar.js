@@ -248,6 +248,12 @@ function instants(e, from, to) {
   return out
 }
 
+/** A birthday's year, when it was given (X-TETRA-BIRTH-YEAR on the event): the age shows. */
+function birthYear(f) {
+  const m = f.comps.flatMap(c => c.name === 'VEVENT' ? [c] : subs(c, 'VEVENT')).find(x => !prop(x, 'RECURRENCE-ID'))
+  return +(m && prop(m, 'X-TETRA-BIRTH-YEAR')?.value) || null
+}
+
 /** Each time a file's event happens in [from, to): { e (the master or a changed day), start, end } in ms. */
 function occurrencesOf(f, from, to) {
   const out = []
@@ -376,6 +382,7 @@ class Calendar {
         rrule: m?.rrule ?? null, startDate: o.e.allDay ? timeAt(o.start, o.e.start.tz).date : null,
         endDate: o.e.allDay ? timeAt(o.end, o.e.start.tz).date : null,
         alarms: o.e.alarms, zone: o.e.start.tz,
+        birthYear: birthYear(f),
         masterStart: m ? m.start.ms : null, masterDate: m ? m.start.date : null, dayDate: timeAt(o.e.recurrenceId ?? o.start, (m || o.e).start.tz).date,
       })
     }
@@ -430,6 +437,12 @@ class Calendar {
     setProp(v, 'LOCATION', ev.place ? escape(ev.place) : null)
     setProp(v, 'DESCRIPTION', ev.notes ? escape(ev.notes) : null)
     setProp(v, 'RRULE', ev.rrule || null)
+    if (ev.exdates) { // a schedule's skipped days: { date, time }, in the event's clock
+      v.items = v.items.filter(i => i.items || i.name !== 'EXDATE')
+      const sub = v.items.findIndex(i => i.items)
+      v.items.splice(sub < 0 ? v.items.length : sub, 0, ...ev.exdates.map(x => { const [xv, xp] = timeValue(Calendar.when(x, ev.allDay), ev.allDay); return { name: 'EXDATE', params: xp, value: xv } }))
+    }
+    for (const [k, val] of Object.entries(ev.extra || {})) setProp(v, k, String(val)) // e.g. a birthday's X-TETRA-BIRTH-YEAR
     if (ev.alarms) {
       v.items = v.items.filter(i => !(i.items && i.name === 'VALARM'))
       for (const a of ev.alarms) {
@@ -439,6 +452,27 @@ class Calendar {
       }
     }
   }
+
+  /**
+   * A weekly schedule (a school timetable) as one repeating event (the user, 18 Oct): its first day the first chosen
+   * weekday from [from], until [to] inclusive (UTC, as RFC 5545 wants with a zone), [skip]'s school days as EXDATEs.
+   * The phone's scheduleEvent, the same.
+   */
+  static schedule({ title, place = '', days, at, until, from, to, skip = [], tz = LOCAL_ZONE }) {
+    let first = from
+    for (let i = 0; i < 7 && !days.includes(DAYS[weekday(first)]); i++) first = addDays(first, 1)
+    const [y, mo, d] = to.split('-').map(Number)
+    const untilUtc = stampNow(instant(y, mo, d, 23, 59, 59, tz))
+    const end = until > at ? until : `${String(Math.min(+at.slice(0, 2) + 1, 23)).padStart(2, '0')}${at.slice(2)}`
+    return {
+      title, place, notes: '', allDay: false, start: { date: first, time: at }, end: { date: first, time: end },
+      rrule: `FREQ=WEEKLY;BYDAY=${DAYS.filter(c => days.includes(c)).join(',')};UNTIL=${untilUtc}`,
+      exdates: [...new Set(skip)].sort().filter(x => x >= first && x <= to && days.includes(DAYS[weekday(x)])).map(date => ({ date, time: at })),
+      alarms: [],
+    }
+  }
+
+  scheduleEvent(args) { return Calendar.schedule(args) }
 
   /** A new event's name: its title and eight letters of its UID's hash (Google's UIDs of a series begin alike). */
   static slug(title, uid) {

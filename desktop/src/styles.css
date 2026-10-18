@@ -657,7 +657,8 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .system-folders .tick { position: absolute; top: -4px; right: -8px; display: flex; border-radius: 50%; background: var(--island); }
 
 /* Calendar (Drive-Android Plan.md § Calendar): Google Calendar on the web — the side panel, the month, week and day. */
-.cal { height: 100%; display: flex; flex-direction: column; position: relative; --cal-pink: #F41879; --cal-line: #ffffff1f; }
+:root { --cal-pink: #F41879; } /* the dialogs sit outside .cal */
+.cal { height: 100%; display: flex; flex-direction: column; position: relative; --cal-line: #ffffff1f; }
 @media (prefers-color-scheme: light) { .cal { --cal-line: #0000001f; } }
 .outline-button { padding: 8px 20px; border-radius: 999px; border: 1px solid var(--cal-line); font-weight: 600; }
 .outline-button:hover { background: var(--hover); }
@@ -765,3 +766,23 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .cal-topbar { position: static; margin: 0; padding: 12px 12px 8px; background: none; }
 .cal-nav { gap: 2px; padding: 4px 6px; }
 .cal-nav .round.flat { margin: 0; }
+
+/* wide: the small month and the calendars beside the grid; narrow: the small calendar at the bottom (18 Oct) */
+.cal-body { flex: 1; display: flex; min-height: 0; }
+.cal-side { width: 260px; flex: none; overflow-y: auto; overflow-x: hidden; padding: 0 12px 90px; display: flex; flex-direction: column; gap: 4px; }
+.cal-side h4 { display: flex; align-items: center; gap: 8px; margin: 14px 4px 4px; font-size: 14px; }
+.cal.narrow .cal-main { padding-bottom: 0; }
+.cal.narrow .island-item:not(.on) span { display: none; }
+.cal-strip { padding: 0 12px 84px; border-top: 1px solid var(--cal-line); }
+.cal-strip .cal-mini-grid button { width: 34px; height: 34px; }
+.cal-strip-handle { display: block; margin: 0 auto; width: 80px; height: 20px; cursor: ns-resize; touch-action: none; }
+.cal-strip-handle span { display: block; width: 40px; height: 5px; margin: 0 auto; border-radius: 3px; background: var(--muted); opacity: .7; }
+.cal-strip-month { font-weight: 600; font-size: 14px; margin: 0 6px 4px; }
+.cal-year { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px 28px; padding: 8px 8px 90px; align-content: start; }
+.cal-year-name { font-weight: 600; margin: 0 6px 4px; }
+.cal-year-name.today { color: var(--cal-pink); }
+.cal-kinds { display: flex; gap: 4px; padding: 6px; margin-bottom: 8px; box-shadow: 0 8px 30px #0006; }
+.cal-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.cal-chips button { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--cal-pink); font-size: 13px; }
+.cal-chips button.on { background: var(--cal-pink); color: #fff; }
+.cal-side .cal-two { flex-wrap: wrap; }

@@ -121,3 +121,19 @@ test('calendar: two events of one title whose UIDs begin alike get two files (th
     assert.deepEqual(cal.importInto(inc, 'Google'), { added: 0, updated: 2 })
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
+
+test('calendar: a school timetable is one weekly event, its holidays skipped; a birthday keeps its year', () => {
+  const { tmp, cal } = setup()
+  try {
+    const ev = Calendar.schedule({ title: 'Lessons', days: ['MO', 'TU', 'WE', 'TH', 'FR'], at: '08:15', until: '13:30', from: '2026-09-01', to: '2027-06-26', skip: ['2026-10-28', '2026-12-25', '2026-12-26'] })
+    assert.equal(ev.rrule, 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20270626T205959Z')
+    assert.equal(ev.start.date, '2026-09-01')
+    assert.equal(ev.exdates.length, 2) // the Saturday is no school day
+    const rel = cal.save(null, 'Work', ev)
+    const days = cal.occurrences(at('2026-10-26T00:00'), at('2026-10-31T00:00')).filter(o => o.file === rel).map(o => local(o.start))
+    assert.deepEqual(days, ['2026-10-26T08:15', '2026-10-27T08:15', '2026-10-29T08:15', '2026-10-30T08:15'])
+    const b = cal.save(null, 'Work', { title: "Maria's birthday", allDay: true, start: { date: '1980-03-12' }, end: { date: '1980-03-12' }, rrule: 'FREQ=YEARLY', alarms: [], extra: { 'X-TETRA-BIRTH-YEAR': 1980 } })
+    const o = cal.occurrences(new Date('2027-03-01T00:00+02:00').getTime(), new Date('2027-04-01T00:00+03:00').getTime()).find(x => x.file === b)
+    assert.equal(o.startDate, '2027-03-12'); assert.equal(o.birthYear, 1980)
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})

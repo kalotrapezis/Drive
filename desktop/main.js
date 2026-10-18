@@ -53,7 +53,7 @@ let notes, db, files, people, documents, folders, vault, sync, purgatory, win, s
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage', 'chosenFolders', 'chooseSystemFolders']
 const NOTE_CALLS = ['list', 'create', 'save', 'snapshot', 'history', 'restoreVersion', 'remove']
-const CALENDAR_CALLS = ['calendars', 'occurrences', 'save', 'saveDay', 'skipDay', 'endBefore', 'trash', 'move', 'keep', 'newCalendar', 'setCalendar', 'deleteCalendar']
+const CALENDAR_CALLS = ['calendars', 'occurrences', 'save', 'saveDay', 'skipDay', 'endBefore', 'trash', 'move', 'keep', 'newCalendar', 'setCalendar', 'deleteCalendar', 'scheduleEvent']
 let calendar = null, reminderTimer = null, calendarNudge = null, calendarIncoming = []
 
 // The Calendar's reminders (Drive-Android Plan.md § Calendar): one timer for the next, the plan made again from the files
@@ -583,7 +583,7 @@ app.whenReady().then(() => {
   ipcMain.handle('calendar:call', (_, method, ...args) => {
     if (!CALENDAR_CALLS.includes(method)) throw new Error('Unknown Calendar action.')
     const result = calendar[method](...args)
-    if (!['calendars', 'occurrences'].includes(method)) {
+    if (!['calendars', 'occurrences', 'scheduleEvent'].includes(method)) {
       planReminders()
       clearTimeout(calendarNudge)
       calendarNudge = setTimeout(() => sync.nudge().catch(() => {}), 2500) // the phone hears of it soon
