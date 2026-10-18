@@ -192,8 +192,7 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
       if (!o.repeating || !scope) { await call('save', o.file, to, d); return }
       if (scope === 'one') return call('saveDay', o.file, o.day, d)
       if (scope === 'following' && o.masterStart != null && o.day > o.masterStart) {
-        await call('endBefore', o.file, o.day)
-        return call('save', null, to, { ...d, rrule: d.rrule?.split(';').filter(p => !/^COUNT=/i.test(p)).join(';') || null })
+        return call('split', o.file, o.day, to, { ...d, rrule: d.rrule?.split(';').filter(p => !/^COUNT=/i.test(p)).join(';') || null })
       }
       // all: the change of this day moved onto the series' own start
       const startDate = addDays(o.masterDate ?? d.start.date, between(o.dayDate, d.start.date))

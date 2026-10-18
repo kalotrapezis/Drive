@@ -67,6 +67,20 @@ test('calendar: an edit keeps every other line; one day moved then deleted; this
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
 
+test('calendar: this and following moved to another time keeps the cancelled and changed days after the split', () => {
+  const { tmp, root, cal } = setup()
+  try {
+    const all = () => staff(cal, at('2026-10-01T00:00'), at('2026-11-15T00:00')).map(o => local(o.start))
+    const rel = cal.split('Work/staff-meeting.ics', at('2026-10-13T10:00'), 'Work', { uid: 'staff-split', title: 'Staff meeting',
+      allDay: false, rrule: 'FREQ=WEEKLY;BYDAY=TU', start: { date: '2026-10-13', time: '11:00' }, end: { date: '2026-10-13', time: '12:00' } })
+    assert.deepEqual(all(), ['2026-10-06T10:00', '2026-10-13T11:00', '2026-10-27T12:00', '2026-11-03T11:00', '2026-11-10T11:00'])
+    const text = fs.readFileSync(path.join(root, rel), 'utf8')
+    assert.match(text, /EXDATE;TZID=Europe\/Athens:20261020T110000/)
+    assert.match(text, /RECURRENCE-ID;TZID=Europe\/Athens:20261027T110000/)
+    assert.doesNotMatch(fs.readFileSync(path.join(root, 'Work/staff-meeting.ics'), 'utf8'), /RECURRENCE-ID/)
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})
+
 test('calendar: a new event written and read back; a conflict shown once; Trash, never deleted', () => {
   const { tmp, root, cal } = setup()
   try {

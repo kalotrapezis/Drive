@@ -570,6 +570,27 @@ class Calendar {
     })
   }
 
+  /**
+   * "This and following" changed from [day]: [rel]'s repeat ends before it, and a new event [ev] in [calendar] takes its
+   * cancelled and changed days from [day] on, moved by as much as [day] moved, or they come back. The phone's the same.
+   */
+  split(rel, day, calendar, ev, now = Date.now()) {
+    const f = readFile(this.file(rel)), cal = f.comps.find(c => c.name === 'VCALENDAR')
+    const m = cal && subs(cal, 'VEVENT').find(x => !prop(x, 'RECURRENCE-ID'))
+    const exdates = (m ? props(m, 'EXDATE') : []).map(p => ({ ...p, value: p.value.split(',').filter(x => timeOf({ ...p, value: x }).ms >= day).join(',') })).filter(p => p.value)
+    const days = cal ? subs(cal, 'VEVENT').filter(x => prop(x, 'RECURRENCE-ID') && timeOf(prop(x, 'RECURRENCE-ID')).ms >= day) : []
+    this.endBefore(rel, day, now)
+    const out = this.save(null, calendar, ev, now)
+    this.rewrite(this.file(out), c => {
+      const v = subs(c, 'VEVENT')[0], uid = prop(v, 'UID').value
+      const sub = v.items.findIndex(i => i.items)
+      v.items.splice(sub < 0 ? v.items.length : sub, 0, ...exdates)
+      for (const d of days) { setProp(d, 'UID', uid); c.items.push(d) }
+      shiftRepeat(c, v, { ...timeAt(day, f.master.start.tz), allDay: f.master.allDay }, timeOf(prop(v, 'DTSTART')))
+    })
+    return out
+  }
+
   /** Into the Trash of Files (a name there already: "name (2)"); a calendar's folder too. */
   trash(rel) {
     const from = path.resolve(this.root, String(rel))
