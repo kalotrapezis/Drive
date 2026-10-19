@@ -1,14 +1,16 @@
-// The tetra-calendar skill's one source is Drive-Android's skills/tetra-calendar; this copies it here before a build
-// (npm start / dist), so Calendar › Share with Claude hands over the skill matching the app. No source found: the copy
-// already committed in desktop/skills stays.
+// The tetra-calendar and tetra-timer skills' one source is Drive-Android's skills/; this copies them here before a build
+// (npm start / dist), so Share with Claude hands over the skills matching the app. No source found: the copy already
+// committed in desktop/skills stays.
 const fs = require('node:fs')
 const path = require('node:path')
-const to = path.join(__dirname, '..', 'skills', 'tetra-calendar')
 const coding = path.resolve(__dirname, '..', '..', '..') // …/Coding (the Drive repo or a worktree of it sits here)
-const from = [process.env.TETRA_SKILL_SRC, path.join(coding, 'Drive-Android', 'skills', 'tetra-calendar'),
-  path.join(coding, '..', 'Drive-Android', 'skills', 'tetra-calendar'), path.join(coding, '..', 'Drive-Android-worktrees', 'calendar', 'skills', 'tetra-calendar')]
-  .filter(Boolean).find(d => fs.existsSync(path.join(d, 'SKILL.md')))
-if (!from) { console.warn('[copy-skill] Drive-Android/skills/tetra-calendar not found; keeping desktop/skills/tetra-calendar'); process.exit(0) }
-fs.mkdirSync(to, { recursive: true })
-for (const f of ['SKILL.md', 'tetra_calendar.py']) fs.copyFileSync(path.join(from, f), path.join(to, f))
-console.log(`[copy-skill] ${from} → ${to}`)
+for (const name of ['tetra-calendar', 'tetra-timer']) {
+  const to = path.join(__dirname, '..', 'skills', name)
+  const from = [process.env.TETRA_SKILL_SRC && path.join(process.env.TETRA_SKILL_SRC, '..', name), path.join(coding, 'Drive-Android', 'skills', name),
+    path.join(coding, '..', 'Drive-Android', 'skills', name)]
+    .filter(Boolean).find(d => fs.existsSync(path.join(d, 'SKILL.md')))
+  if (!from) { console.warn(`[copy-skill] Drive-Android/skills/${name} not found; keeping desktop/skills/${name}`); continue }
+  fs.mkdirSync(to, { recursive: true })
+  for (const f of fs.readdirSync(from).filter(n => !n.startsWith('.') && fs.statSync(path.join(from, n)).isFile())) fs.copyFileSync(path.join(from, f), path.join(to, f))
+  console.log(`[copy-skill] ${from} → ${to}`)
+}

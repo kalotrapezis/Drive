@@ -69,7 +69,23 @@ export function TimerPage({ say }: { say: (text: string) => void }) {
   // the user's sketch, 18 Oct: the clock, HH and MM under it, Pause and Stop under those; the timers' cards beside, no island
   return (
     <div className="timer">
-      <header className="topbar"><div className="island title-island"><Icon name="timer" /><h1>Timer</h1></div></header>
+      <header className="topbar">
+        <div className="island title-island"><Icon name="timer" /><h1>Timer</h1></div>
+        {/* the user, 19 Oct: its own settings at the top right, as the Calendar's */}
+        <div className="tools">
+          <details className="menu">
+            <summary className="round" title="Timer settings"><Icon name="tune" /></summary>
+            <div className="island menu-body cal-settings">
+              <h4 className="cal-share-head">Share with Claude</h4>
+              <p className="muted">Lets Claude start, pause and stop your timers by editing their files.</p>
+              <div className="cal-two">
+                <button className="text-button" onClick={() => window.drive.skillSave('tetra-timer').then(p => p && say('Saved to ' + p), e => say('Not saved: ' + errorText(e)))}>Save as…</button>
+                <button className="text-button" onClick={() => window.drive.skillInstall('tetra-timer').then(p => say('Installed for Claude Code in ' + p), e => say('Not installed: ' + errorText(e)))}>Copy to ~/.claude/skills</button>
+              </div>
+            </div>
+          </details>
+        </div>
+      </header>
       <div className="timer-body">
         <section className="timer-main">
           <div className="cal-clock timer-clock">

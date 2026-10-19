@@ -658,19 +658,22 @@ app.whenReady().then(() => {
     fs.writeFileSync(r.filePath, all ? calendar.exportAll() : calendar.exportCalendar(id))
     return r.filePath
   })
-  // Share with Claude (asked 18 Oct): the tetra-calendar skill the app was built with (desktop/skills, copied from Drive-Android's)
-  const SKILL = path.join(__dirname, 'skills', 'tetra-calendar')
-  const skillFiles = () => fs.readdirSync(SKILL).filter(n => !n.startsWith('.') && fs.statSync(path.join(SKILL, n)).isFile())
-  ipcMain.handle('calendar:skillSave', async () => {
-    const r = await dialog.showSaveDialog(win, { title: 'Save the Calendar skill for Claude', defaultPath: path.join(app.getPath('downloads'), 'tetra-calendar.zip') })
+  // Share with Claude (asked 18 Oct; the Timer's 19 Oct): a skill the app was built with (desktop/skills, copied from Drive-Android's)
+  const SKILLS = ['tetra-calendar', 'tetra-timer']
+  const skillDir = name => { if (!SKILLS.includes(name)) throw new Error('Unknown skill.'); return path.join(__dirname, 'skills', name) }
+  const skillFiles = name => fs.readdirSync(skillDir(name)).filter(n => !n.startsWith('.') && fs.statSync(path.join(skillDir(name), n)).isFile())
+  ipcMain.handle('skill:save', async (_, name) => {
+    skillDir(name)
+    const r = await dialog.showSaveDialog(win, { title: 'Save the skill for Claude', defaultPath: path.join(app.getPath('downloads'), `${name}.zip`) })
     if (r.canceled || !r.filePath) return null
-    fs.writeFileSync(r.filePath, require('./calendar').zip(skillFiles().map(n => ({ name: `tetra-calendar/${n}`, data: fs.readFileSync(path.join(SKILL, n)) }))))
+    fs.writeFileSync(r.filePath, require('./calendar').zip(skillFiles(name).map(n => ({ name: `${name}/${n}`, data: fs.readFileSync(path.join(skillDir(name), n)) }))))
     return r.filePath
   })
-  ipcMain.handle('calendar:skillInstall', () => { // for Claude Code on this computer
-    const to = path.join(os.homedir(), '.claude', 'skills', 'tetra-calendar')
+  ipcMain.handle('skill:install', (_, name) => { // for Claude Code on this computer
+    const to = path.join(os.homedir(), '.claude', 'skills', name)
+    const files = skillFiles(name)
     fs.mkdirSync(to, { recursive: true })
-    for (const n of skillFiles()) fs.copyFileSync(path.join(SKILL, n), path.join(to, n))
+    for (const n of files) fs.copyFileSync(path.join(skillDir(name), n), path.join(to, n))
     return to
   })
   ipcMain.handle('calendar:settings', () => ({ reminders: setting('calendarReminders') !== 'off', autostart: fs.existsSync(AUTOSTART) }))

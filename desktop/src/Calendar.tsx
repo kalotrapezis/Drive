@@ -293,8 +293,8 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
     <h4 className="cal-share-head">Share with Claude</h4>
     <p className="muted">Lets Claude read and change this calendar by editing its files.</p>
     <div className="cal-two">
-      <button className="text-button" onClick={() => window.drive.calendarSkillSave().then(p => p && say('Saved to ' + p), e => say('Not saved: ' + errorText(e)))}>Save as…</button>
-      <button className="text-button" onClick={() => window.drive.calendarSkillInstall().then(p => say('Installed for Claude Code in ' + p), e => say('Not installed: ' + errorText(e)))}>Copy to ~/.claude/skills</button>
+      <button className="text-button" onClick={() => window.drive.skillSave('tetra-calendar').then(p => p && say('Saved to ' + p), e => say('Not saved: ' + errorText(e)))}>Save as…</button>
+      <button className="text-button" onClick={() => window.drive.skillInstall('tetra-calendar').then(p => say('Installed for Claude Code in ' + p), e => say('Not installed: ' + errorText(e)))}>Copy to ~/.claude/skills</button>
     </div>
   </>
   const nav = <div className="island title-island cal-nav">
