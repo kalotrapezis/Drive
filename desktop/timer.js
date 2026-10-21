@@ -118,6 +118,33 @@ class Timers {
     return true
   }
 
+  /**
+   * The waste (the user, 21 Oct: "the timer app creates a lot of duplicat files"): sync's "x (2).json" copies from before each
+   * device wrote only its own file. Every timer's copies go; when the files that stay would not hold the timer as it is (its
+   * newest state, pin and all, was in a copy), this computer first writes it into its own file. Sync never deletes, so the
+   * phone does the same (TimerFiles.clean). Answers how many went.
+   */
+  clean() {
+    let names = []
+    try { names = fs.readdirSync(this.root) } catch { return 0 }
+    const all = names.filter(n => !n.startsWith('.') && n.toLowerCase().endsWith('.json')).map(n => {
+      const f = path.join(this.root, n)
+      try { return fs.statSync(f).isFile() ? parse(fs.readFileSync(f, 'utf8'), f) : null } catch { return null }
+    }).filter(Boolean)
+    const copy = r => / \(\d+\)\.json$/i.test(path.basename(r.file))
+    let removed = 0
+    for (const id of new Set(all.map(r => r.id))) {
+      const group = all.filter(r => r.id === id)
+      const [w] = winners(group)
+      const copies = group.filter(copy)
+      if (!copies.length) continue
+      const [rest] = winners(group.filter(r => !copy(r)))
+      if (!rest || rest.rev < w.rev || rest.state !== w.state || rest.pinned !== w.pinned || rest.ends !== w.ends || rest.left !== w.left) this.write({ ...w, by: this.by })
+      for (const r of copies) { try { fs.unlinkSync(r.file); removed++ } catch {} }
+    }
+    return removed
+  }
+
   /** When the next running timer ends (for the alarm), or null. */
   nextEnd(now = Date.now()) {
     const ends = this.read().filter(r => r.state === RUNNING && r.ends != null && r.ends > now).map(r => r.ends)

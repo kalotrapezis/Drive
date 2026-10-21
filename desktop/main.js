@@ -321,6 +321,8 @@ app.whenReady().then(() => {
   calendar = new Calendar(path.join(FILES_ROOT, 'Calendar'), path.join(FILES_ROOT, 'Trash'))
   try { fs.mkdirSync(calendar.root, { recursive: true }) } catch {}
   timers = new timer.Timers(path.join(FILES_ROOT, 'Timer'), os.hostname() || 'Computer')
+  // sync's old copies of timers that are over (timer.js clean; the phone clears its own the same way)
+  try { const n = timers.clean(); if (n) console.log(`Timer: cleared ${n} old copies`) } catch {}
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
