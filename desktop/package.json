@@ -1,6 +1,6 @@
 {
   "name": "local-drive-desktop",
-  "version": "0.6.0-beta.2",
+  "version": "0.6.0-beta.3",
   "description": "Tetra desktop app",
   "main": "main.js",
   "scripts": {
@@ -77,8 +77,8 @@
       "!node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_cuda.so",
       "!node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_tensorrt.so",
       "!node_modules/tesseract.js-core/*.wasm.js",
-      "!node_modules/tesseract.js-core/tesseract-core.{js,wasm}",
-      "!node_modules/tesseract.js-core/tesseract-core-simd.{js,wasm}"
+      "!node_modules/tesseract.js-core/tesseract-core-lstm.{js,wasm}",
+      "!node_modules/tesseract.js-core/tesseract-core-simd-lstm.{js,wasm}"
     ],
     "asarUnpack": [
       "node_modules/sharp/**",

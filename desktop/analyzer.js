@@ -69,6 +69,8 @@ async function run({ rescan, wantFaces, wantDocs }) {
 // The viewer's Text in the photo and the editor's Hide eyes / Hide text (phone: Ocr, PhotoEditor's findEyes), asked by the
 // window and answered here, where sharp and the models are safe to run.
 let reader = null // tesseract.js with the phone's own models (tessdata_fast, Greek + English), made the first time it is asked
+// tesseract.js 6 on Node always loads its full core (tesseract-core-simd, or tesseract-core without SIMD): its worker hands
+// getCore `true` where an OEM number is compared. So the package keeps those two and leaves out the -lstm ones (package.json).
 
 /** Each face's two eyes, 0–1 across the upright photo, and the decode's size (for the eyes' distance in pixels). */
 async function findEyes(file) {
