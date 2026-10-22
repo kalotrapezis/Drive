@@ -24,3 +24,38 @@ export function clampRect(r: Rect, min = 0.05): Rect {
 }
 
 export const frameSize = (w: number, h: number, rotation: number) => rotation % 180 ? { w: h, h: w } : { w, h }
+
+/**
+ * A hidden part of the photo — a black bar, or stars over eyes — 0–1 across the upright photo before any turn or crop,
+ * so it turns and crops with it (phone: PhotoCover). `eye` marks the ones Find eyes made, redrawn when the style changes.
+ */
+export interface Cover extends Rect { stars: boolean; eye?: boolean }
+export type Eyes = [{ x: number; y: number }, { x: number; y: number }][]
+
+export const coverHas = (c: Rect, x: number, y: number) => x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h
+
+/** A bar across both eyes, or a star on each (phone: eyeCovers); w×h is the picture the eyes were found in. */
+export function eyeCovers(eyes: Eyes, w: number, h: number, stars: boolean): Cover[] {
+  return eyes.flatMap(([a, b]) => {
+    const ax = a.x * w, ay = a.y * h, bx = b.x * w, by = b.y * h, d = Math.hypot(bx - ax, by - ay)
+    const box = (cx: number, cy: number, rx: number, ry: number): Cover => ({ x: (cx - rx) / w, y: (cy - ry) / h, w: 2 * rx / w, h: 2 * ry / h, stars, eye: true })
+    // ponytail: the bar stays level (a tilted head only makes it taller); turn it with the head if tilted eyes show past its ends
+    return stars ? [box(ax, ay, 0.6 * d, 0.6 * d), box(bx, by, 0.6 * d, 0.6 * d)] : [box((ax + bx) / 2, (ay + by) / 2, d, 0.4 * d + Math.abs(ay - by) / 2)]
+  })
+}
+
+/** Draws one cover in pixels: a black bar, or fat yellow stars filling it along its longer side (phone: drawCover). */
+export function drawCover(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, stars: boolean) {
+  if (!stars) { ctx.fillStyle = '#000'; ctx.fillRect(x, y, w, h); return }
+  ctx.fillStyle = '#fdd835'
+  const side = Math.min(w, h), n = Math.max(1, Math.round(Math.max(w, h) / side)), step = Math.max(w, h) / n
+  for (let i = 0; i < n; i++) {
+    const cx = w >= h ? x + step * (i + 0.5) : x + w / 2, cy = w >= h ? y + h / 2 : y + step * (i + 0.5)
+    ctx.beginPath()
+    for (let k = 0; k < 10; k++) { // inner radius 0.5, so little shows between the arms
+      const r = side / 2 * (k % 2 ? 0.5 : 1), a = (-90 + k * 36) * Math.PI / 180
+      k ? ctx.lineTo(cx + r * Math.cos(a), cy + r * Math.sin(a)) : ctx.moveTo(cx + r * Math.cos(a), cy + r * Math.sin(a))
+    }
+    ctx.closePath(); ctx.fill()
+  }
+}

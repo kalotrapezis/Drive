@@ -11,7 +11,7 @@ import { TrashPage } from './TrashPage'
 import { AnalysisBar, ChooseCover, CombinePicker, MergeHistory, PeopleHistory, PeoplePage, RenamePerson, ReviewPage } from './People'
 import { MapView } from './MapView'
 import { HiddenPage, VaultGate } from './Hidden'
-import { Editor } from './Editor'
+import { Editor, type Hide } from './Editor'
 import { OffloadDialog, SyncPage } from './Sync'
 import { NotesPage } from './Notes'
 import { CalendarPage } from './Calendar'
@@ -58,7 +58,7 @@ export function App() {
   const [names, setNames] = useState<Record<string, string[]>>({})
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [vault, setVault] = useState<VaultStatus | null>(null)
-  const [editing, setEditing] = useState<Media | null>(null)
+  const [editing, setEditing] = useState<{ item: Media; hide?: Hide } | null>(null)
   const [unread, setUnread] = useState(0)
   useEffect(() => {
     const count = () => window.drive.notifications.list().then(l => setUnread(l.filter(n => !n.read).length))
@@ -434,11 +434,11 @@ export function App() {
           setIndex={i => setOpen(scoped ? scoped[i] : i)} onClose={() => { setOpen(null); setScope(null) }} people={names[items[open].sha256] ?? []}
           onShowOnMap={m => { setOpen(null); setPage({ kind: 'map', focus: m.sha256 }) }}
           onDocument={(m, on) => run(() => window.drive.documents.set(m.sha256, on), on ? 'Marked as a document' : 'No longer a document')}
-          onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={driveId ? undefined : m => hide([m])} onEdit={driveId ? undefined : setEditing}
+          onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={driveId ? undefined : m => hide([m])} onEdit={driveId ? undefined : (item, hide) => setEditing({ item, hide })}
           onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} onMove={driveId ? undefined : m => moveTo([m])}
           uncollectTitle={folderAlbum ? `Move out of the ${folderAlbum} folder` : undefined} />
       )}
-      {editing && <Editor item={editing} onClose={() => setEditing(null)} onSaved={msg => { setEditing(null); say(msg); reload() }} />}
+      {editing && <Editor item={editing.item} hide={editing.hide} onClose={() => setEditing(null)} onSaved={msg => { setEditing(null); say(msg); reload() }} />}
       {dialog}
       <TimerBell />
       {toast && <div className="island toast" role="status">{toast.text}

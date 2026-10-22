@@ -91,6 +91,10 @@ code { background: var(--island-2); padding: 2px 6px; border-radius: 6px; }
 .details dl { margin: 0; display: grid; gap: 4px; }
 .details dt { color: #a3a8ac; font-size: 12px; margin-top: 10px; }
 .details dd { margin: 0; display: flex; align-items: center; gap: 4px; overflow-wrap: anywhere; }
+.photo-text { display: flex; flex-direction: column; gap: 10px; }
+.photo-text h3 { margin: 0; }
+.photo-text textarea { flex: 1; min-height: 240px; resize: none; background: var(--island-2); color: inherit; border: 0; border-radius: 12px; padding: 12px; font: inherit; line-height: 1.5; }
+.photo-text .text-button { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; }
 .mono { font-family: ui-monospace, monospace; font-size: 11px; }
 .filmstrip { display: flex; gap: 4px; padding: 12px; overflow-x: auto; flex: none; scrollbar-width: none; }
 .filmstrip button { width: 56px; height: 56px; flex: none; padding: 0; border-radius: 8px; overflow: hidden; background: #1e2124; opacity: .55; transition: opacity .15s, width .15s; }
@@ -316,6 +320,8 @@ h2.section { font-size: 15px; font-weight: 600; margin: 20px 4px 12px; }
 .tool-panel label { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .tool-panel input[type=range] { width: 180px; accent-color: #fff; }
 .tool-panel .text-button { display: inline-flex; align-items: center; gap: 6px; }
+.tool-panel .text-button.on { background: var(--accent); color: var(--on-accent); }
+.tool-panel .hint { font-size: 13px; opacity: .8; }
 .swatch.small { width: 30px; height: 30px; border: 2px solid #fff4; }
 .swatch.custom { display: grid; place-items: center; position: relative; overflow: hidden; background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); color: #fff; }
 .swatch.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }

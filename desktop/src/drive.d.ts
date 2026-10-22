@@ -69,6 +69,9 @@ declare global {
       openMap(lat: number, lon: number): Promise<void>
       editorLoad(id: number): Promise<Uint8Array>
       editorSave(id: number, bytes: Uint8Array, mode: 'copy' | 'replace'): Promise<string>
+      /** 'eyes': each face's two eyes (0–1) and the decode's size; 'text': the photo's text and its words' boxes (0–1). */
+      photoAsk(id: number, what: 'eyes'): Promise<{ eyes: [{ x: number; y: number }, { x: number; y: number }][]; width: number; height: number }>
+      photoAsk(id: number, what: 'text'): Promise<{ text: string; words: { x: number; y: number; w: number; h: number }[] }>
       onScanProgress(fn: (p: { done: number; changed: number }) => void): () => void
       favorite(shas: string[], on: boolean): Promise<void>
       trash(ids: number[]): Promise<{ trashed: number; failed: string[] }>

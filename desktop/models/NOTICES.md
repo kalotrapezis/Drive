@@ -34,3 +34,9 @@ embedded `labels_without_background.txt`. With the phone's rule (top 5, score �
 0.15) the label sets matched TFLite on 14 of 15 test photos (the other differed
 at 0.16 vs 0.15). SHA-256
 `10f602179d3d3b76d7205c8e2d492b1afda372866ba5667ecaf6d8ecb81b65d6`.
+
+## tessdata/ell.traineddata, tessdata/eng.traineddata — reading text (Apache License 2.0)
+
+Tesseract's `tessdata_fast` models for Greek and English (github.com/tesseract-ocr/tessdata_fast), the same files the
+phone app carries in `assets/tessdata`; read here by tesseract.js (Apache 2.0) for Photos › Text in the photo and the
+editor's Hide text.

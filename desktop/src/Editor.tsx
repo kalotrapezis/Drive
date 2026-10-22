@@ -2,21 +2,30 @@ import { useEffect, useRef, useState } from 'react'
 import type { Media } from './timeline'
 import { Icon, type IconName } from './Icon'
 import { Modal, errorText } from './Dialogs'
-import { FULL, clampRect, coverScale, frameSize, turnPoint, turnRect, type Rect, type Stroke, type Turn } from './edit'
+import { FULL, clampRect, coverHas, coverScale, drawCover, eyeCovers, frameSize, turnPoint, turnRect, type Cover, type Eyes, type Rect, type Stroke, type Turn } from './edit'
 
-// Phone editor: crop & straighten, rotate, markup; Save / Save as copy / Discard. Full resolution up to 8192 px.
+// Phone editor: crop & straighten, rotate, markup, hide eyes or text; Save / Save as copy / Discard. Full resolution up to 8192 px.
 const MAX_OUTPUT = 8192
 const SWATCHES = ['#ffffff', '#000000', '#e3685f', '#f2b544', '#55a96b', '#4f86e8', '#ad68cf']
-type Mode = 'crop' | 'markup' | null
+type Mode = 'crop' | 'markup' | 'hide' | null
+export type Hide = 'eyes' | 'text'
 
-export function Editor({ item, onClose, onSaved }: { item: Media; onClose: () => void; onSaved: (message: string) => void }) {
+export function Editor({ item, onClose, onSaved, hide }: { item: Media; onClose: () => void; onSaved: (message: string) => void; hide?: Hide }) {
   const [image, setImage] = useState<ImageBitmap | null>(null)
   const [error, setError] = useState('')
   const [rotation, setRotation] = useState(0)
   const [angle, setAngle] = useState(0)
   const [crop, setCrop] = useState<Rect>(FULL)
   const [strokes, setStrokes] = useState<Stroke[]>([])
-  const [mode, setMode] = useState<Mode>(null)
+  const [mode, setMode] = useState<Mode>(hide ? 'hide' : null)
+  // Hide: covers burned into the photo before turn and crop; the eyes and words found to place them (phone: PhotoEditor's Hide)
+  const [covers, setCovers] = useState<Cover[]>([])
+  const [stars, setStars] = useState(false)
+  const [eyes, setEyes] = useState<{ eyes: Eyes; width: number; height: number } | null>(null)
+  const [words, setWords] = useState<Rect[]>([])
+  const [finding, setFinding] = useState(false)
+  const [note, setNote] = useState('')
+  const box = useRef<{ start: [number, number]; end: [number, number] } | null>(null)
   const [color, setColor] = useState('#e3685f')
   const [brush, setBrush] = useState(8)
   const [sheet, setSheet] = useState(false)
@@ -25,7 +34,7 @@ export function Editor({ item, onClose, onSaved }: { item: Media; onClose: () =>
   const stage = useRef<HTMLDivElement>(null)
   const drawing = useRef<Stroke | null>(null)
   const dragging = useRef<{ kind: string; start: [number, number]; rect: Rect } | null>(null)
-  const changed = rotation !== 0 || angle !== 0 || strokes.length > 0 || crop.x !== 0 || crop.y !== 0 || crop.w !== 1 || crop.h !== 1
+  const changed = rotation !== 0 || angle !== 0 || strokes.length > 0 || covers.length > 0 || crop.x !== 0 || crop.y !== 0 || crop.w !== 1 || crop.h !== 1
 
   useEffect(() => {
     window.drive.editorLoad(item.id)
@@ -48,6 +57,7 @@ export function Editor({ item, onClose, onSaved }: { item: Media; onClose: () =>
     const s = coverScale(f.w, f.h, angle) * k
     ctx.scale(s, s)
     ctx.drawImage(img, -img.width / 2, -img.height / 2)
+    for (const c of covers) drawCover(ctx, -img.width / 2 + c.x * img.width, -img.height / 2 + c.y * img.height, c.w * img.width, c.h * img.height, c.stars)
     ctx.restore()
     ctx.lineCap = ctx.lineJoin = 'round'
     for (const st of [...strokes, ...(drawing.current ? [drawing.current] : [])]) {
@@ -68,18 +78,33 @@ export function Editor({ item, onClose, onSaved }: { item: Media; onClose: () =>
     return out
   }
 
-  // Preview: the whole frame while cropping, the cropped result otherwise.
+  /** Hiding works on the whole upright photo the covers are measured on: the covers, the found words to click, a box being dragged. */
+  function renderPlain(maxSide: number) {
+    const img = image!, k = Math.min(1, maxSide / Math.max(img.width, img.height))
+    const c = document.createElement('canvas')
+    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k)
+    const ctx = c.getContext('2d')!
+    ctx.drawImage(img, 0, 0, c.width, c.height)
+    for (const v of covers) drawCover(ctx, v.x * c.width, v.y * c.height, v.w * c.width, v.h * c.height, v.stars)
+    ctx.strokeStyle = '#4f86e8'; ctx.lineWidth = 2
+    for (const w of words) if (!covers.some(v => v.x === w.x && v.y === w.y)) ctx.strokeRect(w.x * c.width, w.y * c.height, w.w * c.width, w.h * c.height)
+    const b = box.current
+    if (b) ctx.strokeRect(Math.min(b.start[0], b.end[0]) * c.width, Math.min(b.start[1], b.end[1]) * c.height, Math.abs(b.end[0] - b.start[0]) * c.width, Math.abs(b.end[1] - b.start[1]) * c.height)
+    return c
+  }
+
+  // Preview: the whole frame while cropping, the plain photo while hiding, the cropped result otherwise.
   function paint() {
     if (!image || !canvas.current || !stage.current) return
     const box = stage.current.getBoundingClientRect()
-    const src = mode === 'crop' ? renderFrame(1600) : renderOutput(1600)
+    const src = mode === 'crop' ? renderFrame(1600) : mode === 'hide' ? renderPlain(1600) : renderOutput(1600)
     const k = Math.min(box.width / src.width, box.height / src.height)
     const c = canvas.current
     c.width = src.width; c.height = src.height
     c.style.width = `${src.width * k}px`; c.style.height = `${src.height * k}px`
     c.getContext('2d')!.drawImage(src, 0, 0)
   }
-  useEffect(paint, [image, rotation, angle, crop, strokes, mode])
+  useEffect(paint, [image, rotation, angle, crop, strokes, mode, covers, words])
   useEffect(() => { const ro = new ResizeObserver(paint); if (stage.current) ro.observe(stage.current); return () => ro.disconnect() })
 
   const pos = (e: React.PointerEvent): [number, number] => {
@@ -102,6 +127,43 @@ export function Editor({ item, onClose, onSaved }: { item: Media; onClose: () =>
     drawing.current.points.push([crop.x + x * crop.w, crop.y + y * crop.h])
     paint()
   }
+  async function find(what: Hide) {
+    setFinding(true); setNote('')
+    try {
+      if (what === 'eyes') {
+        const found = await window.drive.photoAsk(item.id, 'eyes')
+        setEyes(found)
+        setCovers(list => [...list.filter(c => !c.eye), ...eyeCovers(found.eyes, found.width, found.height, stars)])
+        if (!found.eyes.length) setNote('No faces found. Drag over the eyes to hide them.')
+      } else {
+        const found = await window.drive.photoAsk(item.id, 'text')
+        setWords(found.words)
+        if (!found.words.length) setNote('No words found. Drag over the text to hide it.')
+      }
+    } catch (e) { setNote(errorText(e)) }
+    setFinding(false)
+  }
+  useEffect(() => { if (image && hide) find(hide) }, [image]) // eslint-disable-line react-hooks/exhaustive-deps
+  function setStyle(next: boolean) {
+    setStars(next)
+    if (eyes) setCovers(list => [...list.filter(c => !c.eye), ...eyeCovers(eyes.eyes, eyes.width, eyes.height, next)])
+  }
+  // Click: a cover shows its part again, a found word is hidden; drag: hide any part.
+  function hideDown(e: React.PointerEvent) { ;(e.target as Element).setPointerCapture(e.pointerId); const p = pos(e); box.current = { start: p, end: p } }
+  function hideMove(e: React.PointerEvent) { if (box.current) { box.current.end = pos(e); paint() } }
+  function hideUp() {
+    const b = box.current
+    box.current = null
+    if (!b) return
+    const [x0, y0] = b.start, [x1, y1] = b.end
+    if (Math.abs(x1 - x0) < 0.005 || Math.abs(y1 - y0) < 0.005) {
+      const hit = [...covers].reverse().find(c => coverHas(c, x0, y0))
+      if (hit) setCovers(list => list.filter(c => c !== hit))
+      else { const w = words.find(c => coverHas(c, x0, y0)); if (w) setCovers(list => [...list, { ...w, stars: false }]) }
+      paint()
+    } else setCovers(list => [...list, { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0), stars }])
+  }
+
   function markUp() { if (drawing.current) { const s = drawing.current; drawing.current = null; setStrokes(list => [...list, s]) } }
 
   function cropDown(e: React.PointerEvent, kind: string) {
@@ -153,7 +215,8 @@ export function Editor({ item, onClose, onSaved }: { item: Media; onClose: () =>
         {!image && !error && <span className="spinner" />}
         {error && <p className="error">{error}</p>}
         <div className="editor-canvas">
-          <canvas ref={canvas} className={mode === 'markup' ? 'drawing' : ''} onPointerDown={markDown} onPointerMove={markMove} onPointerUp={markUp} />
+          <canvas ref={canvas} className={mode === 'markup' || mode === 'hide' ? 'drawing' : ''}
+            onPointerDown={e => mode === 'hide' ? hideDown(e) : markDown(e)} onPointerMove={e => mode === 'hide' ? hideMove(e) : markMove(e)} onPointerUp={() => mode === 'hide' ? hideUp() : markUp()} />
           {mode === 'crop' && image && (
             <div className="crop-layer" onPointerMove={cropMove} onPointerUp={() => { dragging.current = null }}>
               <div className="crop-rect" style={{ left: `${crop.x * 100}%`, top: `${crop.y * 100}%`, width: `${crop.w * 100}%`, height: `${crop.h * 100}%` }}
@@ -179,11 +242,24 @@ export function Editor({ item, onClose, onSaved }: { item: Media; onClose: () =>
             <button className="text-button" disabled={!strokes.length} onClick={() => setStrokes(s => s.slice(0, -1))}><Icon name="undo" size={18} /> Undo</button>
           </div>
         )}
+        {mode === 'hide' && (
+          <div className="island tool-panel">
+            <button className="text-button" disabled={finding} onClick={() => find('eyes')}><Icon name="visibilityOff" size={18} /> Find eyes</button>
+            <button className="text-button" disabled={finding} onClick={() => find('text')}><Icon name="textFields" size={18} /> Find text</button>
+            {words.length > 0 && <button className="text-button" onClick={() => setCovers(list => [...list, ...words.filter(w => !list.some(c => c.x === w.x && c.y === w.y)).map(w => ({ ...w, stars: false }))])}>
+              <Icon name="textFields" size={18} /> Hide all the text</button>}
+            <button className={`text-button ${!stars ? 'on' : ''}`} onClick={() => setStyle(false)}><Icon name="square" size={18} /> Black bar</button>
+            <button className={`text-button ${stars ? 'on' : ''}`} onClick={() => setStyle(true)}><Icon name="star" size={18} /> Stars</button>
+            <button className="text-button" disabled={!covers.length} onClick={() => setCovers(c => c.slice(0, -1))}><Icon name="undo" size={18} /> Undo</button>
+            {finding ? <span className="spinner" /> : <span className="hint">{note || (words.length ? 'Click words to hide them, a cover to show it again; drag to hide any part.' : 'Click a cover to show it again; drag to hide any part.')}</span>}
+          </div>
+        )}
         <div className="island tool-bar">
           {tool('crop', 'Crop & straighten', () => setMode(m => m === 'crop' ? null : 'crop'), mode === 'crop', !image)}
           {tool('rotateLeft', 'Rotate left', () => turn('left'), false, !image)}
           {tool('rotateRight', 'Rotate right', () => turn('right'), false, !image)}
           {tool('edit', 'Markup', () => setMode(m => m === 'markup' ? null : 'markup'), mode === 'markup', !image)}
+          {tool('visibilityOff', 'Hide eyes or text', () => setMode(m => m === 'hide' ? null : 'hide'), mode === 'hide', !image)}
           {tool('save', 'Save…', () => setSheet(true), false, !changed)}
         </div>
       </div>

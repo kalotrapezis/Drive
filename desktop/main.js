@@ -140,6 +140,9 @@ const analysis = { running: false, paused: false, done: 0, total: 0, error: '' }
 // The window may already be gone when the worker stops (quitting): nothing to tell then.
 const sendAnalysis = () => { if (win && !win.isDestroyed()) win.webContents.send('people-progress', { ...analysis }); updateTray() }
 let analyzer = null, scanDone = null
+const asks = new Map() // the window's questions to the background thread (eyes, text), by id
+let lastAsk = 0
+const ask = (what, file) => new Promise((resolve, reject) => { const id = ++lastAsk; asks.set(id, { resolve, reject }); worker().postMessage({ type: 'ask', id, what, file }) })
 
 /** The background thread (analyzer.js): scanning and analysis both run there, never on the window's thread. */
 function worker() {
@@ -150,11 +153,14 @@ function worker() {
     if (m.type === 'progress') { Object.assign(analysis, m.analysis); sendAnalysis() }
     else if (m.type === 'scan-progress') win?.webContents.send('scan-progress', { done: m.done, changed: m.changed })
     else if (m.type === 'scanned') { const d = scanDone; scanDone = null; m.error ? d?.reject(new Error(m.error)) : d?.resolve(m.result) }
+    else if (m.type === 'answer') { const q = asks.get(m.id); asks.delete(m.id); m.error ? q?.reject(new Error(m.error)) : q?.resolve(m.result) }
   })
   analyzer.on('error', e => console.error('[analyzer]', e))
   analyzer.on('exit', code => {
     analyzer = null
     scanDone?.reject(new Error(`The background process stopped (${code}).`)); scanDone = null
+    for (const q of asks.values()) q.reject(new Error(`The background process stopped (${code}).`))
+    asks.clear()
     if (analysis.running) Object.assign(analysis, { running: false, error: `Analysis stopped unexpectedly (${code}).` })
     sendAnalysis()
   })
@@ -520,13 +526,19 @@ app.whenReady().then(() => {
     return restored
   })
   // Editor: bytes in (HEIC via its JPEG preview), JPEG out.
-  ipcMain.handle('editor:load', async (_, id) => {
+  const photoFile = async id => {
     const row = db.prepare('SELECT path, sha256, location FROM media WHERE id = ?').get(Number(id))
     if (!row) throw new Error('This photo is no longer in the library.')
     const { file: full, why } = await sync.locate(row)
     if (!full) throw new Error(why)
+    return { row, full }
+  }
+  ipcMain.handle('editor:load', async (_, id) => {
+    const { row, full } = await photoFile(id)
     return fs.promises.readFile(library.needsPreview(row.path) ? await library.preview(full, row.sha256, DATA_DIR) : full)
   })
+  // The viewer's Text in the photo ('text') and the editor's Hide eyes / Hide text ('eyes', 'text'), on the background thread.
+  ipcMain.handle('photo:ask', async (_, id, what) => ask(what === 'eyes' ? 'eyes' : 'text', (await photoFile(id)).full))
   ipcMain.handle('editor:save', async (_, id, bytes, mode) => {
     const row = db.prepare('SELECT * FROM media WHERE id = ?').get(Number(id))
     if (!row) throw new Error('This photo is no longer in the library.')

@@ -153,8 +153,16 @@ export const SYSTEM_FOLDER_ICONS: Record<string, [IconName, string]> = {
 }
 const EVEN_ODD = new Set<string>(['folderScans', ...Object.values(SYSTEM_FOLDER_ICONS).map(([icon]) => icon)])
 
-export function Icon({ name, size = 22 }: { name: IconName | 'motionOff'; size?: number }) {
+// The phone's own drawables on a 24 grid (Material Icons), for the Hide tools shared with it.
+const SMALL = {
+  textFields: 'M2.5,4v3h5v12h3V7h5V4H2.5zM21.5,9h-9v3h3v7h3v-7h3V9z',
+  star: 'M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z',
+  square: 'M18,4H6C4.9,4 4,4.9 4,6v12c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V6C20,4.9 19.1,4 18,4zM18,18H6V6h12V18z',
+}
+
+export function Icon({ name, size = 22 }: { name: IconName | 'motionOff' | keyof typeof SMALL; size?: number }) {
   const clip = useId()
+  if (name in SMALL) return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={SMALL[name as keyof typeof SMALL]} /></svg>
   if (name === 'motionOff') return <svg width={size} height={size} viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">
     <defs><clipPath id={clip}><path d={MOTION_GAP} /></clipPath></defs>
     <path clipPath={`url(#${clip})`} d={PATHS.motion} /><path d={MOTION_SLASH} />

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { formatBytes, type Media } from './timeline'
 import { Icon } from './Icon'
+import { errorText } from './Dialogs'
+import type { Hide } from './Editor'
 
 const MAX_ZOOM = 5
 const when = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -10,7 +12,7 @@ const RESET: View = { scale: 1, x: 0, y: 0 }
 
 interface Props {
   media: Media[]; index: number; setIndex: (i: number) => void; onClose: () => void
-  onFavorite?: (m: Media) => void; onTrash?: (m: Media) => void; onHide?: (m: Media) => void; onRestore?: (m: Media) => void; onEdit?: (m: Media) => void
+  onFavorite?: (m: Media) => void; onTrash?: (m: Media) => void; onHide?: (m: Media) => void; onRestore?: (m: Media) => void; onEdit?: (m: Media, hide?: Hide) => void
   onCollect?: (m: Media) => void; onUncollect?: (m: Media) => void; uncollectTitle?: string; onMove?: (m: Media) => void
   people: string[]
   onShowOnMap?: (m: Media) => void
@@ -24,6 +26,11 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
   const item = media[index]
   const [view, setView] = useState<View>(RESET)
   const [details, setDetails] = useState(false)
+  // Text in the photo (phone: the viewer's panel), read on the background thread; '' while reading
+  const [text, setText] = useState<string | null>(null)
+  const [textError, setTextError] = useState('')
+  const textBox = useRef<HTMLTextAreaElement>(null)
+  const [picked, setPicked] = useState(false)
   const [failed, setFailed] = useState(false)
   // Motion photos: the paired video (item.motion) or the one inside the file (Pixel, Samsung), played in place.
   const [motionUrl, setMotionUrl] = useState<string | null>(null)
@@ -38,6 +45,19 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
 
   const go = (i: number) => { if (i >= 0 && i < media.length) setIndex(i) }
   useEffect(() => { setView(RESET); setFailed(false); setMotionPlay(autoplay) }, [index, autoplay])
+  useEffect(() => { setText(null); setTextError('') }, [index])
+  function readText() {
+    if (text !== null) { setText(null); return }
+    setText(''); setTextError('')
+    window.drive.photoAsk(item.id, 'text').then(r => setText(r.text || '\u0000'), e => { setTextError(errorText(e)); setText('\u0000') })
+  }
+  const pick = (e: React.SyntheticEvent<HTMLTextAreaElement>) => setPicked(e.currentTarget.selectionStart !== e.currentTarget.selectionEnd)
+  // The chosen part, or all of it (the user, 22 Oct: "I want to be able to choose what I want to copy").
+  function copyText() {
+    const t = textBox.current
+    if (!t) return
+    navigator.clipboard.writeText(t.selectionStart !== t.selectionEnd ? t.value.slice(t.selectionStart, t.selectionEnd) : t.value)
+  }
   useEffect(() => {
     setMotionUrl(null)
     if (item.is_video || !fileUrl(item).startsWith('media://file/')) return // not in Hidden or the Trash
@@ -117,6 +137,11 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           {onUncollect && <button className="round flat" title={uncollectTitle ?? 'Remove from this collection'} onClick={() => onUncollect(item)}><Icon name="uncollect" /></button>}
           {onMove && !item.location && <button className="round flat" title="Move to folder…" onClick={() => onMove(item)}><Icon name="moveTo" /></button>}
           {onEdit && !item.is_video && <button className="round flat" title="Edit" onClick={() => onEdit(item)}><Icon name="edit" /></button>}
+          {onEdit && !item.is_video && <>
+            <button className={`round flat ${text !== null ? 'on' : ''}`} title="Text in the photo" onClick={readText}><Icon name="textFields" /></button>
+            <button className="round flat" title="Hide eyes" onClick={() => onEdit(item, 'eyes')}><Icon name="visibilityOff" /></button>
+            <button className="round flat" title="Hide text" onClick={() => onEdit(item, 'text')}><Icon name="square" /></button>
+          </>}
           {onHide && <button className="round flat" title="Move to Hidden" onClick={() => onHide(item)}><Icon name="lock" /></button>}
           {onRestore && <button className="round flat" title="Restore to Photos" onClick={() => onRestore(item)}><Icon name="lockOpen" /></button>}
           {onTrash && <button className="round flat" title="Move to Trash (Delete)" onClick={() => onTrash(item)}><Icon name="trash" /></button>}
@@ -144,6 +169,18 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
           {index > 0 && <button className="round nav prev" title="Previous (←)" onClick={() => go(index - 1)}><Icon name="back" /></button>}
           {index < media.length - 1 && <button className="round nav next" title="Next (→)" onClick={() => go(index + 1)}><Icon name="forward" /></button>}
         </div>
+        {text !== null && (
+          <aside className="island details photo-text">
+            <h3>Text in the photo</h3>
+            {text === '' ? <span className="spinner" />
+              : text === '\u0000' ? <p className="hint">{textError || 'No words found in this photo.'}</p>
+              : <>
+                <p className="hint">Select part of it to copy only that. You can fix the words here too.</p>
+                <textarea ref={textBox} defaultValue={text} spellCheck={false} onSelect={pick} onMouseUp={pick} onKeyUp={pick} />
+                <button className="text-button" onClick={copyText}><Icon name="copy" size={18} /> {picked ? 'Copy selected' : 'Copy all'}</button>
+              </>}
+          </aside>
+        )}
         {details && (
           <aside className="island details">
             <h3>Details</h3>

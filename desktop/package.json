@@ -31,7 +31,8 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "selfsigned": "^5.5.0",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.4",
+    "tesseract.js": "^6.0.1"
   },
   "productName": "Tetra",
   "private": true,
@@ -64,13 +65,17 @@
       "skills/**",
       "importer.js",
       "models/*.onnx",
+      "models/tessdata/*.traineddata",
       "dist/**",
       "public/icon.png",
       "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
       "!node_modules/onnxruntime-node/bin/napi-v6/win32/**",
       "!node_modules/onnxruntime-node/bin/napi-v6/linux/arm64/**",
       "!node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_cuda.so",
-      "!node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_tensorrt.so"
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/x64/libonnxruntime_providers_tensorrt.so",
+      "!node_modules/tesseract.js-core/*.wasm.js",
+      "!node_modules/tesseract.js-core/tesseract-core.{js,wasm}",
+      "!node_modules/tesseract.js-core/tesseract-core-simd.{js,wasm}"
     ],
     "asarUnpack": [
       "node_modules/sharp/**",

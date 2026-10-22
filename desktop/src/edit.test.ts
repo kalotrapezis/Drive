@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { clampRect, coverScale, turnPoint, turnRect } from './edit.ts'
+import { clampRect, coverHas, coverScale, eyeCovers, turnPoint, turnRect } from './edit.ts'
 
 test('turning keeps crop and markup on the same part of the photo', () => {
   const r = { x: 0.1, y: 0.2, w: 0.3, h: 0.4 }
@@ -22,4 +22,15 @@ test('straighten zooms just enough to hide empty corners', () => {
 test('crop stays inside the frame', () => {
   assert.deepEqual(clampRect({ x: 0.9, y: -0.2, w: 0.3, h: 2 }), { x: 0.7, y: 0, w: 0.3, h: 1 })
   assert.deepEqual(clampRect({ x: 0.5, y: 0.5, w: 0, h: 0.01 }), { x: 0.5, y: 0.5, w: 0.05, h: 0.05 })
+})
+
+test('Hide eyes: a bar covers both eyes, a star sits on each', () => {
+  const eyes = [[{ x: 0.4, y: 0.5 }, { x: 0.6, y: 0.5 }]] as [{ x: number; y: number }, { x: number; y: number }][]
+  const [bar] = eyeCovers(eyes, 1000, 500, false)
+  for (const e of eyes[0]) assert.ok(coverHas(bar, e.x, e.y))
+  assert.ok(bar.x < 0.4 - 0.05 && bar.x + bar.w > 0.6 + 0.05) // past each eye by half their distance
+  const stars = eyeCovers(eyes, 1000, 500, true)
+  assert.equal(stars.length, 2)
+  stars.forEach((s, i) => { assert.ok(coverHas(s, eyes[0][i].x, eyes[0][i].y)); assert.ok(s.stars && s.eye) })
+  assert.ok(Math.abs(stars[0].w * 1000 - stars[0].h * 500) < 1e-9) // square in pixels, not in 0–1
 })
