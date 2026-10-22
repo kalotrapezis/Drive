@@ -16,11 +16,12 @@ import { OffloadDialog, SyncPage } from './Sync'
 import { NotesPage } from './Notes'
 import { CalendarPage } from './Calendar'
 import { TimerBell, TimerPage } from './Timer'
+import { MapsPage } from './Maps'
 import { NotificationsPage, SettingsPage } from './Settings'
 import { ImportDialog } from './Import'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
-  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' } | { kind: 'calendar' } | { kind: 'timer' } | { kind: 'notifications' } | { kind: 'settings' }
+  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' } | { kind: 'calendar' } | { kind: 'timer' } | { kind: 'maps' } | { kind: 'notifications' } | { kind: 'settings' }
 
 const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
@@ -289,6 +290,7 @@ export function App() {
   else if (page.kind === 'notes') content = <NotesPage setDialog={setDialog} say={say} />
   else if (page.kind === 'calendar') content = <CalendarPage setDialog={setDialog} say={say} />
   else if (page.kind === 'timer') content = <TimerPage say={say} />
+  else if (page.kind === 'maps') content = <MapsPage say={say} />
   else if (page.kind === 'notifications') content = <NotificationsPage />
   else if (page.kind === 'settings') content = <SettingsPage />
   else if (page.kind === 'photoTrash') content = <TrashPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
@@ -374,6 +376,7 @@ export function App() {
         {nav({ kind: 'notes' }, page.kind === 'notes', 'notes', 'Notes')}
         {nav({ kind: 'calendar' }, page.kind === 'calendar', 'calendar', 'Calendar')}
         {nav({ kind: 'timer' }, page.kind === 'timer', 'timer', 'Timer')}
+        {nav({ kind: 'maps' }, page.kind === 'maps', 'map', 'Maps')}
         {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Devices')}
         {/* A drive is a device: its photos sit under Devices (asked 2026-09-26). */}
         {collections.filter(c => c.drive).map(c => <div key={c.id} className="rail-group">{nav({ kind: 'collection', id: c.id, name: c.name }, driveId === c.id.slice(6), 'database', c.name)}</div>)}

@@ -17,6 +17,8 @@ const history = require('./history')
 const { Notes } = require('./notes')
 const { Calendar } = require('./calendar')
 const timer = require('./timer')
+const { Maps } = require('./maps')
+const { Router } = require('./router')
 const importer = require('./importer')
 
 const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'local-drive-desktop')
@@ -32,7 +34,7 @@ if (HOME.note) console.warn('[home]', HOME.note)
 const PHOTOS_ROOT = process.env.DRIVE_PHOTOS || HOME.photos
 const FILES_ROOT = process.env.DRIVE_FILES || HOME.files
 
-protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } }])
+protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } }])
 
 let importing = null, importStop = null
 // The video inside a picture, read when the viewer asks; the last one is kept for the playback that follows.
@@ -84,6 +86,8 @@ function planReminders() {
 // in it, as every device does; at the end it notifies and the window rings (TimerBell) until OK here or on any device.
 // The files are read again at each end and every 30 s (the user: "sync check every 30 sec"), and at once when one lands.
 let timers = null, timerAlarm = null
+let maps = null // Maps (maps.js): the phone's map files in Files/Maps, read and written as they are
+let router = null // directions (router.js): GraphHopper's server on the phone's graph, started at the first route
 const timerRung = new Set()
 function planTimer() {
   clearTimeout(timerAlarm)
@@ -165,6 +169,53 @@ function worker() {
     sendAnalysis()
   })
   return analyzer
+}
+
+/** A place, list or trip changed here, on a phone or by Claude: the window shows it (as the Timer's folder). */
+function watchMaps() {
+  let settle = null
+  for (const dir of ['Places', 'Lists', 'Trips']) {
+    const full = path.join(maps.root, dir)
+    try {
+      fs.mkdirSync(full, { recursive: true })
+      fs.watch(full, () => { clearTimeout(settle); settle = setTimeout(() => win?.webContents.send('maps-changed'), 300) })
+    } catch (e) { console.warn('[maps] cannot watch', e.message) }
+  }
+}
+
+/** The map's style, fonts and icons: built into the app (dist/maps, the phone's assets/maps). */
+const mapsAsset = rel => [path.join(__dirname, 'dist', 'maps', rel), path.join(__dirname, 'public', 'maps', rel)].find(f => fs.existsSync(f)) ?? null
+
+/** media://maps/… — the offline map: tiles from Files/Maps/greece.pmtiles, the phone's style pointed at them. */
+async function mapsResponse(key) {
+  const r = await mapsBody(key)
+  const headers = new Headers(r.headers)
+  headers.set('access-control-allow-origin', '*') // MapLibre fetches these from the page (file://), another origin
+  return new Response(r.body, { status: r.status, headers })
+}
+async function mapsBody(key) {
+  const tile = /^tile\/(\d+)\/(\d+)\/(\d+)$/.exec(key)
+  if (tile) {
+    const data = await maps.tile(+tile[1], +tile[2], +tile[3]).catch(() => null)
+    return data ? new Response(data, { headers: { 'content-type': 'application/x-protobuf', 'cache-control': 'max-age=3600' } }) : new Response(null, { status: 204 })
+  }
+  const style = /^style\/(light|dark)$/.exec(key)
+  if (style) {
+    const file = mapsAsset(`${style[1]}.json`)
+    if (!file) return new Response('Not found', { status: 404 })
+    const s = JSON.parse(await fs.promises.readFile(file, 'utf8'))
+    s.glyphs = 'media://maps/fonts/{fontstack}/{range}.pbf'
+    s.sprite = `media://maps/sprites/${style[1]}`
+    s.sources.protomaps = { type: 'vector', tiles: ['media://maps/tile/{z}/{x}/{y}'], minzoom: 0, maxzoom: 15, attribution: '© OpenStreetMap, Protomaps' }
+    return new Response(JSON.stringify(s), { headers: { 'content-type': 'application/json' } })
+  }
+  const font = /^fonts\/([^/]+)\/(\d+-\d+)\.pbf$/.exec(key)
+  const sprite = /^sprites\/((?:light|dark)(?:@2x)?\.(?:json|png))$/.exec(key)
+  // a font list ("Noto Sans Medium,Noto Sans Regular"): the first the app has
+  const file = font ? font[1].split(',').map(f => mapsAsset(`fonts/${f.trim()}/${font[2]}.pbf`)).find(Boolean) : sprite ? mapsAsset(`sprites/${sprite[1]}`) : null
+  // a range the fonts lack (Arabic forms in Turkey's names): an empty one, which draws nothing and asks no more
+  if (font && !file) return new Response(new Uint8Array(0), { headers: { 'content-type': 'application/x-protobuf' } })
+  return file ? net.fetch(pathToFileURL(file).toString()) : new Response('Not found', { status: 404 })
 }
 
 function startScan() {
@@ -329,6 +380,10 @@ app.whenReady().then(() => {
   timers = new timer.Timers(path.join(FILES_ROOT, 'Timer'), os.hostname() || 'Computer')
   // sync's old copies of timers that are over (timer.js clean; the phone clears its own the same way)
   try { const n = timers.clean(); if (n) console.log(`Timer: cleared ${n} old copies`) } catch {}
+  // Maps: deleting a place goes to Files' Trash, so the deletion reaches the phone (as the Calendar's)
+  maps = new Maps(path.join(FILES_ROOT, 'Maps'), rel => files.trash(rel))
+  router = new Router(path.join(FILES_ROOT, 'Maps', 'greece-gh'), path.join(DATA_DIR, 'routing'))
+  watchMaps()
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
@@ -383,6 +438,7 @@ app.whenReady().then(() => {
       const video = await embeddedMotion(Number(key))
       return video ? new Response(video, { headers: { 'content-type': 'video/mp4', 'cache-control': 'no-store' } }) : new Response('Not found', { status: 404 })
     }
+    if (url.host === 'maps') return mapsResponse(key)
     if (url.host === 'face' && /^[0-9a-f-]{36}$/.test(key)) file = await people.crop(key, PHOTOS_ROOT).catch(() => null)
     // A trashed photo is no longer in the library, so it is served from the trash by the name it has there.
     if (url.host === 'trash') file = (await library.trashedPhotos(PHOTOS_ROOT)).find(t => t.id === key)?.file ?? null
@@ -539,6 +595,26 @@ app.whenReady().then(() => {
   })
   // The viewer's Text in the photo ('text') and the editor's Hide eyes / Hide text ('eyes', 'text'), on the background thread.
   ipcMain.handle('photo:ask', async (_, id, what) => ask(what === 'eyes' ? 'eyes' : 'text', (await photoFile(id)).full))
+  // Maps (maps.js): the same files as the phone's; a change is sent to the devices at once, as the Timer's
+  const mapsChanged = r => { sync?.nudge().catch(() => {}); return r }
+  ipcMain.handle('maps:info', () => maps.info())
+  ipcMain.handle('maps:places', () => maps.places())
+  ipcMain.handle('maps:lists', () => maps.lists())
+  ipcMain.handle('maps:trips', () => maps.trips())
+  ipcMain.handle('maps:savePlace', async (_, p) => mapsChanged(await maps.savePlace(p)))
+  ipcMain.handle('maps:deletePlace', async (_, id) => mapsChanged(await maps.deletePlace(id)))
+  ipcMain.handle('maps:saveList', async (_, l) => mapsChanged(await maps.saveList(l)))
+  ipcMain.handle('maps:deleteList', async (_, id) => mapsChanged(await maps.deleteList(id)))
+  ipcMain.handle('maps:saveTrip', async (_, t) => mapsChanged(await maps.saveTrip(t)))
+  ipcMain.handle('maps:deleteTrip', async (_, id) => mapsChanged(await maps.deleteTrip(id)))
+  ipcMain.handle('maps:search', (_, q) => maps.search(q))
+  ipcMain.handle('maps:describe', (_, lat, lng) => maps.describe(lat, lng))
+  ipcMain.handle('maps:near', (_, lat, lng, name) => maps.near(lat, lng, name))
+  ipcMain.handle('maps:route', (_, points, mode) => router.route(points, mode))
+  // online: Google's page of the place, with its reviews and photos (the phone's place card does the same)
+  // a place's website (or its Διαύγεια decision): web pages only
+  ipcMain.handle('maps:web', (_, url) => { if (typeof url !== 'string' || !/^https?:\/\/[^\s]+$/i.test(url)) throw new Error('Not a web address.'); return shell.openExternal(url) })
+  ipcMain.handle('maps:google', (_, q) => { if (typeof q !== 'string' || !q || q.length > 300) throw new Error('Nothing to look up.'); return shell.openExternal('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q)) })
   ipcMain.handle('editor:save', async (_, id, bytes, mode) => {
     const row = db.prepare('SELECT * FROM media WHERE id = ?').get(Number(id))
     if (!row) throw new Error('This photo is no longer in the library.')
@@ -762,4 +838,5 @@ app.whenReady().then(() => {
 if (!process.env.DRIVE_HIDDEN && !app.requestSingleInstanceLock()) app.exit(0)
 app.on('second-instance', showWindow)
 app.on('window-all-closed', () => app.quit())
-app.on('before-quit', () => { quitting = true; vault?.lock(); analyzer?.terminate() })
+app.on('before-quit', () => { quitting = true; vault?.lock(); analyzer?.terminate(); router?.stop() })
+process.on('exit', () => router?.stop()) // a Tetra stopped without quitting leaves no routing server behind

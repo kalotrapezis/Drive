@@ -41,8 +41,8 @@ const isSafeName = name => typeof name === 'string' && name.trim() === name && n
 const inTrash = rel => rel === TRASH || rel.startsWith(TRASH + '/')
 /** A part of Drive that syncs on its own, at once (the Calendar, 18 Oct): its folders, and its kinds of file in the Trash. */
 const SCOPES = { calendar: { dirs: ['Calendar'], trashExts: ['.ics'] }, timer: { dirs: ['Timer'], trashExts: [] } }
-/** The Calendar's and the Timer's folders: synced as files, kept out of Files' lists, search and Move (the user, 18 Oct). */
-const APP_FOLDERS = ['Calendar', 'Timer']
+/** The Calendar's, the Timer's and Maps' folders: synced as files, kept out of Files' lists, search and Move (the user, 18 Oct). */
+const APP_FOLDERS = ['Calendar', 'Timer', 'Maps']
 function scopeTest(scope) {
   if (!scope) return () => true
   const s = SCOPES[scope]

@@ -1,6 +1,13 @@
 /// <reference types="vite/client" />
 import type { Media } from './timeline'
 
+/** Maps (maps.js): the phone's files in Files/Maps. */
+export interface MapPlace { id: string; name: string; lat: number; lng: number; icon: string; slot: number; mode: 'car' | 'foot' | 'bike'; lists: string[]; label: string }
+export interface MapList { id: string; name: string; emoji: string }
+export interface MapStop { name: string; lat: number; lng: number }
+export interface MapTrip { id: string; name: string; stops: MapStop[] }
+export interface Poi { kind: string; lat: number; lng: number; name: string; nameEn: string; more: string; hours: string; phone: string; web: string; wheelchair: string; note: string }
+
 export interface DriveItem {
   name: string; path: string; dir: boolean; size: number; mtime: number; type: string; system: boolean
   favorite: boolean; color: string | null; tags: string[]; openedAt?: number
@@ -170,6 +177,24 @@ declare global {
         last(): Promise<number>
       }
       onTimerChanged(cb: () => void): () => void
+      mapsInfo(): Promise<{ root: string; map: { bytes: number; at: number } | null }>
+      mapsPlaces(): Promise<MapPlace[]>
+      mapsLists(): Promise<MapList[]>
+      mapsTrips(): Promise<MapTrip[]>
+      mapsSavePlace(p: Partial<MapPlace> & { name: string; lat: number; lng: number }): Promise<MapPlace>
+      mapsDeletePlace(id: string): Promise<void>
+      mapsSaveList(l: Partial<MapList> & { name: string }): Promise<MapList>
+      mapsDeleteList(id: string): Promise<void>
+      mapsSaveTrip(t: { id?: string; name: string; stops: MapStop[] }): Promise<MapTrip>
+      mapsDeleteTrip(id: string): Promise<void>
+      mapsSearch(q: { query?: string; kind?: string | null; lat: number; lng: number; limit?: number; nearby?: boolean; within?: { south: number; north: number; west: number; east: number } | null }): Promise<Poi[]>
+      mapsDescribe(lat: number, lng: number): Promise<string | null>
+      mapsNear(lat: number, lng: number, name: string): Promise<Poi | null>
+      mapsGoogle(query: string): Promise<void>
+      mapsWeb(url: string): Promise<void>
+      /** Directions on this computer (router.js): the line, metres, seconds and turns from the first point through the others. */
+      mapsRoute(points: { lat: number; lng: number }[], mode: 'car' | 'foot' | 'bike' | 'wheelchair'): Promise<{ metres: number; seconds: number; line: [number, number][]; steps: { text: string; metres: number; seconds: number; sign: number }[] }>
+      onMapsChanged(cb: () => void): () => void
       onNotesChanged(cb: () => void): () => void
       notesSynced(): Promise<{ at: number; device: string } | null>
       notifications: { list(): Promise<AppNotification[]>; read(): Promise<void>; clear(): Promise<void>; onChange(cb: () => void): () => void }

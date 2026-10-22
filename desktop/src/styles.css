@@ -871,3 +871,51 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .timer-pin.on { opacity: 1; color: var(--timer-teal); }
 .timer-card.ringing .timer-pin.on { color: #fff; }
 .timer-pin:hover, .timer-trash:hover { opacity: 1; }
+
+/* Maps (Maps.tsx): the offline map, a side panel of search, saved places and trips */
+.maps-page { position: absolute; inset: 0; }
+.maps-canvas { position: absolute; inset: 0; border-radius: var(--radius); overflow: hidden; }
+.maps-panel { position: absolute; top: 12px; left: 12px; bottom: 12px; width: 380px; display: flex; flex-direction: column; gap: 6px; padding: 14px; overflow-y: auto; overflow-x: hidden; z-index: 2; }
+.maps-panel h3 { margin: 14px 4px 6px; font-size: 14px; color: var(--muted); font-weight: 600; }
+.maps-panel section { display: flex; flex-direction: column; gap: 2px; }
+.maps-search { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 14px; border-radius: 999px; background: var(--island-2); }
+.maps-query { flex: 1; min-width: 0; padding: 10px 0; border: 0; background: none; color: var(--text); font: inherit; outline: none; }
+.maps-panel > * { flex: none; }
+.maps-panel .maps-pills { padding: 6px 0 2px; }
+.maps-tabs { margin-top: 6px; }
+.maps-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border-radius: 12px; text-align: left; color: var(--text); cursor: pointer; }
+.maps-row:hover, .maps-row.on { background: var(--hover); }
+.maps-row.static { cursor: default; }
+.maps-row-icon { width: 30px; text-align: center; font-size: 20px; flex: none; }
+.maps-row-icon.big { font-size: 28px; width: 40px; }
+.maps-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.maps-row-text b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.maps-row-text small, .maps-row > small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-place { width: 30px; height: 30px; border-radius: 50%; background: #5c6bc0; color: #fff; border: 2px solid #fff; display: grid; place-items: center; box-shadow: 0 1px 4px #0006; cursor: pointer; padding: 0; flex: none; }
+.map-place.static { box-shadow: none; }
+.map-place.big { width: 44px; height: 44px; }
+.map-place.on { outline: 3px solid var(--text); }
+.map-stop { width: 28px; height: 28px; border-radius: 50%; background: #5c6bc0; color: #fff; border: 2px solid #fff; display: grid; place-items: center; font-weight: 700; font-size: 14px; box-shadow: 0 1px 4px #0006; flex: none; }
+.maps-slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.maps-slot { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; background: var(--island-2); color: var(--text); font-size: 12px; min-height: 66px; cursor: pointer; }
+.maps-slot span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.maps-slot.empty { justify-content: center; color: var(--muted); opacity: .5; cursor: default; }
+.maps-card { display: flex; flex-direction: column; gap: 8px; padding: 6px 2px; }
+.maps-card h2 { margin: 0; font-size: 19px; }
+.maps-card-head { display: flex; align-items: center; gap: 12px; }
+.maps-card-head > div { flex: 1; min-width: 0; }
+.maps-card-head small { color: var(--muted); }
+.maps-card dl { margin: 6px 0; display: grid; gap: 2px; }
+.maps-card dt { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.maps-card dd { margin: 0; overflow-wrap: anywhere; }
+.maps-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.maps-actions .text-button { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; }
+.maps-emblems { display: flex; flex-wrap: wrap; gap: 8px; }
+.maps-slot-pick { display: flex; flex-wrap: wrap; gap: 4px; }
+.maps-missing { position: absolute; top: 12px; left: 404px; right: 12px; padding: 12px 16px; z-index: 2; }
+.maps-page .maplibregl-ctrl-bottom-left { left: 400px; }
+.link-button { color: #4f86e8; text-decoration: underline; text-align: left; padding: 0; overflow-wrap: anywhere; cursor: pointer; }
+.maps-route { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; margin: 6px 0; border-radius: 14px; background: var(--island-2); }
+.maps-route .segmented { margin-bottom: 4px; }
+.maps-leg { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.maps-leg.total { font-weight: 700; border-top: 1px solid var(--hover); padding-top: 4px; margin-top: 2px; }
