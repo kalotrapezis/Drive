@@ -1836,7 +1836,11 @@ it says so at once instead). Android's freezer stops a backgrounded app within a
 Tetra cannot answer at all, and the computer says "No phone answered. Open Tetra on the phone". On the user's
 Xiaomi 15 it is sooner and harder: about 5 s after Home the phone's network policy blocks Tetra (`APP_BACKGROUND`),
 so a pocketed phone answers only if Tetra is open — or if a service of ours keeps it out of the cached state, which
-is the open question in Plan.md. The computer (`sync.js` `phoneLocation`, through `reach`, which
+was the open question in Plan.md. Decided by the user the same day: with a computer paired, Tetra on the phone
+listens with the app closed (`SyncListenService`, a foreground service whose notification is the quietest kind; Settings
+› Sync › Listen in the background turns it off). This replaces 6i's "nothing listens once the app is closed": the
+computer's "sync now" reaches a pocketed phone too. Started from the open app with the location allowed, the service
+also holds the location right, so `/location` answers without a tap (on the user's phone, Tetra closed: 7.5 s). The computer (`sync.js` `phoneLocation`, through `reach`, which
 `nudge` now shares: each address, then the beacon) asks phones first and a tablet only when no phone answers; three
 seconds to reach a device, a minute for its answer. An older Tetra answers 404, said as "needs the new Tetra".
 Nothing is stored on either side: the fix is shown, and kept only if the person makes it a trip's stop A.
