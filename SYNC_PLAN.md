@@ -2438,4 +2438,9 @@ a later manifest deletes nothing; only the paired certificate gets bytes, an old
 on the PC in ~1.2 s, SHA-256 equal, "2 files from Xiaomi 15"; a PDF shared with the PC's Tetra stopped → kept in the
 outbox, job scheduled, landed 61 s after the PC came back (by the job: the phone's listener was not running after the
 install, so the start's "sync now" did not reach it); two files sent to the phone in 0.7 s, equal, "2 files from
-theologos-82xm".
+theologos-82xm". The user's own try (21:36–21:55): a photo shared from Photos landed with its own date; a PDF with a
+long Greek name crashed the desktop (ENAMETOOLONG on the .part, an unhandled stream error) — fixed (fitName, a short
+.part, the error ends the request) and it then landed from the outbox 8 s after the desktop restarted; the tray's "Send
+files to phone…" put two pictures on the phone; a desktop notification's click did nothing until it was held until it
+closed (Electron drops an unheld one's click on Linux); both notifications now open Files at the folder, checked by the
+user. The phone's notification was hidden by Bedtime (Do Not Disturb), not by Tetra.

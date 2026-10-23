@@ -274,6 +274,7 @@ let offer = null, moving = null
 const said = { offer: 0, full: 0 }
 const HOURS = 3_600_000
 const fmtBytes = n => n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`
+const shownNotes = new Set()
 function notify(title, body, open = null) {
   // Kept as well as shown: a notification goes by in seconds, the Notifications page keeps them (asked 2026-09-26).
   try {
@@ -284,6 +285,8 @@ function notify(title, body, open = null) {
   if (!Notification.isSupported()) return
   const n = new Notification({ title, body, icon: path.join(__dirname, 'public', 'icon.png') })
   n.on('click', () => { showWindow(); if (open) open(); else if (offer) win?.webContents.send('offload-offer', offer.deviceId) })
+  // held until it closes: one nobody holds is collected, and its click does nothing (the user, 23 Oct)
+  shownNotes.add(n); n.on('close', () => shownNotes.delete(n))
   n.show()
 }
 async function checkSpace() {
