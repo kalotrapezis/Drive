@@ -50,6 +50,8 @@ export function Emblem({ icon, size = 18 }: { icon: string; size?: number }) {
 }
 
 type Card = { kind: 'poi'; poi: Poi } | { kind: 'place'; place: MapPlace } | { kind: 'pin'; lat: number; lng: number }
+  | { kind: 'me'; lat: number; lng: number; accuracy: number; device: string }
+const ME = 'My location' // the phone's fix as a trip's stop
 type Draft = { id?: string; name: string; stops: MapStop[] }
 const cardSpot = (c: Card) => c.kind === 'poi' ? c.poi : c.kind === 'place' ? c.place : c
 
@@ -59,6 +61,8 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
   const markers = useRef<maplibregl.Marker[]>([])
   const tripMarkers = useRef<maplibregl.Marker[]>([])
   const pin = useRef<maplibregl.Marker | null>(null)
+  const meMarker = useRef<maplibregl.Marker | null>(null)
+  const [asking, setAsking] = useState(false) // waiting for the phone's fix
   const [ready, setReady] = useState(false)
   const [missing, setMissing] = useState(false)
   const [places, setPlaces] = useState<MapPlace[]>([])
@@ -174,6 +178,22 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
     if (c.kind === 'pin') pin.current = new maplibregl.Marker({ color: '#e5484d' }).setLngLat([c.lng, c.lat]).addTo(map.current!)
     window.drive.mapsDescribe(s.lat, s.lng).then(setAddress, () => {})
   }
+  /** Where I am: this computer has no GPS, so the paired phone is asked for one fix (sync.js phoneLocation). */
+  async function whereAmI() {
+    if (asking) return null
+    setAsking(true)
+    const r = await window.drive.mapsPhoneLocation().catch(e => ({ error: errorText(e) }))
+    setAsking(false)
+    if (r.error !== undefined) { say(r.error); return null }
+    const el = document.createElement('div')
+    el.className = 'map-me'
+    el.title = `${ME} (${r.device})`
+    meMarker.current?.remove()
+    meMarker.current = new maplibregl.Marker({ element: el }).setLngLat([r.lng, r.lat]).addTo(map.current!)
+    return { kind: 'me' as const, lat: r.lat, lng: r.lng, accuracy: r.accuracy, device: r.device }
+  }
+  async function showMe() { const me = await whereAmI(); if (me) open(me) }
+  async function startHere() { const me = await whereAmI(); if (me) addStop(me) }
   function closeCard() { setCard(null); setEdit(null); pin.current?.remove(); pin.current = null }
 
   onMapClick.current = async e => {
@@ -257,8 +277,9 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
 
   function addStop(c: Card) {
     const s = cardSpot(c)
-    const name = c.kind === 'poi' ? poiTitle(c.poi) : c.kind === 'place' ? c.place.name : address?.split(',')[0] || `Stop ${letter(draft?.stops.length ?? 0)}`
-    const stops = [...(draft?.stops ?? []), { name, lat: s.lat, lng: s.lng }]
+    const name = c.kind === 'me' ? ME : c.kind === 'poi' ? poiTitle(c.poi) : c.kind === 'place' ? c.place.name : address?.split(',')[0] || `Stop ${letter(draft?.stops.length ?? 0)}`
+    // where I am is where the trip starts: A, in place of an older fix
+    const stops = c.kind === 'me' ? [{ name, lat: s.lat, lng: s.lng }, ...(draft?.stops ?? []).filter(x => x.name !== ME)] : [...(draft?.stops ?? []), { name, lat: s.lat, lng: s.lng }]
     setDraft({ name: draft?.name ?? '', id: draft?.id, stops })
     setShown(null); setTab('trips'); closeCard()
     if (stops.length > 1) fitStops(stops)
@@ -296,6 +317,8 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
   return (
     <div className="maps-page">
       <div ref={box} className="maps-canvas" />
+      <button className="round maps-here" title="Where I am (asks the phone)" disabled={asking} onClick={showMe}><Icon name="myLocation" size={22} /></button>
+      {asking && <div className="island maps-waiting">Waiting for the phone's location…<small>Tetra in the background there? Tap its notification.</small></div>}
       {missing && <div className="island maps-missing">The map is not on this computer yet: <code>Files/Maps/greece.pmtiles</code> comes from <code>tools/maps-greece.sh</code> or from the phone by sync.</div>}
       <aside className="island maps-panel">
         <div className="maps-search">
@@ -357,6 +380,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
                       <button className="round flat" title="Remove" onClick={() => setDraft({ ...draft, stops: draft.stops.filter((_, j) => j !== i) })}><Icon name="close" size={18} /></button>
                     </div>
                   ))}
+                  {draft.stops[0]?.name !== ME && <button className="text-button" disabled={asking} onClick={startHere}><Icon name="myLocation" size={18} /> Start from where I am</button>}
                   <RouteSummary stops={draft.stops} legs={legs} note={routeNote} mode={mode} setMode={setMode} />
                   <p className="hint">Add stop {letter(draft.stops.length)}: click the map, a search result or a saved place, then <b>Add as stop</b>.</p>
                   <div className="maps-actions">
@@ -426,13 +450,14 @@ function PlaceCard({ card, address, places, draft, onClose, onSave, onDelete, on
   const s = cardSpot(card)
   const poi = card.kind === 'poi' ? card.poi : null
   const saved = card.kind === 'place' ? card.place : places.find(p => Math.abs(p.lat - s.lat) < 1e-5 && Math.abs(p.lng - s.lng) < 1e-5) ?? null
-  const title = saved?.name ?? (poi ? poiTitle(poi) : address?.split(',')[0] ?? 'Dropped pin')
+  const me = card.kind === 'me' ? card : null
+  const title = me ? ME : saved?.name ?? (poi ? poiTitle(poi) : address?.split(',')[0] ?? 'Dropped pin')
   const google = poi && poi.name ? `${poi.name}, ${poi.more || `${s.lat.toFixed(6)},${s.lng.toFixed(6)}`}` : `${s.lat.toFixed(6)},${s.lng.toFixed(6)}`
   return (
     <section className="maps-card">
       <div className="maps-card-head">
-        {saved ? <span className="map-place static big"><Emblem icon={saved.icon} size={22} /></span> : <span className="maps-row-icon big">{poi ? kindEmoji(poi.kind) : '📍'}</span>}
-        <div><h2>{title}</h2><small>{poi ? kindLabel(poi.kind) : saved ? 'Saved place' : 'A spot on the map'}</small></div>
+        {me ? <span className="maps-row-icon big"><span className="map-me" /></span> : saved ? <span className="map-place static big"><Emblem icon={saved.icon} size={22} /></span> : <span className="maps-row-icon big">{poi ? kindEmoji(poi.kind) : '📍'}</span>}
+        <div><h2>{title}</h2><small>{me ? `From ${me.device} · ±${metresText(me.accuracy)}` : poi ? kindLabel(poi.kind) : saved ? 'Saved place' : 'A spot on the map'}</small></div>
         <button className="round flat" title="Close" onClick={onClose}><Icon name="close" size={20} /></button>
       </div>
       <dl>
@@ -446,7 +471,7 @@ function PlaceCard({ card, address, places, draft, onClose, onSave, onDelete, on
         <dt>Coordinates</dt><dd className="mono">{s.lat.toFixed(5)}, {s.lng.toFixed(5)}</dd>
       </dl>
       <div className="maps-actions">
-        <button className="filled-button" onClick={onStop}>{draft ? `Add as stop ${letter(draft.stops.length)}` : 'Add to a trip'}</button>
+        <button className="filled-button" onClick={onStop}>{me ? 'Start a trip here (A)' : draft ? `Add as stop ${letter(draft.stops.length)}` : 'Add to a trip'}</button>
         <button className="text-button" onClick={onSave}><Icon name={saved ? 'edit' : 'add'} size={18} /> {saved ? 'Change' : 'Save'}</button>
         <button className="text-button" onClick={onNearby}><Icon name="place" size={18} /> Nearby</button>
         <button className="text-button" onClick={() => window.drive.mapsGoogle(google)}><Icon name="external" size={18} /> Google Maps</button>

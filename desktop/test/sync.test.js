@@ -6,6 +6,7 @@ const path = require('node:path')
 const https = require('node:https')
 const crypto = require('node:crypto')
 const dgram = require('node:dgram')
+const net = require('node:net')
 const library = require('../library')
 const { SyncServer, identity } = require('../sync')
 const { Documents } = require('../documents')
@@ -735,6 +736,56 @@ test('the computer can only say "there is something new"; the phone it says it t
     server.setConnection(only, 'files', { direction: 'send', keep: 'everything' })
     await server.nudge()
     assert.deepEqual(asked, [])
+  } finally {
+    await new Promise(r => phone.close(r))
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('desktop Maps asks the paired phone where it is: a fix, what the phone said instead, or nobody there', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-where-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = await new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  server.find = async () => [] // no beacon on the test's network
+  const phoneId = await identity(path.join(tmp, 'phone'))
+  let answer = { status: 200, body: { lat: 37.3612, lng: 22.5021, accuracy: 6, at: 1, provider: 'gps' } }
+  const asked = []
+  const phone = https.createServer({ key: phoneId.key, cert: phoneId.cert }, (req, res) => {
+    asked.push({ method: req.method, url: req.url, auth: req.headers.authorization })
+    setTimeout(() => { res.writeHead(answer.status, { 'content-type': 'application/json' }); res.end(JSON.stringify(answer.body)) }, 50)
+  })
+  await new Promise(r => phone.listen(0, '127.0.0.1', r))
+  try {
+    assert.match((await server.phoneLocation()).error, /No phone is paired/)
+    const token = crypto.randomBytes(16).toString('hex')
+    const row = (fp, kind = 'device', port = phone.address().port) => db.prepare(`INSERT INTO sync_devices(id, name, token_hash, paired_at, peer_fp, peer_hosts, peer_port, peer_token, kind)
+      VALUES(?,?,?,?,?,?,?,?,?)`).run(crypto.randomUUID(), 'Xiaomi 15', crypto.randomUUID(), Date.now(), fp, '127.0.0.1', port, token, kind)
+    row(phoneId.fingerprint)
+    assert.deepEqual(await server.phoneLocation(), { lat: 37.3612, lng: 22.5021, accuracy: 6, at: 1, provider: 'gps', device: 'Xiaomi 15' })
+    assert.deepEqual(asked, [{ method: 'POST', url: '/location', auth: `Bearer ${token}` }])
+
+    // the phone answered, but with no fix: its words reach the screen
+    answer = { status: 503, body: { error: 'Location is off on the phone.' } }
+    assert.deepEqual(await server.phoneLocation(), { error: 'Xiaomi 15: Location is off on the phone.' })
+    // an older Tetra on the phone knows no /location
+    answer = { status: 404, body: { error: 'Unknown request.' } }
+    assert.match((await server.phoneLocation()).error, /needs the new Tetra/)
+
+    // a certificate that is not the paired one is not the phone: its "fix" is not taken
+    answer = { status: 200, body: { lat: 1, lng: 2 } }
+    db.prepare('DELETE FROM sync_devices').run()
+    row('f'.repeat(64))
+    assert.match((await server.phoneLocation()).error, /No phone answered/)
+
+    // nobody at the phone's address
+    db.prepare('DELETE FROM sync_devices').run()
+    const closed = net.createServer(); await new Promise(r => closed.listen(0, '127.0.0.1', r)); const dead = closed.address().port; closed.close()
+    row(phoneId.fingerprint, 'device', dead)
+    assert.match((await server.phoneLocation()).error, /No phone answered/)
+    // …but a tablet does: it is asked once no phone answered
+    row(phoneId.fingerprint, 'tablet')
+    assert.equal((await server.phoneLocation()).lat, 1)
   } finally {
     await new Promise(r => phone.close(r))
     await server.stop()

@@ -611,6 +611,7 @@ app.whenReady().then(() => {
   ipcMain.handle('maps:describe', (_, lat, lng) => maps.describe(lat, lng))
   ipcMain.handle('maps:near', (_, lat, lng, name) => maps.near(lat, lng, name))
   ipcMain.handle('maps:route', (_, points, mode) => router.route(points, mode))
+  ipcMain.handle('maps:phoneLocation', () => sync.phoneLocation()) // this computer has no GPS: the paired phone's fix
   // online: Google's page of the place, with its reviews and photos (the phone's place card does the same)
   // a place's website (or its Διαύγεια decision): web pages only
   ipcMain.handle('maps:web', (_, url) => { if (typeof url !== 'string' || !/^https?:\/\/[^\s]+$/i.test(url)) throw new Error('Not a web address.'); return shell.openExternal(url) })

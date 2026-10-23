@@ -1821,6 +1821,23 @@ outside Tetra — Downloads, another app's — stays on its device: *Save as* pu
 Tetra/Documents, and from then it crosses. Built on both sides; not yet seen going
 between two real devices (the computer needs the new build).
 
+### 6am. The computer asks the phone where it is (2026-10-23)
+
+Desktop Maps has no GPS, and a guess from the internet is "off by half a county" (the user, 21 Oct). So its
+where-I-am button, and *Start from where I am* in a trip, ask the paired phone: `POST /location` on the phone's
+`SyncServer` (the listener that already answers "sync now" while Tetra is open), with the same bearer token and
+the same pinned certificate. The phone takes one fix (`PhoneLocation`: a GPS fix under 30 s old at once, else
+GPS waited for up to 45 s, the network's fix only when GPS found nothing) and answers `{lat, lng, accuracy, at,
+provider}`, or `{error}` in words for the computer's screen: no permission (asked for on the phone's screen while
+the computer waits), location off, no fix in time. Android gives the location only to the app on screen (measured
+on the emulator: in the background `getCurrentLocation` answers null at once), so a Tetra in the background posts
+"The computer asks where this phone is — tap to send it the location" and waits for the tap (notifications off:
+it says so at once instead). Android's freezer stops a backgrounded app within a minute or so; a frozen or closed
+Tetra cannot answer at all, and the computer says "No phone answered. Open Tetra on the phone". The computer (`sync.js` `phoneLocation`, through `reach`, which
+`nudge` now shares: each address, then the beacon) asks phones first and a tablet only when no phone answers; three
+seconds to reach a device, a minute for its answer. An older Tetra answers 404, said as "needs the new Tetra".
+Nothing is stored on either side: the fix is shown, and kept only if the person makes it a trip's stop A.
+
 ## Roadmap (set 2026-09-24)
 
 The order is the user's: **nothing more is trusted to real sync until the things

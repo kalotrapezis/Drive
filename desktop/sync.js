@@ -700,25 +700,54 @@ class SyncServer {
     await Promise.all(devices.map(async d => {
       const ways = [this.connection(d.id, 'photos').direction, this.connection(d.id, 'files').direction]
       if (ways.every(w => w === 'send' || w === 'off')) return // nothing here is for that device
-      const hosts = String(d.peer_hosts ?? '').split(',').filter(Boolean)
-      let there = false // its certificate answered, whatever it said: it has not moved
-      for (const host of hosts) {
-        const reached = await this.ask(host, d).catch(() => null)
-        if (reached) return void asked++
-        there ||= reached === false
-      }
-      if (there) return
-      // Nobody was at any address it had: it changed network and has not called since, so ask out loud who holds
-      // its certificate now — the beacon of 6k, from this side. The answer is a hint; ask() still pins the cert.
-      for (const [host, port] of await this.find(d.peer_fp)) {
-        const reached = await this.ask(host, { ...d, peer_port: port }).catch(() => null)
-        if (reached == null) continue
-        if (reached) asked++
-        this.db.prepare('UPDATE sync_devices SET peer_hosts = ?, peer_port = ? WHERE id = ?').run([...new Set([host, ...hosts])].slice(0, 4).join(','), port, d.id)
-        return
-      }
+      if ((await this.reach(d))?.status === 200) asked++
     }))
     return asked
+  }
+
+  /**
+   * One request to a paired device, wherever it is now: each address it had, then — nobody was at any of them, so
+   * it changed network and has not called since — the beacon of 6k asking out loud who holds its certificate. The
+   * beacon's answer is a hint; askFor() still pins the cert. Answers the device's reply, or null when none came.
+   */
+  async reach(d, path = '/sync', ms = 3000) {
+    const hosts = String(d.peer_hosts ?? '').split(',').filter(Boolean)
+    let answer = null // its certificate answered, whatever it said: it has not moved
+    for (const host of hosts) {
+      const got = await this.askFor(host, d, path, ms).catch(() => null)
+      if (got?.status === 200) return got
+      answer ||= got
+    }
+    if (answer) return answer
+    for (const [host, port] of await this.find(d.peer_fp)) {
+      const got = await this.askFor(host, { ...d, peer_port: port }, path, ms).catch(() => null)
+      if (!got) continue
+      this.db.prepare('UPDATE sync_devices SET peer_hosts = ?, peer_port = ? WHERE id = ?').run([...new Set([host, ...hosts])].slice(0, 4).join(','), port, d.id)
+      return got
+    }
+    return null
+  }
+
+  /**
+   * Where the paired phone is (desktop Maps' "where I am"): this computer has no GPS, and a guess from the internet is
+   * off by half a county (the user, 21 Oct), so the phone takes one fix when asked (SyncServer.kt /location). Phones
+   * first; a tablet only when no phone answers. { lat, lng, accuracy, at, provider, device } or { error }.
+   */
+  async phoneLocation(ms = 60_000) {
+    const devices = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
+      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL ORDER BY kind = 'tablet'`).all()
+    if (!devices.length) return { error: 'No phone is paired with this computer. Pair one in Settings › Sync.' }
+    let said = null // the first thing a device said instead of a fix ("location is off", "no permission")
+    for (const tier of [devices.filter(d => d.kind !== 'tablet'), devices.filter(d => d.kind === 'tablet')]) {
+      const fix = await Promise.any(tier.map(async d => {
+        const got = await this.reach(d, '/location', ms)
+        if (got?.status === 200 && Number.isFinite(got.body?.lat) && Number.isFinite(got.body?.lng)) return { ...got.body, device: d.name }
+        said ||= got && (got.status !== 404 && typeof got.body?.error === 'string' ? `${d.name}: ${got.body.error}` : `${d.name} cannot answer that yet: it needs the new Tetra.`)
+        throw new Error('no fix')
+      })).catch(() => null)
+      if (fix) return fix
+    }
+    return { error: said ?? 'No phone answered. Open Tetra on the phone, on the same network as this computer.' }
   }
 
   /** Keeps the newer open/close of each path; answers with every path's newest. */
@@ -750,17 +779,28 @@ class SyncServer {
     })
   }
 
-  ask(host, device) {
+  ask(host, device) { return this.askFor(host, device).then(r => r.status === 200) }
+
+  /**
+   * A POST to a paired device, answered only if its certificate is the one from pairing. Three seconds to reach it;
+   * once the handshake is done, `ms` for the answer (a GPS fix takes a while).
+   */
+  askFor(host, device, path = '/sync', ms = 3000) {
     return new Promise((resolve, reject) => {
       const req = https.request({
-        host, port: device.peer_port || PORT, method: 'POST', path: '/sync', timeout: 3000, rejectUnauthorized: false,
+        host, port: device.peer_port || PORT, method: 'POST', path, timeout: 3000, rejectUnauthorized: false,
         headers: { authorization: `Bearer ${device.peer_token}`, 'content-length': 0 },
       }, res => {
         const got = res.socket.getPeerCertificate().fingerprint256?.replace(/:/g, '').toLowerCase()
-        res.resume()
-        if (got !== device.peer_fp) return reject(new Error('That is not the paired device.'))
-        resolve(res.statusCode === 200)
+        if (got !== device.peer_fp) { res.resume(); return reject(new Error('That is not the paired device.')) }
+        const parts = []
+        res.on('data', c => { if (parts.length < 64) parts.push(c) }).on('end', () => {
+          let body = null
+          try { body = JSON.parse(Buffer.concat(parts).toString('utf8')) } catch {}
+          resolve({ status: res.statusCode, body })
+        }).on('error', reject)
       })
+      req.on('socket', s => s.once('secureConnect', () => req.setTimeout(ms)))
       req.on('timeout', () => req.destroy(new Error('No answer.')))
       req.on('error', reject)
       req.end()
