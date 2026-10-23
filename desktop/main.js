@@ -408,7 +408,8 @@ app.whenReady().then(() => {
     notify(`${paths.length} ${paths.length === 1 ? 'file' : 'files'} from ${device}`, [...new Set(paths.map(p => p.split('/').pop()))].join(', '))
     win?.webContents.send('sync-received')
   } })
-  sync.start().catch(e => { sync.error = e.message })
+  // started: the devices are told at once, so what waited for this computer (Send to computer's outbox) goes now
+  sync.start().then(() => { if (!process.env.DRIVE_HIDDEN) sync.nudge().catch(() => {}) }).catch(e => { sync.error = e.message })
   purgatory.held = sha => sync.heldSafely(sha)
   // Photos moved before a Move deleted outright are still in the system Trash, taking the room they were to free.
   setTimeout(() => sync.releaseTrashedMoved().then(n => n && console.log(`[trash] ${n} moved photos let go`)).catch(() => {}), 5000)
