@@ -39,6 +39,7 @@ const fail = message => { throw new Error(message) }
 const isSafeRel = rel => typeof rel === 'string' && (rel === '' || (!rel.startsWith('/') && rel.split('/').every(p => p && p !== '.' && p !== '..')))
 const isSafeName = name => typeof name === 'string' && name.trim() === name && name !== '' && name !== '.' && name !== '..' && !/[/\\\0]/.test(name)
 const inTrash = rel => rel === TRASH || rel.startsWith(TRASH + '/')
+const isEvent = rel => rel.startsWith('Calendar/') && rel.toLowerCase().endsWith('.ics')
 /** A part of Drive that syncs on its own, at once (the Calendar, 18 Oct): its folders, and its kinds of file in the Trash. */
 const SCOPES = { calendar: { dirs: ['Calendar'], trashExts: ['.ics'] }, timer: { dirs: ['Timer'], trashExts: [] } }
 /** The Calendar's, the Timer's and Maps' folders: synced as files, kept out of Files' lists, search and Move (the user, 18 Oct). */
@@ -393,10 +394,25 @@ class Files {
     const back = this.db.prepare('DELETE FROM file_deleted_here WHERE sha256 = ?')
     for (const sha of mine.keys()) back.run(sha)
     const deletedHere = new Set(this.db.prepare('SELECT sha256 FROM file_deleted_here').all().map(r => r.sha256))
+    // The same per path: a path this computer held when it last agreed with this device and holds no more was removed
+    // here, even when its bytes are still here under another name (23 Oct: birthdays rm'd from Calendar/Personal came
+    // back within seconds, their identical "(2)" copies keeping the bytes here). Not asked for again while the device
+    // offers exactly those bytes there; an edit there is asked for, and the memory goes once the device lets it go.
+    this.db.exec('CREATE TABLE IF NOT EXISTS file_removed_here (device_id TEXT NOT NULL, path TEXT NOT NULL, sha256 TEXT NOT NULL, PRIMARY KEY(device_id, path))')
+    const removedRow = this.db.prepare('INSERT OR REPLACE INTO file_removed_here(device_id, path, sha256) VALUES(?,?,?)')
+    if (mine.size || mineBefore.size < 20) for (const [rel, sha] of mineBefore) if (!minePaths.has(rel)) removedRow.run(deviceId, rel, sha)
+    const removedHere = new Map()
+    const unremoved = this.db.prepare('DELETE FROM file_removed_here WHERE device_id = ? AND path = ?')
+    for (const r of this.db.prepare('SELECT path, sha256 FROM file_removed_here WHERE device_id = ?').all(deviceId)) {
+      if (!inScope(r.path)) continue
+      if (minePaths.has(r.path) || offered.get(r.path) !== r.sha256) unremoved.run(deviceId, r.path)
+      else removedHere.set(r.path, r.sha256)
+    }
     const want = [], moved = [], updates = []
     for (const [rel, sha] of offered) {
       if (!followTrash && inTrash(rel)) continue
       if (deletedHere.has(sha)) continue
+      if (removedHere.get(rel) === sha) continue
       if (mine.get(sha)?.includes(rel)) continue // already here, at this very path
       // The device's copy is the version both held last time and this computer has edited it since: the new
       // version goes to the device (have), and its old one is not asked for.
@@ -430,6 +446,14 @@ class Files {
     // is the same sin as deleting, read backwards — so it is never offered again.
     const gone = new Set([...before.values()].filter(sha => !offeredShas.has(sha)))
     const have = [], moveTo = []
+    // An event file the device held last time and holds no more, unchanged here since, it deleted (rm'd, not trashed):
+    // this computer's copy goes to the Trash, as an event deleted in the Calendar does (the user, 23 Oct: an .ics deleted
+    // from the disk is a deletion from that calendar). Not for a Move device, whose deletions are its own, nor when its
+    // Calendar came empty where 20+ events were (a missing folder).
+    const events = m => [...m.keys()].filter(isEvent).length
+    const removedThere = followTrash && (events(offered) || events(before) < 20)
+      ? [...minePaths].filter(([rel, sha]) => isEvent(rel) && !offered.has(rel) && before.get(rel) === sha && mineBefore.get(rel) === sha) : []
+    for (const [rel, sha] of removedThere) { minePaths.delete(rel); minePaths.set(await this.trash(rel), sha) }
     for (const [rel, sha] of minePaths) {
       if (offered.get(rel) === sha) continue // the device has these bytes at this very path
       // This computer edited it and the device has not touched its copy since: the new version replaces it there.
@@ -448,6 +472,8 @@ class Files {
       // as the device's own copies reach this computer (a document copied into a new folder, 29 September).
       else if (!offered.has(rel)) have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel) })
     }
+    // An event file removed here that the device still holds as it was: the device's copy follows into its Trash.
+    for (const [rel] of removedHere) if (isEvent(rel) && !moveTo.some(m => m.from === rel)) moveTo.push({ from: rel, to: `${TRASH}/${path.posix.basename(rel)}` })
     // A path the device is being told to *move* must not also be asked for. Both answers are true on their own
     // — this computer does not hold those bytes at that path, and it moved them itself — and sending both made
     // the device upload the old path while renaming its copy, so the computer ended up with two of everything.

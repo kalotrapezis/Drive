@@ -2378,3 +2378,33 @@ so it goes through Files sync's own requests and rules — only for its part, so
   offered as a replacement; a delete there is followed into Trash; the next whole sync finds nothing amiss) and
   `sync.test.js` (the scoped request end to end; an unknown scope refused; the whole sync's address ignores a scope);
   Android `CalendarTest` (the scope's paths). **Not yet run between real devices.**
+
+### 6an. An event rm'd stays deleted; the same bytes never land as "(2)" (found and fixed 2026-10-23)
+
+**What happened.** Six birthdays moved by hand from Calendar/Personal to a new Γενέθλια while Tetra ran; the seven
+old files `rm`'d from Personal came back within seconds, from the phone (history: "received" 19:56 and 19:58). Personal
+held 334 `x (2).ics`, 330 byte for byte their original.
+
+**Why.** (1) The computer remembered a deletion by its *bytes* only (`file_deleted_here`): a file removed while the same
+bytes stayed here under another name — its identical "(2)" — was not a deletion, so the phone's copy at the old path was
+asked for again. (2) A file arriving at a path that already held exactly those bytes (two syncs asking at once: the
+Calendar's part and the whole) landed beside it as "(2)", on the computer (`sync.js receiveFile`) and on the phone
+(`SyncClient.receiveFile`, and `moveFile` when the target held the same bytes).
+
+**The rule now.**
+- A path this computer held when it last agreed with a device and holds no more was removed here
+  (`file_removed_here`, per device and path): not asked for while that device offers exactly those bytes there; an
+  edit there is still asked for; the memory goes when the device lets the path go or it is back here.
+- **Calendar events only** (the user: an .ics deleted from the disk is a deletion from that calendar): the other side
+  follows into its Trash, as an event deleted in the app does — removed here → the device is told `moveTo` Trash;
+  removed on the device (held unchanged here) → this computer's copy to its Trash. Not from a Move device, and not when
+  a device's Calendar comes empty where 20+ events were.
+- The same bytes already at the path: nothing is written, no "(2)", on both sides.
+- Two versions of one event in one calendar: the higher `SEQUENCE` is shown, then the newer `LAST-MODIFIED`/`DTSTAMP`
+  (was the newer only). The same UID in two calendars is two events (each calendar groups its own files).
+
+**Checked:** desktop `files.test.js` (an event rm'd while its "(2)" stays: not asked back, sync after sync; the device
+told to Trash it; a move by hand mirrored; the device's own rm → this computer's Trash; an edit there after a removal
+here asked for), `sync.test.js` (the same bytes PUT twice: no "(2)"; bytes back under another name are asked for, the
+removed path is not), `calendar.test.js` and Android `CalendarTest` (SEQUENCE first; the same UID in two calendars).
+The phone's receive and move checks have no unit test (they need the network). Not yet run between real devices.

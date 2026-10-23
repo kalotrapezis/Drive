@@ -1439,7 +1439,11 @@ class SyncServer {
       // device edited — the old one kept in "Files history", outside Drive, as a drive backup keeps it. Anything
       // else of the same name stays, and the newcomer lands beside it.
       const replaces = this.files.pendingUpdate(device.id, rel, expected)
-      if (replaces && fs.existsSync(target) && await this.files.hash(rel) === replaces) {
+      // Those very bytes are already at that path (two syncs asked at once): nothing to add. 330 of Personal's 334
+      // "(2)" events were byte for byte their original (23 Oct).
+      const same = fs.existsSync(target) && await this.files.hash(rel) === expected
+      if (same) await fsp.rm(part)
+      else if (replaces && fs.existsSync(target) && await this.files.hash(rel) === replaces) {
         const old = path.join(this.dataDir, 'Files history', String(Date.now()), ...rel.split('/'))
         await fsp.mkdir(path.dirname(old), { recursive: true })
         await fsp.copyFile(target, old)
@@ -1453,7 +1457,7 @@ class SyncServer {
         await fsp.rm(part)
       }
       const modified = Number(params.get('modified'))
-      if (Number.isFinite(modified) && modified > 0) await fsp.utimes(kept, new Date(), new Date(modified))
+      if (!same && Number.isFinite(modified) && modified > 0) await fsp.utimes(kept, new Date(), new Date(modified))
       const relKept = this.files.rel(kept)
       this.files.received(device.id, relKept, expected)
       history.record(this.db, { action: 'received', kind: 'file', name: relKept, sha256: expected, device: device.id })

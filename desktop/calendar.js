@@ -172,7 +172,7 @@ function eventOf(c) {
   return {
     uid: text('UID').trim(), title: text('SUMMARY'), place: text('LOCATION'), notes: text('DESCRIPTION'), allDay: start.allDay, start, end,
     rrule: prop(c, 'RRULE')?.value.trim() || null, exdates, recurrenceId: prop(c, 'RECURRENCE-ID') ? timeOf(prop(c, 'RECURRENCE-ID')).ms : null,
-    cancelled: text('STATUS').toUpperCase() === 'CANCELLED', alarms, modified: mod ? timeOf(mod).ms : 0,
+    cancelled: text('STATUS').toUpperCase() === 'CANCELLED', alarms, modified: mod ? timeOf(mod).ms : 0, sequence: parseInt(prop(c, 'SEQUENCE')?.value, 10) || 0,
   }
 }
 
@@ -210,7 +210,8 @@ function readFile(file) {
   let mtime = 0
   try { mtime = fs.statSync(file).mtimeMs } catch {}
   const mods = [master, ...overrides].filter(Boolean).map(e => e.modified).filter(Boolean)
-  return { file, comps, master, overrides, uid: master?.uid || overrides[0]?.uid || path.basename(file, '.ics'), modified: mods.length ? Math.max(...mods) : mtime }
+  return { file, comps, master, overrides, uid: master?.uid || overrides[0]?.uid || path.basename(file, '.ics'), modified: mods.length ? Math.max(...mods) : mtime,
+    sequence: Math.max(0, ...[master, ...overrides].filter(Boolean).map(e => e.sequence)) }
 }
 
 // ——— repeats (RFC 5545 RRULE), in the event's own clock ———
@@ -391,7 +392,8 @@ class Calendar {
     }).filter(Boolean)
     const byUid = new Map()
     for (const f of read) byUid.set(f.uid, [...(byUid.get(f.uid) || []), f])
-    return [...byUid.values()].map(same => { const f = same.reduce((a, b) => b.modified > a.modified ? b : a); return { ...f, versions: same.length } })
+    // the one shown: the higher SEQUENCE, then the newer LAST-MODIFIED/DTSTAMP (RFC 5545's own order, the user 23 Oct)
+    return [...byUid.values()].map(same => { const f = same.reduce((a, b) => (b.sequence - a.sequence || b.modified - a.modified) > 0 ? b : a); return { ...f, versions: same.length } })
   }
 
   /** Every time the calendars' events happen in [from, to), for the screen: plain values only. */

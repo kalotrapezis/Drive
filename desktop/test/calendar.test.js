@@ -175,3 +175,18 @@ test('calendar: a repeat moved to another time keeps its cancelled and changed d
     assert.match(fs.readFileSync(path.join(root, rel), 'utf8'), /EXDATE;VALUE=DATE:20261021/)
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
+
+test('calendar: two versions of one event show the higher SEQUENCE, then the newer; the same UID in two calendars is two events (23 Oct)', () => {
+  const { tmp, root, cal } = setup()
+  try {
+    const ev = (seq, mod, title) => ['BEGIN:VCALENDAR', 'VERSION:2.0', 'BEGIN:VEVENT', 'UID:bday-1', 'DTSTAMP:20261018T101618Z', `LAST-MODIFIED:${mod}`,
+      `SEQUENCE:${seq}`, `SUMMARY:${title}`, 'DTSTART;VALUE=DATE:20160627', 'DTEND;VALUE=DATE:20160628', 'RRULE:FREQ=YEARLY', 'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n')
+    fs.writeFileSync(path.join(root, 'Work', 'bday.ics'), ev(3, '20250101T000000Z', 'Edited three times'))
+    fs.writeFileSync(path.join(root, 'Work', 'bday (2).ics'), ev(1, '20260101T000000Z', 'Newer but behind'))
+    cal.newCalendar('Γενέθλια', '#F06292')
+    fs.writeFileSync(path.join(root, 'Γενέθλια', 'bday.ics'), ev(0, '20200101T000000Z', 'In the other calendar'))
+    const shown = cal.occurrences(new Date('2027-06-01T00:00+03:00').getTime(), new Date('2027-07-01T00:00+03:00').getTime()).filter(o => o.uid === 'bday-1')
+    assert.deepEqual(shown.map(o => [o.calendar, o.title]).sort(), [['Work', 'Edited three times'], ['Γενέθλια', 'In the other calendar']])
+    assert.equal(fs.readFileSync(path.join(root, 'Γενέθλια', 'bday.ics'), 'utf8'), ev(0, '20200101T000000Z', 'In the other calendar'), 'reading writes nothing')
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})

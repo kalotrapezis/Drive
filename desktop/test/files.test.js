@@ -130,6 +130,43 @@ test('a chosen System folder is made and kept like Documents; left out, it goes,
   fs.rmSync(tmp, { recursive: true })
 })
 
+test('an event removed by hand is a deletion: never asked back, and the other side follows into its Trash (23 Oct)', async () => {
+  const { tmp, root, files } = setup()
+  try {
+    const sha = b => require('node:crypto').createHash('sha256').update(b).digest('hex')
+    const cal = p => path.join(root, 'Calendar', p)
+    const list = l => l.map(([p, b]) => ({ path: p, sha256: sha(b) }))
+    fs.mkdirSync(cal('Personal'), { recursive: true }); fs.mkdirSync(cal('Γενέθλια'))
+    const ev = 'BEGIN:VCALENDAR birthday', other = 'BEGIN:VCALENDAR other', moved = 'BEGIN:VCALENDAR moved'
+    // the identical "(2)" kept the bytes here, so removing the original by hand was not remembered as a deletion
+    for (const [p, b] of [['Personal/bday.ics', ev], ['Personal/bday (2).ics', ev], ['Personal/other.ics', other], ['Personal/moved.ics', moved]]) fs.writeFileSync(cal(p), b)
+    const device = [['Calendar/Personal/bday.ics', ev], ['Calendar/Personal/bday (2).ics', ev], ['Calendar/Personal/other.ics', other], ['Calendar/Personal/moved.ics', moved]]
+    let r = await files.reconcile(list(device), 'phone', { scope: 'calendar' })
+    assert.deepEqual([r.want, r.have, r.moveTo], [[], [], []])
+    // here: the original rm'd (its copy stays); another event moved to Γενέθλια by hand
+    fs.rmSync(cal('Personal/bday.ics')); fs.renameSync(cal('Personal/moved.ics'), cal('Γενέθλια/moved.ics'))
+    r = await files.reconcile(list(device), 'phone', { scope: 'calendar' })
+    assert.deepEqual(r.want, [], 'nothing comes back')
+    assert.deepEqual(r.moveTo.sort((a, b) => a.from.localeCompare(b.from)), [
+      { from: 'Calendar/Personal/bday.ics', to: 'Trash/bday.ics' }, { from: 'Calendar/Personal/moved.ics', to: 'Calendar/Γενέθλια/moved.ics' }])
+    // a device that did not follow is still not asked, sync after sync
+    r = await files.reconcile(list(device), 'phone', { scope: 'calendar' })
+    assert.deepEqual(r.want, [])
+    // the device followed, and rm'd other.ics itself: this computer's copy goes to its Trash, nothing is offered back
+    const after = [['Trash/bday.ics', ev], ['Calendar/Personal/bday (2).ics', ev], ['Calendar/Γενέθλια/moved.ics', moved]]
+    r = await files.reconcile(list(after), 'phone', { scope: 'calendar' })
+    assert.ok(!fs.existsSync(cal('Personal/other.ics'))); assert.equal(fs.readFileSync(path.join(root, 'Trash', 'other.ics'), 'utf8'), other)
+    assert.deepEqual(r.have, []); assert.deepEqual(r.moveTo, [])
+    assert.equal(fs.readFileSync(cal('Γενέθλια/moved.ics'), 'utf8'), moved, 'the event in the other calendar untouched')
+    // an edit there after a removal here is not lost: it is asked for
+    fs.writeFileSync(cal('Personal/x.ics'), 'BEGIN:VCALENDAR x')
+    await files.reconcile(list([...after, ['Calendar/Personal/x.ics', 'BEGIN:VCALENDAR x']]), 'phone', { scope: 'calendar' })
+    fs.rmSync(cal('Personal/x.ics'))
+    r = await files.reconcile(list([...after, ['Calendar/Personal/x.ics', 'BEGIN:VCALENDAR x edited']]), 'phone', { scope: 'calendar' })
+    assert.ok(r.want.includes('Calendar/Personal/x.ics'))
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
+})
+
 test('a name already in Trash never blocks a delete: the newcomer becomes "name (2)"', async () => {
   const { tmp, root, files } = setup()
   for (let i = 0; i < 2; i++) { fs.mkdirSync(path.join(root, 'QA')); fs.writeFileSync(path.join(root, 'a.txt'), 'x'); await files.trash('QA'); await files.trash('a.txt') }

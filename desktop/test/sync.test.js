@@ -384,6 +384,10 @@ test('drive files: the computer asks only for what it lacks, and follows a move 
     assert.equal(fs.existsSync(path.join(root, 'Notes/receipt.pdf')), false)
     r = await call('PUT', `/file/${pdfHash}?path=Notes/receipt.pdf`, { token, body: pdf })
     assert.deepEqual(r.body, { sha256: pdfHash, path: 'Notes/receipt.pdf', verified: true })
+    // the same bytes again at the same path (two syncs asked at once): nothing added, no "(2)" (23 Oct)
+    r = await call('PUT', `/file/${pdfHash}?path=Notes/receipt.pdf`, { token, body: pdf })
+    assert.deepEqual(r.body, { sha256: pdfHash, path: 'Notes/receipt.pdf', verified: true })
+    assert.ok(!fs.existsSync(path.join(root, 'Notes/receipt (2).pdf')))
 
     // Second run: it is here now, so nothing is asked for again.
     assert.deepEqual((await manifest({ files: [{ path: 'Notes/receipt.pdf', sha256: pdfHash, size: pdf.length }] })).body, { want: [], moved: [], have: [], moveTo: [] })
@@ -643,7 +647,9 @@ test('the other direction: what this computer offers, and a connection that says
     assert.deepEqual((await call('POST', '/files/manifest', { token, json: offer })).body.want, [], 'deleted here stays deleted')
     assert.deepEqual((await call('POST', '/files/manifest', { token, json: offer })).body.want, [], 'on the next sync too')
     fs.writeFileSync(path.join(root, 'Notes/back.txt'), bin) // the same bytes put back here by hand
-    assert.deepEqual((await call('POST', '/files/manifest', { token, json: offer })).body.want, ['Notes/shared.txt'], 'back here: forgotten')
+    // back here: the bytes are forgotten (another name for them is asked for), the path removed here is not (23 Oct)
+    offer.files.push({ path: 'Notes/elsewhere.txt', sha256: binHash, size: bin.length })
+    assert.deepEqual((await call('POST', '/files/manifest', { token, json: offer })).body.want, ['Notes/elsewhere.txt'], 'back here: forgotten')
     fs.rmSync(path.join(root, 'Notes/back.txt'))
 
     // Send-only: the device may give, and receives nothing back.
