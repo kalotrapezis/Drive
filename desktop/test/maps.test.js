@@ -48,3 +48,30 @@ test('places: a Home slot is one place\'s; deleting goes to the trash', async ()
   assert.equal((await m.places()).length, 1)
   await assert.rejects(m.deletePlace('../x'))
 })
+
+test("a sync's copies of the parked car leave one car, the newest; deleting a place takes its copies (23 Oct)", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maps-car-'))
+  fs.mkdirSync(path.join(root, 'Places'))
+  const car = (f, lat, at) => {
+    fs.writeFileSync(path.join(root, 'Places', f), JSON.stringify({ id: 'parking', name: 'My car', lat, lng: 23.5, icon: 'parking' }))
+    fs.utimesSync(path.join(root, 'Places', f), at, at)
+  }
+  car('parking (2).json', 38.1, 1000); car('parking (3).json', 38.3, 3000); car('parking.json', 38.2, 2000)
+  fs.writeFileSync(path.join(root, 'Places', 'home.json'), JSON.stringify({ id: 'home', name: 'Home', lat: 38, lng: 23 }))
+  const trashed = []
+  const m = new Maps(root, async rel => { trashed.push(rel); fs.unlinkSync(path.join(root, rel.replace(/^Maps\//, ''))) })
+  const places = await m.places()
+  assert.deepEqual(places.map(p => p.name), ['Home', 'My car'])
+  assert.equal(places.find(p => p.id === 'parking').lat, 38.3)
+  assert.deepEqual(trashed.sort(), ['Maps/Places/parking (2).json', 'Maps/Places/parking.json'])
+  await m.deletePlace('parking')
+  assert.deepEqual(fs.readdirSync(path.join(root, 'Places')), ['home.json'])
+})
+
+test("an address where no house has a number: the street and the village's postcode (the user's house, 23 Oct)", async t => {
+  const root = path.join(os.homedir(), 'Tetra-maps')
+  if (!fs.existsSync(path.join(root, 'greece-streets.tsv'))) return t.skip('no map files on this computer')
+  const m = new Maps(root, async () => {})
+  assert.equal(await m.describe(37.27642, 22.58903), 'Οδός Παραδείγματος, 12345 Άγιος Λουκάς')
+  assert.equal(await m.describe(37.27642, 22.58903, 'Πλατάνι'), 'Πλατάνι, 12345 Άγιος Λουκάς')
+})

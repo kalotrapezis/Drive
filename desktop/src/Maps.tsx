@@ -49,7 +49,7 @@ export function Emblem({ icon, size = 18 }: { icon: string; size?: number }) {
   return <svg width={size} height={size} viewBox={e.vb} fill="currentColor" aria-hidden="true">{e.d.map((d, i) => <path key={i} d={d} />)}</svg>
 }
 
-type Card = { kind: 'poi'; poi: Poi } | { kind: 'place'; place: MapPlace } | { kind: 'pin'; lat: number; lng: number }
+type Card = { kind: 'poi'; poi: Poi } | { kind: 'place'; place: MapPlace } | { kind: 'pin'; lat: number; lng: number; road?: string }
   | { kind: 'me'; lat: number; lng: number; accuracy: number; device: string }
 const ME = 'My location' // the phone's fix as a trip's stop
 type Draft = { id?: string; name: string; stops: MapStop[] }
@@ -176,7 +176,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
     if (fly) map.current?.flyTo({ center: [s.lng, s.lat], zoom: Math.max(map.current.getZoom(), 15) })
     pin.current?.remove(); pin.current = null
     if (c.kind === 'pin') pin.current = new maplibregl.Marker({ color: '#e5484d' }).setLngLat([c.lng, c.lat]).addTo(map.current!)
-    window.drive.mapsDescribe(s.lat, s.lng).then(setAddress, () => {})
+    window.drive.mapsDescribe(s.lat, s.lng, c.kind === 'pin' ? c.road : null).then(setAddress, () => {})
   }
   /** Where I am: this computer has no GPS, so the paired phone is asked for one fix (sync.js phoneLocation). */
   async function whereAmI() {
@@ -207,7 +207,10 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
       const found = await window.drive.mapsNear(lat, lng, String(own.properties.name)).catch(() => null)
       if (found) { open({ kind: 'poi', poi: found }, false); return }
     }
-    open({ kind: 'pin', lat: e.lngLat.lat, lng: e.lngLat.lng }, false)
+    // a road tapped: its name is the spot's street where no house near has a number (roadAtPoint on the phone)
+    const road = m.queryRenderedFeatures([[e.point.x - 12, e.point.y - 12], [e.point.x + 12, e.point.y + 12]])
+      .find(f => f.layer.id.startsWith('roads_') && !/casing|labels|shields|oneway|rail|runway|taxiway|pier/.test(f.layer.id) && (f.properties?.['name:el'] || f.properties?.name))
+    open({ kind: 'pin', lat: e.lngLat.lat, lng: e.lngLat.lng, road: road ? String(road.properties['name:el'] || road.properties.name) : undefined }, false)
   }
 
   // ---- search ----

@@ -188,7 +188,7 @@ declare global {
       mapsSaveTrip(t: { id?: string; name: string; stops: MapStop[] }): Promise<MapTrip>
       mapsDeleteTrip(id: string): Promise<void>
       mapsSearch(q: { query?: string; kind?: string | null; lat: number; lng: number; limit?: number; nearby?: boolean; within?: { south: number; north: number; west: number; east: number } | null }): Promise<Poi[]>
-      mapsDescribe(lat: number, lng: number): Promise<string | null>
+      mapsDescribe(lat: number, lng: number, road?: string | null): Promise<string | null>
       mapsNear(lat: number, lng: number, name: string): Promise<Poi | null>
       mapsGoogle(query: string): Promise<void>
       mapsWeb(url: string): Promise<void>

@@ -140,7 +140,26 @@ class Maps {
     }
     return out.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
   }
-  places() { return this.read(PLACES, parsePlace) }
+  /**
+   * The saved places, one per id: a sync that found a place changed on both sides keeps both files ("parking (2).json"),
+   * so the newest file is the place; a parked car's older copies go to the Trash, as there is one car (the user, 23 Oct:
+   * "it had 3 parkings, keep only the latest") — Places.places on the phone.
+   */
+  async places() {
+    const full = path.join(this.root, PLACES)
+    const byId = new Map()
+    for (const n of await fsp.readdir(full).catch(() => [])) if (!n.startsWith('.') && n.toLowerCase().endsWith('.json')) {
+      const f = path.join(full, n)
+      const p = parsePlace(await fsp.readFile(f, 'utf8').catch(() => ''), f)
+      if (!p) continue
+      const at = (await fsp.stat(f).catch(() => null))?.mtimeMs ?? 0
+      const was = byId.get(p.id)
+      const [keep, drop] = !was || at > was.at ? [{ p, at, n }, was] : [was, { p, at, n }]
+      byId.set(p.id, keep)
+      if (drop && p.id === 'parking') await this.trash(`Maps/${PLACES}/${drop.n}`).catch(() => {})
+    }
+    return [...byId.values()].map(v => v.p).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+  }
   lists() { return this.read(LISTS, parseList) }
   trips() { return this.read(TRIPS, parseTrip) }
 
@@ -179,10 +198,14 @@ class Maps {
   }
   async deleteTrip(id) { await this.remove(TRIPS, id) }
 
+  /** Every file of `id` to the Trash: its own and any copy a sync made of it under another name ("parking (2).json"). */
   async remove(dir, id) {
     if (!/^[A-Za-z0-9_-]+$/.test(String(id))) throw new Error('Not a place of the map.')
-    const rel = `Maps/${dir}/${id}.json`
-    if (fs.existsSync(path.join(this.root, dir, `${id}.json`))) await this.trash(rel)
+    const full = path.join(this.root, dir)
+    for (const n of await fsp.readdir(full).catch(() => [])) if (n.toLowerCase().endsWith('.json')) {
+      const own = n === `${id}.json` || (() => { try { return JSON.parse(fs.readFileSync(path.join(full, n), 'utf8')).id === id } catch { return false } })()
+      if (own) await this.trash(`Maps/${dir}/${n}`)
+    }
   }
 
   // ---- search and addresses ----
@@ -225,8 +248,30 @@ class Maps {
     return this.addrCache
   }
 
-  /** "Οδός 12, 67100 Ξάνθη": the nearest address within 60 m, else the town and the nearest postcode (MapsAddresses.describe). */
-  async describe(lat, lng) {
+  /** The named roads: a name and the middle of each road piece (greece-streets.tsv), read once (MapsStreets). */
+  async streets() {
+    const file = path.join(this.root, 'greece-streets.tsv')
+    const stat = await fsp.stat(file).catch(() => null)
+    if (!stat) return null
+    if (this.streetCache?.at === stat.mtimeMs) return this.streetCache
+    const lat = [], lng = [], name = []
+    for (const line of (await fsp.readFile(file, 'utf8')).split('\n')) {
+      const c = line.split('\t')
+      if (c.length < 3) continue
+      const a = Number(c[1]), b = Number(c[2])
+      if (!c[1] || !inRange(a, b)) continue
+      lat.push(a); lng.push(b); name.push(c[0])
+    }
+    this.streetCache = { at: stat.mtimeMs, lat: Float64Array.from(lat), lng: Float64Array.from(lng), name }
+    return this.streetCache
+  }
+
+  /**
+   * "Οδός 12, 67100 Ξάνθη": the nearest address within 60 m; where no house near has a number (most villages), the street —
+   * `road`, the one tapped, or the nearest road piece within 80 m — with the nearest postcode within 1.5 km or the town's
+   * own (MapsAddresses.describe; the user, 23 Oct: "address, number, postcode"; "when I tap on the road give the address").
+   */
+  async describe(lat, lng, road = null) {
     const a = await this.addresses(), pois = await this.pois()
     let best = -1, bestD = 60, post = '', postD = 1500
     if (a) for (let i = 0; i < a.lat.length; i++) {
@@ -235,14 +280,24 @@ class Maps {
       if (d < bestD) { bestD = d; best = i }
       if (d < postD && a.rest[i][2]) { post = a.rest[i][2]; postD = d }
     }
-    let town = '', townD = Infinity
+    let town = null, townD = Infinity
     for (const p of pois) if (['city', 'town', 'village', 'suburb'].includes(p.kind) && Math.abs(p.lat - lat) < 0.1 && Math.abs(p.lng - lng) < 0.13) {
       const d = metres(lat, lng, p.lat, p.lng)
-      if (d < townD) { townD = d; town = p.name || p.nameEn }
+      if (d < townD) { townD = d; town = p }
     }
     const r = best >= 0 ? a.rest[best] : null
-    const street = r ? `${r[0]} ${r[1] ?? ''}`.trim() : ''
-    const code = (r && r[2]) || post, place = (r && r[3]) || town
+    let street = r ? `${r[0]} ${r[1] ?? ''}`.trim() : (typeof road === 'string' && road.trim()) || ''
+    if (!street) {
+      const s = await this.streets()
+      let d0 = 80
+      if (s) for (let i = 0; i < s.lat.length; i++) {
+        if (Math.abs(s.lat[i] - lat) > 0.002 || Math.abs(s.lng[i] - lng) > 0.0025) continue
+        const d = metres(lat, lng, s.lat[i], s.lng[i])
+        if (d < d0) { d0 = d; street = s.name[i] }
+      }
+    }
+    const code = (r && r[2]) || post || (town && /^\d{3} ?\d{2}$/.test(town.more) ? town.more : '')
+    const place = (r && r[3]) || (town ? town.name || town.nameEn : '')
     return [street, `${code} ${place}`.trim()].filter(Boolean).join(', ') || null
   }
 

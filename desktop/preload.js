@@ -49,7 +49,7 @@ contextBridge.exposeInMainWorld('drive', {
   mapsSaveTrip: t => ipcRenderer.invoke('maps:saveTrip', t),
   mapsDeleteTrip: id => ipcRenderer.invoke('maps:deleteTrip', id),
   mapsSearch: q => ipcRenderer.invoke('maps:search', q),
-  mapsDescribe: (lat, lng) => ipcRenderer.invoke('maps:describe', lat, lng),
+  mapsDescribe: (lat, lng, road) => ipcRenderer.invoke('maps:describe', lat, lng, road),
   mapsNear: (lat, lng, name) => ipcRenderer.invoke('maps:near', lat, lng, name),
   mapsGoogle: q => ipcRenderer.invoke('maps:google', q),
   mapsWeb: url => ipcRenderer.invoke('maps:web', url),
