@@ -924,3 +924,58 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .maps-route .segmented { margin-bottom: 4px; }
 .maps-leg { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
 .maps-leg.total { font-weight: 700; border-top: 1px solid var(--hover); padding-top: 4px; margin-top: 2px; }
+
+/* Contacts (Drive-Android Plan.md § Contacts): the tablet's layout — the list at the left, the contact at the right */
+.ct { height: 100%; display: flex; flex-direction: column; position: relative; --ct: #BE7E4D; }
+.ct-search { flex: 1; max-width: 520px; padding-left: 18px; }
+.ct-search input { flex: 1; background: none; border: 0; color: var(--text); font: inherit; font-size: 16px; outline: none; }
+.ct-search h1 { flex: 1; }
+.ct-body { flex: 1; display: flex; min-height: 0; gap: 12px; }
+.ct-list { width: 360px; flex: none; overflow-y: auto; padding: 0 4px 90px; }
+.ct-page { flex: 1; overflow-y: auto; padding: 0 12px 90px; }
+.ct-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 8px 12px; border-radius: var(--radius); text-align: left; }
+.ct-row:hover { background: var(--hover); }
+.ct-row.on { background: color-mix(in srgb, var(--ct) 25%, transparent); }
+.ct-row.picked { background: color-mix(in srgb, var(--ct) 45%, transparent); }
+.ct-name { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-name small, .ct-row small { color: var(--muted); }
+.ct-letter { margin: 12px 16px 2px; color: var(--ct); font-size: 14px; }
+.ct-face { border-radius: 50%; object-fit: cover; flex: none; display: grid; place-items: center; }
+.ct-initial { background: linear-gradient(135deg, #D7A982, var(--ct), #8D5A3B); color: #fff; font-weight: 500; }
+.ct-check { background: var(--ct); color: #fff; }
+.ct-favs { display: flex; gap: 14px; overflow-x: auto; padding: 4px 12px 10px; scrollbar-width: none; }
+.ct-fav { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 64px; }
+.ct-fav small { width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.ct-hint { padding: 16px; text-align: center; }
+.ct-contact { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.ct-contact h2 { margin: 0; font-weight: 500; }
+.ct-contact > .hint { margin: 0; }
+.ct-star { color: var(--ct); }
+.ct-top { align-self: stretch; display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.ct-edit .ct-top { justify-content: space-between; }
+.ct-edit .ct-top h3 { margin: 0; }
+.ct-actions { display: flex; gap: 22px; }
+.ct-action { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ct-action > svg, .ct-action > span { width: 56px; height: 56px; padding: 16px; border-radius: 50%; background: var(--ct); color: #fff; box-sizing: border-box; }
+.ct-action:disabled { opacity: .4; cursor: default; }
+.ct-card { align-self: stretch; background: var(--island); border-radius: var(--radius); padding: 6px 0; }
+.ct-detail { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
+.ct-detail > div { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ct-detail small, .ct-form > small { color: var(--muted); font-size: 12px; }
+.ct-detail .chips { padding: 0; }
+.ct-link { color: var(--ct); text-align: left; }
+.ct-form { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; }
+.ct-form > small { margin-top: 6px; }
+.ct-line { display: flex; gap: 8px; align-items: center; }
+.ct-line .field { flex: 1; min-width: 0; }
+.ct-label { flex: none !important; width: 120px; }
+.ct-short { flex: none !important; width: 140px; }
+.ct-delete { color: #ff7a6b; }
+.ct-drawer { left: 12px; right: auto; width: min(560px, calc(100% - 24px)); }
+.ct-dock { position: absolute; left: 12px; bottom: 12px; z-index: 6; }
+.ct .island-item { white-space: nowrap; }
+.ct-merge { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
+.ct-pair { padding: 12px; }
+.ct-who { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.ct-who > span { display: flex; flex-direction: column; min-width: 0; }
+.ct-who small { color: var(--muted); }

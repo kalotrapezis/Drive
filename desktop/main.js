@@ -16,6 +16,7 @@ const { Purgatory } = require('./purgatory')
 const history = require('./history')
 const { Notes } = require('./notes')
 const { Calendar } = require('./calendar')
+const { Contacts, readImport: readContacts } = require('./contacts')
 const timer = require('./timer')
 const { Maps } = require('./maps')
 const { Router } = require('./router')
@@ -58,6 +59,9 @@ const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move',
 const NOTE_CALLS = ['list', 'create', 'save', 'snapshot', 'history', 'restoreVersion', 'remove']
 const CALENDAR_CALLS = ['calendars', 'occurrences', 'save', 'saveDay', 'skipDay', 'endBefore', 'split', 'trash', 'move', 'keep', 'newCalendar', 'setCalendar', 'deleteCalendar', 'scheduleEvent', 'trashed', 'restore']
 let calendar = null, reminderTimer = null, calendarIncoming = []
+// Contacts (Drive-Android Plan.md § Contacts): Files/Contacts, one vCard a person; the window's calls, checked by name
+const CONTACTS_CALLS = ['list', 'save', 'trash', 'keep', 'trashed', 'restore', 'pairs', 'merge', 'notTheSame']
+let contacts = null
 
 // The Calendar's reminders (Drive-Android Plan.md § Calendar): one timer for the next, the plan made again from the files
 // whenever they change, a reminder is due, the computer wakes or Tetra starts. What came due while it was closed or asleep
@@ -113,6 +117,17 @@ function watchTimer() {
       settle = setTimeout(() => { win?.webContents.send('timer-changed'); planTimer(); sync?.nudge().catch(() => {}) }, 150)
     })
   } catch (e) { console.warn('[timer] cannot watch', e.message) }
+}
+function watchContacts() {
+  let settle = null
+  try {
+    fs.watch(contacts.root, (_, name) => {
+      if (name && path.basename(String(name)).startsWith('.')) return // a write in progress (.part)
+      clearTimeout(settle)
+      // shown, and the phones and tablets told at once: the nudge has them sync Contacts' part (SYNC_PLAN 6ap)
+      settle = setTimeout(() => { win?.webContents.send('contacts-changed'); sync?.nudge().catch(() => {}) }, 300)
+    })
+  } catch (e) { console.warn('[contacts] cannot watch', e.message) }
 }
 function watchCalendar() {
   let settle = null
@@ -389,6 +404,9 @@ app.whenReady().then(() => {
   // The Calendar is a folder of Files (synced as files); deleting goes to Files' Trash, as everywhere.
   calendar = new Calendar(path.join(FILES_ROOT, 'Calendar'), path.join(FILES_ROOT, 'Trash'))
   try { fs.mkdirSync(calendar.root, { recursive: true }) } catch {}
+  contacts = new Contacts(path.join(FILES_ROOT, 'Contacts'), path.join(FILES_ROOT, 'Trash'), calendar)
+  contacts.chosen = setting('contactsBirthdays') || null // the calendar birthdays go into (Γενέθλια when none chosen)
+  try { fs.mkdirSync(contacts.root, { recursive: true }) } catch {}
   timers = new timer.Timers(path.join(FILES_ROOT, 'Timer'), os.hostname() || 'Computer')
   // sync's old copies of timers that are over (timer.js clean; the phone clears its own the same way)
   try { const n = timers.clean(); if (n) console.log(`Timer: cleared ${n} old copies`) } catch {}
@@ -744,6 +762,38 @@ app.whenReady().then(() => {
     if (action === 'restart' && r) setSetting('timerLast', String(r.seconds))
     planTimer()
   })
+  ipcMain.handle('contacts:call', (_, method, ...args) => {
+    if (!CONTACTS_CALLS.includes(method)) throw new Error('Unknown Contacts action.')
+    const result = contacts[method](...args)
+    if (!['list', 'trashed', 'pairs'].includes(method)) planReminders() // a birthday's event may have changed
+    return result
+  })
+  ipcMain.handle('contacts:pickImport', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Import contacts', filters: [{ name: 'Contacts (.vcf, Google CSV, Takeout .zip)', extensions: ['vcf', 'csv', 'zip'] }], properties: ['openFile'] })
+    if (r.canceled || !r.filePaths[0]) return null
+    const r2 = contacts.import(readContacts(fs.readFileSync(r.filePaths[0]), r.filePaths[0]))
+    planReminders()
+    return r2
+  })
+  ipcMain.handle('contacts:export', async (_, uids, name) => {
+    const r = await dialog.showSaveDialog(win, { title: 'Export contacts', defaultPath: path.join(app.getPath('downloads'), `${String(name || 'Contacts').replace(/[/\\:*?"<>|]/g, '-')}.vcf`) })
+    if (r.canceled || !r.filePath) return null
+    fs.writeFileSync(r.filePath, contacts.exportCards(Array.isArray(uids) ? uids : null))
+    return r.filePath
+  })
+  // Mail opens mailto:, WhatsApp its web link, Viber its own link (Viber desktop): only these, checked
+  ipcMain.handle('contacts:open', (_, how, value) => {
+    const v = String(value || '').trim(), digits = v.replace(/[^\d+]/g, '').replace(/^00/, '+')
+    const url = how === 'mail' && /^[^\s@]+@[^\s@]+$/.test(v) ? 'mailto:' + v
+      : how === 'whatsapp' && digits ? 'https://wa.me/' + digits.replace(/^\+/, '')
+      : how === 'viber' && digits ? 'viber://chat?number=' + encodeURIComponent(digits.startsWith('+') ? digits : '+' + digits)
+      : how === 'web' && /^https?:\/\/\S+$/i.test(v) ? v : null
+    if (!url) throw new Error('Nothing to open.')
+    return shell.openExternal(url)
+  })
+  ipcMain.handle('contacts:settings', () => ({ birthdays: contacts.birthdayCalendar(false), calendars: calendar.calendars(), byLast: setting('contactsByLast') === '1' }))
+  ipcMain.handle('contacts:setBirthdays', (_, id) => { if (!calendar.calendars().some(c => c.id === id)) throw new Error('No such calendar.'); setSetting('contactsBirthdays', id); contacts.chosen = id })
+  ipcMain.handle('contacts:setByLast', (_, on) => setSetting('contactsByLast', on ? '1' : '0'))
   // Refresh: the phones and tablets are asked to sync now; what they bring shows through the watcher
   ipcMain.handle('calendar:refresh', () => sync.nudge())
   ipcMain.handle('calendar:pickImport', async () => {
@@ -830,6 +880,7 @@ app.whenReady().then(() => {
     if (items.length) Menu.buildFromTemplate(items).popup({ window: win })
   })
   watchCalendar()
+  watchContacts()
   planReminders()
   watchTimer()
   planTimer()

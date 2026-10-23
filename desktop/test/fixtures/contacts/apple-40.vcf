@@ -1,0 +1,16 @@
+BEGIN:VCARD
+VERSION:3.0
+PRODID:-//Apple Inc.//iPhone OS 17.0//EN
+N:Sample;Petros;;;
+FN:Petros Sample
+BDAY;X-APPLE-OMIT-YEAR=1604:1604-10-23
+TEL;type=CELL;type=VOICE;type=pref:+30 690 000 0004
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+FN:Dora Four
+N:Four;Dora;;;
+BDAY:--1023
+TEL;TYPE=cell:+30 690 000 0005
+PHOTO:data:image/jpeg;base64,bm90IHJlYWxseSBhIGpwZWc=
+END:VCARD

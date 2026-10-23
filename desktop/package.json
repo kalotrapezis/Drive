@@ -65,6 +65,7 @@
       "history.js",
       "notes.js",
       "calendar.js",
+      "contacts.js",
       "skills/**",
       "importer.js",
       "models/*.onnx",
