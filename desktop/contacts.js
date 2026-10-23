@@ -185,7 +185,7 @@ function info(lines) {
 const composed = i => [i.prefix, i.given, i.middle, i.family, i.suffix].filter(s => s && s.trim()).join(' ')
 const nameOf = i => (i.formatted || '').trim() || composed(i) || i.org || i.phones[0]?.value || i.emails[0]?.value || ''
 const favourite = i => i.categories.some(c => c.toLowerCase() === STARRED.toLowerCase())
-const labels = i => i.categories.filter(c => c.trim() && ![STARRED, MY_CONTACTS].some(x => x.toLowerCase() === c.toLowerCase()))
+const labels = i => i.categories.filter(c => c.trim() && ![STARRED, MY_CONTACTS, 'Starred in Android'].some(x => x.toLowerCase() === c.toLowerCase()))
 const empty = () => ({ uid: '', prefix: '', given: '', middle: '', family: '', suffix: '', formatted: '', nickname: '', org: '', department: '', title: '',
   phones: [], emails: [], addresses: [], urls: [], birthday: null, dates: [], related: [], note: '', categories: [], photo: null, photoUrl: null, person: null, rev: '' })
 /** The window's view of a contact: the info and what is worked out from it. */
