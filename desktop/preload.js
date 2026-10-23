@@ -32,6 +32,13 @@ contextBridge.exposeInMainWorld('drive', {
   notes: (method, ...args) => ipcRenderer.invoke('notes:call', method, ...args),
   calendar: (method, ...args) => ipcRenderer.invoke('calendar:call', method, ...args),
   calendarRefresh: () => ipcRenderer.invoke('calendar:refresh'),
+  contacts: (method, ...args) => ipcRenderer.invoke('contacts:call', method, ...args),
+  contactsPickImport: () => ipcRenderer.invoke('contacts:pickImport'),
+  contactsExport: (uids, name) => ipcRenderer.invoke('contacts:export', uids, name),
+  contactsOpen: (how, value) => ipcRenderer.invoke('contacts:open', how, value),
+  contactsSettings: () => ipcRenderer.invoke('contacts:settings'),
+  contactsSetBirthdays: id => ipcRenderer.invoke('contacts:setBirthdays', id),
+  contactsSetByLast: on => ipcRenderer.invoke('contacts:setByLast', on),
   timer: {
     active: () => ipcRenderer.invoke('timer:active'),
     start: seconds => ipcRenderer.invoke('timer:start', seconds),
@@ -88,6 +95,7 @@ contextBridge.exposeInMainWorld('drive', {
   setTheme: t => ipcRenderer.invoke('settings:setTheme', t),
   onNotesSynced: cb => { const f = (_, s) => cb(s); ipcRenderer.on('notes-synced', f); return () => ipcRenderer.removeListener('notes-synced', f) },
   onNotesChanged: cb => { const f = () => cb(); ipcRenderer.on('notes-changed', f); return () => ipcRenderer.removeListener('notes-changed', f) },
+  onContactsChanged: cb => { const f = () => cb(); ipcRenderer.on('contacts-changed', f); return () => ipcRenderer.removeListener('contacts-changed', f) },
   onCalendarChanged: cb => { const f = () => cb(); ipcRenderer.on('calendar-changed', f); return () => ipcRenderer.removeListener('calendar-changed', f) },
   files: {
     root: () => ipcRenderer.invoke('files:root'),

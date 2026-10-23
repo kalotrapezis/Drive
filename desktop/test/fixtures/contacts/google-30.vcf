@@ -1,0 +1,29 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Άννα Κωνσταντίνου
+N:Κωνσταντίνου;Άννα;;;
+NICKNAME:Αννούλα
+EMAIL;TYPE=INTERNET;TYPE=HOME:anna@example.org
+TEL;TYPE=CELL:+30 690 000 0002
+item1.TEL:+30 2310 000002
+item1.X-ABLabel:Γιαγιά
+ADR;TYPE=HOME:;;Οδός Δοκιμής 3;Θεσσαλονίκη;;54622;Ελλάδα
+BDAY:19900523
+item2.X-ABDATE:2015-06-12
+item2.X-ABLabel:_$!<Anniversary>!$_
+item3.X-ABRELATEDNAMES:Γιώργος
+item3.X-ABLabel:_$!<Spouse>!$_
+ORG:Σχολείο Δοκιμής;Τμήμα Α
+TITLE:Δασκάλα
+NOTE:Σημείωση\, με κόμμα
+PHOTO:https://lh3.googleusercontent.com/contacts/not-a-real-photo
+CATEGORIES:myContacts,Family,starred
+X-UNKNOWN-THING;X-PARAM=1:κάτι που δεν ξέρει το Tetra
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Kostas Example
+N:Example;Kostas;;;
+TEL;TYPE=CELL:6900000003
+CATEGORIES:myContacts
+END:VCARD

@@ -163,6 +163,14 @@ declare global {
       notes<T = unknown>(method: string, ...args: unknown[]): Promise<T>
       calendar<T = unknown>(method: string, ...args: unknown[]): Promise<T>
       calendarRefresh(): Promise<number>
+      contacts<T = unknown>(method: string, ...args: unknown[]): Promise<T>
+      contactsPickImport(): Promise<{ added: number; same: number } | null>
+      contactsExport(uids: string[] | null, name: string): Promise<string | null>
+      contactsOpen(how: 'mail' | 'whatsapp' | 'viber' | 'web', value: string): Promise<void>
+      contactsSettings(): Promise<{ birthdays: string | null; calendars: { id: string; name: string; color: string }[]; byLast: boolean }>
+      contactsSetBirthdays(id: string): Promise<void>
+      contactsSetByLast(on: boolean): Promise<void>
+      onContactsChanged(cb: () => void): () => void
       calendarPickImport(): Promise<{ index: number; name: string; color: string | null; count: number }[] | null>
       calendarImport(choices: { index: number; into: string }[]): Promise<{ added: number; updated: number }>
       calendarExport(id: string | null): Promise<string | null>

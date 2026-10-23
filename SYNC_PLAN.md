@@ -2444,3 +2444,22 @@ long Greek name crashed the desktop (ENAMETOOLONG on the .part, an unhandled str
 files to phone…" put two pictures on the phone; a desktop notification's click did nothing until it was held until it
 closed (Electron drops an unheld one's click on Linux); both notifications now open Files at the folder, checked by the
 user. The phone's notification was hidden by Bedtime (Do Not Disturb), not by Tetra.
+
+### 6ap. Contacts' part, at once (built 2026-10-23, branches `claude/contacts-583397` / `contacts`)
+- **The files.** One vCard 3.0 per person in `Tetra/Contacts/` (`~/Tetra/Files/Contacts` on the PC), written by
+  `Contacts.kt` and `desktop/contacts.js` alike — the same bytes for the same contact (`ContactsTest.theDesktopWritesWhatThePhoneWrites`
+  on a file the desktop wrote). Files sync carried them before this; now they also travel at once, as the Calendar's.
+- **The part.** Scope `contacts` = `Contacts/` and the Trash's `.vcf` — one line in `DriveScope` (DriveFiles.kt) and one
+  in `files.js SCOPES`. Every change made in Contacts on the phone (save, import, merge, delete, link, faces, the
+  Calendar's Birthday saved as a contact, Codes' Add to Contacts) runs `ScopedSync.soon("contacts")` and
+  `ScopedSync.soon("calendar")` (a birthday's event); a wait has its own JobScheduler id (4145; 4143 is Send to
+  computer's outbox job); the quarter-hourly look takes Contacts' part too; the computer's `/sync` nudge brings it.
+  On the computer `Files/Contacts` is watched: shown at once, the phones nudged. A contact arriving on the phone updates
+  its copy in the phone's own contacts (`ContactsAccount`, one way from the files).
+- **Deletions** are moves into Trash, so they follow (6an); a contact's birthday events go to the Trash with it.
+- An older computer answers "Unknown scope": the phone falls back to the whole sync (as for the Timer).
+- **Checked on the real pair (23 Oct, the phone on the PC's Wi-Fi, desktop from source):** a contact with a birthday
+  made on the PC was on the phone 7 s later, SHA-256 equal, its event in Γενέθλια with it; a star tapped on the phone
+  was in the PC's file 4 s later; the contact moved to the Trash on the PC was in the phone's Trash 6 s later, its event
+  too. Not checked: the tablet (not connected), two devices changing one contact at once (shown as one with
+  "Keep this one", as the Calendar's).
