@@ -37,6 +37,7 @@ const UNIT_MS = { day: 86_400_000, week: 7 * 86_400_000, month: 30 * 86_400_000,
 const sha = s => crypto.createHash('sha256').update(s).digest('hex')
 const isHash = h => typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)
 const safeRel = rel => typeof rel === 'string' && rel.length < 512 && !rel.startsWith('/') && rel.split('/').every(p => p !== '.' && p !== '..') && !/[\\\0]/.test(rel)
+const FROM_PHONE = 'From phone' // Send to computer's folder in Files (the user, 23 Oct)
 const safeName = n => typeof n === 'string' && n.length > 0 && n.length < 256 && !/[/\\\0]/.test(n) && n !== '.' && n !== '..'
 
 async function identity(dir) {
@@ -80,9 +81,10 @@ async function copyVerified(src, dest, expected) {
 }
 
 class SyncServer {
-  /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan). */
-  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null }) {
-    Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, port, beaconPort, trashItem, purgatory })
+  /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan); onSent({ device, paths }) after a burst of Send to computer. */
+  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null }) {
+    Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, onSent, port, beaconPort, trashItem, purgatory })
+    this.sentQuiet = 2000 // a share's files arrive one after another: one notification once they stop
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
       -- The text editor's open tabs, by path in the synced files: the newest open or close of each, from any device.
@@ -710,17 +712,17 @@ class SyncServer {
    * it changed network and has not called since — the beacon of 6k asking out loud who holds its certificate. The
    * beacon's answer is a hint; askFor() still pins the cert. Answers the device's reply, or null when none came.
    */
-  async reach(d, path = '/sync', ms = 3000) {
+  async reach(d, path = '/sync', ms = 3000, file = null) {
     const hosts = String(d.peer_hosts ?? '').split(',').filter(Boolean)
     let answer = null // its certificate answered, whatever it said: it has not moved
     for (const host of hosts) {
-      const got = await this.askFor(host, d, path, ms).catch(() => null)
+      const got = await this.askFor(host, d, path, ms, file).catch(() => null)
       if (got?.status === 200) return got
       answer ||= got
     }
     if (answer) return answer
     for (const [host, port] of await this.find(d.peer_fp)) {
-      const got = await this.askFor(host, { ...d, peer_port: port }, path, ms).catch(() => null)
+      const got = await this.askFor(host, { ...d, peer_port: port }, path, ms, file).catch(() => null)
       if (!got) continue
       this.db.prepare('UPDATE sync_devices SET peer_hosts = ?, peer_port = ? WHERE id = ?').run([...new Set([host, ...hosts])].slice(0, 4).join(','), port, d.id)
       return got
@@ -783,13 +785,15 @@ class SyncServer {
 
   /**
    * A POST to a paired device, answered only if its certificate is the one from pairing. Three seconds to reach it;
-   * once the handshake is done, `ms` for the answer (a GPS fix takes a while).
+   * once the handshake is done, `ms` for the answer (a GPS fix takes a while). With a `file` ({ path, size }) it is
+   * a PUT of that file's bytes (Send to phone).
    */
-  askFor(host, device, path = '/sync', ms = 3000) {
+  askFor(host, device, path = '/sync', ms = 3000, file = null) {
     return new Promise((resolve, reject) => {
       const req = https.request({
-        host, port: device.peer_port || PORT, method: 'POST', path, timeout: 3000, rejectUnauthorized: false,
-        headers: { authorization: `Bearer ${device.peer_token}`, 'content-length': 0 },
+        host, port: device.peer_port || PORT, method: file ? 'PUT' : 'POST', path, timeout: 3000, rejectUnauthorized: false,
+        ...(file && { agent: false }), // a fresh socket, so its handshake below is seen before the bytes go
+        headers: { authorization: `Bearer ${device.peer_token}`, 'content-length': file ? file.size : 0 },
       }, res => {
         const got = res.socket.getPeerCertificate().fingerprint256?.replace(/:/g, '').toLowerCase()
         if (got !== device.peer_fp) { res.resume(); return reject(new Error('That is not the paired device.')) }
@@ -803,8 +807,45 @@ class SyncServer {
       req.on('socket', s => s.once('secureConnect', () => req.setTimeout(ms)))
       req.on('timeout', () => req.destroy(new Error('No answer.')))
       req.on('error', reject)
-      req.end()
+      if (!file) return req.end()
+      // the certificate is checked before anything is written: no byte goes to a device that is not the paired one
+      req.on('socket', s => s.once('secureConnect', () => {
+        const got = s.getPeerCertificate().fingerprint256?.replace(/:/g, '').toLowerCase()
+        if (got !== device.peer_fp) return req.destroy(new Error('That is not the paired device.'))
+        fs.createReadStream(file.path).on('error', e => req.destroy(e)).pipe(req)
+      }))
     })
+  }
+
+  /**
+   * Send to phone (the user, 23 Oct): files from this computer straight into the paired phone's Files, "From computer"
+   * (SyncServer.kt PUT /send). Phones first, a tablet when no phone answers, as phoneLocation. { sent, device } or { error }.
+   */
+  async sendToDevice(paths, ms = 60_000) {
+    const devices = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
+      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL ORDER BY kind = 'tablet'`).all()
+    if (!devices.length) return { error: 'No phone is paired with this computer. Pair one in Settings › Sync.' }
+    const files = []
+    for (const p of paths) {
+      const st = await fsp.stat(p).catch(() => null)
+      if (!st?.isFile()) return { error: `${path.basename(p)} is not a file.` }
+      const hash = crypto.createHash('sha256')
+      for await (const c of fs.createReadStream(p)) hash.update(c)
+      files.push({ path: p, size: st.size, sha256: hash.digest('hex'), modified: Math.round(st.mtimeMs) })
+    }
+    const put = (d, f) => this.reach(d, `/send/${f.sha256}?name=${encodeURIComponent(path.basename(f.path))}&modified=${f.modified}`, ms, f)
+    let said = null
+    for (const d of devices) {
+      let sent = 0
+      for (const f of files) {
+        const got = await put(d, f)
+        if (got?.status === 200 && got.body?.verified) { sent++; continue }
+        said ||= got && (got.status === 404 ? `${d.name} needs the new Tetra for this.` : `${d.name}: ${got.body?.error ?? `answered ${got.status}`}`)
+        break
+      }
+      if (sent) return sent === files.length ? { sent, device: d.name } : { sent, device: d.name, error: `${files.length - sent} of ${files.length} did not go: ${said ?? 'the phone stopped answering'}` }
+    }
+    return { error: said ?? 'No phone answered. Open Tetra on the phone, on the same network as this computer.' }
   }
 
   /**
@@ -1291,6 +1332,8 @@ class SyncServer {
       return this.sendFile(res, absolute, file[1])
     }
     if (req.method === 'PUT' && file) return this.send(res, 200, await this.receiveFile(req, device, file[1], url.searchParams))
+    const sent = /^\/send\/([0-9a-f]{64})$/.exec(url.pathname)
+    if (req.method === 'PUT' && sent) return this.send(res, 200, await this.receiveSent(req, device, sent[1], url.searchParams))
     if (req.method === 'POST' && url.pathname === '/metadata') return this.send(res, 200, this.applyMetadata(await this.json(req, 1 << 24)))
     if (req.method === 'GET' && url.pathname === '/metadata') {
       const since = Number(url.searchParams.get('since')) || 0
@@ -1467,6 +1510,46 @@ class SyncServer {
     } catch (e) { out.destroy(); await fsp.rm(part, { force: true }); throw e }
   }
 
+  /**
+   * Send to computer (the user, 23 Oct): a file shared from the phone's share menu, into Files' "From phone" at once.
+   * Hashed while written, kept only if it matches; a name already there with other bytes keeps both. Not a sync: the
+   * device is not recorded as holding it at that path, so its next manifest (without it) never reads as a delete here.
+   */
+  async receiveSent(req, device, expected, params) {
+    const name = params.get('name') ?? ''
+    if (!this.files || !safeName(name)) throw Object.assign(new Error('Invalid name.'), { status: 400, expose: true })
+    const dir = this.files.resolve(FROM_PHONE, false)
+    await fsp.mkdir(dir, { recursive: true })
+    const part = path.join(dir, `.${name}.${crypto.randomUUID()}.part`)
+    const hash = crypto.createHash('sha256')
+    const out = fs.createWriteStream(part, { flags: 'wx' })
+    try {
+      for await (const chunk of req) { hash.update(chunk); if (!out.write(chunk)) await new Promise(r => out.once('drain', r)) }
+      await new Promise((resolve, reject) => out.end(err => err ? reject(err) : resolve()))
+      if (hash.digest('hex') !== expected) throw Object.assign(new Error('The file changed in transit; nothing was kept.'), { status: 422, expose: true })
+      let kept = path.join(dir, name)
+      // the same bytes under that name already: a send retried after its answer was lost, nothing to add
+      const same = fs.existsSync(kept) && await this.files.hash(this.files.rel(kept)) === expected
+      if (same) await fsp.rm(part)
+      else {
+        kept = this.files.freeTarget(dir, name)
+        await fsp.link(part, kept)
+        await fsp.rm(part)
+        const modified = Number(params.get('modified'))
+        if (Number.isFinite(modified) && modified > 0) await fsp.utimes(kept, new Date(), new Date(modified))
+      }
+      const rel = this.files.rel(kept), from = this.db.prepare('SELECT name FROM sync_devices WHERE id = ?').get(device.id)?.name ?? 'the phone'
+      if (!same) history.record(this.db, { action: 'received', kind: 'file', name: rel, sha256: expected, device: device.id, detail: `sent from ${from}` })
+      this.arrivals ??= new Map()
+      const burst = this.arrivals.get(device.id) ?? { paths: [] }
+      clearTimeout(burst.timer)
+      burst.paths.push(rel)
+      burst.timer = setTimeout(() => { this.arrivals.delete(device.id); this.onSent({ device: from, paths: burst.paths }) }, this.sentQuiet)
+      this.arrivals.set(device.id, burst)
+      return { sha256: expected, path: rel, verified: true }
+    } catch (e) { out.destroy(); await fsp.rm(part, { force: true }); throw e }
+  }
+
   receipt(device, hash, rel, size) {
     this.db.prepare('INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at) VALUES(?,?,?,?,?)').run(device.id, hash, rel, size, Date.now())
     // It is here now, and the next question about it comes before the minute is up — a device sends in parallel
@@ -1477,4 +1560,4 @@ class SyncServer {
   }
 }
 
-module.exports = { SyncServer, identity, lanAddresses, PORT }
+module.exports = { SyncServer, identity, lanAddresses, PORT, FROM_PHONE }

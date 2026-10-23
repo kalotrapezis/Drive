@@ -355,9 +355,18 @@ function updateTray() {
       click: () => { showWindow(); win?.webContents.send('offload-offer', offer.deviceId) } },
     analysis.running ? { label: 'Pause analysis', click: () => { analysis.paused = true; analyzer?.postMessage({ type: 'pause' }) } }
       : { label: 'Resume analysis', visible: analysis.paused, click: () => analyzeLibrary() },
+    { label: 'Send files to phone…', click: sendFilesToPhone },
     { type: 'separator' },
     { label: 'Quit Tetra', click: () => { quitting = true; app.quit() } },
   ]))
+}
+
+/** Send to phone (the user, 23 Oct): any files on this computer, picked, straight into the phone's Files › From computer. */
+async function sendFilesToPhone() {
+  const { filePaths } = await dialog.showOpenDialog({ title: 'Send to phone', properties: ['openFile', 'multiSelections'] })
+  if (!filePaths.length) return
+  const r = await sync.sendToDevice(filePaths).catch(e => ({ error: e.message }))
+  notify(r.sent ? `Sent ${r.sent} ${r.sent === 1 ? 'file' : 'files'} to ${r.device}` : 'Nothing was sent to the phone', r.error ?? 'In Files › From computer there')
 }
 
 /** `rescan` — 'faces' or 'documents' — reads photos that were read before, because the rules changed since. */
@@ -395,6 +404,9 @@ app.whenReady().then(() => {
   sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
+  }, onSent: ({ device, paths }) => { // Send to computer: the phone's share menu, into Files › From phone
+    notify(`${paths.length} ${paths.length === 1 ? 'file' : 'files'} from ${device}`, [...new Set(paths.map(p => p.split('/').pop()))].join(', '))
+    win?.webContents.send('sync-received')
   } })
   sync.start().catch(e => { sync.error = e.message })
   purgatory.held = sha => sync.heldSafely(sha)
@@ -785,6 +797,7 @@ app.whenReady().then(() => {
     if (error) throw new Error(error)
     if (require('node:fs').statSync(full).isFile()) files.recordOpen(rel) // Recent lists files only, like the phone
   })
+  ipcMain.handle('files:sendToPhone', (_, rels) => sync.sendToDevice(rels.map(r => files.resolve(r))))
   ipcMain.handle('files:reveal', (_, rel) => shell.showItemInFolder(files.resolve(rel)))
   ipcMain.handle('library:show', (_, id) => {
     const row = db.prepare('SELECT path, location FROM media WHERE id = ?').get(id)

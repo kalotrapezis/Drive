@@ -120,6 +120,16 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
     else act(() => window.drive.files.open(item.path))
   }
 
+  /** Send to phone (the user, 23 Oct): straight into the paired phone's Files › From computer. Files only. */
+  async function sendToPhone(items: DriveItem[]) {
+    const list = items.filter(i => !i.dir)
+    if (!list.length) return say('Only files can be sent, not folders.')
+    say(`Sending ${list.length === 1 ? `\u201c${list[0].name}\u201d` : `${list.length} files`} to the phone\u2026`)
+    const r = await window.drive.files.sendToPhone(list.map(i => i.path)).catch(e => ({ error: errorText(e) }) as { sent?: number; device?: string; error?: string })
+    setSelected(new Set())
+    say(r.error ?? `Sent ${r.sent === 1 ? list[0].name : `${r.sent} files`} to ${r.device}`)
+  }
+
   function sheet(item: DriveItem) {
     const trashed = item.path === TRASH || item.path.startsWith(TRASH + '/')
     const system = item.system
@@ -135,6 +145,7 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
         </div>
         {row(item.dir ? 'drive' : 'open', item.dir ? 'Open folder' : 'Open', () => open(item))}
         {row('folder', 'Show in file manager', () => act(() => window.drive.files.reveal(item.path)))}
+        {!item.dir && !trashed && row('device', 'Send to phone', () => sendToPhone([item]))}
         {!trashed && row(item.favorite ? 'heartFill' : 'heart', item.favorite ? 'Remove from Favorites' : 'Add to Favorites',
           () => act(() => call('setFavorite', item.path, !item.favorite)))}
         {!trashed && row('tag', 'Tags', () => editTags([item]))}
@@ -325,6 +336,7 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
             <button className="round flat" title="Copy to…" onClick={() => pickDestination(picked, 'copy')}><Icon name="copy" /></button>
             <button className="round flat" title="Move to…" onClick={() => pickDestination(picked, 'move')}><Icon name="moveTo" /></button>
             <button className="round flat" title="Tags" onClick={() => editTags(picked)}><Icon name="tag" /></button>
+            {picked.some(i => !i.dir) && <button className="round flat" title="Send to phone" onClick={() => sendToPhone(picked)}><Icon name="device" /></button>}
             <button className="round flat" title={picked.every(i => i.favorite) ? 'Remove from Favorites' : 'Add to Favorites'}
               onClick={() => { const on = !picked.every(i => i.favorite); actAll(picked, i => call('setFavorite', i.path, on), n => `${on ? 'Added' : 'Removed'} ${n} ${n === 1 ? 'item' : 'items'}`) }}>
               <Icon name={picked.every(i => i.favorite) ? 'heartFill' : 'heart'} /></button>

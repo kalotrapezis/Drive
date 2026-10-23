@@ -94,6 +94,7 @@ contextBridge.exposeInMainWorld('drive', {
     call: (method, ...args) => ipcRenderer.invoke('files:call', method, ...args),
     open: rel => ipcRenderer.invoke('files:open', rel),
     reveal: rel => ipcRenderer.invoke('files:reveal', rel),
+    sendToPhone: rels => ipcRenderer.invoke('files:sendToPhone', rels),
   },
   vault: {
     status: () => ipcRenderer.invoke('vault:status'),

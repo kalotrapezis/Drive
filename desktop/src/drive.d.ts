@@ -219,6 +219,7 @@ declare global {
         call<T = unknown>(method: string, ...args: unknown[]): Promise<T>
         open(rel: string): Promise<void>
         reveal(rel: string): Promise<void>
+        sendToPhone(rels: string[]): Promise<{ sent?: number; device?: string; error?: string }>
       }
     }
   }

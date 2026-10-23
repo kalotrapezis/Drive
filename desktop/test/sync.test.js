@@ -1343,3 +1343,100 @@ test('the Calendar travels on its own (scope "calendar"): a new event is asked f
     fs.rmSync(tmp, { recursive: true })
   }
 })
+
+test('Send to computer: a shared file lands in Files › From phone at once, verified, never over another, one notification per burst', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-send-'))
+  const root = path.join(tmp, 'Drive')
+  fs.mkdirSync(root, { recursive: true })
+  const db = library.open(path.join(tmp, 'data'))
+  const files = new Files(db, root)
+  const bursts = []
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
+    dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0, onSent: b => bursts.push(b) }).start()
+  server.sentQuiet = 50
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex')
+  const from = rel => path.join(root, 'From phone', rel)
+  try {
+    const { token } = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    const photo = crypto.randomBytes(200_000), pdf = Buffer.from('%PDF-1.4 boarding pass')
+    assert.equal((await call('PUT', `/send/${sha(pdf)}?name=pass.pdf`, { body: pdf })).status, 401, 'only a paired device')
+    assert.equal((await call('PUT', `/send/${sha(pdf)}?name=..%2Fescape.pdf`, { token, body: pdf })).status, 400)
+    assert.equal((await call('PUT', `/send/${sha(pdf)}?name=pass.pdf`, { token, body: Buffer.from('other') })).status, 422)
+    assert.deepEqual(fs.readdirSync(path.join(root, 'From phone')), [], 'nothing kept of a bad one, not even a .part')
+
+    let r = await call('PUT', `/send/${sha(photo)}?name=IMG_1.jpg&modified=1700000000000`, { token, body: photo })
+    assert.deepEqual(r.body, { sha256: sha(photo), path: 'From phone/IMG_1.jpg', verified: true })
+    assert.deepEqual(fs.readFileSync(from('IMG_1.jpg')), photo)
+    assert.equal(fs.statSync(from('IMG_1.jpg')).mtimeMs, 1700000000000)
+    r = await call('PUT', `/send/${sha(pdf)}?name=pass.pdf`, { token, body: pdf })
+    assert.equal(r.body.path, 'From phone/pass.pdf')
+    // the same send again (its answer was lost): nothing new; another file of that name: both kept
+    assert.equal((await call('PUT', `/send/${sha(pdf)}?name=pass.pdf`, { token, body: pdf })).body.path, 'From phone/pass.pdf')
+    const other = Buffer.from('%PDF-1.4 the return trip')
+    assert.equal((await call('PUT', `/send/${sha(other)}?name=pass.pdf`, { token, body: other })).body.path, 'From phone/pass (2).pdf')
+    assert.deepEqual(fs.readFileSync(from('pass.pdf')), pdf, 'the first one untouched')
+
+    await new Promise(r => setTimeout(r, 150))
+    assert.deepEqual(bursts, [{ device: 'Xiaomi 15', paths: ['From phone/IMG_1.jpg', 'From phone/pass.pdf', 'From phone/pass.pdf', 'From phone/pass (2).pdf'] }])
+    // not a sync: the phone is not on record as holding these, so its next manifest (without them) is not their delete
+    r = await call('POST', '/files/manifest', { token, json: { files: [] } })
+    assert.deepEqual(r.body.moved, [])
+    assert.deepEqual(fs.readdirSync(path.join(root, 'From phone')).sort(), ['IMG_1.jpg', 'pass (2).pdf', 'pass.pdf'])
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('Send to phone: the files go to the paired phone, verified there, and only to the paired certificate', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-tophone-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const server = await new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  server.find = async () => [] // no beacon on the test's network
+  const phoneId = await identity(path.join(tmp, 'phone'))
+  const got = []
+  let status = 200
+  const phone = https.createServer({ key: phoneId.key, cert: phoneId.cert }, (req, res) => {
+    const parts = []
+    req.on('data', c => parts.push(c)).on('end', () => {
+      const body = Buffer.concat(parts), want = req.url.match(/^\/send\/([0-9a-f]{64})/)?.[1]
+      got.push({ method: req.method, url: req.url, auth: req.headers.authorization, body })
+      const ok = status === 200 && crypto.createHash('sha256').update(body).digest('hex') === want
+      res.writeHead(ok ? 200 : status === 200 ? 422 : status, { 'content-type': 'application/json' })
+      res.end(JSON.stringify(ok ? { verified: true, path: 'From computer/x' } : { error: 'Unknown request.' }))
+    })
+  })
+  await new Promise(r => phone.listen(0, '127.0.0.1', r))
+  const a = path.join(tmp, 'notes.txt'), b = path.join(tmp, 'photo ά.jpg')
+  fs.writeFileSync(a, 'shopping list'); fs.writeFileSync(b, crypto.randomBytes(100_000))
+  try {
+    assert.match((await server.sendToDevice([a])).error, /No phone is paired/)
+    const token = crypto.randomBytes(16).toString('hex')
+    const row = fp => db.prepare(`INSERT INTO sync_devices(id, name, token_hash, paired_at, peer_fp, peer_hosts, peer_port, peer_token, kind)
+      VALUES(?,?,?,?,?,?,?,?,?)`).run(crypto.randomUUID(), 'Xiaomi 15', crypto.randomUUID(), Date.now(), fp, '127.0.0.1', phone.address().port, token, 'device')
+    row(phoneId.fingerprint)
+    assert.deepEqual(await server.sendToDevice([a, b]), { sent: 2, device: 'Xiaomi 15' })
+    assert.equal(got.length, 2)
+    assert.equal(got[0].method, 'PUT')
+    assert.equal(got[0].auth, `Bearer ${token}`)
+    assert.match(got[1].url, /name=photo%20%CE%AC\.jpg&modified=\d+$/)
+    assert.deepEqual(got[1].body, fs.readFileSync(b))
+    assert.match((await server.sendToDevice([tmp])).error, /is not a file/)
+
+    status = 404 // an older Tetra on the phone
+    assert.match((await server.sendToDevice([a])).error, /needs the new Tetra/)
+
+    // a certificate that is not the paired one gets not one byte
+    status = 200
+    got.length = 0
+    db.prepare('DELETE FROM sync_devices').run()
+    row('f'.repeat(64))
+    assert.match((await server.sendToDevice([a])).error, /No phone answered/)
+    assert.deepEqual(got, [])
+  } finally {
+    await new Promise(r => phone.close(r))
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
