@@ -310,7 +310,7 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
             onClick={() => { if (handled.current) handled.current = false; else open(item) }}
             onKeyDown={e => { if (e.key === 'Enter') open(item) }}
             onContextMenu={e => { e.preventDefault(); sheet(item) }}>
-            <ItemIcon item={item} size={view === 'grid' ? 56 : 28} />
+            {item.thumb ? <FileThumb item={item} glyphSize={view === 'grid' ? 30 : 14} /> : <ItemIcon item={item} size={view === 'grid' ? 56 : 28} />}
             <span className="check" title="Select"><Icon name={selected.has(item.path) ? 'checked' : 'unchecked'} size={22} /></span>
             <div className="file-name">
               <span>{item.name}{item.favorite && <Icon name="heartFill" size={14} />}</span>
@@ -356,6 +356,22 @@ const systemLook = (item: DriveItem) => item.system ? SYSTEM_FOLDER_ICONS[item.p
 function ItemIcon({ item, size }: { item: DriveItem; size: number }) {
   return <span className="file-icon" style={{ color: item.dir ? (item.color ? FOLDER_COLORS[item.color] : systemLook(item)?.[1]) : undefined }}>
     <Icon name={item.path === TRASH ? 'trash' : SYSTEM_ICON[item.path] ?? systemLook(item)?.[0] ?? TYPE_ICON[item.type] ?? 'file'} size={size} />
+  </span>
+}
+
+/** Office's glyph over a document's thumbnail, in its app's colour (the phone's Office: Words' lines, Tables' table, Slides' play). */
+const GLYPH: Record<string, [IconName, string]> = { words: ['fileText', '#185ABD'], tables: ['table', '#107C41'], slides: ['play', '#B7472A'] }
+
+/** A file's thumbnail (thumbs.js); a document's first page with its glyph, or the glyph on a blank page when it has none. */
+function FileThumb({ item, glyphSize }: { item: DriveItem; glyphSize: number }) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => setFailed(false), [item.path, item.mtime])
+  const glyph = GLYPH[item.thumb ?? '']
+  if (failed && !glyph) return <ItemIcon item={item} size={glyphSize * 2} />
+  return <span className={`file-thumb ${glyph ? 'page' : ''}`}>
+    {!failed && <img src={`media://filethumb/${encodeURIComponent(item.path)}?v=${item.mtime}`} loading="lazy" decoding="async" draggable={false} alt=""
+      onError={() => setFailed(true)} />}
+    {glyph && <span className="thumb-glyph" style={{ color: glyph[1] }}><Icon name={glyph[0]} size={glyphSize} /></span>}
   </span>
 }
 

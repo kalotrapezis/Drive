@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { sha256 } = require('./library')
+const thumbs = require('./thumbs')
 
 const TRASH = 'Trash'
 /**
@@ -137,7 +138,8 @@ class Files {
     const meta = this.db.prepare('SELECT favorite, color FROM file_meta WHERE path = ?').get(rel)
     const tags = this.db.prepare('SELECT tag FROM file_tags WHERE path = ? AND deleted = 0 ORDER BY tag COLLATE NOCASE').all(rel).map(r => r.tag)
     return { name: path.basename(full), path: rel, dir: st.isDirectory(), size: st.isDirectory() ? 0 : st.size, mtime: Math.trunc(st.mtimeMs),
-      type: st.isDirectory() ? 'Folder' : typeGroup(full), system: st.isDirectory() && this.isSystem(rel), favorite: !!meta?.favorite, color: meta?.color ?? null, tags }
+      type: st.isDirectory() ? 'Folder' : typeGroup(full), system: st.isDirectory() && this.isSystem(rel), favorite: !!meta?.favorite, color: meta?.color ?? null, tags,
+      thumb: st.isDirectory() ? null : thumbs.kind(full) }
   }
 
   async list(rel) {

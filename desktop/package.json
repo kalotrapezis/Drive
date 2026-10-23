@@ -58,6 +58,7 @@
       "folders.js",
       "drives.js",
       "home.js",
+      "thumbs.js",
       "purgatory.js",
       "timer.js",
       "maps.js",

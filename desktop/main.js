@@ -19,6 +19,7 @@ const { Calendar } = require('./calendar')
 const timer = require('./timer')
 const { Maps } = require('./maps')
 const { Router } = require('./router')
+const { Thumbs } = require('./thumbs')
 const importer = require('./importer')
 
 const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'local-drive-desktop')
@@ -88,6 +89,7 @@ function planReminders() {
 let timers = null, timerAlarm = null
 let maps = null // Maps (maps.js): the phone's map files in Files/Maps, read and written as they are
 let router = null // directions (router.js): GraphHopper's server on the phone's graph, started at the first route
+let thumbs = null // Files' thumbnails (thumbs.js), made when Files first asks for one
 const timerRung = new Set()
 function planTimer() {
   clearTimeout(timerAlarm)
@@ -456,6 +458,8 @@ app.whenReady().then(() => {
       return video ? new Response(video, { headers: { 'content-type': 'video/mp4', 'cache-control': 'no-store' } }) : new Response('Not found', { status: 404 })
     }
     if (url.host === 'maps') return mapsResponse(key)
+    // media://filethumb/<Files-relative path>?v=<mtime>: a file's thumbnail in Files (thumbs.js), made on first asking
+    if (url.host === 'filethumb') file = await (thumbs ??= new Thumbs(DATA_DIR)).get(files.resolve(key)).catch(() => null)
     if (url.host === 'face' && /^[0-9a-f-]{36}$/.test(key)) file = await people.crop(key, PHOTOS_ROOT).catch(() => null)
     // A trashed photo is no longer in the library, so it is served from the trash by the name it has there.
     if (url.host === 'trash') file = (await library.trashedPhotos(PHOTOS_ROOT)).find(t => t.id === key)?.file ?? null

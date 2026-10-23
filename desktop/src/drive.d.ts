@@ -11,6 +11,8 @@ export interface Poi { kind: string; lat: number; lng: number; name: string; nam
 export interface DriveItem {
   name: string; path: string; dir: boolean; size: number; mtime: number; type: string; system: boolean
   favorite: boolean; color: string | null; tags: string[]; openedAt?: number
+  /** Which thumbnail Files shows (thumbs.js); null: its icon. */
+  thumb?: 'picture' | 'video' | 'pdf' | 'words' | 'tables' | 'slides' | null
 }
 
 /** A folder under the Photos root; included null = never asked. */
