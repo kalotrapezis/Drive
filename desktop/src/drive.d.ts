@@ -220,6 +220,7 @@ declare global {
         open(rel: string): Promise<void>
         reveal(rel: string): Promise<void>
         sendToPhone(rels: string[]): Promise<{ sent?: number; device?: string; error?: string }>
+        onOpenFolder(fn: (folder: string) => void): () => void
       }
     }
   }

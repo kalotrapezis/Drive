@@ -106,6 +106,8 @@ export function App() {
   reloadRef.current = reload
   useEffect(() => { store('level', level) }, [level])
   // "Free 22 GB?" from the tray or a notification opens here, whatever page is showing (SYNC_PLAN.md D3).
+  // "2 files from Xiaomi 15": its click opens Files at From phone
+  useEffect(() => window.drive.files.onOpenFolder(folder => setPage({ kind: 'files', mode: 'browse', folder })), [])
   useEffect(() => window.drive.sync.onOffer(id => setDialog(<OffloadDialog deviceId={id} onClose={() => setDialog(null)} />)), [])
   useEffect(() => { window.drive.viewSettings().then(v => { setHideScreenshots(v.hideScreenshots); setHideDocuments(v.hideDocuments) }) }, [])
   useEffect(() => { window.drive.trashList().then(t => setTrashCount(t.length)).catch(() => {}) }, [page])

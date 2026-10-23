@@ -2408,3 +2408,34 @@ told to Trash it; a move by hand mirrored; the device's own rm → this computer
 here asked for), `sync.test.js` (the same bytes PUT twice: no "(2)"; bytes back under another name are asked for, the
 removed path is not), `calendar.test.js` and Android `CalendarTest` (SEQUENCE first; the same UID in two calendars).
 The phone's receive and move checks have no unit test (they need the network). Not yet run between real devices.
+
+### 6ao. Send to computer, Send to phone (built 2026-10-23, branches `send-to-computer` / `claude/keen-grothendieck-9e0fad`)
+
+The user, 23 Oct: "could Files be in the sharing menu so you send files to the PC at once?" — over the Wi-Fi link sync
+already has, not Bluetooth (~2 Mbit/s). Not a sync: a file *sent* is a new file on the other side, nothing else.
+
+- **Phone → computer.** Tetra is in Android's share menu as "Send to computer" (`SendToComputer.kt`, SEND and
+  SEND_MULTIPLE, any type). Each file is copied into a private outbox, `files/outbox/<sha256>/<name>` (another app's
+  read permission ends with the share screen), then `PUT /send/<sha>?name=&modified=` to the paired computer with sync's
+  token and pinned certificate. The computer (`sync.js receiveSent`) writes it into Files' **From phone** (the user's
+  choice), hashed while written, kept only if it matches, never over another file ("name (2)"; the same bytes under that
+  name: nothing new, so a retry after a lost answer is harmless), and **not** recorded as the device's holding — the
+  phone's next manifest, without it, is not a delete. One notification per burst: "2 files from Xiaomi 15".
+- **Computer away.** The share says so ("…will go when it is") and the outbox waits: a JobScheduler job (4143, any
+  network, backoff from 30 s) tries until the computer has them; any whole sync and the computer's "sync now" send them
+  too, and the desktop now says "sync now" when it starts. A computer too old for `/send` (404) keeps them waiting
+  without retries; the next share or sync tries again.
+- **Computer → phone** ("Send to phone"): desktop Files (a file's sheet, the selection bar) and the tray's "Send files
+  to phone…" (any file on the computer). `sendToDevice` → `reach` → the phone's listener `PUT /send` (`SyncServer.kt`,
+  `FromComputer.receive`) into the phone's Tetra/**From computer**, the same rules, one notification "N files from
+  <computer>". Phones first, a tablet when no phone answers. The bytes go only once the paired certificate has answered
+  the handshake. Reaches the phone only while it listens (Tetra open, or `SyncListenService`).
+- Both folders are in Files, so sync then carries each to the other side as well (accepted with the choice).
+
+**Checked:** desktop `sync.test.js` (both directions: verified, bad bytes/names keep nothing, no overwrite, one burst,
+a later manifest deletes nothing; only the paired certificate gets bytes, an older phone said as such), Android
+`SendToComputerTest`. On the real pair (23 Oct, the phone the PC's hotspot): a photo (3.9 MB) and a PDF shared →
+on the PC in ~1.2 s, SHA-256 equal, "2 files from Xiaomi 15"; a PDF shared with the PC's Tetra stopped → kept in the
+outbox, job scheduled, landed 61 s after the PC came back (by the job: the phone's listener was not running after the
+install, so the start's "sync now" did not reach it); two files sent to the phone in 0.7 s, equal, "2 files from
+theologos-82xm".

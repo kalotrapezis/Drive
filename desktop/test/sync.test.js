@@ -1377,12 +1377,21 @@ test('Send to computer: a shared file lands in Files › From phone at once, ver
     assert.equal((await call('PUT', `/send/${sha(other)}?name=pass.pdf`, { token, body: other })).body.path, 'From phone/pass (2).pdf')
     assert.deepEqual(fs.readFileSync(from('pass.pdf')), pdf, 'the first one untouched')
 
+    // a long Greek name (two bytes a letter) past the disk's 255 bytes: shortened, its extension kept (the user's PDF, 23 Oct)
+    const long = '«Η αυτο - αποτελεσματικότητα των εκπαιδευτικών σε σχέση με την ικανοποίηση από τη ζωή τους» ΣΤΕΛΛΑ ΜΟΥΣΑΔΑΚΗ - 06.2023.pdf'
+    const thesis = Buffer.from('%PDF-1.4 thesis')
+    r = await call('PUT', `/send/${sha(thesis)}?name=${encodeURIComponent(long)}`, { token, body: thesis })
+    assert.equal(r.status, 200)
+    assert.ok(Buffer.byteLength(r.body.path.split('/').pop()) <= 200 && r.body.path.endsWith('.pdf') && r.body.path.startsWith('From phone/«Η αυτο'), r.body.path)
+    assert.deepEqual(fs.readFileSync(path.join(root, r.body.path)), thesis)
+    const thesisName = r.body.path.split('/').pop()
+
     await new Promise(r => setTimeout(r, 150))
-    assert.deepEqual(bursts, [{ device: 'Xiaomi 15', paths: ['From phone/IMG_1.jpg', 'From phone/pass.pdf', 'From phone/pass.pdf', 'From phone/pass (2).pdf'] }])
+    assert.deepEqual(bursts, [{ device: 'Xiaomi 15', paths: ['From phone/IMG_1.jpg', 'From phone/pass.pdf', 'From phone/pass.pdf', 'From phone/pass (2).pdf', r.body.path] }])
     // not a sync: the phone is not on record as holding these, so its next manifest (without them) is not their delete
     r = await call('POST', '/files/manifest', { token, json: { files: [] } })
     assert.deepEqual(r.body.moved, [])
-    assert.deepEqual(fs.readdirSync(path.join(root, 'From phone')).sort(), ['IMG_1.jpg', 'pass (2).pdf', 'pass.pdf'])
+    assert.deepEqual(fs.readdirSync(path.join(root, 'From phone')).sort(), ['IMG_1.jpg', 'pass (2).pdf', 'pass.pdf', thesisName].sort())
   } finally {
     await server.stop()
     fs.rmSync(tmp, { recursive: true })

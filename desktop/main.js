@@ -10,7 +10,7 @@ const places = require('./places')
 const { Vault } = require('./vault')
 const editor = require('./editor')
 const docs = require('./documents')
-const { SyncServer, lanAddresses } = require('./sync')
+const { SyncServer, lanAddresses, FROM_PHONE } = require('./sync')
 const { Folders } = require('./folders')
 const { Purgatory } = require('./purgatory')
 const history = require('./history')
@@ -274,7 +274,7 @@ let offer = null, moving = null
 const said = { offer: 0, full: 0 }
 const HOURS = 3_600_000
 const fmtBytes = n => n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`
-function notify(title, body) {
+function notify(title, body, open = null) {
   // Kept as well as shown: a notification goes by in seconds, the Notifications page keeps them (asked 2026-09-26).
   try {
     db.exec('CREATE TABLE IF NOT EXISTS notifications (id INTEGER PRIMARY KEY, at INTEGER NOT NULL, title TEXT NOT NULL, body TEXT, read INTEGER NOT NULL DEFAULT 0)')
@@ -283,7 +283,7 @@ function notify(title, body) {
   } catch (e) { console.warn('[notify]', e.message) }
   if (!Notification.isSupported()) return
   const n = new Notification({ title, body, icon: path.join(__dirname, 'public', 'icon.png') })
-  n.on('click', () => { showWindow(); if (offer) win?.webContents.send('offload-offer', offer.deviceId) })
+  n.on('click', () => { showWindow(); if (open) open(); else if (offer) win?.webContents.send('offload-offer', offer.deviceId) })
   n.show()
 }
 async function checkSpace() {
@@ -405,7 +405,8 @@ app.whenReady().then(() => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   }, onSent: ({ device, paths }) => { // Send to computer: the phone's share menu, into Files › From phone
-    notify(`${paths.length} ${paths.length === 1 ? 'file' : 'files'} from ${device}`, [...new Set(paths.map(p => p.split('/').pop()))].join(', '))
+    notify(`${paths.length} ${paths.length === 1 ? 'file' : 'files'} from ${device}`, [...new Set(paths.map(p => p.split('/').pop()))].join(', '),
+      () => win?.webContents.send('open-files-folder', FROM_PHONE))
     win?.webContents.send('sync-received')
   } })
   // started: the devices are told at once, so what waited for this computer (Send to computer's outbox) goes now

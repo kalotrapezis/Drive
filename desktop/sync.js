@@ -38,6 +38,14 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex')
 const isHash = h => typeof h === 'string' && /^[0-9a-f]{64}$/.test(h)
 const safeRel = rel => typeof rel === 'string' && rel.length < 512 && !rel.startsWith('/') && rel.split('/').every(p => p !== '.' && p !== '..') && !/[\\\0]/.test(rel)
 const FROM_PHONE = 'From phone' // Send to computer's folder in Files (the user, 23 Oct)
+// A name the disk takes: Linux allows 255 bytes and a Greek letter is two (the user's 23 Oct PDF crashed the app); the
+// extension kept, room left for " (2)".
+function fitName(name, max = 200) {
+  if (Buffer.byteLength(name) <= max) return name
+  const ext = path.extname(name).slice(0, 20), base = [...name.slice(0, name.length - ext.length)]
+  while (base.length && Buffer.byteLength(base.join('') + ext) > max) base.pop()
+  return base.join('').trimEnd() + ext
+}
 const safeName = n => typeof n === 'string' && n.length > 0 && n.length < 256 && !/[/\\\0]/.test(n) && n !== '.' && n !== '..'
 
 async function identity(dir) {
@@ -1516,14 +1524,17 @@ class SyncServer {
    * device is not recorded as holding it at that path, so its next manifest (without it) never reads as a delete here.
    */
   async receiveSent(req, device, expected, params) {
-    const name = params.get('name') ?? ''
-    if (!this.files || !safeName(name)) throw Object.assign(new Error('Invalid name.'), { status: 400, expose: true })
+    const asked = params.get('name') ?? ''
+    if (!this.files || !safeName(asked)) throw Object.assign(new Error('Invalid name.'), { status: 400, expose: true })
+    const name = fitName(asked)
     const dir = this.files.resolve(FROM_PHONE, false)
     await fsp.mkdir(dir, { recursive: true })
-    const part = path.join(dir, `.${name}.${crypto.randomUUID()}.part`)
+    const part = path.join(dir, `.${crypto.randomUUID()}.part`)
     const hash = crypto.createHash('sha256')
     const out = fs.createWriteStream(part, { flags: 'wx' })
+    out.on('error', e => req.destroy(e)) // a disk error ends this request, never the app
     try {
+      await new Promise((resolve, reject) => { out.once('open', resolve); out.once('error', reject) })
       for await (const chunk of req) { hash.update(chunk); if (!out.write(chunk)) await new Promise(r => out.once('drain', r)) }
       await new Promise((resolve, reject) => out.end(err => err ? reject(err) : resolve()))
       if (hash.digest('hex') !== expected) throw Object.assign(new Error('The file changed in transit; nothing was kept.'), { status: 422, expose: true })
@@ -1560,4 +1571,4 @@ class SyncServer {
   }
 }
 
-module.exports = { SyncServer, identity, lanAddresses, PORT, FROM_PHONE }
+module.exports = { SyncServer, identity, lanAddresses, PORT, FROM_PHONE, fitName }

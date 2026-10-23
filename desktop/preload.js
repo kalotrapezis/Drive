@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('drive', {
     open: rel => ipcRenderer.invoke('files:open', rel),
     reveal: rel => ipcRenderer.invoke('files:reveal', rel),
     sendToPhone: rels => ipcRenderer.invoke('files:sendToPhone', rels),
+    onOpenFolder: fn => { const l = (_, folder) => fn(folder); ipcRenderer.on('open-files-folder', l); return () => ipcRenderer.off('open-files-folder', l) },
   },
   vault: {
     status: () => ipcRenderer.invoke('vault:status'),
