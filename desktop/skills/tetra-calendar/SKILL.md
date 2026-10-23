@@ -117,9 +117,9 @@ Each reminder is a `BEGIN:VALARM … END:VALARM` inside the VEVENT, with `ACTION
 - New: `new-calendar NAME [#RRGGBB]`, or `mkdir` + a `color` file holding `#RRGGBB`.
 - Rename: rename the folder. Colour: rewrite `color`.
 - Move an event to another calendar: `mv` its file into that folder.
-- Delete an event or a calendar: **`tetra_calendar.py trash PATH`** (into `~/Tetra/Files/Trash`). **Never `rm`**: Tetra's sync
-  never deletes, so a file removed on the computer comes back from the phone; a file moved into Trash moves there on
-  every device.
+- Delete an event or a calendar: **`tetra_calendar.py trash PATH`** (into `~/Tetra/Files/Trash`). Not `rm`: a file moved into
+  Trash moves there on every device and can be restored; an `rm`'d event leaves no copy here (since desktop
+  0.6.0-beta.4 the other devices put theirs in their Trash; older builds brought it back from the phone).
 - Colours Tetra offers: `#E91E63` pink, `#D50000` red, `#E67C73` flamingo, `#F4511E` tangerine, `#F6BF26` yellow,
   `#33B679` sage, `#0B8043` green, `#039BE5` blue, `#3F51B5` blueberry, `#7986CB` lavender, `#8E24AA` grape,
   `#616161` grey.
