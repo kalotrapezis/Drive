@@ -142,8 +142,8 @@ class Maps {
   }
   /**
    * The saved places, one per id: a sync that found a place changed on both sides keeps both files ("parking (2).json"),
-   * so the newest file is the place; a parked car's older copies go to the Trash, as there is one car (the user, 23 Oct:
-   * "it had 3 parkings, keep only the latest") — Places.places on the phone.
+   * so the newest file is the place and its older copies go to the Trash (the user, 23 Oct: "it had 3 parkings, keep only
+   * the latest"; home in three files on the phone, where a save into an empty slot lost to an older copy) — MapsFiles.places.
    */
   async places() {
     const full = path.join(this.root, PLACES)
@@ -156,9 +156,9 @@ class Maps {
       const was = byId.get(p.id)
       const [keep, drop] = !was || at > was.at ? [{ p, at, n }, was] : [was, { p, at, n }]
       byId.set(p.id, keep)
-      if (drop && p.id === 'parking') await this.trash(`Maps/${PLACES}/${drop.n}`).catch(() => {})
+      if (drop) await this.trash(`Maps/${PLACES}/${drop.n}`).catch(() => {})
     }
-    return [...byId.values()].map(v => v.p).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+    return settle([...byId.values()]).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
   }
   lists() { return this.read(LISTS, parseList) }
   trips() { return this.read(TRIPS, parseTrip) }
@@ -178,6 +178,7 @@ class Maps {
     if (!p) throw new Error('This place has no position.')
     if (p.slot > 0) for (const o of await this.places()) if (o.slot === p.slot && o.id !== p.id) await this.write(PLACES, o.id, placeJson({ ...o, slot: 0 }))
     await this.write(PLACES, p.id, placeJson(p))
+    await this.remove(PLACES, p.id, `${p.id}.json`) // its sync copies: this save is the place
     return p
   }
   async deletePlace(id) { await this.remove(PLACES, id) }
@@ -199,10 +200,10 @@ class Maps {
   async deleteTrip(id) { await this.remove(TRIPS, id) }
 
   /** Every file of `id` to the Trash: its own and any copy a sync made of it under another name ("parking (2).json"). */
-  async remove(dir, id) {
+  async remove(dir, id, keep = null) {
     if (!/^[A-Za-z0-9_-]+$/.test(String(id))) throw new Error('Not a place of the map.')
     const full = path.join(this.root, dir)
-    for (const n of await fsp.readdir(full).catch(() => [])) if (n.toLowerCase().endsWith('.json')) {
+    for (const n of await fsp.readdir(full).catch(() => [])) if (n.toLowerCase().endsWith('.json') && n !== keep) {
       const own = n === `${id}.json` || (() => { try { return JSON.parse(fs.readFileSync(path.join(full, n), 'utf8')).id === id } catch { return false } })()
       if (own) await this.trash(`Maps/${dir}/${n}`)
     }
@@ -317,6 +318,24 @@ class Maps {
 }
 
 const strip = ({ key, ...p }) => p
+/**
+ * One place a slot, both kept: two devices that each put a place into one slot while apart — the newest file keeps it, the
+ * other takes the first free slot (none free: off Home, still saved). From the files alone, by second, so every device shows
+ * the same card without a write (MapsFiles.settle on the phone). `vs` are { p, at } with `at` the file's mtimeMs.
+ */
+const settle = vs => {
+  const taken = new Set()
+  const late = vs.filter(v => v.p.slot > 0)
+    .sort((a, b) => Math.floor(b.at / 1000) - Math.floor(a.at / 1000) || (a.p.id < b.p.id ? -1 : a.p.id > b.p.id ? 1 : 0))
+    .filter(v => taken.has(v.p.slot) ? true : (taken.add(v.p.slot), false))
+  const moved = new Map(late.map(v => {
+    let n = 0
+    for (let i = 1; i <= SLOTS; i++) if (!taken.has(i)) { n = i; taken.add(i); break }
+    return [v.p.id, n]
+  }))
+  return vs.map(v => moved.has(v.p.id) ? { ...v.p, slot: moved.get(v.p.id) } : v.p)
+}
+
 const placeJson = p => ({ id: p.id, name: p.name, lat: p.lat, lng: p.lng, icon: p.icon, slot: p.slot, mode: p.mode, lists: p.lists, ...(p.label ? { label: p.label } : {}) })
 
 function search(all, { query = '', kind = null, lat, lng, limit = 60, nearby = false, within = null }) {
