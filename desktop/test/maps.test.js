@@ -68,6 +68,28 @@ test("a sync's copies of the parked car leave one car, the newest; deleting a pl
   assert.deepEqual(fs.readdirSync(path.join(root, 'Places')), ['home.json'])
 })
 
+test('two devices put a place into one slot while apart: the newer keeps it, the other the first free slot (23 Oct)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'maps-slots-'))
+  fs.mkdirSync(path.join(root, 'Places'))
+  const put = (f, id, slot, at) => {
+    fs.writeFileSync(path.join(root, 'Places', f), JSON.stringify({ id, name: id, lat: 38, lng: 23.5, slot }))
+    fs.utimesSync(path.join(root, 'Places', f), at, at)
+  }
+  for (let i = 1; i <= 5; i++) put(`s${i}.json`, `s${i}`, i, 1000)
+  put('market.json', 'market', 7, 2000); put('home.json', 'home', 7, 3000); put('home (2).json', 'home', 6, 1000)
+  const m = new Maps(root, async rel => fs.unlinkSync(path.join(root, rel.replace(/^Maps\//, ''))))
+  const slot = id => m.places().then(ps => ps.find(p => p.id === id).slot)
+  assert.equal(await slot('home'), 7)
+  assert.equal(await slot('market'), 6)
+  assert.equal(JSON.parse(fs.readFileSync(path.join(root, 'Places', 'market.json'), 'utf8')).slot, 7) // nothing written
+  assert.ok(!fs.existsSync(path.join(root, 'Places', 'home (2).json'))) // the older copy to the Trash
+  // a save is the place, whatever an older copy's date: its copies go
+  put('market (2).json', 'market', 9, Date.now() / 1000 + 60)
+  await m.savePlace({ id: 'market', name: 'market', lat: 38, lng: 23.5, slot: 8 })
+  assert.equal(await slot('market'), 8)
+  assert.deepEqual(fs.readdirSync(path.join(root, 'Places')).filter(n => n.startsWith('market')), ['market.json'])
+})
+
 test("an address where no house has a number: the street and the village's postcode (the user's house, 23 Oct)", async t => {
   const root = path.join(os.homedir(), 'Tetra-maps')
   if (!fs.existsSync(path.join(root, 'greece-streets.tsv'))) return t.skip('no map files on this computer')
