@@ -935,7 +935,7 @@ button.link.risk { color: #d8663f; font-weight: 600; }
   .maps-waiting { bottom: calc(45% + 24px); }
   .maps-page .maplibregl-ctrl-bottom-left { left: 0; top: 0; bottom: auto; }
   .maps-page .maplibregl-ctrl-bottom-right { top: 0; bottom: auto; }
-  .maps-here { top: 120px; bottom: auto; }
+  .maps-here { top: 170px; bottom: auto; } /* below the zoom buttons and the attribution */
 }
 .link-button { color: #4f86e8; text-decoration: underline; text-align: left; padding: 0; overflow-wrap: anywhere; cursor: pointer; }
 .maps-route { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; margin: 6px 0; border-radius: 14px; background: var(--island-2); }
