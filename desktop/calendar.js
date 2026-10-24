@@ -142,10 +142,10 @@ function durationValue(days, seconds) {
   const time = (h ? h + 'H' : '') + (m ? m + 'M' : '') + (s ? s + 'S' : '')
   return (t < 0 ? '-' : '') + 'P' + (d ? d + 'D' : '') + (time ? 'T' + time : (d ? '' : 'T0S'))
 }
-/** start + nominal days (the clock kept across a DST change) + seconds. */
-function plus(t, days, seconds) {
+/** start + nominal days (the clock kept across a DST change) + seconds; [wall]: the seconds on the clock too (all day). */
+function plus(t, days, seconds, wall = false) {
   const [y, mo, d] = addDays(t.date, days).split('-').map(Number)
-  return instant(y, mo, d, t.h, t.mi, t.s, t.tz) + seconds * 1000
+  return wall ? instant(y, mo, d, t.h, t.mi, t.s + seconds, t.tz) : instant(y, mo, d, t.h, t.mi, t.s, t.tz) + seconds * 1000
 }
 
 // ——— events ———
@@ -301,7 +301,7 @@ function occurrencesOf(f, from, to) {
 }
 
 function fireTimes(a, start, end, startT) {
-  const first = a.at != null ? a.at : a.fromEnd ? end + (a.days * 86400 + a.seconds) * 1000 : plus(timeAt(start, startT.tz), a.days, a.seconds)
+  const first = a.at != null ? a.at : a.fromEnd ? end + (a.days * 86400 + a.seconds) * 1000 : plus(timeAt(start, startT.tz), a.days, a.seconds, startT.allDay) // all day: PT9H is 09:00 when the clocks change too
   return Array.from({ length: Math.min(a.repeat || 0, 100) + 1 }, (_, i) => first + i * (a.every || 0) * 1000)
 }
 
