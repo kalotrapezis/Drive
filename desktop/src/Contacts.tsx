@@ -207,9 +207,9 @@ function Page({ c, all, edit, openUid, openPerson, setDialog, star, keep, say }:
     <div className="ct-detail"><Icon name={icon} size={20} /><div><small>{label}</small>{onClick ? <button className="ct-link" onClick={onClick}>{value}</button> : <span>{value}</span>}</div>{action}</div>
   return (
     <div className="ct-contact">
+      <Face c={c} size={128} />
       <div className="ct-head">
         <div className="island ct-hero">
-          <Face c={c} size={128} />
           <h2>{c.name}</h2>
           {job && <p className="hint">{job}</p>}
           <div className="ct-actions">
@@ -219,11 +219,12 @@ function Page({ c, all, edit, openUid, openPerson, setDialog, star, keep, say }:
             <button className="ct-action" disabled={!phone} onClick={() => choose('Viber', c.phones.map(p => [`${p.label || 'Phone'} · ${p.value}`, () => open('viber', p.value)]))}><span><Icon name="device" /></span><small>Viber</small></button>
           </div>
         </div>
-        <div className="island ct-side">
-          <button className={`round flat ${c.favourite ? 'ct-faved' : ''}`} title={c.favourite ? 'Remove from favourites' : 'Add to favourites'} onClick={star}><Icon name="heart" /></button>
-          <button className="round flat" title="Edit" onClick={edit}><Icon name="edit" /></button>
-        </div>
       </div>
+      {/* the user, 24 Oct (with a sketch): the contact's own buttons in an island at the bottom right, the main island in the middle */}
+      <nav className="notes-island island ct-corner">
+        <button className={`island-item ${c.favourite ? 'ct-faved' : ''}`} onClick={star}><Icon name="heart" size={20} /><span>{c.favourite ? 'Favourite' : 'Add to favourites'}</span></button>
+        <button className="island-item" onClick={edit}><Icon name="edit" size={20} /><span>Edit</span></button>
+      </nav>
       {(c.versions ?? 1) > 1 && <div className="ct-card"><Row icon="warning" label={`${c.versions} versions (a change on two devices)`} value="This is the newer." action={<button className="text-button" onClick={keep}>Keep this one</button>} /></div>}
       {c.phones.length > 0 && <div className="ct-card">{c.phones.map((p, k) => <Row key={k} icon="call" label={p.label || 'Phone'} value={p.value} onClick={() => dial(p.value)}
         action={<span className="chips"><button className="chip" onClick={() => open('whatsapp', p.value)}>WhatsApp</button><button className="chip" onClick={() => open('viber', p.value)}>Viber</button></span>} />)}</div>}
@@ -353,7 +354,11 @@ function Editor({ start, labels, cancel, save, remove, setDialog, say }: { start
   </>
   return (
     <div className="ct-contact ct-edit">
-      <div className="ct-top"><button className="text-button" onClick={cancel}>Cancel</button><h3>{start ? 'Edit contact' : 'New contact'}</h3><button className="filled-button" onClick={done}>Save</button></div>
+      <h3 className="ct-edit-title">{start ? 'Edit contact' : 'New contact'}</h3>
+      <nav className="notes-island island ct-corner">
+        <button className="island-item" onClick={cancel}><Icon name="close" size={20} /><span>Cancel</span></button>
+        <button className="island-item on" onClick={done}><Icon name="checked" size={20} /><span>Save</span></button>
+      </nav>
       <Face c={{ ...c, name: [c.given, c.family].filter(Boolean).join(' ') || c.org }} size={96} />
       <div className="ct-photo-tools">
         <button className="text-button" onClick={() => setDialog(<FacePicker name={[c.given, c.family].filter(Boolean).join(' ')} onClose={() => setDialog(null)} pick={(pid, pname, fid) => {
