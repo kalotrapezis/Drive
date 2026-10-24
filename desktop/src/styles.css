@@ -881,7 +881,7 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .timer-pin:hover, .timer-trash:hover { opacity: 1; }
 
 /* Maps (Maps.tsx): the offline map, a side panel of search, saved places and trips */
-.maps-page { position: absolute; inset: 0; }
+.maps-page { position: absolute; inset: 0; container-type: size; }
 .maps-canvas { position: absolute; inset: 0; border-radius: var(--radius); overflow: hidden; }
 .maps-panel { position: absolute; top: 12px; left: 12px; bottom: 12px; width: 380px; display: flex; flex-direction: column; gap: 6px; padding: 14px; overflow-y: auto; overflow-x: hidden; z-index: 2; }
 .maps-panel h3 { margin: 14px 4px 6px; font-size: 14px; color: var(--muted); font-weight: 600; }
@@ -927,6 +927,16 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .maps-waiting small { display: block; opacity: .7; margin-top: 2px; }
 .maps-missing { position: absolute; top: 12px; left: 404px; right: 12px; padding: 12px 16px; z-index: 2; }
 .maps-page .maplibregl-ctrl-bottom-left { left: 400px; }
+/* A narrow window: one column, the panel a sheet over the map's bottom as on the phone, the map's buttons at the top
+   (the user, 24 Oct: "when the window gets narrow … one column") */
+@container (max-width: 760px) {
+  .maps-panel { top: auto; left: 12px; right: 12px; width: auto; max-height: 45%; }
+  .maps-missing { left: 12px; }
+  .maps-waiting { bottom: calc(45% + 24px); }
+  .maps-page .maplibregl-ctrl-bottom-left { left: 0; top: 0; bottom: auto; }
+  .maps-page .maplibregl-ctrl-bottom-right { top: 0; bottom: auto; }
+  .maps-here { top: 120px; bottom: auto; }
+}
 .link-button { color: #4f86e8; text-decoration: underline; text-align: left; padding: 0; overflow-wrap: anywhere; cursor: pointer; }
 .maps-route { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; margin: 6px 0; border-radius: 14px; background: var(--island-2); }
 .maps-route .segmented { margin-bottom: 4px; }
