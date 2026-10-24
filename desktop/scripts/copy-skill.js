@@ -14,3 +14,10 @@ for (const name of ['tetra-calendar', 'tetra-timer']) {
   for (const f of fs.readdirSync(from).filter(n => !n.startsWith('.') && fs.statSync(path.join(from, n)).isFile())) fs.copyFileSync(path.join(from, f), path.join(to, f))
   console.log(`[copy-skill] ${from} → ${to}`)
 }
+// Files' categories (file-kinds.json): one table for the phone and the desktop, kept in Drive-Android; copied the same way.
+{
+  const from = [path.join(coding, 'Drive-Android'), path.join(coding, '..', 'Drive-Android')]
+    .map(d => path.join(d, 'app', 'src', 'main', 'resources', 'file-kinds.json')).find(f => fs.existsSync(f))
+  if (from) { fs.copyFileSync(from, path.join(__dirname, '..', 'file-kinds.json')); console.log(`[copy-skill] ${from}`) }
+  else console.warn('[copy-skill] Drive-Android\'s file-kinds.json not found; keeping desktop/file-kinds.json')
+}

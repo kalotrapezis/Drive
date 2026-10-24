@@ -13,6 +13,8 @@ export interface DriveItem {
   favorite: boolean; color: string | null; tags: string[]; openedAt?: number
   /** Which thumbnail Files shows (thumbs.js); null: its icon. */
   thumb?: 'picture' | 'video' | 'pdf' | 'words' | 'tables' | 'slides' | null
+  /** Its category's icon (file-kinds.json), public/kinds/<icon>.png; null: the type's own. */
+  icon?: string | null
 }
 
 /** A folder under the Photos root; included null = never asked. */

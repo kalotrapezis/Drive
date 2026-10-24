@@ -354,24 +354,24 @@ const SYSTEM_ICON: Record<string, IconName> = { Documents: 'folderDocuments', 'D
 const systemLook = (item: DriveItem) => item.system ? SYSTEM_FOLDER_ICONS[item.path] : undefined
 
 function ItemIcon({ item, size }: { item: DriveItem; size: number }) {
+  // a file of a known category: its icon in its own colours (the user's tiles, 24 Oct)
+  if (!item.dir && item.icon) return <span className="file-icon"><img className="kind-icon" src={`kinds/${item.icon}.png`} width={size} height={size} draggable={false} alt="" /></span>
   return <span className="file-icon" style={{ color: item.dir ? (item.color ? FOLDER_COLORS[item.color] : systemLook(item)?.[1]) : undefined }}>
     <Icon name={item.path === TRASH ? 'trash' : SYSTEM_ICON[item.path] ?? systemLook(item)?.[0] ?? TYPE_ICON[item.type] ?? 'file'} size={size} />
   </span>
 }
 
-/** Office's glyph over a document's thumbnail, in its app's colour (the phone's Office: Words' lines, Tables' table, Slides' play). */
-const GLYPH: Record<string, [IconName, string]> = { words: ['fileText', '#185ABD'], tables: ['table', '#107C41'], slides: ['play', '#B7472A'] }
-
-/** A file's thumbnail (thumbs.js); a document's first page with its glyph, or the glyph on a blank page when it has none. */
+/** A file's thumbnail (thumbs.js). A document's first page has its category's tile in the middle (the user's icons, 24 Oct:
+ * Words', Tables', Slides'); a file with no thumbnail shows its icon. */
 function FileThumb({ item, glyphSize }: { item: DriveItem; glyphSize: number }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [item.path, item.mtime])
-  const glyph = GLYPH[item.thumb ?? '']
-  if (failed && !glyph) return <ItemIcon item={item} size={glyphSize * 2} />
-  return <span className={`file-thumb ${glyph ? 'page' : ''}`}>
-    {!failed && <img src={`media://filethumb/${encodeURIComponent(item.path)}?v=${item.mtime}`} loading="lazy" decoding="async" draggable={false} alt=""
-      onError={() => setFailed(true)} />}
-    {glyph && <span className="thumb-glyph" style={{ color: glyph[1] }}><Icon name={glyph[0]} size={glyphSize} /></span>}
+  if (failed) return <ItemIcon item={item} size={glyphSize * 2} />
+  const badge = item.thumb === 'words' || item.thumb === 'tables' || item.thumb === 'slides' ? item.icon : null
+  return <span className={`file-thumb ${badge ? 'page' : ''}`}>
+    <img src={`media://filethumb/${encodeURIComponent(item.path)}?v=${item.mtime}`} loading="lazy" decoding="async" draggable={false} alt=""
+      onError={() => setFailed(true)} />
+    {badge && <img className="thumb-badge" src={`kinds/${badge}.png`} style={{ width: Math.round(glyphSize * 1.4), height: Math.round(glyphSize * 1.4) }} draggable={false} alt="" />}
   </span>
 }
 

@@ -1,0 +1,14 @@
+{
+  "about": "Files' categories (the user, 24 Oct): each one's icon (Assets/<icon>.png, made small by tools/file-icons.py as kind_<icon> on the phone, kinds/<icon>.png on the desktop, in lower case) and the extensions it stands for. One table for the phone (FileKinds.kt) and the desktop (copied there by scripts/copy-skill.js). Pictures, videos and PDFs keep their own icons and thumbnails.",
+  "kinds": {
+  "words":    { "icon": "docs-word", "extensions": ["doc", "docx", "docm", "dot", "dotx", "odt", "ott", "rtf", "pages"] },
+  "tables":   { "icon": "excel", "extensions": ["xls", "xlsx", "xlsm", "xltx", "ods", "ots", "csv", "tsv", "numbers"] },
+  "slides":   { "icon": "slides", "extensions": ["ppt", "pptx", "pptm", "pps", "ppsx", "potx", "odp", "otp", "key"] },
+  "text":     { "icon": "docs-txt", "extensions": ["txt", "md", "markdown", "log", "rst", "ini", "cfg", "conf", "toml", "yaml", "yml", "json", "xml", "tex", "srt", "nfo"] },
+  "archives": { "icon": "Archives", "extensions": ["zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "tbz2", "xz", "txz", "zst", "lz", "lzma", "cab", "iso"] },
+  "scripts":  { "icon": "bash-scripts", "extensions": ["sh", "bash", "zsh", "fish", "py", "js", "mjs", "cjs", "ts", "tsx", "jsx", "rb", "pl", "php", "lua", "ps1", "bat", "cmd", "kt", "kts", "java", "c", "h", "cpp", "hpp", "cs", "go", "rs", "swift", "sql", "gradle"] },
+  "ebooks":   { "icon": "ebooks", "extensions": ["epub", "mobi", "azw", "azw3", "fb2", "djvu", "cbz", "cbr", "ibooks"] },
+  "web":      { "icon": "html-pages", "extensions": ["html", "htm", "xhtml", "mhtml", "mht", "css", "url", "webloc"] },
+  "programs": { "icon": "programs-executables", "extensions": ["apk", "aab", "xapk", "exe", "msi", "deb", "rpm", "appimage", "flatpak", "snap", "dmg", "pkg", "jar", "bin", "run"] }
+  }
+}
