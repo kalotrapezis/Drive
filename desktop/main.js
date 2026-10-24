@@ -955,5 +955,5 @@ app.whenReady().then(() => {
 if (!process.env.DRIVE_HIDDEN && !app.requestSingleInstanceLock()) app.exit(0)
 app.on('second-instance', showWindow)
 app.on('window-all-closed', () => app.quit())
-app.on('before-quit', () => { quitting = true; vault?.lock(); analyzer?.terminate(); router?.stop() })
+app.on('before-quit', () => { quitting = true; calls?.quit(); vault?.lock(); analyzer?.terminate(); router?.stop() })
 process.on('exit', () => router?.stop()) // a Tetra stopped without quitting leaves no routing server behind

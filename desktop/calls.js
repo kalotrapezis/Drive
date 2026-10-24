@@ -6,10 +6,59 @@
 // voice is the phone's unless the phone is connected to this computer by Bluetooth as a hands-free kit: that is said in
 // the bubble, shown in Settings › Calls, and a notification says when it connects or drops.
 const { BrowserWindow, screen } = require('electron')
-const { execFile, spawn } = require('node:child_process')
+const { execFile, execFileSync, spawn } = require('node:child_process')
 const path = require('node:path')
 
 const run = args => new Promise(r => execFile('bluetoothctl', args, { timeout: 4000 }, (e, out) => r(e ? null : String(out))))
+const pactl = args => new Promise(r => execFile('pactl', args, { timeout: 4000 }, (e, out) => r(e ? null : String(out).trim())))
+
+/**
+ * Echo cancellation while a call's sound is on this computer (the user, 24 Oct: "the other side hears their voice two
+ * times"): the speakers play the caller, the microphone hears them and sends them back. PipeWire's webrtc echo canceller
+ * goes between the two for the call — its speaker and microphone the defaults, the phone's Bluetooth streams moved onto
+ * them — and the old defaults come back after.
+ */
+const echo = {
+  module: null, was: null, chain: Promise.resolve(),
+  queue(fn) { this.chain = this.chain.then(fn).catch(e => console.log('[calls] echo cancel:', e.message)); return this.chain },
+  on() {
+    return this.queue(async () => {
+      if (!this.module) {
+        const sink = await pactl(['get-default-sink']), source = await pactl(['get-default-source'])
+        if (!sink || !source || sink.startsWith('tetra_call')) return
+        const id = await pactl(['load-module', 'module-echo-cancel', 'aec_method=webrtc', `sink_master=${sink}`, `source_master=${source}`,
+          'sink_name=tetra_call_speaker', 'source_name=tetra_call_mic'])
+        if (!id) return console.log('[calls] echo cancel: PipeWire would not load module-echo-cancel')
+        Object.assign(this, { module: id, was: { sink, source } })
+        await pactl(['set-default-sink', 'tetra_call_speaker']); await pactl(['set-default-source', 'tetra_call_mic'])
+      }
+      // the phone's voice streams (they appear when the call's audio starts, so this runs again on each state)
+      const bluez = p => /^bluez_/.test(p['node.name'] || '') || p['device.api'] === 'bluez5' || 'api.bluez5.address' in p
+      for (const [kind, to] of [['sink-inputs', 'tetra_call_speaker'], ['source-outputs', 'tetra_call_mic']]) {
+        const list = JSON.parse(await pactl(['-f', 'json', 'list', kind]) || '[]')
+        for (const x of list.filter(x => bluez(x.properties || {}))) await pactl([kind === 'sink-inputs' ? 'move-sink-input' : 'move-source-output', String(x.index), to])
+      }
+    })
+  },
+  off() {
+    return this.queue(async () => {
+      if (!this.module) return
+      const { was } = this
+      if (await pactl(['get-default-sink']) === 'tetra_call_speaker') await pactl(['set-default-sink', was.sink])
+      if (await pactl(['get-default-source']) === 'tetra_call_mic') await pactl(['set-default-source', was.source])
+      await pactl(['unload-module', this.module]); this.module = null
+    })
+  },
+  /** On quit (nothing async gets to run then), and at start for one a crash left behind. */
+  offNow() {
+    try {
+      if (this.module) { execFileSync('pactl', ['set-default-sink', this.was.sink], { timeout: 2000 }); execFileSync('pactl', ['set-default-source', this.was.source], { timeout: 2000 }) }
+      const mods = String(execFileSync('pactl', ['list', 'short', 'modules'], { timeout: 2000 }))
+      for (const m of mods.matchAll(/^(\d+)\s+module-echo-cancel\s+.*sink_name=tetra_call_speaker/gm)) execFileSync('pactl', ['unload-module', m[1]], { timeout: 2000 })
+    } catch {}
+    this.module = null
+  },
+}
 
 /**
  * The phones paired with this computer's Bluetooth that can carry calls (they offer the Handsfree Audio Gateway), and
@@ -72,10 +121,14 @@ class Calls {
       this.win.webContents.send('call', this.state)
       if (s.state === 'ringing') { this.win.show(); this.win.focus() } else this.win.showInactive()
     }
-    if (s.state === 'ended') this.closer = setTimeout(() => this.close(), 6000)
+    if (s.state === 'ended') { echo.off(); this.closer = setTimeout(() => this.close(), 6000) }
+    else if ((s.state === 'calling' || s.state === 'active') && this.bt.phones.some(p => p.connected)) echo.on()
   }
 
-  close() { clearTimeout(this.closer); this.state = null; if (this.win && !this.win.isDestroyed()) this.win.close() }
+  close() { clearTimeout(this.closer); this.state = null; echo.off(); if (this.win && !this.win.isDestroyed()) this.win.close() }
+
+  /** The app quitting: the echo canceller goes and the speaker and microphone are as they were. */
+  quit() { echo.offNow() }
 
   /** The bubble's buttons: answer, decline, end on the phone; close the bubble. */
   async press(what) {
@@ -96,6 +149,7 @@ class Calls {
       if (this.state) this.show(this.state)
     }
     this.bt.phones = this.bt.phones ?? []
+    echo.offNow() // one a crash left behind
     look(); setInterval(look, 30_000)
   }
 
