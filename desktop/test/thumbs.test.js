@@ -48,6 +48,7 @@ test('files find their category icon, and every icon is there', () => {
   assert.equal(kindIcon('/x/Essay.DOCX'), 'docs-word')
   assert.equal(kindIcon('backup.tar.gz'), 'archives')
   assert.equal(kindIcon('Tetra.AppImage'), 'programs-executables')
+  assert.equal(kindIcon('paper.PDF'), 'pdf')
   assert.equal(kindIcon('photo.jpg'), null)
   for (const k of Object.values(require('../file-kinds.json').kinds)) assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', 'kinds', k.icon.toLowerCase() + '.png')), k.icon)
 })

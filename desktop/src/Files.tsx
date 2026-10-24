@@ -362,12 +362,12 @@ function ItemIcon({ item, size }: { item: DriveItem; size: number }) {
 }
 
 /** A file's thumbnail (thumbs.js). A document's first page has its category's tile in the middle (the user's icons, 24 Oct:
- * Words', Tables', Slides'); a file with no thumbnail shows its icon. */
+ * Words', Tables', Slides', PDFs'); a file with no thumbnail shows its icon. */
 function FileThumb({ item, glyphSize }: { item: DriveItem; glyphSize: number }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [item.path, item.mtime])
   if (failed) return <ItemIcon item={item} size={glyphSize * 2} />
-  const badge = item.thumb === 'words' || item.thumb === 'tables' || item.thumb === 'slides' ? item.icon : null
+  const badge = item.thumb === 'words' || item.thumb === 'tables' || item.thumb === 'slides' || item.thumb === 'pdf' ? item.icon : null
   return <span className={`file-thumb ${badge ? 'page' : ''}`}>
     <img src={`media://filethumb/${encodeURIComponent(item.path)}?v=${item.mtime}`} loading="lazy" decoding="async" draggable={false} alt=""
       onError={() => setFailed(true)} />
