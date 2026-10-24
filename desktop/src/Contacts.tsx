@@ -11,7 +11,7 @@ type VDate = { year: number | null; month: number; day: number }
 export type Contact = {
   uid: string; name: string; prefix: string; given: string; middle: string; family: string; suffix: string; formatted: string; nickname: string
   org: string; department: string; title: string; phones: Field[]; emails: Field[]; addresses: Address[]; urls: Field[]; birthday: VDate | null
-  dates: Field[]; related: Field[]; note: string; categories: string[]; photo: string | null; photoUrl: string | null; person: string | null; face?: string | null
+  dates: Field[]; related: Field[]; note: string; categories: string[]; photo: string | null; photoUrl: string | null; person: string | null; face?: string | null; defaultPhone?: string | null
   favourite: boolean; labels: string[]; versions?: number; key?: string
 }
 type Tab = 'all' | 'favourites' | 'labels'
@@ -155,7 +155,8 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
           {editing ? <Editor start={editing === 'new' ? null : editing} labels={allLabels} setDialog={setDialog} say={say} cancel={() => setEditing(null)} save={c => save(editing === 'new' ? null : editing, c)}
             remove={editing === 'new' ? undefined : () => { const c = editing; setDialog(<Modal onClose={close}><h3>Delete {c.name}?</h3><p>The contact goes to the Trash, with its birthday's event, and can be restored from there.</p>
               <div className="dialog-actions"><button className="text-button" onClick={close}>Cancel</button><button className="filled-button danger" onClick={() => { close(); setEditing(null); setOpen(null); act(() => call('trash', c.uid), `${c.name} moved to the Trash`) }}>Delete</button></div></Modal>) }} />
-            : contact ? <Page c={contact} all={list} edit={() => setEditing(contact)} openUid={setOpen} openPerson={openPerson} setDialog={setDialog} star={() => act(() => call('save', contact.uid, { ...contact, categories: contact.favourite ? contact.categories.filter(x => x.toLowerCase() !== 'starred') : [...contact.categories, 'starred'] }), contact.favourite ? 'Not a favourite' : 'Added to favourites')}
+            : contact ? <Page c={contact} all={list} edit={() => setEditing(contact)} openUid={setOpen} openPerson={openPerson} setDialog={setDialog}
+              setDefault={n => act(() => call('save', contact.uid, { ...contact, defaultPhone: n }), n ? 'Default number set' : 'No default number')} star={() => act(() => call('save', contact.uid, { ...contact, categories: contact.favourite ? contact.categories.filter(x => x.toLowerCase() !== 'starred') : [...contact.categories, 'starred'] }), contact.favourite ? 'Not a favourite' : 'Added to favourites')}
               keep={() => act(() => call('keep', contact.uid), 'Kept this version; the other went to the Trash')} say={say} />
             : <p className="hint ct-hint">Choose a contact.</p>}
         </section>}
@@ -207,10 +208,12 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
 
 /** A contact's page: its island in the middle (the round face, the name, Call · Mail · WhatsApp · Viber), ♥ and Edit in an
  * island of their own at the right (the user, 24 Oct), the details in cards under it. */
-function Page({ c, all, edit, openUid, openPerson, setDialog, star, keep, say }: { c: Contact; all: Contact[]; edit: () => void; openUid: (uid: string) => void
+function Page({ c, all, edit, openUid, openPerson, setDialog, setDefault, star, keep, say }: { c: Contact; all: Contact[]; edit: () => void; openUid: (uid: string) => void; setDefault: (n: string | null) => void
   openPerson: (id: string, name: string) => void; setDialog: (d: ReactNode) => void; star: () => void; keep: () => void; say: (t: string) => void }) {
   const open = (how: 'mail' | 'whatsapp' | 'viber' | 'web', v: string) => window.drive.contactsOpen(how, v).catch(e => say(errorText(e)))
   const phone = c.phones[0]?.value, mail = c.emails[0]?.value
+  // a number starred as the default (the user, 24 Oct; TYPE=PREF in the file): Call, WhatsApp and Viber go to it at once
+  const nums = (c.defaultPhone && c.phones.filter(p => p.value === c.defaultPhone).length ? c.phones.filter(p => p.value === c.defaultPhone) : c.phones)
   const job = [c.title, [c.org, c.department].filter(Boolean).join(', ')].filter(Boolean).join(' · ')
   // a call is placed by the paired phone (sync.js callOnPhone): at once, or as a notification to tap there
   const dial = (number: string) => window.drive.contactsCall(number, c.name).then(r => say(r.error ?? (r.how === 'calling' ? `Calling ${c.name} on ${r.device}` : `${r.device} shows "Call ${c.name}": tap it to call`)), e => say(errorText(e)))
@@ -229,10 +232,10 @@ function Page({ c, all, edit, openUid, openPerson, setDialog, star, keep, say }:
           <h2>{c.name}</h2>
           {job && <p className="hint">{job}</p>}
           <div className="ct-actions">
-            <button className="ct-action" disabled={!phone} onClick={() => choose('Call', c.phones.map(p => [`${p.label || 'Phone'} · ${p.value}`, () => dial(p.value)]))}><span><Icon name="call" /></span><small>Call</small></button>
+            <button className="ct-action" disabled={!phone} onClick={() => choose('Call', nums.map(p => [`${p.label || 'Phone'} · ${p.value}`, () => dial(p.value)]))}><span><Icon name="call" /></span><small>Call</small></button>
             <button className="ct-action" disabled={!mail} onClick={() => choose('Mail', c.emails.map(e => [e.value, () => open('mail', e.value)]))}><span><Icon name="mail" /></span><small>Mail</small></button>
-            <button className="ct-action" disabled={!phone} onClick={() => choose('WhatsApp', c.phones.map(p => [`${p.label || 'Phone'} · ${p.value}`, () => open('whatsapp', p.value)]))}><span><Icon name="chat" /></span><small>WhatsApp</small></button>
-            <button className="ct-action" disabled={!phone} onClick={() => choose('Viber', c.phones.map(p => [`${p.label || 'Phone'} · ${p.value}`, () => open('viber', p.value)]))}><span><Icon name="device" /></span><small>Viber</small></button>
+            <button className="ct-action" disabled={!phone} onClick={() => choose('WhatsApp', nums.map(p => [`${p.label || 'Phone'} · ${p.value}`, () => open('whatsapp', p.value)]))}><span className="ct-mark"><WhatsAppMark size={56} /></span><small>WhatsApp</small></button>
+            <button className="ct-action" disabled={!phone} onClick={() => choose('Viber', nums.map(p => [`${p.label || 'Phone'} · ${p.value}`, () => open('viber', p.value)]))}><span className="ct-mark"><ViberMark size={56} /></span><small>Viber</small></button>
           </div>
         </div>
       </div>
@@ -242,8 +245,13 @@ function Page({ c, all, edit, openUid, openPerson, setDialog, star, keep, say }:
         <button className="island-item" onClick={edit}><Icon name="edit" size={20} /><span>Edit</span></button>
       </nav>
       {(c.versions ?? 1) > 1 && <div className="ct-card"><Row icon="warning" label={`${c.versions} versions (a change on two devices)`} value="This is the newer." action={<button className="text-button" onClick={keep}>Keep this one</button>} /></div>}
-      {c.phones.length > 0 && <div className="ct-card">{c.phones.map((p, k) => <Row key={k} icon="call" label={p.label || 'Phone'} value={p.value} onClick={() => dial(p.value)}
-        action={<span className="chips"><button className="chip" onClick={() => open('whatsapp', p.value)}>WhatsApp</button><button className="chip" onClick={() => open('viber', p.value)}>Viber</button></span>} />)}</div>}
+      {c.phones.length > 0 && <div className="ct-card">{c.phones.map((p, k) => { const isDefault = c.phones.length > 1 && p.value === c.defaultPhone
+        return <Row key={k} icon="call" label={(p.label || 'Phone') + (isDefault ? ' · default' : '')} value={p.value} onClick={() => dial(p.value)}
+          action={<span className="ct-marks">
+            {c.phones.length > 1 && <button className={`round flat ct-default ${isDefault ? 'on' : ''}`} title={isDefault ? 'The default number (click to clear)' : 'Make this the default number'} onClick={() => setDefault(isDefault ? null : p.value)}>{isDefault ? '★' : '☆'}</button>}
+            <button className="round flat" title={`WhatsApp ${p.value}`} onClick={() => open('whatsapp', p.value)}><WhatsAppMark size={26} /></button>
+            <button className="round flat" title={`Viber ${p.value}`} onClick={() => open('viber', p.value)}><ViberMark size={26} /></button>
+          </span>} /> })}</div>}
       {c.emails.length > 0 && <div className="ct-card">{c.emails.map((e, k) => <Row key={k} icon="mail" label={e.label || 'Email'} value={e.value} onClick={() => open('mail', e.value)} />)}</div>}
       {(c.birthday || c.dates.length > 0) && <div className="ct-card">
         {c.birthday && <Row icon="cake" label="Birthday" value={dateText(c.birthday, true)} />}
@@ -472,4 +480,19 @@ async function squarePicture(file: File): Promise<{ photo: string; face: string 
   URL.revokeObjectURL(img.src)
   const r4 = (n: number) => Math.round(n * 10000) / 10000
   return { photo: canvas.toDataURL('image/jpeg', 0.85).split(',')[1], face: `${sha};${[(w - side) / 2 / w, (h - side) / 2 / h, (w + side) / 2 / w, (h + side) / 2 / h].map(r4).join(',')}` }
+}
+
+/** WhatsApp's and Viber's marks, plain drawings of Tetra's own in their colours (the phone draws the same: ic_whatsapp, ic_viber). */
+function WhatsAppMark({ size }: { size: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="#25D366" d="M12 2C6.5 2 2 6.4 2 11.9c0 1.9.5 3.7 1.5 5.2L2 22l5-1.4c1.5.8 3.2 1.2 5 1.2 5.5 0 10-4.4 10-9.9S17.5 2 12 2z" />
+    <path fill="#fff" d="M8.7 7.3c-.2-.5-.4-.5-.6-.5h-.5c-.2 0-.5.1-.7.3-.3.3-.9.9-.9 2.2s.9 2.6 1.1 2.7c.1.2 1.8 2.9 4.5 4 2.2.9 2.7.7 3.2.7.5-.1 1.6-.7 1.8-1.3.2-.6.2-1.2.2-1.3-.1-.1-.2-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.6.1l-.7.9c-.1.2-.3.2-.5.1-.3-.1-1.1-.4-2.1-1.3-.8-.7-1.3-1.5-1.5-1.8-.2-.3 0-.4.1-.5l.4-.4.2-.4c.1-.1 0-.3 0-.4l-.7-1.9z" />
+  </svg>
+}
+function ViberMark({ size }: { size: number }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <path fill="#7360F2" d="M6 2h12a4 4 0 0 1 4 4v8a4 4 0 0 1-4 4h-5l-4.5 3.5V18H6a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4z" />
+    <path fill="#fff" transform="translate(6 15.2) scale(0.0098)" d="M798-120q-125 0-247-54.5T329-329Q229-429 174.5-551T120-798q0-18 12-30t30-12h162q14 0 25 9.5t13 22.5l26 140q2 16-1 27t-11 19l-97 98q20 37 47.5 71.5T387-386q31 31 65 57.5t72 48.5l94-94q9-9 23.5-13.5T670-390l138 28q14 4 23 14.5t9 23.5v162q0 18-12 30t-30 12Z" />
+    <path fill="none" stroke="#fff" strokeWidth="1.1" strokeLinecap="round" d="M13.6 6.4a3.2 3.2 0 0 1 2.6 2.6M13.6 4.4a5.2 5.2 0 0 1 4.6 4.6" />
+  </svg>
 }

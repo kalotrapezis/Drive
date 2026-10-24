@@ -166,6 +166,8 @@ function info(lines) {
     formatted: text('FN'), nickname: text('NICKNAME'),
     org: (org[0] || '').trim(), department: org.slice(1).map(s => s.trim()).join(', ').replace(/^[, ]+|[, ]+$/g, ''), title: text('TITLE'),
     phones: fields('TEL'), emails: fields('EMAIL'),
+    // the number starred as the default (TYPE=PREF on its TEL line, as Google and Android write it)
+    defaultPhone: (p => p ? unescape(p.value).trim() || null : null)(lines.find(p => keyOf(p) === 'TEL' && typesOf(p).includes('PREF'))),
     addresses: lines.filter(p => keyOf(p) === 'ADR').map(p => { const x = parts(p.value).map(s => s.trim()); while (x.length < 7) x.push(''); return { label: labelOf(p, lines), parts: x } })
       .filter(a => a.parts.some(s => s)),
     urls: fields('URL'),
@@ -188,7 +190,7 @@ const nameOf = i => (i.formatted || '').trim() || composed(i) || i.org || i.phon
 const favourite = i => i.categories.some(c => c.toLowerCase() === STARRED.toLowerCase())
 const labels = i => i.categories.filter(c => c.trim() && ![STARRED, MY_CONTACTS, 'Starred in Android'].some(x => x.toLowerCase() === c.toLowerCase()))
 const empty = () => ({ uid: '', prefix: '', given: '', middle: '', family: '', suffix: '', formatted: '', nickname: '', org: '', department: '', title: '',
-  phones: [], emails: [], addresses: [], urls: [], birthday: null, dates: [], related: [], note: '', categories: [], photo: null, photoUrl: null, person: null, face: null, rev: '' })
+  phones: [], defaultPhone: null, emails: [], addresses: [], urls: [], birthday: null, dates: [], related: [], note: '', categories: [], photo: null, photoUrl: null, person: null, face: null, rev: '' })
 /** The window's view of a contact: the info and what is worked out from it. */
 const view = i => ({ ...i, name: nameOf(i), favourite: favourite(i), labels: labels(i) })
 
@@ -234,7 +236,8 @@ function apply(lines, was, now, at = Date.now()) {
   if (was.org !== now.org || was.department !== now.department)
     replace(['ORG'], !now.org && !now.department ? [] : [{ name: 'ORG', params: '', value: escape(now.org || '') + (now.department ? ';' + escape(now.department) : '') }])
   if (was.title !== now.title) replace(['TITLE'], single('TITLE', now.title))
-  if (!same(was.phones, now.phones)) replace(['TEL'], now.phones.flatMap(f => labelled('TEL', f, escape(f.value), PHONE_TYPES)))
+  if (!same(was.phones, now.phones) || (was.defaultPhone ?? null) !== (now.defaultPhone ?? null)) replace(['TEL'], now.phones.flatMap(f => labelled('TEL', f, escape(f.value), PHONE_TYPES)
+    .map(p => f.value !== now.defaultPhone || p.name.endsWith('X-ABLabel') ? p : { ...p, params: p.params.startsWith(';TYPE=') ? p.params + ',PREF' : ';TYPE=PREF' })))
   if (!same(was.emails, now.emails)) replace(['EMAIL'], now.emails.flatMap(f => labelled('EMAIL', f, escape(f.value), PLACE_TYPES)
     .map(p => !p.params && !p.name.includes('.') ? { ...p, params: ';TYPE=INTERNET' } : p.params.startsWith(';TYPE=') ? { ...p, params: ';TYPE=INTERNET,' + p.params.slice(6) } : p)))
   if (!same(was.addresses, now.addresses)) replace(['ADR'], now.addresses.flatMap(a => {
@@ -412,7 +415,7 @@ class Contacts {
     return {
       ...a, prefix: s(a.prefix, b.prefix), given: s(a.given, b.given), middle: s(a.middle, b.middle), family: s(a.family, b.family), suffix: s(a.suffix, b.suffix),
       formatted: s(a.formatted, b.formatted), nickname: s(a.nickname, b.nickname), org: s(a.org, b.org), department: s(a.department, b.department), title: s(a.title, b.title),
-      phones: by([...a.phones, ...b.phones], p => p.value.replace(/\D/g, '').slice(-9) || p.value.trim()),
+      phones: by([...a.phones, ...b.phones], p => p.value.replace(/\D/g, '').slice(-9) || p.value.trim()), defaultPhone: a.defaultPhone || b.defaultPhone,
       emails: by([...a.emails, ...b.emails], e => e.value.toLowerCase().trim()),
       addresses: by([...a.addresses, ...b.addresses], x => plain(x.parts.join(' '))), urls: by([...a.urls, ...b.urls], u => u.value.trim().toLowerCase()),
       birthday: bd, dates: by([...a.dates, ...b.dates], d => d.label.toLowerCase() + d.value),

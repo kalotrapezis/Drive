@@ -1042,3 +1042,10 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .ct.on-page .ct-search h1 { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kind-icon { display: block; }
 .kind-icon { display: block; }
+
+/* a number's marks and its default star (24 Oct) */
+.ct-marks { display: flex; align-items: center; gap: 2px; }
+.ct-marks .round { width: 38px; height: 38px; }
+.ct-default { font-size: 20px; color: var(--muted); }
+.ct-default.on { color: var(--ct); }
+.ct-action > .ct-mark { background: none; padding: 0; width: 56px; height: 56px; }
