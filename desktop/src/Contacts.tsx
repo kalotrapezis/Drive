@@ -11,7 +11,7 @@ type VDate = { year: number | null; month: number; day: number }
 export type Contact = {
   uid: string; name: string; prefix: string; given: string; middle: string; family: string; suffix: string; formatted: string; nickname: string
   org: string; department: string; title: string; phones: Field[]; emails: Field[]; addresses: Address[]; urls: Field[]; birthday: VDate | null
-  dates: Field[]; related: Field[]; note: string; categories: string[]; photo: string | null; photoUrl: string | null; person: string | null
+  dates: Field[]; related: Field[]; note: string; categories: string[]; photo: string | null; photoUrl: string | null; person: string | null; face?: string | null
   favourite: boolean; labels: string[]; versions?: number; key?: string
 }
 type Tab = 'all' | 'favourites' | 'labels'
@@ -252,9 +252,9 @@ function Page({ c, all, edit, openUid, openPerson, setDialog, star, keep, say }:
  * given to a person Photos only knew as "Person 12" (the user, 24 Oct: faces and names both ways).
  */
 async function photoFromFace(personId: string, personName: string, faceId: string, contactName: string) {
-  const photo = await window.drive.contactsFacePhoto(faceId)
+  const got = await window.drive.contactsFacePhoto(faceId)
   if (/^Person \d+$/.test(personName) && contactName.trim()) await window.drive.people.rename(personId, contactName.trim()).catch(() => {})
-  return photo
+  return got
 }
 
 /** From Photos: the people Photos knows (those named like the contact first, then the unnamed), then a person's faces. */
@@ -303,7 +303,7 @@ function FacesForMany({ list, onClose, done }: { list: Contact[]; onClose: () =>
     setWorking(true)
     let n = 0
     for (const { c, p } of pairs!.filter(x => picked.has(x.c.uid))) {
-      try { const photo = await window.drive.contactsFacePhoto(p.cover!); await call('save', c.uid, { ...c, photo, photoUrl: null, person: p.id }); n++ } catch {}
+      try { const g = await window.drive.contactsFacePhoto(p.cover!); await call('save', c.uid, { ...c, photo: g.photo, face: g.face, photoUrl: null, person: p.id }); n++ } catch {}
     }
     onClose(); done(n)
   }
@@ -358,10 +358,10 @@ function Editor({ start, labels, cancel, save, remove, setDialog, say }: { start
       <div className="ct-photo-tools">
         <button className="text-button" onClick={() => setDialog(<FacePicker name={[c.given, c.family].filter(Boolean).join(' ')} onClose={() => setDialog(null)} pick={(pid, pname, fid) => {
           setDialog(null)
-          photoFromFace(pid, pname, fid, [c.given, c.family].filter(Boolean).join(' ') || c.formatted).then(photo => set({ photo, photoUrl: null, person: pid }), e => say('No photo: ' + errorText(e)))
+          photoFromFace(pid, pname, fid, [c.given, c.family].filter(Boolean).join(' ') || c.formatted).then(g => set({ photo: g.photo, face: g.face, photoUrl: null, person: pid }), e => say('No photo: ' + errorText(e)))
         }} />)}>From Photos</button>
-        <label className="text-button">Choose a picture<input type="file" accept="image/*" hidden onChange={e => { const f = e.target.files?.[0]; if (f) squarePicture(f).then(photo => set({ photo, photoUrl: null, person: null }), () => say('That picture could not be read')) }} /></label>
-        {(c.photo || c.photoUrl) && <button className="text-button" onClick={() => set({ photo: null, photoUrl: null, person: null })}>Remove</button>}
+        <label className="text-button">Choose a picture<input type="file" accept="image/*" hidden onChange={e => { const f = e.target.files?.[0]; if (f) squarePicture(f).then(g => set({ photo: g.photo, face: g.face, photoUrl: null, person: c.person || crypto.randomUUID() }), () => say('That picture could not be read')) }} /></label>
+        {(c.photo || c.photoUrl) && <button className="text-button" onClick={() => set({ photo: null, photoUrl: null, face: null })}>Remove</button>}
       </div>
       <div className="ct-card ct-form">
         <small>Name</small>
@@ -436,18 +436,19 @@ function LabelDialog({ labels, many, onClose, pick }: { labels: string[]; many: 
   </Modal>
 }
 
-/** Any picture as a contact's photo: its middle square, 512 px, a JPEG in base64 (the phone's "Choose a picture"). */
-function squarePicture(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const side = Math.min(img.naturalWidth, img.naturalHeight), out = Math.min(512, side)
-      const canvas = document.createElement('canvas'); canvas.width = canvas.height = out
-      canvas.getContext('2d')!.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, out, out)
-      URL.revokeObjectURL(img.src)
-      resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1])
-    }
-    img.onerror = reject
-    img.src = URL.createObjectURL(file)
-  })
+/**
+ * Any picture as a contact's photo: its middle square, 512 px, a JPEG in base64 (the phone's "Choose a picture"), and its
+ * X-TETRA-FACE — the picture's SHA-256 and that square — so the face in it can join Photos under this contact (contactfaces.js).
+ */
+async function squarePicture(file: File): Promise<{ photo: string; face: string }> {
+  const sha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer()))].map(b => b.toString(16).padStart(2, '0')).join('')
+  const img = new Image()
+  img.src = URL.createObjectURL(file)
+  await img.decode()
+  const w = img.naturalWidth, h = img.naturalHeight, side = Math.min(w, h), out = Math.min(512, side)
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = out
+  canvas.getContext('2d')!.drawImage(img, (w - side) / 2, (h - side) / 2, side, side, 0, 0, out, out)
+  URL.revokeObjectURL(img.src)
+  const r4 = (n: number) => Math.round(n * 10000) / 10000
+  return { photo: canvas.toDataURL('image/jpeg', 0.85).split(',')[1], face: `${sha};${[(w - side) / 2 / w, (h - side) / 2 / h, (w + side) / 2 / w, (h + side) / 2 / h].map(r4).join(',')}` }
 }

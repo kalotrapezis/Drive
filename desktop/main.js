@@ -17,6 +17,7 @@ const history = require('./history')
 const { Notes } = require('./notes')
 const { Calendar } = require('./calendar')
 const { Contacts, readImport: readContacts } = require('./contacts')
+const { linkFaces } = require('./contactfaces')
 const timer = require('./timer')
 const { Maps } = require('./maps')
 const { Router } = require('./router')
@@ -120,6 +121,31 @@ function watchTimer() {
     })
   } catch (e) { console.warn('[timer] cannot watch', e.message) }
 }
+// Contacts ↔ Photos' people kept in step (contactfaces.js): when a contact changes, and every few minutes for Photos' side
+let linking = null
+function linkContactFaces() {
+  if (linking || !contacts || !people) return linking
+  linking = linkFaces({ db, people, contacts, facePhoto: contactFacePhoto })
+    .then(n => { if (n) { console.log(`Contacts: ${n} face links`); win?.webContents.send('contacts-changed') } })
+    .catch(e => console.warn('[contacts] face links', e.message)).finally(() => { linking = null })
+  return linking
+}
+/** A face as a contact's photo: its box (fractions of the upright picture) × 1.8, square, 512 px — the phone's crop — and its X-TETRA-FACE. */
+async function contactFacePhoto(faceId) {
+  const f = db.prepare(`SELECT f.sha256, f.box_left, f.box_top, f.box_right, f.box_bottom, (SELECT MIN(m.path) FROM media m WHERE m.sha256 = f.sha256 AND m.location IS NULL) AS path
+    FROM faces f WHERE f.id = ? AND f.deleted = 0`).get(String(faceId))
+  if (!f?.path) throw new Error('That picture is not on this computer.')
+  const sharp = require('sharp')
+  // the upright size (metadata() gives the stored one, before EXIF's turn)
+  const { width, height } = (await sharp(path.join(PHOTOS_ROOT, f.path)).rotate().toBuffer({ resolveWithObject: true })).info
+  const w = (f.box_right - f.box_left) * width, h = (f.box_bottom - f.box_top) * height
+  const side = Math.max(1, Math.min(Math.round(Math.max(w, h) * 1.8), width, height))
+  const left = Math.min(Math.max(0, Math.round(f.box_left * width + w / 2 - side / 2)), width - side)
+  const top = Math.min(Math.max(0, Math.round(f.box_top * height + h / 2 - side / 2)), height - side)
+  const out = await sharp(path.join(PHOTOS_ROOT, f.path)).rotate().extract({ left, top, width: side, height: side }).resize(Math.min(512, side), Math.min(512, side)).jpeg({ quality: 85 }).toBuffer()
+  const r4 = n => Math.round(n * 10000) / 10000
+  return { photo: out.toString('base64'), face: `${f.sha256};${[left / width, top / height, (left + side) / width, (top + side) / height].map(r4).join(',')}` }
+}
 function watchContacts() {
   let settle = null
   try {
@@ -127,7 +153,7 @@ function watchContacts() {
       if (name && path.basename(String(name)).startsWith('.')) return // a write in progress (.part)
       clearTimeout(settle)
       // shown, and the phones and tablets told at once: the nudge has them sync Contacts' part (SYNC_PLAN 6ap)
-      settle = setTimeout(() => { win?.webContents.send('contacts-changed'); sync?.nudge().catch(() => {}) }, 300)
+      settle = setTimeout(() => { win?.webContents.send('contacts-changed'); sync?.nudge().catch(() => {}); linkContactFaces() }, 300)
     })
   } catch (e) { console.warn('[contacts] cannot watch', e.message) }
 }
@@ -797,20 +823,7 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('contacts:phoneCall', (_, number, name) => sync.callOnPhone(number, name))
   // A face from Photos as a contact's photo: the face's box (fractions of the upright picture) × 1.8, square, 512 px — the phone's crop
-  ipcMain.handle('contacts:facePhoto', async (_, faceId) => {
-    const f = db.prepare(`SELECT f.box_left, f.box_top, f.box_right, f.box_bottom, (SELECT MIN(m.path) FROM media m WHERE m.sha256 = f.sha256 AND m.location IS NULL) AS path
-      FROM faces f WHERE f.id = ? AND f.deleted = 0`).get(String(faceId))
-    if (!f?.path) throw new Error('That picture is not on this computer.')
-    const sharp = require('sharp')
-    // the upright size (metadata() gives the stored one, before EXIF's turn)
-    const { width, height } = (await sharp(path.join(PHOTOS_ROOT, f.path)).rotate().toBuffer({ resolveWithObject: true })).info
-    const w = (f.box_right - f.box_left) * width, h = (f.box_bottom - f.box_top) * height
-    const side = Math.max(1, Math.min(Math.round(Math.max(w, h) * 1.8), width, height))
-    const left = Math.min(Math.max(0, Math.round(f.box_left * width + w / 2 - side / 2)), width - side)
-    const top = Math.min(Math.max(0, Math.round(f.box_top * height + h / 2 - side / 2)), height - side)
-    const out = await sharp(path.join(PHOTOS_ROOT, f.path)).rotate().extract({ left, top, width: side, height: side }).resize(Math.min(512, side), Math.min(512, side)).jpeg({ quality: 85 }).toBuffer()
-    return out.toString('base64')
-  })
+  ipcMain.handle('contacts:facePhoto', (_, faceId) => contactFacePhoto(faceId))
   ipcMain.handle('contacts:settings', () => ({ birthdays: contacts.birthdayCalendar(false), calendars: calendar.calendars(), byLast: setting('contactsByLast') === '1' }))
   ipcMain.handle('contacts:setBirthdays', (_, id) => { if (!calendar.calendars().some(c => c.id === id)) throw new Error('No such calendar.'); setSetting('contactsBirthdays', id); contacts.chosen = id })
   ipcMain.handle('contacts:setByLast', (_, on) => setSetting('contactsByLast', on ? '1' : '0'))
@@ -901,6 +914,7 @@ app.whenReady().then(() => {
   })
   watchCalendar()
   watchContacts()
+  setTimeout(linkContactFaces, 30_000); setInterval(linkContactFaces, 5 * 60_000) // Photos' names and portraits, as they change or arrive from the phone
   planReminders()
   watchTimer()
   planTimer()

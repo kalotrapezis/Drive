@@ -170,7 +170,7 @@ declare global {
       contactsSettings(): Promise<{ birthdays: string | null; calendars: { id: string; name: string; color: string }[]; byLast: boolean }>
       contactsSetBirthdays(id: string): Promise<void>
       contactsCall(number: string, name: string): Promise<{ how?: 'calling' | 'notification'; device?: string; error?: string }>
-      contactsFacePhoto(faceId: string): Promise<string>
+      contactsFacePhoto(faceId: string): Promise<{ photo: string; face: string }>
       contactsSetByLast(on: boolean): Promise<void>
       onContactsChanged(cb: () => void): () => void
       calendarPickImport(): Promise<{ index: number; name: string; color: string | null; count: number }[] | null>

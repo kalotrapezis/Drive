@@ -67,6 +67,7 @@
       "notes.js",
       "calendar.js",
       "contacts.js",
+      "contactfaces.js",
       "skills/**",
       "importer.js",
       "models/*.onnx",
