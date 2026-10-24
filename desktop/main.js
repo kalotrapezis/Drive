@@ -18,6 +18,8 @@ const { Notes } = require('./notes')
 const { Calendar } = require('./calendar')
 const { Contacts, readImport: readContacts } = require('./contacts')
 const { linkFaces } = require('./contactfaces')
+const { Calls } = require('./calls')
+let calls = null
 const timer = require('./timer')
 const { Maps } = require('./maps')
 const { Router } = require('./router')
@@ -433,6 +435,8 @@ app.whenReady().then(() => {
   calendar = new Calendar(path.join(FILES_ROOT, 'Calendar'), path.join(FILES_ROOT, 'Trash'))
   try { fs.mkdirSync(calendar.root, { recursive: true }) } catch {}
   contacts = new Contacts(path.join(FILES_ROOT, 'Contacts'), path.join(FILES_ROOT, 'Trash'), calendar)
+  calls = new Calls({ contacts, act: what => sync.callAction(what), notify: (t, b) => notify(t, b) })
+  calls.watch()
   contacts.chosen = setting('contactsBirthdays') || null // the calendar birthdays go into (Γενέθλια when none chosen)
   try { fs.mkdirSync(contacts.root, { recursive: true }) } catch {}
   timers = new timer.Timers(path.join(FILES_ROOT, 'Timer'), os.hostname() || 'Computer')
@@ -450,7 +454,7 @@ app.whenReady().then(() => {
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
   purgatory = new Purgatory({ db, photosRoot: PHOTOS_ROOT, files, serverBase: path.dirname(HOME.root) })
-  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onReceived: () => {
+  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onCall: s => calls?.fromPhone(s), onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   }, onSent: ({ device, paths }) => { // Send to computer: the phone's share menu, into Files › From phone
@@ -821,7 +825,16 @@ app.whenReady().then(() => {
     if (!url) throw new Error('Nothing to open.')
     return shell.openExternal(url)
   })
-  ipcMain.handle('contacts:phoneCall', (_, number, name) => sync.callOnPhone(number, name))
+  ipcMain.handle('contacts:phoneCall', async (_, number, name) => {
+    const r = await sync.callOnPhone(number, name)
+    if (!r.error) calls.outgoing(number, name, r.device) // the call bubble: Calling…, its time, End call
+    return r
+  })
+  // the call bubble's buttons (calls.js), and Settings › Calls: Bluetooth for the call's sound
+  ipcMain.handle('call:press', (_, what) => calls.press(String(what)))
+  ipcMain.handle('calls:bluetooth', () => ({ ...calls.bt, sound: calls.sound() }))
+  ipcMain.handle('calls:connect', (_, mac) => calls.connect(mac))
+  ipcMain.handle('calls:systemBluetooth', () => calls.openSystemBluetooth())
   // A face from Photos as a contact's photo: the face's box (fractions of the upright picture) × 1.8, square, 512 px — the phone's crop
   ipcMain.handle('contacts:facePhoto', (_, faceId) => contactFacePhoto(faceId))
   ipcMain.handle('contacts:settings', () => ({ birthdays: contacts.birthdayCalendar(false), calendars: calendar.calendars(), byLast: setting('contactsByLast') === '1' }))

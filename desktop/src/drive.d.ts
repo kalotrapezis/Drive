@@ -173,6 +173,9 @@ declare global {
       contactsSetBirthdays(id: string): Promise<void>
       contactsCall(number: string, name: string): Promise<{ how?: 'calling' | 'notification'; device?: string; error?: string }>
       contactsFacePhoto(faceId: string): Promise<{ photo: string; face: string }>
+      callsBluetooth(): Promise<{ available: boolean; phones: { mac: string; name: string; connected: boolean }[]; sound: string }>
+      callsConnect(mac: string): Promise<unknown>
+      callsSystemBluetooth(): Promise<boolean>
       contactsSetByLast(on: boolean): Promise<void>
       onContactsChanged(cb: () => void): () => void
       calendarPickImport(): Promise<{ index: number; name: string; color: string | null; count: number }[] | null>

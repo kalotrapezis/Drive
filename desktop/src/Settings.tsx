@@ -51,6 +51,7 @@ export function SettingsPage() {
         </div>
         <p className="muted">Auto follows the system's light or dark setting.</p>
       </section>
+      <CallsCard />
       <section className="settings-card island">
         <h3><span className="cat photos"><Icon name="photos" size={20} /></span>Motion photos</h3>
         <div className="segmented">
@@ -68,5 +69,32 @@ export function SettingsPage() {
         <p className="muted">{autoplay ? 'A motion photo plays its few seconds as soon as it opens.' : 'Motion photos open still; the Motion button plays them.'}</p>
       </section>
     </div>
+  )
+}
+
+/**
+ * Settings › Calls (the user, 24 Oct: "how do I know the PC and phone are connected by Bluetooth?"): a call is placed and
+ * answered by the phone; its sound is on this computer only while the phone is connected to it by Bluetooth as a
+ * hands-free kit — paired in the system's Bluetooth settings, "Phone calls" allowed for this computer on the phone.
+ */
+function CallsCard() {
+  const [bt, setBt] = useState<Awaited<ReturnType<typeof window.drive.callsBluetooth>> | null>(null)
+  const [said, setSaid] = useState('')
+  const load = () => window.drive.callsBluetooth().then(setBt)
+  useEffect(() => { load(); const t = setInterval(load, 10_000); return () => clearInterval(t) }, [])
+  const on = bt?.phones.find(p => p.connected)
+  return (
+    <section className="settings-card island">
+      <h3><Icon name="call" size={20} />Calls</h3>
+      <p><strong>{bt === null ? 'Looking at Bluetooth…' : on ? `Connected for calls: ${on.name}` : bt.phones.length ? 'Paired, not connected' : 'No phone paired by Bluetooth'}</strong></p>
+      <p className="muted">{on ? "A call's sound is on this computer: its speakers and microphone." : "A call's sound stays on the phone. Call, Answer and End in Contacts and the call bubble work either way."}</p>
+      {bt?.phones.filter(p => !p.connected).map(p => <button key={p.mac} className="filled-button secondary" onClick={() => { setSaid('Connecting…'); window.drive.callsConnect(p.mac).then(() => { setSaid(''); load() }, e => setSaid(String(e.message ?? e).replace(/^.*?Error: /, ''))) }}>Connect {p.name}</button>)}
+      {!on && <>
+        <p className="muted">To hear calls here: pair the phone with this computer in the system's Bluetooth settings, then on the phone open Bluetooth › this computer › and allow "Phone calls". Tetra then shows it connected here, and says so when it connects or drops.</p>
+        <button className="text-button" onClick={() => window.drive.callsSystemBluetooth()}>Open Bluetooth settings</button>
+      </>}
+      {said && <p className="muted">{said}</p>}
+      {bt && !bt.available && <p className="muted">bluetoothctl is not installed, so Tetra cannot see Bluetooth here.</p>}
+    </section>
   )
 }

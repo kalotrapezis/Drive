@@ -1,6 +1,6 @@
 {
   "name": "local-drive-desktop",
-  "version": "0.6.0-beta.11",
+  "version": "0.6.0-beta.12",
   "description": "Tetra desktop app",
   "main": "main.js",
   "scripts": {
@@ -69,6 +69,9 @@
       "calendar.js",
       "contacts.js",
       "contactfaces.js",
+      "calls.js",
+      "bubble.html",
+      "bubble-preload.js",
       "skills/**",
       "importer.js",
       "models/*.onnx",

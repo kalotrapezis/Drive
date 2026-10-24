@@ -90,8 +90,8 @@ async function copyVerified(src, dest, expected) {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan); onSent({ device, paths }) after a burst of Send to computer. */
-  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null }) {
-    Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, onSent, port, beaconPort, trashItem, purgatory })
+  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, onCall = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null }) {
+    Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, onSent, onCall, port, beaconPort, trashItem, purgatory })
     this.sentQuiet = 2000 // a share's files arrive one after another: one notification once they stop
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
@@ -781,6 +781,21 @@ class SyncServer {
     return got ?? { error: said ?? 'No phone answered. Open Tetra on the phone, on the same network as this computer.' }
   }
 
+  /** The call bubble's Answer, Decline or End, done by the phone (SyncServer.kt /call/action). { ok } or { error }. */
+  async callAction(what) {
+    if (!['answer', 'decline', 'end'].includes(what)) return { error: 'Unknown action.' }
+    const phones = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
+      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind != 'tablet'`).all()
+    let said = null
+    const got = await Promise.any(phones.map(async d => {
+      const r = await this.reach(d, `/call/action?do=${what}`, 8000)
+      if (r?.status === 200) return { ok: true }
+      said ||= r && (r.status !== 404 && typeof r.body?.error === 'string' ? r.body.error : `${d.name} needs the new Tetra for this.`)
+      throw new Error('no')
+    })).catch(() => null)
+    return got ?? { error: said ?? 'The phone did not answer.' }
+  }
+
   /** Keeps the newer open/close of each path; answers with every path's newest. */
   mergeEditorTabs(tabs) {
     const keep = this.db.prepare(`INSERT INTO editor_tabs(path, open, at) VALUES(?, ?, ?)
@@ -1367,6 +1382,12 @@ class SyncServer {
       const crop = await this.people?.crop(face[1], this.photosRoot).catch(() => null)
       if (!crop) return this.send(res, 404, { error: 'No such face here.' })
       return this.sendFile(res, crop)
+    }
+    // a call on the phone, for the call bubble (calls.js; the phone's PhoneCall.Watcher): ringing, active, ended
+    if (req.method === 'POST' && url.pathname === '/call/state') {
+      const b = await this.json(req, 4096)
+      this.onCall({ state: String(b.state || ''), direction: b.direction === 'out' ? 'out' : 'in', number: String(b.number || '').replace(/[^\d+*#]/g, '').slice(0, 32), missed: !!b.missed, device: device.name })
+      return this.send(res, 200, { ok: true })
     }
     const sent = /^\/send\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'PUT' && sent) return this.send(res, 200, await this.receiveSent(req, device, sent[1], url.searchParams))
