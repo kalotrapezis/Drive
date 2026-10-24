@@ -675,7 +675,7 @@ app.whenReady().then(() => {
   ipcMain.handle('maps:search', (_, q) => maps.search(q))
   ipcMain.handle('maps:describe', (_, lat, lng, road) => maps.describe(lat, lng, road))
   ipcMain.handle('maps:near', (_, lat, lng, name) => maps.near(lat, lng, name))
-  ipcMain.handle('maps:route', (_, points, mode) => router.route(points, mode))
+  ipcMain.handle('maps:route', (_, points, mode, main) => router.route(points, mode, !!main))
   ipcMain.handle('maps:phoneLocation', () => sync.phoneLocation()) // this computer has no GPS: the paired phone's fix
   // online: Google's page of the place, with its reviews and photos (the phone's place card does the same)
   // a place's website (or its Διαύγεια decision): web pages only

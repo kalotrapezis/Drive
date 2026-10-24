@@ -80,6 +80,9 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
   const [draft, setDraft] = useState<Draft | null>(null)
   // directions for the trip shown or planned (router.js on this computer): each leg's length and time, the roads' line
   const [mode, setMode] = useState<'car' | 'foot' | 'bike'>('car')
+  // Main roads or Shortest, as Settings › Maps on the phone (the user, 24 Oct); this computer's own choice
+  const [main, setMainState] = useState(() => { try { return localStorage.getItem('maps.roads') !== 'shortest' } catch { return true } })
+  const setMain = (m: boolean) => { setMainState(m); try { localStorage.setItem('maps.roads', m ? 'main' : 'shortest') } catch { /* kept for now only */ } }
   const [legs, setLegs] = useState<{ metres: number; seconds: number }[] | null>(null)
   const [routeLine, setRouteLine] = useState<[number, number][] | null>(null)
   const [routeNote, setRouteNote] = useState('')
@@ -162,11 +165,11 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
     if (tripStops.length < 2) return
     let live = true
     setRouteNote('Finding the roads…')
-    Promise.all(tripStops.slice(1).map((s, i) => window.drive.mapsRoute([tripStops[i], s], mode)))
+    Promise.all(tripStops.slice(1).map((s, i) => window.drive.mapsRoute([tripStops[i], s], mode, main)))
       .then(rs => { if (!live) return; setLegs(rs.map(r => ({ metres: r.metres, seconds: r.seconds }))); setRouteLine(rs.flatMap(r => r.line)); setRouteNote('') },
         e => { if (live) setRouteNote(errorText(e)) })
     return () => { live = false }
-  }, [tripStops, mode])
+  }, [tripStops, mode, main])
 
   // ---- cards ----
 
@@ -384,7 +387,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
                     </div>
                   ))}
                   {draft.stops[0]?.name !== ME && <button className="text-button" disabled={asking} onClick={startHere}><Icon name="myLocation" size={18} /> Start from where I am</button>}
-                  <RouteSummary stops={draft.stops} legs={legs} note={routeNote} mode={mode} setMode={setMode} />
+                  <RouteSummary stops={draft.stops} legs={legs} note={routeNote} mode={mode} setMode={setMode} main={main} setMain={setMain} />
                   <p className="hint">Add stop {letter(draft.stops.length)}: click the map, a search result or a saved place, then <b>Add as stop</b>.</p>
                   <div className="maps-actions">
                     <button className="filled-button" disabled={!draft.stops.length} onClick={saveDraft}>Save trip</button>
@@ -393,7 +396,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
                 </> : <>
                   <button className="filled-button big" onClick={() => { setDraft({ name: '', stops: [] }); setShown(null) }}><Icon name="add" size={20} /> Plan a trip</button>
                   <p className="hint">A trip saved here is on the phone at the next sync: Directions › its name, and each next stop starts by itself.</p>
-                  {shown && <RouteSummary stops={shown.stops} legs={legs} note={routeNote} mode={mode} setMode={setMode} />}
+                  {shown && <RouteSummary stops={shown.stops} legs={legs} note={routeNote} mode={mode} setMode={setMode} main={main} setMain={setMain} />}
                   {trips.map(t => (
                     <div key={t.id} className={`maps-row ${shown?.id === t.id ? 'on' : ''}`} onClick={() => showTrip(t)}>
                       <span className="maps-row-icon">🧭</span>
@@ -427,13 +430,15 @@ function minutesText(seconds: number) {
 }
 
 /** The trip's legs by road: A → B, each with its length and time, then the whole; Car / Walk / Bike as the phone's directions. */
-function RouteSummary({ stops, legs, note, mode, setMode }: {
+function RouteSummary({ stops, legs, note, mode, setMode, main, setMain }: {
   stops: MapStop[]; legs: { metres: number; seconds: number }[] | null; note: string; mode: 'car' | 'foot' | 'bike'; setMode: (m: 'car' | 'foot' | 'bike') => void
+  main: boolean; setMain: (m: boolean) => void
 }) {
   if (stops.length < 2) return null
   return (
     <div className="maps-route">
       <div className="segmented small">{(['car', 'foot', 'bike'] as const).map(m => <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{m === 'car' ? 'Car' : m === 'foot' ? 'Walk' : 'Bike'}</button>)}</div>
+      {mode === 'car' && <div className="segmented small"><button className={main ? 'on' : ''} onClick={() => setMain(true)}>Main roads</button><button className={main ? '' : 'on'} onClick={() => setMain(false)}>Shortest</button></div>}
       {legs ? <>
         {legs.map((l, i) => <div key={i} className="maps-leg"><span>{letter(i)} → {letter(i + 1)}</span><span>{metresText(l.metres)} · {minutesText(l.seconds)}</span></div>)}
         {legs.length > 1 && <div className="maps-leg total"><span>All of it</span><span>{metresText(legs.reduce((a, l) => a + l.metres, 0))} · {minutesText(legs.reduce((a, l) => a + l.seconds, 0))}</span></div>}

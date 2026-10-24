@@ -44,6 +44,23 @@ const PROFILES = `  profiles:
   import.osm.ignored_highways: ""
   routing.snap_preventions_default: tunnel, bridge, ferry
 `
+/**
+ * Main roads (the user, 24 Oct: "it always chooses the shorter path … even if that means a road that falls off a cliff"):
+ * car.json without its pull towards the shorter way, a smaller road counting slower — MapsRouting.mainPriority on the
+ * phone. Asked without the graph's shortcuts, which are made for car.json.
+ */
+const MAIN_ROADS = {
+  distance_influence: 0,
+  priority: [
+    { if: 'road_class == MOTORWAY || road_class == TRUNK || road_class == PRIMARY || road_class == SECONDARY', multiply_by: '1' },
+    { else_if: 'road_class == TERTIARY', multiply_by: '0.8' },
+    { else_if: 'road_class == RESIDENTIAL || road_class == LIVING_STREET', multiply_by: '0.6' },
+    { else_if: 'road_class == UNCLASSIFIED', multiply_by: '0.4' },
+    { else_if: 'road_class == TRACK', multiply_by: '0.1' },
+    { else: '', multiply_by: '0.3' },
+  ],
+}
+
 /** The phone's car times are GraphHopper's × 1.2 (Plan.md § Maps: Άγιος Λουκάς → Χαλκίδα 30 min). */
 const CAR_TIME = 1.2
 
@@ -95,14 +112,23 @@ class Router {
   }
 
   /** From the first point through each next one: its line, metres, minutes and turns (Greek, as the phone says them). */
-  async route(points, mode = 'car') {
+  async route(points, mode = 'car', main = false) {
     const profile = ['car', 'foot', 'bike', 'wheelchair'].includes(mode) ? mode : 'car'
     if (!Array.isArray(points) || points.length < 2 || !points.every(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))) throw new Error('Directions need two places.')
     await this.ready()
-    const q = points.map(p => `point=${p.lat},${p.lng}`).join('&')
-    const res = await fetch(`http://localhost:${this.port}/route?${q}&profile=${profile}&locale=el&instructions=true&points_encoded=false`)
-    const body = await res.json()
-    if (!res.ok || !body.paths?.length) throw new Error(plain(body.message))
+    let body
+    if (main && profile === 'car') {
+      const res = await fetch(`http://localhost:${this.port}/route`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ points: points.map(p => [p.lng, p.lat]), profile, locale: 'el', instructions: true, points_encoded: false, 'ch.disable': true, custom_model: MAIN_ROADS }) })
+      body = await res.json()
+      if (!res.ok || !body.paths?.length) body = null // too far to search without the shortcuts: the shortest way, as the phone
+    }
+    if (!body) {
+      const q = points.map(p => `point=${p.lat},${p.lng}`).join('&')
+      const res = await fetch(`http://localhost:${this.port}/route?${q}&profile=${profile}&locale=el&instructions=true&points_encoded=false`)
+      body = await res.json()
+      if (!res.ok || !body.paths?.length) throw new Error(plain(body.message))
+    }
     const p = body.paths[0], k = profile === 'car' ? CAR_TIME : 1
     return { metres: p.distance, seconds: p.time / 1000 * k, line: p.points.coordinates,
       steps: p.instructions.map(i => ({ text: i.text, metres: i.distance, seconds: i.time / 1000 * k, sign: i.sign })) }
@@ -125,4 +151,4 @@ const freePort = () => new Promise((resolve, reject) => {
   s.on('error', reject)
 })
 
-module.exports = { Router, plain }
+module.exports = { Router, plain, MAIN_ROADS }
