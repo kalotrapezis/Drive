@@ -1015,3 +1015,18 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .ct-side { position: absolute; right: 0; top: 0; }
 @media (max-width: 1100px) { .ct-head { padding-right: 64px; } }
 .ct-head { padding: 0 64px; }
+
+/* the user's sketch, 24 Oct: search in the middle at the top, refresh alone at the right; the main island in the middle at
+   the bottom; the contact's buttons (♥ · Edit, or Cancel · Save) in an island of their own at the bottom right */
+.ct-topbar { justify-content: center; position: relative; }
+.ct-topbar .ct-search { flex: 0 1 560px; }
+.ct-topbar .tools { position: absolute; right: 24px; top: 0; }
+.ct-dock { left: 50%; translate: -50% 0; }
+.ct-corner { position: absolute; right: 12px; bottom: 12px; z-index: 6; }
+.ct-head { padding: 0; }
+.ct-hero { padding: 18px 20px 20px; }
+.ct-edit-title { margin: 0; }
+.ct-page { padding-bottom: 110px; }
+.ct-list { padding-bottom: 110px; }
+.ct-drawer { left: 50%; right: auto; translate: -50% 110%; }
+.ct-drawer.open { translate: -50% 0; }
