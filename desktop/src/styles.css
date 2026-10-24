@@ -1030,3 +1030,8 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .ct-list { padding-bottom: 110px; }
 .ct-drawer { left: 50%; right: auto; translate: -50% 110%; }
 .ct-drawer.open { translate: -50% 0; }
+
+/* a narrow window (24 Oct): one column, as the phone — the list the whole width, a contact over it with ‹ */
+.ct.narrow .ct-list { width: 100%; }
+.ct.narrow .ct-page { padding-left: 4px; padding-right: 4px; }
+.ct.on-page .ct-search h1 { font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

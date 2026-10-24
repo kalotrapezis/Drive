@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Icon, type IconName } from './Icon'
 import { Modal } from './Dialogs'
 
@@ -76,7 +76,20 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
     call<Contact[]>('list', settings?.byLast ?? false).then(l => { cached = l; setLoaded(l) }).catch(e => { setLoaded(l => l ?? []); say('Contacts could not be read: ' + errorText(e)) })
     call<[Contact, Contact][]>('pairs').then(setPairs).catch(() => {})
   }, [version, settings?.byLast])
-  useEffect(() => { if (!open && list.length) setOpen(list[0].uid) }, [list])
+  // a narrow window (the user, 24 Oct): one column as the phone's — the list, then the contact over it with a back button
+  const root = useRef<HTMLDivElement>(null)
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const ro = new ResizeObserver(() => setNarrow((root.current?.clientWidth ?? 1200) < 880))
+    ro.observe(root.current!)
+    return () => ro.disconnect()
+  }, [])
+  // two columns always show a contact; one column opens one only when it is chosen
+  const autoOpened = useRef(false) // the first contact, opened by the two columns, not by the person
+  useEffect(() => { if (!narrow && !open && list.length) { setOpen(list[0].uid); autoOpened.current = true } }, [list, narrow])
+  useEffect(() => { if (narrow && autoOpened.current) { setOpen(null); autoOpened.current = false } }, [narrow])
+  const onPage = narrow && (!!editing || !!open)
+  const back = () => { setEditing(null); setOpen(null) }
   const act = async (work: () => Promise<unknown>, said: string) => {
     try { await work(); say(said) } catch (e) { say('Not done: ' + errorText(e)) }
     setVersion(v => v + 1)
@@ -99,14 +112,14 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
       </> : <>
         {label && <div className="chips"><button className="chip on" onClick={() => setLabel(null)}>{label} ✕</button></div>}
         {tab === 'all' && !query && !label && list.some(c => c.favourite) && <div className="ct-favs">
-          {list.filter(c => c.favourite).map(c => <button key={c.uid} className="ct-fav" onClick={() => setOpen(c.uid)} title={c.name}><Face c={c} size={52} /><small>{c.given || c.name}</small></button>)}
+          {list.filter(c => c.favourite).map(c => <button key={c.uid} className="ct-fav" onClick={() => { setOpen(c.uid); autoOpened.current = false }} title={c.name}><Face c={c} size={52} /><small>{c.given || c.name}</small></button>)}
         </div>}
         {loaded === null && <div className="ct-loading"><span className="spinner" />Reading your contacts…</div>}
         {loaded !== null && shown.length === 0 && <p className="hint ct-hint">{list.length === 0 ? 'No contacts yet. The phone\'s come with sync; Import in the drawer takes a .vcf, Google\'s CSV or Takeout\'s zip.' : query ? `No one matches "${query}".` : tab === 'favourites' ? 'No favourites yet: the star on a contact adds one.' : 'No one here.'}</p>}
         {shown.map((c, k) => <div key={c.uid}>
           {!query && (k === 0 || letter(shown[k - 1]) !== letter(c)) && <h4 className="ct-letter">{letter(c)}</h4>}
           <button className={`ct-row ${c.uid === open && !picked.size ? 'on' : ''} ${picked.has(c.uid) ? 'picked' : ''}`}
-            onClick={e => { if (e.ctrlKey || e.metaKey || picked.size) toggle(c.uid); else { setOpen(c.uid); setEditing(null) } }}
+            onClick={e => { if (e.ctrlKey || e.metaKey || picked.size) toggle(c.uid); else { setOpen(c.uid); setEditing(null); autoOpened.current = false } }}
             onContextMenu={e => { e.preventDefault(); toggle(c.uid) }}>
             {picked.has(c.uid) ? <span className="ct-face ct-check" style={{ width: 40, height: 40 }}><Icon name="checked" /></span> : <Face c={c} size={40} />}
             <span className="ct-name">{c.name}<small>{c.phones[0]?.value || c.emails[0]?.value || c.org}</small></span>
@@ -118,9 +131,12 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
 
   const many = list.filter(c => picked.has(c.uid))
   return (
-    <div className="ct">
+    <div className={`ct ${narrow ? 'narrow' : ''} ${onPage ? 'on-page' : ''}`} ref={root}>
       <header className="topbar ct-topbar">
-        {picked.size ? <div className="island title-island ct-search">
+        {onPage ? <div className="island title-island ct-search">
+          <button className="round flat" title="Contacts" onClick={back}><Icon name="back" /></button>
+          <h1>{editing ? (editing === 'new' ? 'New contact' : 'Edit contact') : contact?.name}</h1>
+        </div> : picked.size ? <div className="island title-island ct-search">
           <button className="round flat" title="Done choosing" onClick={() => setPicked(new Set())}><Icon name="close" /></button>
           <h1>{picked.size} selected</h1>
           <button className="text-button" onClick={() => setPicked(picked.size === shown.length ? new Set() : new Set(shown.map(c => c.uid)))}>{picked.size === shown.length ? 'None' : `All ${shown.length}`}</button>
@@ -134,15 +150,15 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
         </div>
       </header>
       <div className="ct-body">
-        {listPane}
-        <section className="ct-page">
+        {!onPage && listPane}
+        {(!narrow || onPage) && <section className="ct-page">
           {editing ? <Editor start={editing === 'new' ? null : editing} labels={allLabels} setDialog={setDialog} say={say} cancel={() => setEditing(null)} save={c => save(editing === 'new' ? null : editing, c)}
             remove={editing === 'new' ? undefined : () => { const c = editing; setDialog(<Modal onClose={close}><h3>Delete {c.name}?</h3><p>The contact goes to the Trash, with its birthday's event, and can be restored from there.</p>
               <div className="dialog-actions"><button className="text-button" onClick={close}>Cancel</button><button className="filled-button danger" onClick={() => { close(); setEditing(null); setOpen(null); act(() => call('trash', c.uid), `${c.name} moved to the Trash`) }}>Delete</button></div></Modal>) }} />
             : contact ? <Page c={contact} all={list} edit={() => setEditing(contact)} openUid={setOpen} openPerson={openPerson} setDialog={setDialog} star={() => act(() => call('save', contact.uid, { ...contact, categories: contact.favourite ? contact.categories.filter(x => x.toLowerCase() !== 'starred') : [...contact.categories, 'starred'] }), contact.favourite ? 'Not a favourite' : 'Added to favourites')}
               keep={() => act(() => call('keep', contact.uid), 'Kept this version; the other went to the Trash')} say={say} />
             : <p className="hint ct-hint">Choose a contact.</p>}
-        </section>
+        </section>}
       </div>
       <div className={`notes-drawer island ct-drawer ${drawer ? 'open' : ''}`} aria-hidden={!drawer}>
         <h4><Icon name="add" />Import and export</h4>
@@ -165,7 +181,7 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
         </div>
         <p className="hint">Each birthday and date is a yearly event there, reminded at 9:00 on the day and the day before; change it on the contact and the event follows.</p>
       </div>
-      <div className="ct-dock">
+      {!onPage && <div className="ct-dock">
         {picked.size ? <nav className="notes-island island">
           <button className="island-item" onClick={() => setDialog(<LabelDialog labels={allLabels} many={many} onClose={close} pick={l => {
             close(); const off = many.every(c => c.labels.some(x => x.toLowerCase() === l.toLowerCase()))
@@ -184,7 +200,7 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
           <button className="island-item" title="New contact" onClick={() => { setDrawer(false); setEditing('new') }}><Icon name="add" size={20} /><span>New</span></button>
           <button className={`island-item ${drawer ? 'on' : ''}`} aria-expanded={drawer} onClick={() => setDrawer(d => !d)}><Icon name="more" size={20} /><span>More</span></button>
         </nav>}
-      </div>
+      </div>}
     </div>
   )
 }
