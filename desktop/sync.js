@@ -781,6 +781,13 @@ class SyncServer {
     return got ?? { error: said ?? 'No phone answered. Open Tetra on the phone, on the same network as this computer.' }
   }
 
+  /** A call's state passed on to the paired tablets, which have no calls of their own (their SyncServer /call/state). */
+  toTablets(s) {
+    const tablets = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
+      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind = 'tablet'`).all()
+    for (const d of tablets) this.reach(d, `/call/state?s=${encodeURIComponent(JSON.stringify(s))}`, 4000).catch(() => {})
+  }
+
   /** The call bubble's Answer, Decline or End, done by the phone (SyncServer.kt /call/action). { ok } or { error }. */
   async callAction(what) {
     // hold, unhold, mute, unmute and the keypad's tones only while Tetra is the phone's phone app (Drive-Android PhoneCalls.act)
@@ -1384,11 +1391,28 @@ class SyncServer {
       if (!crop) return this.send(res, 404, { error: 'No such face here.' })
       return this.sendFile(res, crop)
     }
-    // a call on the phone, for the call bubble (calls.js; the phone's PhoneCall.Watcher): ringing, active, ended
+    // a call on the phone, for the call bubble (calls.js; the phone's PhoneCall.Watcher or, as its phone app, PhoneCalls): ringing,
+    // calling, active, held, ended — here, and on the tablets (their Phone goes through this computer, Drive-Android Plan.md § Phone step 6)
     if (req.method === 'POST' && url.pathname === '/call/state') {
       const b = await this.json(req, 4096)
-      this.onCall({ state: String(b.state || ''), direction: b.direction === 'out' ? 'out' : 'in', number: String(b.number || '').replace(/[^\d+*#]/g, '').slice(0, 32), missed: !!b.missed, device: device.name })
+      const s = { state: String(b.state || ''), direction: b.direction === 'out' ? 'out' : 'in', number: String(b.number || '').replace(/[^\d+*#]/g, '').slice(0, 32), missed: !!b.missed,
+        muted: !!b.muted, phoneApp: !!b.phoneApp, device: device.name }
+      // a call a tablet placed shows on the tablet, not in this computer's bubble too
+      const tablets = this.tabletCall && s.direction === 'out' && Date.now() - this.tabletCall.at < 120_000
+      if (!tablets) this.onCall(s)
+      if (s.state === 'ended') this.tabletCall = null
+      this.toTablets(s)
       return this.send(res, 200, { ok: true })
+    }
+    // a tablet's Phone: the call placed by the phone, and the tablet's call notification's buttons done by the phone
+    if (req.method === 'POST' && url.pathname === '/call/place') {
+      const r = await this.callOnPhone(url.searchParams.get('number'), url.searchParams.get('name') || '')
+      if (!r.error) this.tabletCall = { at: Date.now() }
+      return this.send(res, r.error ? 409 : 200, r)
+    }
+    if (req.method === 'POST' && url.pathname === '/call/act') {
+      const r = await this.callAction(String(url.searchParams.get('do') || ''))
+      return this.send(res, r.error ? 409 : 200, r)
     }
     const sent = /^\/send\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'PUT' && sent) return this.send(res, 200, await this.receiveSent(req, device, sent[1], url.searchParams))
