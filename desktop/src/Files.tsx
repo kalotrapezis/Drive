@@ -366,8 +366,7 @@ function FileThumb({ item, iconSize }: { item: DriveItem; iconSize: number }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [item.path, item.mtime])
   if (failed) return <ItemIcon item={item} size={iconSize} />
-  const page = item.thumb === 'words' || item.thumb === 'tables' || item.thumb === 'slides' || item.thumb === 'pdf'
-  return <span className={`file-thumb ${page ? 'page' : ''}`}>
+  return <span className="file-thumb">
     <img src={`media://filethumb/${encodeURIComponent(item.path)}?v=${item.mtime}`} loading="lazy" decoding="async" draggable={false} alt=""
       onError={() => setFailed(true)} />
   </span>

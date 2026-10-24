@@ -6,6 +6,7 @@
     "tables":   { "icon": "excel", "extensions": ["xls", "xlsx", "xlsm", "xltx", "ods", "ots", "csv", "tsv", "numbers"] },
     "slides":   { "icon": "slides", "extensions": ["ppt", "pptx", "pptm", "pps", "ppsx", "potx", "odp", "otp", "key"] },
     "text":     { "icon": "docs-txt", "extensions": ["txt", "md", "markdown", "log", "rst", "ini", "cfg", "conf", "toml", "yaml", "yml", "json", "xml", "tex", "srt", "nfo"] },
+    "images":   { "icon": "images", "extensions": ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "bmp", "avif", "tif", "tiff", "svg", "ico", "raw", "dng", "nef", "cr2", "cr3", "arw", "psd", "xcf"] },
     "video":    { "icon": "video", "extensions": ["mp4", "mov", "mkv", "avi", "webm", "3gp", "m4v", "wmv", "flv", "mpg", "mpeg", "ogv"] },
     "music":    { "icon": "music", "extensions": ["mp3", "m4a", "aac", "flac", "ogg", "oga", "opus", "wav", "wma", "aif", "aiff", "mid", "midi", "amr"] },
     "archives": { "icon": "Archives", "extensions": ["zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "tbz2", "xz", "txz", "zst", "lz", "lzma", "cab", "iso"] },
