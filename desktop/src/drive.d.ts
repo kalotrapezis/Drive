@@ -174,6 +174,8 @@ declare global {
       contactsCall(number: string, name: string): Promise<{ how?: 'calling' | 'notification'; device?: string; error?: string }>
       phoneHistory(): Promise<{ at: string; number: string; dir: 'in' | 'out' | 'missed' | 'declined' | 'blocked' | 'voicemail'; secs: number; contact?: string; name?: string; note?: string }[]>
       phoneRecordings(): Promise<{ name: string; size: number; at: number }[]>
+      phoneSpam(): Promise<{ number: string; note: string }[]>
+      phoneSetSpam(number: string, on: boolean): Promise<{ number: string; note: string }[]>
       phoneOpenRecording(name: string): Promise<string>
       contactsFacePhoto(faceId: string): Promise<{ photo: string; face: string }>
       callsBluetooth(): Promise<{ available: boolean; phones: { mac: string; name: string; connected: boolean }[]; sound: string }>

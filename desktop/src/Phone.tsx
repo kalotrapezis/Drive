@@ -37,11 +37,14 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [recordings, setRecordings] = useState<Recording[]>([])
   const [number, setNumber] = useState('')
-  const [missedOnly, setMissedOnly] = useState(false)
+  const [filter, setFilter] = useState<'all' | 'missed' | 'spam'>('all')
+  const [spam, setSpam] = useState<{ number: string; note: string }[]>([])
+  const [adding, setAdding] = useState('')
   useEffect(() => {
     const look = () => {
       window.drive.phoneHistory().then(setCalls, () => setCalls([]))
       window.drive.phoneRecordings().then(setRecordings, () => {})
+      window.drive.phoneSpam().then(setSpam, () => {})
       window.drive.contacts<Contact[]>('list', false).then(setContacts, () => {})
     }
     look()
@@ -56,7 +59,14 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
     if (!n.trim()) return
     window.drive.contactsCall(n, name || who(n)?.name || '').then(r => say(r.error ? r.error : r.how === 'notification' ? 'The phone shows it: tap to call' : `Calling on ${r.device || 'the phone'}`), e => say(errorText(e)))
   }
-  const shownCalls = (calls || []).filter(l => (!missedOnly || l.dir === 'missed') && matches(who(l.number)?.name || l.name, [l.number]))
+  const shownCalls = (calls || []).filter(l => (filter !== 'missed' || l.dir === 'missed') && matches(who(l.number)?.name || l.name, [l.number]))
+  // the same rule as the phone's (PhoneSpam.matches): the last nine digits, or a range's start
+  const national = (n: string) => { const t = n.trim(), d = t.replace(/\D/g, ''); return t.startsWith('+30') ? d.slice(2) : t.startsWith('0030') ? d.slice(4) : t.startsWith('+') ? '+' + d : t.startsWith('00') ? '+' + d.slice(2) : d }
+  const isSpam = (n: string) => spam.some(e => e.number.endsWith('*') ? national(n).startsWith(national(e.number.slice(0, -1))) && e.number.replace(/\D/g, '').length >= 2 : key(e.number).length >= 5 && key(e.number) === key(n))
+  // a number caught by a range (69800*): the range's line is changed in the Spam list, not from the number
+  const inRange = (n: string) => spam.some(e => e.number.endsWith('*') && national(n).startsWith(national(e.number.slice(0, -1))) && e.number.replace(/\D/g, '').length >= 2)
+  const markSpam = (n: string, on: boolean) => window.drive.phoneSetSpam(n, on).then(l => { setSpam(l); say(on ? 'On the spam list: it will not ring' : 'Taken off the spam list') }, e => say(errorText(e)))
+  const lookUp = (n: string) => { const d = national(n); return d.length === 10 && !d.startsWith('+') ? `https://www.callinsider.gr/gr/${d}` : null }
   const people = contacts.filter(c => c.phones.length && (tab !== 'favourites' || c.favourite) && matches(c.name, c.phones.map(p => p.value)))
   const typed = number.replace(/[^\d+*#]/g, '')
   const found = typed.replace(/\D/g, '').length >= 3 ? contacts.filter(c => c.phones.some(p => p.value.replace(/\D/g, '').includes(typed.replace(/\D/g, '')))).slice(0, 4) : []
@@ -73,17 +83,30 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
       <div className="ct-body">
         <section className="ct-list">
           {tab === 'recents' && <>
-            <div className="chips"><button className={`chip ${!missedOnly ? 'on' : ''}`} onClick={() => setMissedOnly(false)}>All</button><button className={`chip ${missedOnly ? 'on' : ''}`} onClick={() => setMissedOnly(true)}>Missed</button></div>
+            <div className="chips">{(['all', 'missed', 'spam'] as const).map(f => <button key={f} className={`chip ${filter === f ? 'on' : ''}`} onClick={() => setFilter(f)}>{f === 'all' ? 'All' : f === 'missed' ? 'Missed' : `Spam (${spam.length})`}</button>)}</div>
+            {filter === 'spam' ? <>
+              <p className="hint ct-hint">Calls from these are declined on the phone before they ring. A * at the end takes a whole range (69800*).</p>
+              {spam.map(e => <div key={e.number} className="ct-row">
+                <span className="ct-face ct-initial" style={{ width: 40, height: 40, background: '#d93a3a' }}><Icon name="block" size={22} /></span>
+                <span className="ct-name">{e.number}{e.note && <small>{e.note}</small>}</span>
+                <button className="text-button" onClick={() => markSpam(e.number, false)}>Remove</button>
+              </div>)}
+              <div className="ct-row"><input className="ph-number" style={{ fontSize: 16, textAlign: 'left' }} placeholder="A number, or 69800*" value={adding} onChange={e => setAdding(e.target.value.replace(/[^\d+* ]/g, ''))} />
+                <button className="text-button" disabled={!/\d/.test(adding)} onClick={() => { markSpam(adding.replace(/ /g, ''), true); setAdding('') }}>Add</button></div>
+            </> : <>
             {calls && !calls.length && <p className="hint ct-hint">The phone's calls show here once Tetra is the phone's phone app (Settings › Phone on the phone).</p>}
             {shownCalls.map((l, i) => {
               const c = who(l.number), [icon, what] = DIR[l.dir] || DIR.in
               return <div key={l.at + i} className="ct-row" title={l.note || undefined}>
                 <Face c={c} size={40} />
                 <span className="ct-name"><span style={l.dir === 'missed' ? { color: '#d93a3a' } : undefined}>{c?.name || l.name || l.number || 'Hidden number'}</span>
-                  <small><span style={{ verticalAlign: 'middle', color: l.dir === 'missed' ? '#d93a3a' : 'var(--ct)' }}><Icon name={icon} size={14} /></span> {what} · {when(l.at)}{l.secs > 0 ? ` · ${length(l.secs)}` : ''}{l.note ? ` · ${l.note}` : ''}</small></span>
+                  <small>{l.number && isSpam(l.number) && <b style={{ color: '#d93a3a' }}>Spam · </b>}<span style={{ verticalAlign: 'middle', color: l.dir === 'missed' ? '#d93a3a' : 'var(--ct)' }}><Icon name={icon} size={14} /></span> {what} · {when(l.at)}{l.secs > 0 ? ` · ${length(l.secs)}` : ''}{l.note ? ` · ${l.note}` : ''}</small></span>
+                {l.number && !c && lookUp(l.number) && <button className="round flat" title="Look it up on CallInsider (opens the browser)" onClick={() => window.drive.contactsOpen('web', lookUp(l.number)!)}><Icon name="search" /></button>}
+                {l.number && !c && !inRange(l.number) && <button className="round flat" title={isSpam(l.number) ? 'Not spam' : 'Spam: never ring again'} onClick={() => markSpam(l.number, !isSpam(l.number))}><span style={{ color: isSpam(l.number) ? 'var(--muted)' : '#d93a3a', display: 'grid' }}><Icon name="block" /></span></button>}
                 {l.number && <button className="round flat" title="Call" onClick={() => callNow(l.number, c?.name)}><Icon name="call" /></button>}
               </div>
             })}
+            </>}
           </>}
           {(tab === 'favourites' || tab === 'contacts') && <>
             {!people.length && <p className="hint ct-hint">{tab === 'favourites' ? 'Star people in Contacts and they show here.' : 'No contacts with a number.'}</p>}

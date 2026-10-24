@@ -837,6 +837,8 @@ app.whenReady().then(() => {
   // the Phone (Drive-Android Plan.md § Phone): the phone's call history as it sends it (Phone/calls-YYYY-MM.jsonl), and recordings
   ipcMain.handle('phone:history', () => phoneHistory())
   ipcMain.handle('phone:recordings', () => phoneRecordings())
+  ipcMain.handle('phone:spam', () => phoneSpam())
+  ipcMain.handle('phone:setSpam', (_, number, on) => setPhoneSpam(number, !!on))
   ipcMain.handle('phone:openRecording', (_, name) => {
     if (!phoneRecordings().some(r => r.name === name)) throw new Error('No such recording.')
     return shell.openPath(path.join(FILES_ROOT, 'Phone', 'Recordings', name))
@@ -989,4 +991,25 @@ function phoneRecordings() {
     return fs.readdirSync(dir).filter(n => /\.(ogg|opus|m4a|mp3|wav)$/i.test(n)).map(name => { const s = fs.statSync(path.join(dir, name)); return { name, size: s.size, at: s.mtimeMs } })
       .sort((a, b) => b.at - a.at)
   } catch { return [] }
+}
+
+// Spam and unwanted callers: Phone/spam.txt, the same list as the phone's (Drive-Android PhoneSpam) — one number a line, a
+// note after #, a * at the end for a range; the phone declines a match before it rings.
+const SPAM_HEAD = '# Spam and unwanted (Tetra Phone): one number a line, a note after #; a * at the end takes every number that starts so.\n# Calls from these are declined before they ring. The same list on the phone, the tablet and the computer.\n'
+const spamFile = () => path.join(FILES_ROOT, 'Phone', 'spam.txt')
+const spamParse = text => text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+  .map(l => ({ number: l.split('#')[0].trim().replace(/ /g, ''), note: l.includes('#') ? l.slice(l.indexOf('#') + 1).trim() : '' })).filter(e => /\d/.test(e.number))
+const spamNational = n => { const t = String(n).trim(), d = t.replace(/\D/g, ''); return t.startsWith('+30') ? d.slice(2) : t.startsWith('0030') ? d.slice(4) : t.startsWith('+') ? '+' + d : t.startsWith('00') ? '+' + d.slice(2) : d }
+const spamSame = (a, b) => { const k = s => String(s).replace(/\D/g, '').slice(-9); return k(a).length >= 5 && k(a) === k(b) }
+const spamMatch = (list, n) => list.find(e => e.number.endsWith('*') ? (p => (p.replace(/\D/g, '').length >= 2 && spamNational(n).startsWith(p)))(spamNational(e.number.slice(0, -1))) : spamSame(e.number, n))
+function phoneSpam() { try { return spamParse(fs.readFileSync(spamFile(), 'utf8')) } catch { return [] } }
+function setPhoneSpam(number, on) {
+  const n = String(number || '').replace(/[^\d+*]/g, '')
+  if (!/\d/.test(n)) throw new Error('Not a phone number.')
+  let text = ''; try { text = fs.readFileSync(spamFile(), 'utf8') } catch { text = SPAM_HEAD }
+  if (on) { if (!spamMatch(spamParse(text), n)) text = text.replace(/\n*$/, '\n') + n + '\n' }
+  else text = text.split('\n').filter(l => { const e = spamParse(l)[0]; return !e || (n.endsWith('*') ? e.number !== n : (e.number.endsWith('*') || !spamSame(e.number, n))) }).join('\n').replace(/\n*$/, '\n')
+  fs.mkdirSync(path.dirname(spamFile()), { recursive: true }); fs.writeFileSync(spamFile(), text)
+  sync?.nudge().catch(() => {}) // to the phone now
+  return phoneSpam()
 }
