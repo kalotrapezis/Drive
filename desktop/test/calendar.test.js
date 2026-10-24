@@ -37,6 +37,12 @@ test('calendar: Google weekly meeting, a day off and a day moved; a third Tuesda
     assert.equal(b.allDay, true); assert.equal(b.startDate, '2027-03-12'); assert.equal(b.endDate, '2027-03-13')
     const r = cal.reminders(new Date('2027-03-08T00:00+02:00').getTime(), new Date('2027-03-12T00:00+02:00').getTime()).filter(x => x.title === "Mum's birthday")
     assert.deepEqual(r.map(x => local(x.at)), ['2027-03-09T09:00', '2027-03-10T09:00', '2027-03-11T09:00'])
+    // Google's birthday: all day starts at midnight, so on the day at 09:00 is P0DT9H0M0S, after the start
+    const g = cal.reminders(at('2026-10-01T00:00'), new Date('2026-11-01T00:00+02:00').getTime()).filter(x => x.title === '🎂 Godchild')
+    assert.deepEqual(g.map(x => local(x.at)), ['2026-10-17T09:00', '2026-10-23T09:00', '2026-10-24T09:00'])
+    // and on the day the clocks go back, still 09:00
+    cal.save(null, 'Work', { title: 'DST birthday', place: '', notes: '', allDay: true, start: { date: '2026-10-25', time: '00:00' }, end: { date: '2026-10-25', time: '00:00' }, alarms: [{ days: 0, seconds: 9 * 3600 }] })
+    assert.deepEqual(cal.reminders(at('2026-10-24T00:00'), new Date('2026-10-26T00:00+02:00').getTime()).filter(x => x.title === 'DST birthday').map(x => local(x.at)), ['2026-10-25T09:00'])
     const d = cal.occurrences(at('2026-10-20T00:00'), at('2026-10-21T00:00')).find(o => o.title === 'Dentist')
     assert.equal(local(d.start), '2026-10-20T09:30')
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
@@ -127,7 +133,7 @@ test('calendar: Google export and Takeout zip imported, again without doubles; E
     assert.deepEqual(back.map(e => e.name), ['Calendar/School 2026-27.ics', 'Calendar/Work.ics'])
     const work = back[1].data.toString()
     assert.match(work, /X-WR-CALNAME:Work/); assert.match(work, /X-APPLE-CALENDAR-COLOR:#33B679/)
-    assert.equal(Calendar.incoming(work, 'x').events.size, 4)
+    assert.equal(Calendar.incoming(work, 'x').events.size, 5)
   } finally { fs.rmSync(tmp, { recursive: true, force: true }) }
 })
 

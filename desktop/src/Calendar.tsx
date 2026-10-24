@@ -85,13 +85,14 @@ function alarmText(a: Alarm, allDay: boolean, start: string): string {
   let base: string
   if (a.at != null) base = 'At ' + new Date(a.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   else if (a.fromEnd) base = t === 0 ? 'At the end' : `${span(t)} ${t < 0 ? 'before' : 'after'} the end`
-  else if (t <= 0 && (allDay || t <= -86400)) {
+  else if (allDay || t <= -86400) { // all day starts at midnight, so "on the day at 09:00" is PT9H, after the start
     const [h, m] = (allDay ? '00:00' : start).split(':').map(Number)
     const fire = h * 3600 + m * 60 + a.seconds // seconds into the day, a.days days on
     const before = -a.days - Math.floor(fire / 86400)
     const clock = ((fire % 86400) + 86400) % 86400
     const c = `${pad(Math.floor(clock / 3600))}:${pad(Math.floor(clock % 3600 / 60))}`
-    base = before === 0 ? `On the day at ${c}` : before === 1 ? `The day before at ${c}` : before === 7 ? `A week before at ${c}` : `${before} days before at ${c}`
+    base = before === 0 ? `On the day at ${c}` : before === 1 ? `The day before at ${c}` : before === 7 ? `A week before at ${c}` : before === -1 ? `The day after at ${c}`
+      : before > 0 ? `${before} days before at ${c}` : `${-before} days after at ${c}`
   } else base = t === 0 ? 'At the time' : `${span(t)} ${t < 0 ? 'before' : 'after'}`
   return a.repeat ? `${base} · every ${span(a.every || 0).replace(/^1 /, '')}, ${a.repeat + 1} times` : base
 }
