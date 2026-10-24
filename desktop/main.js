@@ -795,6 +795,22 @@ app.whenReady().then(() => {
     if (!url) throw new Error('Nothing to open.')
     return shell.openExternal(url)
   })
+  ipcMain.handle('contacts:phoneCall', (_, number, name) => sync.callOnPhone(number, name))
+  // A face from Photos as a contact's photo: the face's box (fractions of the upright picture) × 1.8, square, 512 px — the phone's crop
+  ipcMain.handle('contacts:facePhoto', async (_, faceId) => {
+    const f = db.prepare(`SELECT f.box_left, f.box_top, f.box_right, f.box_bottom, (SELECT MIN(m.path) FROM media m WHERE m.sha256 = f.sha256 AND m.location IS NULL) AS path
+      FROM faces f WHERE f.id = ? AND f.deleted = 0`).get(String(faceId))
+    if (!f?.path) throw new Error('That picture is not on this computer.')
+    const sharp = require('sharp')
+    // the upright size (metadata() gives the stored one, before EXIF's turn)
+    const { width, height } = (await sharp(path.join(PHOTOS_ROOT, f.path)).rotate().toBuffer({ resolveWithObject: true })).info
+    const w = (f.box_right - f.box_left) * width, h = (f.box_bottom - f.box_top) * height
+    const side = Math.max(1, Math.min(Math.round(Math.max(w, h) * 1.8), width, height))
+    const left = Math.min(Math.max(0, Math.round(f.box_left * width + w / 2 - side / 2)), width - side)
+    const top = Math.min(Math.max(0, Math.round(f.box_top * height + h / 2 - side / 2)), height - side)
+    const out = await sharp(path.join(PHOTOS_ROOT, f.path)).rotate().extract({ left, top, width: side, height: side }).resize(Math.min(512, side), Math.min(512, side)).jpeg({ quality: 85 }).toBuffer()
+    return out.toString('base64')
+  })
   ipcMain.handle('contacts:settings', () => ({ birthdays: contacts.birthdayCalendar(false), calendars: calendar.calendars(), byLast: setting('contactsByLast') === '1' }))
   ipcMain.handle('contacts:setBirthdays', (_, id) => { if (!calendar.calendars().some(c => c.id === id)) throw new Error('No such calendar.'); setSetting('contactsBirthdays', id); contacts.chosen = id })
   ipcMain.handle('contacts:setByLast', (_, on) => setSetting('contactsByLast', on ? '1' : '0'))

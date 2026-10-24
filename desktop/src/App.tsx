@@ -17,7 +17,7 @@ import { NotesPage } from './Notes'
 import { CalendarPage } from './Calendar'
 import { TimerBell, TimerPage } from './Timer'
 import { MapsPage } from './Maps'
-import { ContactsPage } from './Contacts'
+import { ContactsPage, preloadContacts } from './Contacts'
 import { NotificationsPage, SettingsPage } from './Settings'
 import { ImportDialog } from './Import'
 
@@ -62,6 +62,7 @@ export function App() {
   const [vault, setVault] = useState<VaultStatus | null>(null)
   const [editing, setEditing] = useState<{ item: Media; hide?: Hide } | null>(null)
   const [unread, setUnread] = useState(0)
+  useEffect(() => { const t = setTimeout(preloadContacts, 1500); return () => clearTimeout(t) }, []) // Contacts read ahead, so the page opens full (24 Oct)
   useEffect(() => {
     const count = () => window.drive.notifications.list().then(l => setUnread(l.filter(n => !n.read).length))
     count(); return window.drive.notifications.onChange(count)
@@ -294,7 +295,7 @@ export function App() {
   else if (page.kind === 'calendar') content = <CalendarPage setDialog={setDialog} say={say} />
   else if (page.kind === 'timer') content = <TimerPage say={say} />
   else if (page.kind === 'maps') content = <MapsPage say={say} />
-  else if (page.kind === 'contacts') content = <ContactsPage setDialog={setDialog} say={say} />
+  else if (page.kind === 'contacts') content = <ContactsPage setDialog={setDialog} say={say} openPerson={(id, name) => setPage({ kind: 'person', id, name })} />
   else if (page.kind === 'notifications') content = <NotificationsPage />
   else if (page.kind === 'settings') content = <SettingsPage />
   else if (page.kind === 'photoTrash') content = <TrashPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
