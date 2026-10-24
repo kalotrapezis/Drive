@@ -428,6 +428,7 @@ function analyzeLibrary(rescan = null) {
 
 app.whenReady().then(() => {
   db = library.open(DATA_DIR)
+  db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)') // read below (Contacts) before the line that made it; a new computer's first start failed
   files = new Files(db, FILES_ROOT)
   // Notes live in a hidden folder of Files (notes.js), and sync through their own step, newest edit wins.
   notes = new Notes(path.join(FILES_ROOT, '.notes'), 'tetra-desktop')
@@ -832,6 +833,14 @@ app.whenReady().then(() => {
   })
   // the call bubble's buttons (calls.js), and Settings › Calls: Bluetooth for the call's sound
   ipcMain.handle('call:press', (_, what) => calls.press(String(what)))
+  ipcMain.handle('call:height', (_, h) => calls.height(Math.max(150, Math.min(360, Number(h) || 150))))
+  // the Phone (Drive-Android Plan.md § Phone): the phone's call history as it sends it (Phone/calls-YYYY-MM.jsonl), and recordings
+  ipcMain.handle('phone:history', () => phoneHistory())
+  ipcMain.handle('phone:recordings', () => phoneRecordings())
+  ipcMain.handle('phone:openRecording', (_, name) => {
+    if (!phoneRecordings().some(r => r.name === name)) throw new Error('No such recording.')
+    return shell.openPath(path.join(FILES_ROOT, 'Phone', 'Recordings', name))
+  })
   ipcMain.handle('calls:bluetooth', () => ({ ...calls.bt, sound: calls.sound() }))
   ipcMain.handle('calls:connect', (_, mac) => calls.connect(mac))
   ipcMain.handle('calls:systemBluetooth', () => calls.openSystemBluetooth())
@@ -957,3 +966,27 @@ app.on('second-instance', showWindow)
 app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => { quitting = true; calls?.quit(); vault?.lock(); analyzer?.terminate(); router?.stop() })
 process.on('exit', () => router?.stop()) // a Tetra stopped without quitting leaves no routing server behind
+
+/** The phone's calls, newest first (at most 1000): the lines the phone writes into Phone/calls-YYYY-MM.jsonl. */
+function phoneHistory() {
+  const dir = path.join(FILES_ROOT, 'Phone')
+  let months = []
+  try { months = fs.readdirSync(dir).filter(n => /^calls-\d{4}-\d{2}\.jsonl$/.test(n)).sort().reverse() } catch { return [] }
+  const out = []
+  for (const m of months) {
+    let lines = []
+    try { lines = fs.readFileSync(path.join(dir, m), 'utf8').split('\n').filter(Boolean).reverse() } catch {}
+    for (const l of lines) { try { out.push(JSON.parse(l)) } catch {} }
+    if (out.length >= 1000) break
+  }
+  return out.slice(0, 1000)
+}
+
+/** Calls recorded on this computer (Phone/Recordings), newest first. */
+function phoneRecordings() {
+  const dir = path.join(FILES_ROOT, 'Phone', 'Recordings')
+  try {
+    return fs.readdirSync(dir).filter(n => /\.(ogg|opus|m4a|mp3|wav)$/i.test(n)).map(name => { const s = fs.statSync(path.join(dir, name)); return { name, size: s.size, at: s.mtimeMs } })
+      .sort((a, b) => b.at - a.at)
+  } catch { return [] }
+}

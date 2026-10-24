@@ -172,6 +172,9 @@ declare global {
       contactsSettings(): Promise<{ birthdays: string | null; calendars: { id: string; name: string; color: string }[]; byLast: boolean }>
       contactsSetBirthdays(id: string): Promise<void>
       contactsCall(number: string, name: string): Promise<{ how?: 'calling' | 'notification'; device?: string; error?: string }>
+      phoneHistory(): Promise<{ at: string; number: string; dir: 'in' | 'out' | 'missed' | 'declined' | 'blocked' | 'voicemail'; secs: number; contact?: string; name?: string; note?: string }[]>
+      phoneRecordings(): Promise<{ name: string; size: number; at: number }[]>
+      phoneOpenRecording(name: string): Promise<string>
       contactsFacePhoto(faceId: string): Promise<{ photo: string; face: string }>
       callsBluetooth(): Promise<{ available: boolean; phones: { mac: string; name: string; connected: boolean }[]; sound: string }>
       callsConnect(mac: string): Promise<unknown>

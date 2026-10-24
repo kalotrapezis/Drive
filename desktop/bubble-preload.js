@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld('call', {
   on: cb => ipcRenderer.on('call', (_, s) => cb(s)),
   said: cb => ipcRenderer.on('said', (_, t) => cb(t)),
   press: what => ipcRenderer.invoke('call:press', what),
+  height: h => ipcRenderer.invoke('call:height', h),
 })

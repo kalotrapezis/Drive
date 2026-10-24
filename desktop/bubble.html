@@ -18,14 +18,19 @@
   button { border: 0; border-radius: 999px; padding: 9px 18px; font: inherit; font-weight: 600; color: #fff; cursor: pointer; }
   .answer { background: #2e9d4f; } .decline, .end { background: #c62f2f; } .close { background: #3a3f43; }
   .said { color: #ff9b8f; font-size: 12px; padding: 0 16px 8px; }
+  .soft { background: #3a3f43; padding: 9px 14px; } .soft.on { background: #eceeef; color: #1e2124; }
+  .keys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 0 16px 12px; -webkit-app-region: no-drag; }
+  .keys button { background: #2c3034; padding: 8px 0; font-size: 16px; }
+  .keys:empty { display: none; }
 </style>
 </head>
 <body>
 <div class="bubble"><div id="faceBox"></div><div class="who"><div class="name" id="name"></div><div class="number" id="number"></div><div class="state" id="state"></div><div class="sound" id="sound"></div></div></div>
 <div class="said" id="said"></div>
+<div class="keys" id="keys"></div>
 <div class="buttons" id="buttons"></div>
 <script>
-  let s = null, tick = null
+  let s = null, tick = null, keys = false
   const $ = id => document.getElementById(id)
   const time = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` }
   function draw() {
@@ -38,13 +43,26 @@
     box.appendChild(face)
     $('name').textContent = s.name || s.number || 'Unknown number'
     $('number').textContent = s.name ? s.number : (s.device ? `on ${s.device}` : '')
-    $('state').textContent = s.state === 'calling' ? 'Calling…' : s.state === 'ringing' ? 'Incoming call' : s.state === 'active' ? time(Date.now() - s.since) : s.missed ? 'Missed call' : 'Call ended'
+    $('state').textContent = s.state === 'calling' ? 'Calling…' : s.state === 'ringing' ? 'Incoming call' : s.state === 'active' ? time(Date.now() - s.since) + (s.muted ? ' · muted' : '')
+      : s.state === 'held' ? 'On hold' : s.missed ? 'Missed call' : 'Call ended'
     $('sound').textContent = s.state === 'ended' ? '' : s.sound
     const b = $('buttons'); b.innerHTML = ''
     const add = (cls, label, what) => { const x = document.createElement('button'); x.className = cls; x.textContent = label; x.onclick = () => { $('said').textContent = ''; window.call.press(what) }; b.appendChild(x) }
     if (s.state === 'ringing') { add('decline', 'Decline', 'decline'); add('answer', 'Answer', 'answer') }
-    else if (s.state === 'calling' || s.state === 'active') add('end', 'End call', 'end')
-    else add('close', 'Close', 'close')
+    else if (s.state === 'calling' || s.state === 'active' || s.state === 'held') {
+      // Tetra the phone's phone app: mute, hold and the keypad from here too (Drive-Android Plan.md § Phone)
+      if (s.phoneApp && s.state !== 'calling') {
+        add(`soft ${s.muted ? 'on' : ''}`, s.muted ? 'Muted' : 'Mute', s.muted ? 'unmute' : 'mute')
+        add(`soft ${s.state === 'held' ? 'on' : ''}`, s.state === 'held' ? 'Resume' : 'Hold', s.state === 'held' ? 'unhold' : 'hold')
+        const k = document.createElement('button'); k.className = `soft ${keys ? 'on' : ''}`; k.textContent = 'Keys'; k.onclick = () => { keys = !keys; draw() }; b.appendChild(k)
+      }
+      add('end', 'End', 'end')
+    } else add('close', 'Close', 'close')
+    const pad = $('keys'); pad.innerHTML = ''
+    if (keys && s.phoneApp && s.state === 'active') for (const d of '123456789*0#') {
+      const x = document.createElement('button'); x.textContent = d; x.onclick = () => window.call.press('dtmf' + d); pad.appendChild(x)
+    }
+    window.call.height(pad.childElementCount ? 250 : 150)
   }
   window.call.on(next => { s = next; draw(); clearInterval(tick); if (s.state === 'active') tick = setInterval(() => { $('state').textContent = time(Date.now() - s.since) }, 1000) })
   window.call.said(t => { $('said').textContent = t })

@@ -783,12 +783,13 @@ class SyncServer {
 
   /** The call bubble's Answer, Decline or End, done by the phone (SyncServer.kt /call/action). { ok } or { error }. */
   async callAction(what) {
-    if (!['answer', 'decline', 'end'].includes(what)) return { error: 'Unknown action.' }
+    // hold, unhold, mute, unmute and the keypad's tones only while Tetra is the phone's phone app (Drive-Android PhoneCalls.act)
+    if (!/^(answer|decline|end|hold|unhold|mute|unmute|dtmf[0-9*#])$/.test(what)) return { error: 'Unknown action.' }
     const phones = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
       WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind != 'tablet'`).all()
     let said = null
     const got = await Promise.any(phones.map(async d => {
-      const r = await this.reach(d, `/call/action?do=${what}`, 8000)
+      const r = await this.reach(d, `/call/action?do=${encodeURIComponent(what)}`, 8000)
       if (r?.status === 200) return { ok: true }
       said ||= r && (r.status !== 404 && typeof r.body?.error === 'string' ? r.body.error : `${d.name} needs the new Tetra for this.`)
       throw new Error('no')

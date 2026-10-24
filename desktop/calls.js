@@ -93,13 +93,14 @@ class Calls {
   outgoing(number, name, device) { this.show({ direction: 'out', state: 'calling', number, name: name || this.who(number)?.name || '', photo: this.who(number)?.photo ?? null, device, since: Date.now() }) }
 
   /** A state the phone told: ringing (with the number), active, ended. */
-  fromPhone({ state, direction, number, missed, device }) {
-    if (!['ringing', 'active', 'ended'].includes(state)) return
+  fromPhone({ state, direction, number, missed, device, muted, phoneApp }) {
+    // calling (dialled, not answered yet) and held: only from a phone where Tetra is the phone app, as are muted and phoneApp
+    if (!['ringing', 'calling', 'active', 'held', 'ended'].includes(state)) return
     const was = this.state
     if (state === 'ended' && !was) return // nothing on the screen to end
     const c = this.who(number || was?.number)
     const next = { ...was, direction: direction === 'out' ? 'out' : 'in', state, number: number || was?.number || '', name: c?.name || was?.name || '', photo: c?.photo ?? was?.photo ?? null, device: device || was?.device,
-      since: state === 'active' && was?.state !== 'active' ? Date.now() : was?.since ?? Date.now(), missed: !!missed }
+      since: state === 'active' && !['active', 'held'].includes(was?.state) ? Date.now() : was?.since ?? Date.now(), missed: !!missed, muted: !!muted, phoneApp: !!phoneApp }
     if (state === 'ringing' && was?.state !== 'ringing') this.notify(`${next.name || next.number || 'Someone'} is calling`, `On ${next.device || 'the phone'} — answer or decline in the call bubble`)
     if (state === 'ended' && missed) this.notify(`Missed call: ${next.name || next.number}`, null)
     this.show(next)
@@ -122,8 +123,11 @@ class Calls {
       if (s.state === 'ringing') { this.win.show(); this.win.focus() } else this.win.showInactive()
     }
     if (s.state === 'ended') { echo.off(); this.closer = setTimeout(() => this.close(), 6000) }
-    else if ((s.state === 'calling' || s.state === 'active') && this.bt.phones.some(p => p.connected)) echo.on()
+    else if (['calling', 'active', 'held'].includes(s.state) && this.bt.phones.some(p => p.connected)) echo.on()
   }
+
+  /** The bubble's keypad open or shut: its window grows to hold it. */
+  height(h) { if (this.win && !this.win.isDestroyed()) { const [x, y] = this.win.getPosition(), [, was] = this.win.getSize(); this.win.setBounds({ x, y: y + was - h, width: 360, height: h }) } }
 
   close() { clearTimeout(this.closer); this.state = null; echo.off(); if (this.win && !this.win.isDestroyed()) this.win.close() }
 
@@ -135,7 +139,7 @@ class Calls {
     if (what === 'close') return this.close()
     const r = await this.act(what).catch(e => ({ error: e.message }))
     if (r?.error) { this.win?.webContents.send('said', r.error); return r }
-    if (what !== 'answer') this.show({ ...this.state, state: 'ended', missed: false })
+    if (what === 'end' || what === 'decline') this.show({ ...this.state, state: 'ended', missed: false })
     return r
   }
 
