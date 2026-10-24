@@ -436,7 +436,7 @@ app.whenReady().then(() => {
   calendar = new Calendar(path.join(FILES_ROOT, 'Calendar'), path.join(FILES_ROOT, 'Trash'))
   try { fs.mkdirSync(calendar.root, { recursive: true }) } catch {}
   contacts = new Contacts(path.join(FILES_ROOT, 'Contacts'), path.join(FILES_ROOT, 'Trash'), calendar)
-  calls = new Calls({ contacts, act: what => sync.callAction(what), notify: (t, b) => notify(t, b) })
+  calls = new Calls({ contacts, act: what => sync.callAction(what), notify: (t, b) => notify(t, b), recordings: path.join(FILES_ROOT, 'Phone', 'Recordings') })
   calls.watch()
   contacts.chosen = setting('contactsBirthdays') || null // the calendar birthdays go into (Γενέθλια when none chosen)
   try { fs.mkdirSync(contacts.root, { recursive: true }) } catch {}

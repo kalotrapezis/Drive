@@ -8,6 +8,7 @@
 const { BrowserWindow, screen } = require('electron')
 const { execFile, execFileSync, spawn } = require('node:child_process')
 const path = require('node:path')
+const fs = require('node:fs')
 
 const run = args => new Promise(r => execFile('bluetoothctl', args, { timeout: 4000 }, (e, out) => r(e ? null : String(out))))
 const pactl = args => new Promise(r => execFile('pactl', args, { timeout: 4000 }, (e, out) => r(e ? null : String(out).trim())))
@@ -61,6 +62,31 @@ const echo = {
 }
 
 /**
+ * Recording a call whose sound is on this computer (Drive-Android Plan.md § Phone, step 9): a phone app cannot record
+ * the other side on Android, but here both are clean — the phone's voice on the echo canceller's speaker (its monitor)
+ * and the user's on its microphone — mixed by ffmpeg into one Opus file in Phone/Recordings, which syncs to the phone.
+ * Only after the bubble's "They agreed" (Greek law, art. 370A: the other person's explicit yes).
+ */
+const recorder = {
+  proc: null, file: null,
+  start(dir, title) {
+    if (this.proc) return this.file
+    fs.mkdirSync(dir, { recursive: true })
+    const d = new Date(), p = n => String(n).padStart(2, '0')
+    const name = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())} ${String(title || 'Call').replace(/[/\\:*?"<>|]/g, '-').slice(0, 60)}.ogg`
+    this.file = path.join(dir, name)
+    this.proc = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'pulse', '-i', 'tetra_call_speaker.monitor', '-f', 'pulse', '-i', 'tetra_call_mic',
+      '-filter_complex', 'amix=inputs=2:duration=longest', '-ac', '1', '-c:a', 'libopus', '-b:a', '32k', '-y', this.file], { stdio: ['pipe', 'ignore', 'pipe'] })
+    this.proc.stderr.on('data', b => console.log('[calls] recording:', String(b).trim()))
+    this.proc.on('exit', () => { this.proc = null })
+    this.proc.on('error', e => { console.log('[calls] recording:', e.message); this.proc = null })
+    return this.file
+  },
+  /** ffmpeg finishes the file on "q"; a kill after five seconds if it does not. */
+  stop() { const p = this.proc; if (!p) return; try { p.stdin.write('q') } catch {} setTimeout(() => { try { p.kill() } catch {} }, 5000); this.proc = null },
+}
+
+/**
  * The phones paired with this computer's Bluetooth that can carry calls (they offer the Handsfree Audio Gateway), and
  * whether one is connected now. { available: bluetoothctl here, phones: [{ mac, name, connected }] }.
  */
@@ -77,7 +103,7 @@ async function bluetooth() {
 
 class Calls {
   /** [contacts]: for a number's face and name; [act](what) → the phone; [notify](title, body). */
-  constructor({ contacts, act, notify }) { Object.assign(this, { contacts, act, notify, win: null, state: null, bt: { available: false, phones: [] }, closer: null }) }
+  constructor({ contacts, act, notify, recordings }) { Object.assign(this, { contacts, act, notify, recordings, win: null, state: null, bt: { available: false, phones: [] }, closer: null }) }
 
   /** The contact a number belongs to (its last nine digits), for the bubble. */
   who(number) {
@@ -108,7 +134,8 @@ class Calls {
 
   show(s) {
     clearTimeout(this.closer)
-    this.state = { ...s, sound: this.sound() }
+    if (s.state === 'ended' && recorder.proc) { recorder.stop(); this.notify('Call recorded', path.basename(recorder.file || '')) }
+    this.state = { ...s, sound: this.sound(), canRecord: !!echo.module && ['active', 'held'].includes(s.state), recording: !!recorder.proc }
     if (!this.win || this.win.isDestroyed()) {
       const { workArea } = screen.getPrimaryDisplay()
       this.win = new BrowserWindow({ width: 360, height: 150, x: workArea.x + workArea.width - 376, y: workArea.y + workArea.height - 166, frame: false, resizable: false,
@@ -132,11 +159,14 @@ class Calls {
   close() { clearTimeout(this.closer); this.state = null; echo.off(); if (this.win && !this.win.isDestroyed()) this.win.close() }
 
   /** The app quitting: the echo canceller goes and the speaker and microphone are as they were. */
-  quit() { echo.offNow() }
+  quit() { recorder.stop(); echo.offNow() }
 
   /** The bubble's buttons: answer, decline, end on the phone; close the bubble. */
   async press(what) {
     if (what === 'close') return this.close()
+    // recording happens here, not on the phone; the bubble asked "They agreed?" before sending it
+    if (what === 'record' && echo.module) { recorder.start(this.recordings, this.state?.name || this.state?.number); return this.show(this.state) }
+    if (what === 'stoprec') { recorder.stop(); this.notify('Call recorded', path.basename(recorder.file || '')); return this.show(this.state) }
     const r = await this.act(what).catch(e => ({ error: e.message }))
     if (r?.error) { this.win?.webContents.send('said', r.error); return r }
     if (what === 'end' || what === 'decline') this.show({ ...this.state, state: 'ended', missed: false })

@@ -18,7 +18,8 @@
   button { border: 0; border-radius: 999px; padding: 9px 18px; font: inherit; font-weight: 600; color: #fff; cursor: pointer; }
   .answer { background: #2e9d4f; } .decline, .end { background: #c62f2f; } .close { background: #3a3f43; }
   .said { color: #ff9b8f; font-size: 12px; padding: 0 16px 8px; }
-  .soft { background: #3a3f43; padding: 9px 14px; } .soft.on { background: #eceeef; color: #1e2124; }
+  .soft { background: #3a3f43; padding: 8px 11px; font-size: 13px; } .soft.on { background: #eceeef; color: #1e2124; }
+  .buttons:has(.soft) { gap: 6px; } .buttons:has(.soft) .end { padding: 8px 14px; font-size: 13px; }
   .keys { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; padding: 0 16px 12px; -webkit-app-region: no-drag; }
   .keys button { background: #2c3034; padding: 8px 0; font-size: 16px; }
   .keys:empty { display: none; }
@@ -30,7 +31,7 @@
 <div class="keys" id="keys"></div>
 <div class="buttons" id="buttons"></div>
 <script>
-  let s = null, tick = null, keys = false
+  let s = null, tick = null, keys = false, asking = false
   const $ = id => document.getElementById(id)
   const time = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` }
   function draw() {
@@ -45,6 +46,7 @@
     $('number').textContent = s.name ? s.number : (s.device ? `on ${s.device}` : '')
     $('state').textContent = s.state === 'calling' ? 'Calling…' : s.state === 'ringing' ? 'Incoming call' : s.state === 'active' ? time(Date.now() - s.since) + (s.muted ? ' · muted' : '')
       : s.state === 'held' ? 'On hold' : s.missed ? 'Missed call' : 'Call ended'
+    if (s.recording) $('state').textContent += ' · ● recording'
     $('sound').textContent = s.state === 'ended' ? '' : s.sound
     const b = $('buttons'); b.innerHTML = ''
     const add = (cls, label, what) => { const x = document.createElement('button'); x.className = cls; x.textContent = label; x.onclick = () => { $('said').textContent = ''; window.call.press(what) }; b.appendChild(x) }
@@ -56,13 +58,23 @@
         add(`soft ${s.state === 'held' ? 'on' : ''}`, s.state === 'held' ? 'Resume' : 'Hold', s.state === 'held' ? 'unhold' : 'hold')
         const k = document.createElement('button'); k.className = `soft ${keys ? 'on' : ''}`; k.textContent = 'Keys'; k.onclick = () => { keys = !keys; draw() }; b.appendChild(k)
       }
+      if (s.recording) add('soft on', 'Stop rec.', 'stoprec')
+      else if (s.canRecord) { const r = document.createElement('button'); r.className = 'soft'; r.textContent = 'Record'; r.onclick = () => { asking = true; draw() }; b.appendChild(r) }
       add('end', 'End', 'end')
     } else add('close', 'Close', 'close')
+    // the other person's explicit yes first (Greek Penal Code 370A: recording one's own call without it is a crime)
+    if (asking && s.canRecord && !s.recording) {
+      $('said').innerHTML = ''; $('said').style.color = '#eceeef'
+      $('said').textContent = 'Ask them first: recording a call without the other person\'s explicit yes is a crime in Greece.'
+      b.innerHTML = ''
+      const no = document.createElement('button'); no.className = 'close'; no.textContent = 'Cancel'; no.onclick = () => { asking = false; $('said').textContent = ''; draw() }; b.appendChild(no)
+      const yes = document.createElement('button'); yes.className = 'answer'; yes.textContent = 'They agreed — record'; yes.onclick = () => { asking = false; $('said').textContent = ''; window.call.press('record') }; b.appendChild(yes)
+    } else $('said').style.color = ''
     const pad = $('keys'); pad.innerHTML = ''
     if (keys && s.phoneApp && s.state === 'active') for (const d of '123456789*0#') {
       const x = document.createElement('button'); x.textContent = d; x.onclick = () => window.call.press('dtmf' + d); pad.appendChild(x)
     }
-    window.call.height(pad.childElementCount ? 250 : 150)
+    window.call.height(pad.childElementCount ? 250 : asking ? 190 : 150)
   }
   window.call.on(next => { s = next; draw(); clearInterval(tick); if (s.state === 'active') tick = setInterval(() => { $('state').textContent = time(Date.now() - s.since) }, 1000) })
   window.call.said(t => { $('said').textContent = t })
