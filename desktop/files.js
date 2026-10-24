@@ -67,6 +67,10 @@ function typeGroup(name) {
   return 'Other'
 }
 
+/** Files' categories (file-kinds.json, Drive-Android's table copied by scripts/copy-skill.js): each extension's icon, public/kinds/<icon>.png. */
+const KIND_ICON = new Map(Object.values(require('./file-kinds.json').kinds).flatMap(k => k.extensions.map(e => [e, k.icon.toLowerCase()])))
+const kindIcon = name => KIND_ICON.get(path.extname(name).slice(1).toLowerCase()) ?? null
+
 class Files {
   constructor(db, root) {
     this.db = db
@@ -139,7 +143,7 @@ class Files {
     const tags = this.db.prepare('SELECT tag FROM file_tags WHERE path = ? AND deleted = 0 ORDER BY tag COLLATE NOCASE').all(rel).map(r => r.tag)
     return { name: path.basename(full), path: rel, dir: st.isDirectory(), size: st.isDirectory() ? 0 : st.size, mtime: Math.trunc(st.mtimeMs),
       type: st.isDirectory() ? 'Folder' : typeGroup(full), system: st.isDirectory() && this.isSystem(rel), favorite: !!meta?.favorite, color: meta?.color ?? null, tags,
-      thumb: st.isDirectory() ? null : thumbs.kind(full) }
+      thumb: st.isDirectory() ? null : thumbs.kind(full), icon: st.isDirectory() ? null : kindIcon(full) }
   }
 
   async list(rel) {
@@ -633,4 +637,4 @@ class Files {
   }
 }
 
-module.exports = { Files, TRASH, OPTIONAL_FOLDERS, COLORS, typeGroup, isSafeRel, isSafeName }
+module.exports = { Files, TRASH, OPTIONAL_FOLDERS, COLORS, typeGroup, kindIcon, isSafeRel, isSafeName }

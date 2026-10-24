@@ -59,6 +59,7 @@
       "drives.js",
       "home.js",
       "thumbs.js",
+      "file-kinds.json",
       "purgatory.js",
       "timer.js",
       "maps.js",
