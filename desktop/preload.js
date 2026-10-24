@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('drive', {
   contactsExport: (uids, name) => ipcRenderer.invoke('contacts:export', uids, name),
   contactsOpen: (how, value) => ipcRenderer.invoke('contacts:open', how, value),
   contactsSettings: () => ipcRenderer.invoke('contacts:settings'),
+  contactsCall: (number, name) => ipcRenderer.invoke('contacts:phoneCall', number, name),
+  contactsFacePhoto: faceId => ipcRenderer.invoke('contacts:facePhoto', faceId),
   contactsSetBirthdays: id => ipcRenderer.invoke('contacts:setBirthdays', id),
   contactsSetByLast: on => ipcRenderer.invoke('contacts:setByLast', on),
   timer: {

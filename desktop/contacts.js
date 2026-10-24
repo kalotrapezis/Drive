@@ -178,6 +178,7 @@ function info(lines) {
     photo,
     photoUrl: photoLine && !photo && /^http/i.test(photoLine.value) ? photoLine.value.trim() : null,
     person: text('X-TETRA-PERSON') || null,
+    face: text('X-TETRA-FACE') || null,
     rev: text('REV'),
   }
   return i
@@ -187,7 +188,7 @@ const nameOf = i => (i.formatted || '').trim() || composed(i) || i.org || i.phon
 const favourite = i => i.categories.some(c => c.toLowerCase() === STARRED.toLowerCase())
 const labels = i => i.categories.filter(c => c.trim() && ![STARRED, MY_CONTACTS, 'Starred in Android'].some(x => x.toLowerCase() === c.toLowerCase()))
 const empty = () => ({ uid: '', prefix: '', given: '', middle: '', family: '', suffix: '', formatted: '', nickname: '', org: '', department: '', title: '',
-  phones: [], emails: [], addresses: [], urls: [], birthday: null, dates: [], related: [], note: '', categories: [], photo: null, photoUrl: null, person: null, rev: '' })
+  phones: [], emails: [], addresses: [], urls: [], birthday: null, dates: [], related: [], note: '', categories: [], photo: null, photoUrl: null, person: null, face: null, rev: '' })
 /** The window's view of a contact: the info and what is worked out from it. */
 const view = i => ({ ...i, name: nameOf(i), favourite: favourite(i), labels: labels(i) })
 
@@ -255,6 +256,7 @@ function apply(lines, was, now, at = Date.now()) {
   if (was.photo !== now.photo || was.photoUrl !== now.photoUrl) replace(['PHOTO'],
     now.photo ? [{ name: 'PHOTO', params: ';ENCODING=b;TYPE=JPEG', value: now.photo }] : now.photoUrl ? [{ name: 'PHOTO', params: ';VALUE=uri', value: now.photoUrl }] : [])
   if (was.person !== now.person) replace(['X-TETRA-PERSON'], now.person ? [{ name: 'X-TETRA-PERSON', params: '', value: now.person }] : [])
+  if ((was.face ?? null) !== (now.face ?? null)) replace(['X-TETRA-FACE'], now.face ? [{ name: 'X-TETRA-FACE', params: '', value: now.face }] : [])
   if (!out.some(p => keyOf(p) === 'UID')) out.push({ name: 'UID', params: '', value: now.uid || crypto.randomUUID() })
   if (!out.some(p => keyOf(p) === 'FN')) out.push({ name: 'FN', params: '', value: escape(nameOf(now)) })
   if (!out.some(p => keyOf(p) === 'N')) out.push(nLine())
@@ -417,7 +419,7 @@ class Contacts {
       related: by([...a.related, ...b.related], r => r.label.toLowerCase() + plain(r.value)),
       note: [...new Set([a.note, b.note].filter(Boolean))].join('\n\n'),
       categories: by([...a.categories, ...b.categories], c => c.toLowerCase()),
-      photo: a.photo || b.photo, photoUrl: a.photo ? a.photoUrl : a.photoUrl || b.photoUrl, person: a.person || b.person,
+      photo: a.photo || b.photo, photoUrl: a.photo ? a.photoUrl : a.photoUrl || b.photoUrl, person: a.person || b.person, face: a.photo ? a.face : a.face || b.face,
     }
   }
   /** [b] merged into [a]: one file with every value of both, [b] to the Trash, [b]'s events become [a]'s. */

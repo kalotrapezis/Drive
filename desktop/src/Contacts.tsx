@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { Modal } from './Dialogs'
 
 // Contacts on the computer (Drive-Android Plan.md § Contacts): the same files as the phone's, read on every look and
@@ -11,12 +11,15 @@ type VDate = { year: number | null; month: number; day: number }
 export type Contact = {
   uid: string; name: string; prefix: string; given: string; middle: string; family: string; suffix: string; formatted: string; nickname: string
   org: string; department: string; title: string; phones: Field[]; emails: Field[]; addresses: Address[]; urls: Field[]; birthday: VDate | null
-  dates: Field[]; related: Field[]; note: string; categories: string[]; photo: string | null; photoUrl: string | null; person: string | null
+  dates: Field[]; related: Field[]; note: string; categories: string[]; photo: string | null; photoUrl: string | null; person: string | null; face?: string | null
   favourite: boolean; labels: string[]; versions?: number; key?: string
 }
 type Tab = 'all' | 'favourites' | 'labels'
 
 const call = <T,>(method: string, ...args: unknown[]) => window.drive.contacts<T>(method, ...args)
+// The list read once when Tetra opens and kept between visits (the user, 24 Oct: "load faster"): shown at once, then read again
+let cached: Contact[] | null = null
+export function preloadContacts() { if (!cached) call<Contact[]>('list', false).then(l => { cached ??= l }).catch(() => {}) }
 const errorText = (e: unknown) => (e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e))
 const plain = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Mn}+/gu, '').trim()
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -53,8 +56,9 @@ function Face({ c, size }: { c: Pick<Contact, 'photo' | 'name'>; size: number })
     : <span className="ct-face ct-initial" style={{ width: size, height: size, fontSize: size * 0.42 }}>{first && /[\p{L}\p{N}]/u.test(first) ? first.toUpperCase() : <Icon name="person" size={size * 0.55} />}</span>
 }
 
-export function ContactsPage({ setDialog, say }: { setDialog: (d: ReactNode) => void; say: (text: string) => void }) {
-  const [list, setList] = useState<Contact[]>([])
+export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: ReactNode) => void; say: (text: string) => void; openPerson: (id: string, name: string) => void }) {
+  const [loaded, setLoaded] = useState<Contact[] | null>(cached)
+  const list = loaded ?? []
   const [version, setVersion] = useState(0)
   const [query, setQuery] = useState('')
   const [tab, setTab] = useState<Tab>('all')
@@ -69,7 +73,7 @@ export function ContactsPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
   useEffect(() => window.drive.onContactsChanged(() => setVersion(v => v + 1)), [])
   useEffect(() => { window.drive.contactsSettings().then(setSettings) }, [version])
   useEffect(() => {
-    call<Contact[]>('list', settings?.byLast ?? false).then(setList).catch(e => say('Contacts could not be read: ' + errorText(e)))
+    call<Contact[]>('list', settings?.byLast ?? false).then(l => { cached = l; setLoaded(l) }).catch(e => { setLoaded(l => l ?? []); say('Contacts could not be read: ' + errorText(e)) })
     call<[Contact, Contact][]>('pairs').then(setPairs).catch(() => {})
   }, [version, settings?.byLast])
   useEffect(() => { if (!open && list.length) setOpen(list[0].uid) }, [list])
@@ -97,14 +101,15 @@ export function ContactsPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
         {tab === 'all' && !query && !label && list.some(c => c.favourite) && <div className="ct-favs">
           {list.filter(c => c.favourite).map(c => <button key={c.uid} className="ct-fav" onClick={() => setOpen(c.uid)} title={c.name}><Face c={c} size={52} /><small>{c.given || c.name}</small></button>)}
         </div>}
-        {shown.length === 0 && <p className="hint ct-hint">{list.length === 0 ? 'No contacts yet. The phone\'s come with sync; Import in the drawer takes a .vcf, Google\'s CSV or Takeout\'s zip.' : query ? `No one matches "${query}".` : tab === 'favourites' ? 'No favourites yet: the star on a contact adds one.' : 'No one here.'}</p>}
+        {loaded === null && <div className="ct-loading"><span className="spinner" />Reading your contacts…</div>}
+        {loaded !== null && shown.length === 0 && <p className="hint ct-hint">{list.length === 0 ? 'No contacts yet. The phone\'s come with sync; Import in the drawer takes a .vcf, Google\'s CSV or Takeout\'s zip.' : query ? `No one matches "${query}".` : tab === 'favourites' ? 'No favourites yet: the star on a contact adds one.' : 'No one here.'}</p>}
         {shown.map((c, k) => <div key={c.uid}>
           {!query && (k === 0 || letter(shown[k - 1]) !== letter(c)) && <h4 className="ct-letter">{letter(c)}</h4>}
           <button className={`ct-row ${c.uid === open && !picked.size ? 'on' : ''} ${picked.has(c.uid) ? 'picked' : ''}`}
             onClick={e => { if (e.ctrlKey || e.metaKey || picked.size) toggle(c.uid); else { setOpen(c.uid); setEditing(null) } }}
             onContextMenu={e => { e.preventDefault(); toggle(c.uid) }}>
             {picked.has(c.uid) ? <span className="ct-face ct-check" style={{ width: 40, height: 40 }}><Icon name="checked" /></span> : <Face c={c} size={40} />}
-            <span className="ct-name">{c.name}{query && <small>{c.phones[0]?.value || c.emails[0]?.value}</small>}</span>
+            <span className="ct-name">{c.name}<small>{c.phones[0]?.value || c.emails[0]?.value || c.org}</small></span>
           </button>
         </div>)}
       </>}
@@ -131,10 +136,10 @@ export function ContactsPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
       <div className="ct-body">
         {listPane}
         <section className="ct-page">
-          {editing ? <Editor start={editing === 'new' ? null : editing} labels={allLabels} cancel={() => setEditing(null)} save={c => save(editing === 'new' ? null : editing, c)}
+          {editing ? <Editor start={editing === 'new' ? null : editing} labels={allLabels} setDialog={setDialog} say={say} cancel={() => setEditing(null)} save={c => save(editing === 'new' ? null : editing, c)}
             remove={editing === 'new' ? undefined : () => { const c = editing; setDialog(<Modal onClose={close}><h3>Delete {c.name}?</h3><p>The contact goes to the Trash, with its birthday's event, and can be restored from there.</p>
               <div className="dialog-actions"><button className="text-button" onClick={close}>Cancel</button><button className="filled-button danger" onClick={() => { close(); setEditing(null); setOpen(null); act(() => call('trash', c.uid), `${c.name} moved to the Trash`) }}>Delete</button></div></Modal>) }} />
-            : contact ? <Page c={contact} all={list} edit={() => setEditing(contact)} openUid={setOpen} star={() => act(() => call('save', contact.uid, { ...contact, categories: contact.favourite ? contact.categories.filter(x => x.toLowerCase() !== 'starred') : [...contact.categories, 'starred'] }), contact.favourite ? 'Not a favourite' : 'Added to favourites')}
+            : contact ? <Page c={contact} all={list} edit={() => setEditing(contact)} openUid={setOpen} openPerson={openPerson} setDialog={setDialog} star={() => act(() => call('save', contact.uid, { ...contact, categories: contact.favourite ? contact.categories.filter(x => x.toLowerCase() !== 'starred') : [...contact.categories, 'starred'] }), contact.favourite ? 'Not a favourite' : 'Added to favourites')}
               keep={() => act(() => call('keep', contact.uid), 'Kept this version; the other went to the Trash')} say={say} />
             : <p className="hint ct-hint">Choose a contact.</p>}
         </section>
@@ -150,6 +155,7 @@ export function ContactsPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
         <h4><Icon name="merge" />Tidy</h4>
         <div className="chips wrap">
           <button className="chip" onClick={() => { setDrawer(false); setDialog(<MergeDialog pairs={pairs} onClose={close} merge={(a, b) => act(() => call('merge', a, b), 'Merged')} notSame={(a, b) => act(() => call('notTheSame', a, b), 'Kept apart')} />) }}>Merge & fix{pairs.length ? ` (${pairs.length})` : ''}</button>
+          <button className="chip" onClick={() => { setDrawer(false); setDialog(<FacesForMany list={list} onClose={close} done={n => { say(`${n} photos from Photos`); setVersion(v => v + 1) }} />) }}>Faces from Photos</button>
           <button className="chip" onClick={() => { setDrawer(false); setDialog(<TrashDialog onClose={close} restore={n => act(() => call('restore', n), 'Restored')} />) }}>Trash</button>
           <button className={`chip ${settings?.byLast ? 'on' : ''}`} onClick={() => { window.drive.contactsSetByLast(!settings?.byLast); setSettings(s => s && { ...s, byLast: !s.byLast }) }}>Sort by last name</button>
         </div>
@@ -183,55 +189,141 @@ export function ContactsPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
   )
 }
 
-/** A contact's page: the round face, name and job, Mail · WhatsApp · Viber, the details in cards. */
-function Page({ c, all, edit, openUid, star, keep, say }: { c: Contact; all: Contact[]; edit: () => void; openUid: (uid: string) => void; star: () => void; keep: () => void; say: (t: string) => void }) {
+/** A contact's page: its island in the middle (the round face, the name, Call · Mail · WhatsApp · Viber), ♥ and Edit in an
+ * island of their own at the right (the user, 24 Oct), the details in cards under it. */
+function Page({ c, all, edit, openUid, openPerson, setDialog, star, keep, say }: { c: Contact; all: Contact[]; edit: () => void; openUid: (uid: string) => void
+  openPerson: (id: string, name: string) => void; setDialog: (d: ReactNode) => void; star: () => void; keep: () => void; say: (t: string) => void }) {
   const open = (how: 'mail' | 'whatsapp' | 'viber' | 'web', v: string) => window.drive.contactsOpen(how, v).catch(e => say(errorText(e)))
   const phone = c.phones[0]?.value, mail = c.emails[0]?.value
   const job = [c.title, [c.org, c.department].filter(Boolean).join(', ')].filter(Boolean).join(' · ')
-  const Row = ({ label, value, onClick, action }: { label: string; value: string; onClick?: () => void; action?: ReactNode }) =>
-    <div className="ct-detail"><div><small>{label}</small>{onClick ? <button className="ct-link" onClick={onClick}>{value}</button> : <span>{value}</span>}</div>{action}</div>
+  // a call is placed by the paired phone (sync.js callOnPhone): at once, or as a notification to tap there
+  const dial = (number: string) => window.drive.contactsCall(number, c.name).then(r => say(r.error ?? (r.how === 'calling' ? `Calling ${c.name} on ${r.device}` : `${r.device} shows "Call ${c.name}": tap it to call`)), e => say(errorText(e)))
+  const choose = (title: string, ways: [string, () => void][]) => ways.length === 1 ? ways[0][1]() : setDialog(<Modal onClose={() => setDialog(null)}><h3>{title}</h3>
+    <div className="ct-ways">{ways.map(([label, go]) => <button key={label} className="ct-way" onClick={() => { setDialog(null); go() }}>{label}</button>)}</div>
+    <div className="dialog-actions"><button className="text-button" onClick={() => setDialog(null)}>Cancel</button></div></Modal>)
+  const [person, setPerson] = useState<{ name: string; count: number } | null>(null)
+  useEffect(() => { setPerson(null); if (c.person) window.drive.people.list().then(ps => { const p = ps.find(x => x.id === c.person); setPerson(p ? { name: p.name, count: p.count } : null) }).catch(() => {}) }, [c.uid, c.person])
+  const Row = ({ icon, label, value, onClick, action }: { icon: IconName; label: string; value: string; onClick?: () => void; action?: ReactNode }) =>
+    <div className="ct-detail"><Icon name={icon} size={20} /><div><small>{label}</small>{onClick ? <button className="ct-link" onClick={onClick}>{value}</button> : <span>{value}</span>}</div>{action}</div>
   return (
     <div className="ct-contact">
-      <div className="ct-top">
-        <button className="round" title={c.favourite ? 'Remove from favourites' : 'Add to favourites'} onClick={star}><Icon name="heart" /></button>
-        <button className="text-button" onClick={edit}>Edit</button>
+      <div className="ct-head">
+        <div className="island ct-hero">
+          <Face c={c} size={128} />
+          <h2>{c.name}</h2>
+          {job && <p className="hint">{job}</p>}
+          <div className="ct-actions">
+            <button className="ct-action" disabled={!phone} onClick={() => choose('Call', c.phones.map(p => [`${p.label || 'Phone'} · ${p.value}`, () => dial(p.value)]))}><span><Icon name="call" /></span><small>Call</small></button>
+            <button className="ct-action" disabled={!mail} onClick={() => choose('Mail', c.emails.map(e => [e.value, () => open('mail', e.value)]))}><span><Icon name="mail" /></span><small>Mail</small></button>
+            <button className="ct-action" disabled={!phone} onClick={() => choose('WhatsApp', c.phones.map(p => [`${p.label || 'Phone'} · ${p.value}`, () => open('whatsapp', p.value)]))}><span><Icon name="chat" /></span><small>WhatsApp</small></button>
+            <button className="ct-action" disabled={!phone} onClick={() => choose('Viber', c.phones.map(p => [`${p.label || 'Phone'} · ${p.value}`, () => open('viber', p.value)]))}><span><Icon name="device" /></span><small>Viber</small></button>
+          </div>
+        </div>
+        <div className="island ct-side">
+          <button className={`round flat ${c.favourite ? 'ct-faved' : ''}`} title={c.favourite ? 'Remove from favourites' : 'Add to favourites'} onClick={star}><Icon name="heart" /></button>
+          <button className="round flat" title="Edit" onClick={edit}><Icon name="edit" /></button>
+        </div>
       </div>
-      <Face c={c} size={120} />
-      <h2>{c.name}{c.favourite && <span className="ct-star"> ★</span>}</h2>
-      {job && <p className="hint">{job}</p>}
-      <div className="ct-actions">
-        <button className="ct-action" disabled={!mail} onClick={() => mail && open('mail', mail)}><Icon name="mail" /><small>Mail</small></button>
-        <button className="ct-action" disabled={!phone} onClick={() => phone && open('whatsapp', phone)}><Icon name="chat" /><small>WhatsApp</small></button>
-        <button className="ct-action" disabled={!phone} onClick={() => phone && open('viber', phone)}><Icon name="device" /><small>Viber</small></button>
-      </div>
-      <p className="hint ct-hint">A computer cannot place a phone call itself; calls are made on the phone.</p>
-      {(c.versions ?? 1) > 1 && <div className="ct-card"><Row label={`${c.versions} versions (a change on two devices)`} value="This is the newer." action={<button className="text-button" onClick={keep}>Keep this one</button>} /></div>}
-      {c.phones.length > 0 && <div className="ct-card">{c.phones.map((p, k) => <Row key={k} label={p.label || 'Phone'} value={p.value}
+      {(c.versions ?? 1) > 1 && <div className="ct-card"><Row icon="warning" label={`${c.versions} versions (a change on two devices)`} value="This is the newer." action={<button className="text-button" onClick={keep}>Keep this one</button>} /></div>}
+      {c.phones.length > 0 && <div className="ct-card">{c.phones.map((p, k) => <Row key={k} icon="call" label={p.label || 'Phone'} value={p.value} onClick={() => dial(p.value)}
         action={<span className="chips"><button className="chip" onClick={() => open('whatsapp', p.value)}>WhatsApp</button><button className="chip" onClick={() => open('viber', p.value)}>Viber</button></span>} />)}</div>}
-      {c.emails.length > 0 && <div className="ct-card">{c.emails.map((e, k) => <Row key={k} label={e.label || 'Email'} value={e.value} onClick={() => open('mail', e.value)} />)}</div>}
+      {c.emails.length > 0 && <div className="ct-card">{c.emails.map((e, k) => <Row key={k} icon="mail" label={e.label || 'Email'} value={e.value} onClick={() => open('mail', e.value)} />)}</div>}
       {(c.birthday || c.dates.length > 0) && <div className="ct-card">
-        {c.birthday && <Row label="Birthday" value={dateText(c.birthday, true)} />}
-        {c.dates.map((d, k) => { const x = parseDate(d.value); return x && <Row key={k} label={d.label} value={dateText(x, false)} /> })}
+        {c.birthday && <Row icon="cake" label="Birthday" value={dateText(c.birthday, true)} />}
+        {c.dates.map((d, k) => { const x = parseDate(d.value); return x && <Row key={k} icon="calendar" label={d.label} value={dateText(x, false)} /> })}
       </div>}
-      {c.addresses.length > 0 && <div className="ct-card">{c.addresses.map((a, k) => <Row key={k} label={a.label || 'Address'} value={addressText(a)}
-        action={<button className="text-button" onClick={() => window.drive.mapsGoogle?.(addressText(a))}>Map</button>} />)}</div>}
-      {c.urls.length > 0 && <div className="ct-card">{c.urls.map((u, k) => <Row key={k} label={u.label || 'Website'} value={u.value}
+      {c.addresses.length > 0 && <div className="ct-card">{c.addresses.map((a, k) => <Row key={k} icon="place" label={a.label || 'Address'} value={addressText(a)}
+        action={<button className="text-button" onClick={() => window.drive.mapsGoogle(addressText(a))}>Map</button>} />)}</div>}
+      {c.urls.length > 0 && <div className="ct-card">{c.urls.map((u, k) => <Row key={k} icon="external" label={u.label || 'Website'} value={u.value}
         onClick={() => open('web', u.label === 'Revolut' ? `https://revolut.me/${u.value}` : /:\/\//.test(u.value) ? u.value : 'https://' + u.value)} />)}</div>}
-      {c.related.length > 0 && <div className="ct-card">{c.related.map((r, k) => { const o = all.find(x => x.uid !== c.uid && plain(x.name) === plain(r.value)); return <Row key={k} label={r.label || 'Related'} value={r.value} onClick={o ? () => openUid(o.uid) : undefined} /> })}</div>}
+      {c.related.length > 0 && <div className="ct-card">{c.related.map((r, k) => { const o = all.find(x => x.uid !== c.uid && plain(x.name) === plain(r.value)); return <Row key={k} icon="person" label={r.label || 'Related'} value={r.value} onClick={o ? () => openUid(o.uid) : undefined} /> })}</div>}
+      {person && c.person && <div className="ct-card"><Row icon="photos" label="In Photos" value={`${person.name} · ${person.count} photo${person.count === 1 ? '' : 's'}`} onClick={() => openPerson(c.person!, person.name)} /></div>}
       {(c.nickname || c.labels.length > 0 || c.note) && <div className="ct-card">
-        {c.nickname && <Row label="Nickname" value={c.nickname} />}
-        {c.labels.length > 0 && <Row label="Labels" value={c.labels.join(' · ')} />}
-        {c.note && <Row label="Notes" value={c.note} />}
+        {c.nickname && <Row icon="person" label="Nickname" value={c.nickname} />}
+        {c.labels.length > 0 && <Row icon="tag" label="Labels" value={c.labels.join(' · ')} />}
+        {c.note && <Row icon="notes" label="Notes" value={c.note} />}
       </div>}
     </div>
   )
+}
+
+/**
+ * A face from Photos as a contact's photo: the face cropped as the phone does (box × 1.8, 512 px), and the contact's name
+ * given to a person Photos only knew as "Person 12" (the user, 24 Oct: faces and names both ways).
+ */
+async function photoFromFace(personId: string, personName: string, faceId: string, contactName: string) {
+  const got = await window.drive.contactsFacePhoto(faceId)
+  if (/^Person \d+$/.test(personName) && contactName.trim()) await window.drive.people.rename(personId, contactName.trim()).catch(() => {})
+  return got
+}
+
+/** From Photos: the people Photos knows (those named like the contact first, then the unnamed), then a person's faces. */
+function FacePicker({ name, onClose, pick }: { name: string; onClose: () => void; pick: (personId: string, personName: string, faceId: string) => void }) {
+  const [people, setPeople] = useState<{ id: string; name: string; count: number; cover: string | null }[] | null>(null)
+  const [person, setPerson] = useState<{ id: string; name: string } | null>(null)
+  const [faces, setFaces] = useState<{ id: string }[] | null>(null)
+  useEffect(() => { window.drive.people.list().then(ps => {
+    const first = plain(name).split(' ')[0], score = (p: string) => plain(p) === plain(name) ? 2 : plain(p).split(' ')[0] === first ? 1 : 0
+    setPeople([...ps].sort((a, b) => score(b.name) - score(a.name)))
+  }).catch(() => setPeople([])) }, [])
+  useEffect(() => { if (person) window.drive.people.faces(person.id).then(f => setFaces([...f].sort((a, b) => Number(b.chosen) - Number(a.chosen)).slice(0, 60))) }, [person])
+  return <Modal onClose={onClose}>
+    {!person ? <>
+      <h3>From Photos</h3>
+      {people === null && <div className="ct-loading"><span className="spinner" />Reading Photos' people…</div>}
+      {people?.length === 0 && <p>Photos has found no faces on this computer yet (Photos › People).</p>}
+      <div className="ct-faces">{people?.map(p => <button key={p.id} className="ct-fav" onClick={() => setPerson(p)} title={p.name}>
+        {p.cover ? <img className="ct-face" src={`media://face/${p.cover}`} style={{ width: 64, height: 64 }} alt="" /> : <span className="ct-face ct-initial" style={{ width: 64, height: 64 }} />}<small>{p.name}</small></button>)}</div>
+    </> : <>
+      <h3><button className="round flat" title="People" onClick={() => { setPerson(null); setFaces(null) }}><Icon name="back" /></button>{person.name}</h3>
+      {faces === null && <div className="ct-loading"><span className="spinner" /></div>}
+      <div className="ct-faces">{faces?.map(f => <button key={f.id} onClick={() => pick(person.id, person.name, f.id)}><img className="ct-face" src={`media://face/${f.id}`} style={{ width: 72, height: 72 }} alt="" /></button>)}</div>
+    </>}
+    <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button></div>
+  </Modal>
+}
+
+/** "Photos knows N of these people": contacts with no photo whose name a named person in Photos has (or a first name only one shares). */
+function FacesForMany({ list, onClose, done }: { list: Contact[]; onClose: () => void; done: (n: number) => void }) {
+  const [pairs, setPairs] = useState<{ c: Contact; p: { id: string; name: string; cover: string | null } }[] | null>(null)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [working, setWorking] = useState(false)
+  useEffect(() => { window.drive.people.list().then(ps => {
+    const named = ps.filter(p => !/^Person \d+$/.test(p.name) && p.cover)
+    const first = (s: string) => plain(s).split(' ')[0]
+    const out = list.filter(c => !c.photo).flatMap(c => {
+      const same = named.find(p => plain(p.name) === plain(c.name))
+      if (same) return [{ c, p: same }]
+      const one = named.filter(p => first(p.name) === first(c.name))
+      return one.length === 1 && list.filter(x => first(x.name) === first(c.name)).length === 1 ? [{ c, p: one[0] }] : []
+    }).filter((x, k, all) => all.findIndex(y => y.p.id === x.p.id) === k)
+    setPairs(out); setPicked(new Set(out.map(x => x.c.uid)))
+  }).catch(() => setPairs([])) }, [])
+  const go = async () => {
+    setWorking(true)
+    let n = 0
+    for (const { c, p } of pairs!.filter(x => picked.has(x.c.uid))) {
+      try { const g = await window.drive.contactsFacePhoto(p.cover!); await call('save', c.uid, { ...c, photo: g.photo, face: g.face, photoUrl: null, person: p.id }); n++ } catch {}
+    }
+    onClose(); done(n)
+  }
+  return <Modal onClose={onClose}>
+    <h3>{pairs === null ? 'Faces from Photos' : `Photos knows ${pairs.length} of these people`}</h3>
+    {pairs === null && <div className="ct-loading"><span className="spinner" /></div>}
+    {pairs?.length === 0 && <p>No contact without a photo has a name Photos knows.</p>}
+    <div className="ct-merge">{pairs?.map(({ c, p }) => <label key={c.uid} className="ct-line ct-who">
+      <input type="checkbox" checked={picked.has(c.uid)} onChange={() => setPicked(s => { const n = new Set(s); if (n.has(c.uid)) n.delete(c.uid); else n.add(c.uid); return n })} />
+      <img className="ct-face" src={`media://face/${p.cover}`} style={{ width: 36, height: 36 }} alt="" /><span className="ct-name">{c.name}</span></label>)}</div>
+    <div className="dialog-actions"><button className="text-button" onClick={onClose}>Not now</button>
+      <button className="filled-button" disabled={working || !picked.size} onClick={go}>{working ? 'Making photos…' : `Use ${picked.size}`}</button></div>
+  </Modal>
 }
 
 const PHONE_LABELS = ['Mobile', 'Home', 'Work', 'Main', 'Other']
 const PLACE_LABELS = ['Home', 'Work', 'Other']
 
 /** Edit and New: one page, the fields grouped (the phone's), the rest of the file kept as it is. */
-function Editor({ start, labels, cancel, save, remove }: { start: Contact | null; labels: string[]; cancel: () => void; save: (c: Contact) => void; remove?: () => void }) {
+function Editor({ start, labels, cancel, save, remove, setDialog, say }: { start: Contact | null; labels: string[]; cancel: () => void; save: (c: Contact) => void; remove?: () => void; setDialog: (d: ReactNode) => void; say: (t: string) => void }) {
   const blank: Contact = { uid: '', name: '', prefix: '', given: '', middle: '', family: '', suffix: '', formatted: '', nickname: '', org: '', department: '', title: '',
     phones: [{ label: 'Mobile', value: '' }], emails: [], addresses: [], urls: [], birthday: null, dates: [], related: [], note: '', categories: [], photo: null, photoUrl: null, person: null, favourite: false, labels: [] }
   const [c, setC] = useState<Contact>(start ?? blank)
@@ -263,6 +355,14 @@ function Editor({ start, labels, cancel, save, remove }: { start: Contact | null
     <div className="ct-contact ct-edit">
       <div className="ct-top"><button className="text-button" onClick={cancel}>Cancel</button><h3>{start ? 'Edit contact' : 'New contact'}</h3><button className="filled-button" onClick={done}>Save</button></div>
       <Face c={{ ...c, name: [c.given, c.family].filter(Boolean).join(' ') || c.org }} size={96} />
+      <div className="ct-photo-tools">
+        <button className="text-button" onClick={() => setDialog(<FacePicker name={[c.given, c.family].filter(Boolean).join(' ')} onClose={() => setDialog(null)} pick={(pid, pname, fid) => {
+          setDialog(null)
+          photoFromFace(pid, pname, fid, [c.given, c.family].filter(Boolean).join(' ') || c.formatted).then(g => set({ photo: g.photo, face: g.face, photoUrl: null, person: pid }), e => say('No photo: ' + errorText(e)))
+        }} />)}>From Photos</button>
+        <label className="text-button">Choose a picture<input type="file" accept="image/*" hidden onChange={e => { const f = e.target.files?.[0]; if (f) squarePicture(f).then(g => set({ photo: g.photo, face: g.face, photoUrl: null, person: c.person || crypto.randomUUID() }), () => say('That picture could not be read')) }} /></label>
+        {(c.photo || c.photoUrl) && <button className="text-button" onClick={() => set({ photo: null, photoUrl: null, face: null })}>Remove</button>}
+      </div>
       <div className="ct-card ct-form">
         <small>Name</small>
         <div className="ct-line"><input className="field" placeholder="First name" value={c.given} onChange={e => set({ given: e.target.value })} /><input className="field" placeholder="Last name" value={c.family} onChange={e => set({ family: e.target.value })} /></div>
@@ -334,4 +434,21 @@ function LabelDialog({ labels, many, onClose, pick }: { labels: string[]; many: 
     <input className="field" placeholder="New label" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && name.trim() && pick(name.trim())} />
     <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" disabled={!name.trim()} onClick={() => pick(name.trim())}>Add</button></div>
   </Modal>
+}
+
+/**
+ * Any picture as a contact's photo: its middle square, 512 px, a JPEG in base64 (the phone's "Choose a picture"), and its
+ * X-TETRA-FACE — the picture's SHA-256 and that square — so the face in it can join Photos under this contact (contactfaces.js).
+ */
+async function squarePicture(file: File): Promise<{ photo: string; face: string }> {
+  const sha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await file.arrayBuffer()))].map(b => b.toString(16).padStart(2, '0')).join('')
+  const img = new Image()
+  img.src = URL.createObjectURL(file)
+  await img.decode()
+  const w = img.naturalWidth, h = img.naturalHeight, side = Math.min(w, h), out = Math.min(512, side)
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = out
+  canvas.getContext('2d')!.drawImage(img, (w - side) / 2, (h - side) / 2, side, side, 0, 0, out, out)
+  URL.revokeObjectURL(img.src)
+  const r4 = (n: number) => Math.round(n * 10000) / 10000
+  return { photo: canvas.toDataURL('image/jpeg', 0.85).split(',')[1], face: `${sha};${[(w - side) / 2 / w, (h - side) / 2 / h, (w + side) / 2 / w, (h + side) / 2 / h].map(r4).join(',')}` }
 }

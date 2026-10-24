@@ -760,6 +760,27 @@ class SyncServer {
     return { error: said ?? 'No phone answered. Open Tetra on the phone, on the same network as this computer.' }
   }
 
+  /**
+   * A call from the computer (the user, 24 Oct): a PC cannot place one, so the paired phone does (SyncServer.kt /call) —
+   * at once when Tetra may call there, else as a notification to tap. Phones only (a tablet has no calls). The voice is
+   * the phone's (or a Bluetooth headset's). { how: 'calling' | 'notification', device } or { error }.
+   */
+  async callOnPhone(number, name = '') {
+    const n = String(number || '').replace(/[^\d+*#]/g, '')
+    if (n.replace(/\D/g, '').length < 3) return { error: 'Not a phone number.' }
+    const phones = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
+      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind != 'tablet'`).all()
+    if (!phones.length) return { error: 'No phone is paired with this computer. Pair one in Settings › Sync.' }
+    let said = null
+    const got = await Promise.any(phones.map(async d => {
+      const r = await this.reach(d, `/call?number=${encodeURIComponent(n)}&name=${encodeURIComponent(String(name).slice(0, 80))}`, 8000)
+      if (r?.status === 200 && r.body?.how) return { how: r.body.how, device: d.name }
+      said ||= r && (r.status !== 404 && typeof r.body?.error === 'string' ? `${d.name}: ${r.body.error}` : `${d.name} cannot place calls yet: it needs the new Tetra.`)
+      throw new Error('no call')
+    })).catch(() => null)
+    return got ?? { error: said ?? 'No phone answered. Open Tetra on the phone, on the same network as this computer.' }
+  }
+
   /** Keeps the newer open/close of each path; answers with every path's newest. */
   mergeEditorTabs(tabs) {
     const keep = this.db.prepare(`INSERT INTO editor_tabs(path, open, at) VALUES(?, ?, ?)
