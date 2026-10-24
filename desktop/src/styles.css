@@ -1014,3 +1014,4 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .ct-hero { margin: 0 auto; }
 .ct-side { position: absolute; right: 0; top: 0; }
 @media (max-width: 1100px) { .ct-head { padding-right: 64px; } }
+.ct-head { padding: 0 64px; }
