@@ -310,7 +310,7 @@ export function Files({ mode, folder, go, setDialog, say, dock }: Props) {
             onClick={() => { if (handled.current) handled.current = false; else open(item) }}
             onKeyDown={e => { if (e.key === 'Enter') open(item) }}
             onContextMenu={e => { e.preventDefault(); sheet(item) }}>
-            {item.thumb ? <FileThumb item={item} glyphSize={view === 'grid' ? 30 : 14} /> : <ItemIcon item={item} size={view === 'grid' ? 56 : 28} />}
+            {item.thumb ? <FileThumb item={item} iconSize={view === 'grid' ? 56 : 28} /> : <ItemIcon item={item} size={view === 'grid' ? 56 : 28} />}
             <span className="check" title="Select"><Icon name={selected.has(item.path) ? 'checked' : 'unchecked'} size={22} /></span>
             <div className="file-name">
               <span>{item.name}{item.favorite && <Icon name="heartFill" size={14} />}</span>
@@ -361,17 +361,15 @@ function ItemIcon({ item, size }: { item: DriveItem; size: number }) {
   </span>
 }
 
-/** A file's thumbnail (thumbs.js). A document's first page has its category's tile in the middle (the user's icons, 24 Oct:
- * Words', Tables', Slides', PDFs'); a file with no thumbnail shows its icon. */
-function FileThumb({ item, glyphSize }: { item: DriveItem; glyphSize: number }) {
+/** A file's thumbnail (thumbs.js), with no icon over it (the user, 24 Oct); a file with none shows its icon. */
+function FileThumb({ item, iconSize }: { item: DriveItem; iconSize: number }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => setFailed(false), [item.path, item.mtime])
-  if (failed) return <ItemIcon item={item} size={glyphSize * 2} />
-  const badge = item.thumb === 'words' || item.thumb === 'tables' || item.thumb === 'slides' || item.thumb === 'pdf' ? item.icon : null
-  return <span className={`file-thumb ${badge ? 'page' : ''}`}>
+  if (failed) return <ItemIcon item={item} size={iconSize} />
+  const page = item.thumb === 'words' || item.thumb === 'tables' || item.thumb === 'slides' || item.thumb === 'pdf'
+  return <span className={`file-thumb ${page ? 'page' : ''}`}>
     <img src={`media://filethumb/${encodeURIComponent(item.path)}?v=${item.mtime}`} loading="lazy" decoding="async" draggable={false} alt=""
       onError={() => setFailed(true)} />
-    {badge && <img className="thumb-badge" src={`kinds/${badge}.png`} style={{ width: Math.round(glyphSize * 1.4), height: Math.round(glyphSize * 1.4) }} draggable={false} alt="" />}
   </span>
 }
 
