@@ -247,6 +247,8 @@ class People {
     // Forgotten: a TV presenter, a stranger in the background. Kept, so their next photo still finds them and
     // does not come back as a new person — just never shown, searched or asked about.
     if (!db.prepare('PRAGMA table_info(people)').all().some(c => c.name === 'hidden')) db.exec('ALTER TABLE people ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0')
+    // The kept person's own name before a combine gave it the other's, so undo can give it back (24 Oct).
+    if (!db.prepare('PRAGMA table_info(people_merges)').all().some(c => c.name === 'target_name')) db.exec('ALTER TABLE people_merges ADD COLUMN target_name TEXT')
   }
 
   tx(fn) { this.db.exec('BEGIN'); try { const r = fn(); this.db.exec('COMMIT'); return r } catch (e) { this.db.exec('ROLLBACK'); throw e } }
@@ -537,8 +539,24 @@ class People {
     return true
   }
 
+  /**
+   * A guess ("Person 41") nobody has a face for any more is nobody: its faces went to someone else or with their
+   * photos. Kept, it travelled to the phone and back on every sync — 554 here and 626 there by 24 Oct. A name stays,
+   * empty or not (the phone's FORGET_EMPTY_GUESSES; a contact may point at it), and so does one combined into
+   * another (deleted = 1): undo brings it back by its row.
+   */
+  forgetEmptyGuesses() {
+    return this.tx(() => {
+      const n = this.db.prepare(`DELETE FROM people WHERE deleted = 0 AND name GLOB 'Person [0-9]*' AND NOT EXISTS (SELECT 1 FROM faces f WHERE f.person_id = people.id AND f.deleted = 0)`).run().changes
+      this.db.prepare('DELETE FROM face_reviews WHERE person_id NOT IN (SELECT id FROM people)').run()
+      this.db.prepare('DELETE FROM people_merges WHERE target_id NOT IN (SELECT id FROM people)').run()
+      return n
+    })
+  }
+
   /** People and their faces for the phone's GET /metadata?since= pull. */
   changedSince(since) {
+    this.forgetEmptyGuesses()
     return {
       people: this.db.prepare('SELECT id AS uuid, name, updated_at AS updatedAt, cover_face_id AS cover, hidden FROM people WHERE deleted = 0 AND updated_at > ?').all(since)
         .map(p => ({ ...p, hidden: !!p.hidden })),
@@ -597,11 +615,16 @@ class People {
       this.db.prepare('UPDATE face_reviews SET person_id = ?, updated_at = ? WHERE person_id = ? AND NOT EXISTS (SELECT 1 FROM face_reviews r2 WHERE r2.face_id = face_reviews.face_id AND r2.person_id = ?)').run(targetId, now, sourceId, targetId)
       this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE person_id = ?').run(targetId, now, sourceId)
       const sourceName = this.db.prepare('SELECT name FROM people WHERE id = ?').get(sourceId)?.name ?? 'Person'
+      // A name beats a guess whichever way round the two were combined (the user, 24 Oct: "Σταύρος Μ" put into
+      // "Person 608" left 43 faces nameless): the kept person takes the combined one's name.
+      const targetName = this.db.prepare('SELECT name FROM people WHERE id = ?').get(targetId)?.name
+      const renamed = isGeneratedName(targetName) && !isGeneratedName(sourceName)
+      if (renamed) this.db.prepare('UPDATE people SET name = ?, updated_at = ? WHERE id = ?').run(sourceName, now, targetId)
       this.db.prepare('UPDATE people SET deleted = 1, updated_at = ? WHERE id = ?').run(now, sourceId)
       // Kept, not just offered for as long as a toast lives: combining is the one action that throws a grouping
       // away, and the person it was wrong about cannot be reached afterwards unless we remember them.
-      this.db.prepare('INSERT INTO people_merges(target_id, source_id, source_name, face_ids, merged_at) VALUES(?,?,?,?,?)')
-        .run(targetId, sourceId, sourceName, faceIds.join(','), now)
+      this.db.prepare('INSERT INTO people_merges(target_id, source_id, source_name, face_ids, merged_at, target_name) VALUES(?,?,?,?,?,?)')
+        .run(targetId, sourceId, sourceName, faceIds.join(','), now, renamed ? targetName : null)
       return { sourceId, faceIds }
     })
   }
@@ -640,6 +663,8 @@ class People {
       this.db.prepare('UPDATE people SET deleted = 0, updated_at = ? WHERE id = ?').run(now, sourceId)
       const move = this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?')
       for (const id of faceIds) move.run(sourceId, now, id)
+      const m = this.db.prepare('SELECT target_id, source_name, target_name FROM people_merges WHERE source_id = ? ORDER BY merged_at DESC').get(sourceId)
+      if (m?.target_name) this.db.prepare('UPDATE people SET name = ?, updated_at = ? WHERE id = ? AND name = ?').run(m.target_name, now, m.target_id, m.source_name)
       this.db.prepare('DELETE FROM people_merges WHERE source_id = ?').run(sourceId)
     })
   }

@@ -62,6 +62,20 @@ test('grouping follows the phone: join ≥ 0.75, new person below, review 0.45�
   assert.equal(people.reviewCount(), 0) // the reviewed face now belongs to the candidate
   people.undoMerge(undo)
   assert.deepEqual(people.shas(p2.id), [sha(3)]) // same id comes back
+  // a name beats a guess whichever way round: "Μαρία" combined into a "Person N" leaves the kept one named; undo gives the guess back (24 Oct)
+  const guess = db.prepare('SELECT name FROM people WHERE id = ?').get(p2.id).name
+  assert.match(guess, /^Person \d+$/)
+  const back = people.merge(p1.id, p2.id)
+  assert.equal(db.prepare('SELECT name FROM people WHERE id = ?').get(p2.id).name, 'Μαρία')
+  people.undoMerge(back)
+  assert.equal(db.prepare('SELECT name FROM people WHERE id = ?').get(p2.id).name, guess)
+  assert.equal(db.prepare('SELECT name FROM people WHERE id = ? AND deleted = 0').get(p1.id).name, 'Μαρία')
+  // a guess with no face left is swept when the phone next asks; a name and a combined-away person stay (24 Oct)
+  const empty = people.createPerson(Date.now())
+  db.prepare("INSERT INTO people(id, name, created_at, updated_at) VALUES('named-empty', 'Νίκος', 1, 1)").run()
+  const before = people.changedSince(0).people.map(p => p.uuid)
+  assert.ok(!before.includes(empty)); assert.ok(before.includes('named-empty'))
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM people WHERE id = ?').get(empty).n, 0)
 
   people.answer(review.faceId, review.personId, 'yes')
   assert.deepEqual(people.shas(p1.id).sort(), [sha(1), sha(2), sha(3)])

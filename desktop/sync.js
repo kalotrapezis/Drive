@@ -1340,6 +1340,13 @@ class SyncServer {
       return this.sendFile(res, absolute, file[1])
     }
     if (req.method === 'PUT' && file) return this.send(res, 200, await this.receiveFile(req, device, file[1], url.searchParams))
+    // People's 160-px crop of one face, for a phone whose photos of that person all came here (a Move, 24 Oct)
+    const face = /^\/face\/([0-9a-f-]{36})$/.exec(url.pathname)
+    if (req.method === 'GET' && face) {
+      const crop = await this.people?.crop(face[1], this.photosRoot).catch(() => null)
+      if (!crop) return this.send(res, 404, { error: 'No such face here.' })
+      return this.sendFile(res, crop)
+    }
     const sent = /^\/send\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'PUT' && sent) return this.send(res, 200, await this.receiveSent(req, device, sent[1], url.searchParams))
     if (req.method === 'POST' && url.pathname === '/metadata') return this.send(res, 200, this.applyMetadata(await this.json(req, 1 << 24)))
