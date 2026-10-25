@@ -37,6 +37,11 @@ your own backups. Screenshots use invented sample data.
 
 <sub>\* Maps and finding photos by place cover Greece only for now; other countries will follow.</sub>
 
+## See it work
+
+![Files both ways: Send to computer on the phone, Send to phone on the computer](Assets/cards/card-send.jpg)
+![Calls on your computer: the call bubble](Assets/cards/card-bubble.jpg)
+
 ## The applets
 
 ![Photos](Assets/cards/card-photos.jpg)
