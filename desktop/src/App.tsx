@@ -19,11 +19,12 @@ import { TimerBell, TimerPage } from './Timer'
 import { MapsPage } from './Maps'
 import { ContactsPage, preloadContacts } from './Contacts'
 import { PhonePage } from './Phone'
+import { DataPage } from './Data'
 import { NotificationsPage, SettingsPage } from './Settings'
 import { ImportDialog } from './Import'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
-  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' } | { kind: 'calendar' } | { kind: 'timer' } | { kind: 'maps' } | { kind: 'contacts' } | { kind: 'phone' } | { kind: 'notifications' } | { kind: 'settings' }
+  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' } | { kind: 'calendar' } | { kind: 'timer' } | { kind: 'maps' } | { kind: 'contacts' } | { kind: 'phone' } | { kind: 'data' } | { kind: 'notifications' } | { kind: 'settings' }
 
 const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
@@ -297,6 +298,7 @@ export function App() {
   else if (page.kind === 'timer') content = <TimerPage say={say} />
   else if (page.kind === 'maps') content = <MapsPage say={say} />
   else if (page.kind === 'phone') content = <PhonePage say={say} />
+  else if (page.kind === 'data') content = <DataPage />
   else if (page.kind === 'contacts') content = <ContactsPage setDialog={setDialog} say={say} openPerson={(id, name) => setPage({ kind: 'person', id, name })} />
   else if (page.kind === 'notifications') content = <NotificationsPage />
   else if (page.kind === 'settings') content = <SettingsPage />
@@ -386,6 +388,7 @@ export function App() {
         {nav({ kind: 'maps' }, page.kind === 'maps', 'map', 'Maps')}
         {nav({ kind: 'contacts' }, page.kind === 'contacts', 'person', 'Contacts')}
         {nav({ kind: 'phone' }, page.kind === 'phone', 'call', 'Phone')}
+        {nav({ kind: 'data' }, page.kind === 'data', 'dataUsage', 'Data')}
         {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Devices')}
         {/* A drive is a device: its photos sit under Devices (asked 2026-09-26). */}
         {collections.filter(c => c.drive).map(c => <div key={c.id} className="rail-group">{nav({ kind: 'collection', id: c.id, name: c.name }, driveId === c.id.slice(6), 'database', c.name)}</div>)}

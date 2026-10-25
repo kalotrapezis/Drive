@@ -19,6 +19,7 @@ const { Calendar } = require('./calendar')
 const { Contacts, readImport: readContacts } = require('./contacts')
 const { linkFaces } = require('./contactfaces')
 const { Calls } = require('./calls')
+const { DataCounter } = require('./datacount')
 let calls = null
 const timer = require('./timer')
 const { Maps } = require('./maps')
@@ -96,6 +97,7 @@ function planReminders() {
 let timers = null, timerAlarm = null
 let maps = null // Maps (maps.js): the phone's map files in Files/Maps, read and written as they are
 let router = null // directions (router.js): GraphHopper's server on the phone's graph, started at the first route
+let dataCounter = null // Data (datacount.js): this computer's network counts, its Wi-Fi, the phone's speed test
 let thumbs = null // Files' thumbnails (thumbs.js), made when Files first asks for one
 const timerRung = new Set()
 function planTimer() {
@@ -447,6 +449,8 @@ app.whenReady().then(() => {
   maps = new Maps(path.join(FILES_ROOT, 'Maps'), rel => files.trash(rel))
   router = new Router(path.join(FILES_ROOT, 'Maps', 'greece-gh'), path.join(DATA_DIR, 'routing'))
   watchMaps()
+  dataCounter = new DataCounter(path.join(FILES_ROOT, 'Data'), os.hostname())
+  dataCounter.start()
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
@@ -455,7 +459,7 @@ app.whenReady().then(() => {
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
   purgatory = new Purgatory({ db, photosRoot: PHOTOS_ROOT, files, serverBase: path.dirname(HOME.root) })
-  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, onCall: s => calls?.fromPhone(s), onReceived: () => {
+  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, data: dataCounter, onCall: s => calls?.fromPhone(s), onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   }, onSent: ({ device, paths }) => { // Send to computer: the phone's share menu, into Files › From phone
@@ -836,6 +840,8 @@ app.whenReady().then(() => {
   ipcMain.handle('call:height', (_, h) => calls.height(Math.max(150, Math.min(360, Number(h) || 150))))
   // the Phone (Drive-Android Plan.md § Phone): the phone's call history as it sends it (Phone/calls-YYYY-MM.jsonl), and recordings
   ipcMain.handle('phone:history', () => phoneHistory())
+  ipcMain.handle('data:all', () => dataCounter.all())
+  ipcMain.handle('data:wifi', () => dataCounter.wifi())
   ipcMain.handle('phone:recordings', () => phoneRecordings())
   ipcMain.handle('phone:spam', () => phoneSpam())
   ipcMain.handle('phone:setSpam', (_, number, on) => setPhoneSpam(number, !!on))
@@ -966,7 +972,7 @@ app.whenReady().then(() => {
 if (!process.env.DRIVE_HIDDEN && !app.requestSingleInstanceLock()) app.exit(0)
 app.on('second-instance', showWindow)
 app.on('window-all-closed', () => app.quit())
-app.on('before-quit', () => { quitting = true; calls?.quit(); vault?.lock(); analyzer?.terminate(); router?.stop() })
+app.on('before-quit', () => { quitting = true; calls?.quit(); dataCounter?.stop(); vault?.lock(); analyzer?.terminate(); router?.stop() })
 process.on('exit', () => router?.stop()) // a Tetra stopped without quitting leaves no routing server behind
 
 /** The phone's calls, newest first (at most 1000): the lines the phone writes into Phone/calls-YYYY-MM.jsonl. */
