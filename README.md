@@ -28,7 +28,7 @@ own backups.
 - **Contacts** with faces from Photos, favourites, labels and birthdays, the same vCard files as on the phone.
 - **Phone**: call anyone from Contacts and the phone dials; a **call bubble** on the computer answers, holds, mutes
   and hangs up; the phone's call history, Favourites and Recordings here too.
-- **Maps** of Greece offline: search, places, lists, trips, and routes by car, on foot and by bike.
+- **Maps\*** of Greece offline: search, places, lists, trips, and routes by car, on foot and by bike.
 - **Data**: the phone's and tablet's usage beside this computer's, the plan, Wi-Fi signal and drops.
 - **Calendar and Timer**, file-type icons and thumbnails in Files, and **every page opens fast** (below).
 
@@ -48,13 +48,15 @@ own backups.
 | **Notes** | Notes and checklists with colours, labels, pins and a history of versions. |
 | **Calendar** | iCalendar (`.ics`) files in `~/Tetra/Files/Calendar`: day, week, month and year, repeats, reminders, import and export. |
 | **Timer** | Timers that ring on whichever device you are at. |
-| **Maps** | OpenStreetMap of Greece on this computer: search, saved places, lists and trips, routes. |
+| **Maps\*** | OpenStreetMap of Greece on this computer: search, saved places, lists and trips, routes. |
 | **Contacts** | vCard files with faces, favourites, labels and history. |
 | **Phone** | Calls through your phone: the call bubble, Recents, Favourites, Recordings. |
 | **Data** | Usage across the phone, the tablet and this computer, the plan, Wi-Fi signal and drops. |
 | **Devices** | Pair a phone or tablet by QR code. Every photo and file is checked by SHA-256 on arrival. Rules per device and per kind: send, both ways, or Move. |
 | **Storage drives** | A USB drive as a **backup** (a verified copy) or as **storage**: old photos move there and still show in the library. Tetra tells you before the disk fills up. |
 | **Trash → purgatory → gone** | Deleted items wait 30 days in the Trash, then 30 more in a purgatory, before they are really gone. |
+
+<sub>\* Maps covers Greece only for now; other countries will follow.</sub>
 
 ## Fast
 
