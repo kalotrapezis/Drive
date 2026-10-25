@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import type { Contact } from './Contacts'
 
@@ -35,6 +35,22 @@ function Face({ c, size }: { c?: Pick<Contact, 'photo' | 'name'>; size: number }
     : <span className="ct-face ct-initial" style={{ width: size, height: size, fontSize: size * 0.42 }}>{first && /[\p{L}\p{N}]/u.test(first) ? first.toUpperCase() : <Icon name="person" size={size * 0.55} />}</span>
 }
 
+/**
+ * The first [step] of a long list, and more as its end nears: the phone's thousand calls made at once kept the window busy
+ * 0.3 s each time the Phone opened (25 Oct). [more] goes on an empty element after the rows.
+ */
+function useFirst<T>(all: T[], step = 60): [T[], (el: HTMLElement | null) => void] {
+  const [n, setN] = useState(step)
+  const io = useRef<IntersectionObserver | null>(null)
+  const more = useCallback((el: HTMLElement | null) => {
+    io.current?.disconnect()
+    if (!el) return
+    io.current = new IntersectionObserver(([e]) => { if (e.isIntersecting) setN(x => x + step) }, { rootMargin: '600px' })
+    io.current.observe(el)
+  }, [step])
+  return [all.slice(0, n), more]
+}
+
 export function PhonePage({ say }: { say: (text: string) => void }) {
   const [tab, setTab] = useState<Tab>('recents')
   const [query, setQuery] = useState('')
@@ -65,6 +81,7 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
     window.drive.contactsCall(n, name || who(n)?.name || '').then(r => say(r.error ? r.error : r.how === 'notification' ? 'The phone shows it: tap to call' : `Calling on ${r.device || 'the phone'}`), e => say(errorText(e)))
   }
   const shownCalls = (calls || []).filter(l => (filter !== 'missed' || l.dir === 'missed') && matches(who(l.number)?.name || l.name, [l.number]))
+  const [firstCalls, moreCalls] = useFirst(shownCalls)
   // the same rule as the phone's (PhoneSpam.matches): the last nine digits, or a range's start
   const national = (n: string) => { const t = n.trim(), d = t.replace(/\D/g, ''); return t.startsWith('+30') ? d.slice(2) : t.startsWith('0030') ? d.slice(4) : t.startsWith('+') ? '+' + d : t.startsWith('00') ? '+' + d.slice(2) : d }
   const isSpam = (n: string) => spam.some(e => e.number.endsWith('*') ? national(n).startsWith(national(e.number.slice(0, -1))) && e.number.replace(/\D/g, '').length >= 2 : key(e.number).length >= 5 && key(e.number) === key(n))
@@ -100,7 +117,7 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
                 <button className="text-button" disabled={!/\d/.test(adding)} onClick={() => { markSpam(adding.replace(/ /g, ''), true); setAdding('') }}>Add</button></div>
             </> : <>
             {calls && !calls.length && <p className="hint ct-hint">The phone's calls show here once Tetra is the phone's phone app (Settings › Phone on the phone).</p>}
-            {shownCalls.map((l, i) => {
+            {firstCalls.map((l, i) => {
               const c = who(l.number), [, what] = DIR[l.dir] || DIR.in
               return <div key={l.at + i} className="ct-row" title={l.note || undefined}>
                 <Face c={c} size={40} />
@@ -111,6 +128,7 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
                 {l.number && <button className="round flat" title="Call" onClick={() => callNow(l.number, c?.name)}><Icon name="call" /></button>}
               </div>
             })}
+            {firstCalls.length < shownCalls.length && <div ref={moreCalls} />}
             </>}
           </>}
           {(tab === 'favourites' || tab === 'contacts') && <>
