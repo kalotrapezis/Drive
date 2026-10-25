@@ -38,6 +38,12 @@ export function cycle(p: Plan | null, today: Date): [Date, Date] {
 }
 
 const DROPS: Record<string, string> = { 'drop-mobile': 'mobile data lost', 'drop-wifi': 'Wi-Fi lost', 'no-service': 'no service', 'weak-mobile': 'no mobile signal', 'weak-wifi': 'Wi-Fi very weak', 'left-hotspot': "off the phone's hotspot", 'fell-to-3G': 'fell to 3G', 'fell-to-2G': 'fell to 2G' }
+/**
+ * (mobile, hotspot, Wi-Fi): on the phone the hotspot is what it shared (part of its mobile data; its metered Wi-Fi is the car's,
+ * Android Auto); on a tablet or this computer it is what they used through the phone (part of their Wi-Fi).
+ */
+const kinds = (l: Line | undefined, isPhone: boolean): [number, number, number] => !l ? [0, 0, 0]
+  : isPhone ? [(l.mobile || 0) - (l.hotspot || 0), l.hotspot || 0, l.wifi || 0] : [l.mobile || 0, l.via || 0, (l.wifi || 0) - (l.via || 0)]
 const quality = (r: number) => (r >= -55 ? 'Excellent' : r >= -67 ? 'Good: calls and video' : r >= -75 ? 'Fair: the web' : r >= -85 ? 'Poor: it may drop' : 'Almost none')
 
 export function DataPage() {
@@ -87,7 +93,7 @@ export function DataPage() {
         <svg viewBox="0 0 600 160" style={{ width: '100%', maxWidth: 900, height: 180 }}>
           {last30.map((d, i) => {
             let y = 150
-            return <g key={d}>{devices.flatMap(dev => { const l = dev.days.get(d); return [[LIME, l?.mobile || 0], [HOTSPOT, l?.via || 0], [WIFI, (l?.wifi || 0) - (l?.via || 0)]] as const }).map(([color, v], j) => {
+            return <g key={d}>{devices.flatMap(dev => kinds(dev.days.get(d), dev === phone).map((v, k) => [[LIME, HOTSPOT, WIFI][k], v] as const)).map(([color, v], j) => {
               const h = (v / top) * 140; y -= h
               return <rect key={j} x={i * 20 + 3} y={y} width={14} height={h} fill={color} opacity={0.6 + 0.4 * (Math.floor(j / 3) % 2)} />
             })}{i % 5 === 0 && <text x={i * 20 + 10} y={159} fontSize={8} textAnchor="middle" fill="currentColor">{Number(d.slice(8))}</text>}</g>
@@ -100,7 +106,7 @@ export function DataPage() {
       <section>
         <h3>This cycle, by device</h3>
         {devices.length === 0 && <p className="muted">Nothing counted yet.</p>}
-        {devices.map(d => <p key={d.name} style={{ margin: '4px 0' }}><b>{d.name}{d.id === all.me ? ' (this computer)' : ''}</b>: {[d.mobile ? `Mobile ${bytes(d.mobile)}` : '', d.via ? `Hotspot ${bytes(d.via)}` : '', `Wi-Fi ${bytes(d.wifi - d.via)}`, d.eth ? `Ethernet ${bytes(d.eth)}` : ''].filter(Boolean).join(' · ')}</p>)}
+        {devices.map(d => <p key={d.name} style={{ margin: '4px 0' }}><b>{d.name}{d.id === all.me ? ' (this computer)' : ''}</b>: {(([m, h, w]) => [m ? `Mobile ${bytes(m)}` : '', h ? `Hotspot ${bytes(h)}` : '', `Wi-Fi ${bytes(w)}`, d.eth ? `Ethernet ${bytes(d.eth)}` : ''])(kinds({ mobile: d.mobile, hotspot: d.hotspot, wifi: d.wifi, via: d.via }, d === phone)).filter(Boolean).join(' · ')}</p>)}
       </section>
 
       {(hotspot > 0 || clients.length > 0) && <section>
