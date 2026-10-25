@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 // the devices, this computer's connection and the drops. Read only: the plan is set on the phone; this computer adds its own counts
 // (datacount.js). The rules (cycle, forecast, tips) are the phone's DataRules/DataInsights, the same here.
 
-type Line = { deviceName?: string; d?: string; h?: string; app?: string; name?: string; net?: string; fg?: number; bg?: number; mobile?: number; wifi?: number; roam?: number;
+type Line = { deviceName?: string; counted?: number; d?: string; h?: string; app?: string; name?: string; net?: string; fg?: number; bg?: number; mobile?: number; wifi?: number; roam?: number;
   hotspot?: number; via?: number; eth?: number; bytes?: number; at?: string; event?: string; secs?: number; note?: string; outsideEu?: boolean }
 type Plan = { kind: string; size: number; every: string; day: number; days: number; from: string; warn: number[]; euCounts?: boolean; daily?: number; carrier?: { cycle: string; offset: number } }
 type All = { plan: Plan | null; devices: Record<string, Line[]>; me: string }
@@ -80,7 +80,8 @@ export function DataPage() {
   const [picked, setPicked] = useState<string | null>(null)
   const [allApps, setAllApps] = useState(false)
   const [openHotspot, setOpenHotspot] = useState(false)
-  useEffect(() => { window.drive.dataAll().then(a => setAll(a as All)).catch(() => setAll({ plan: null, devices: {}, me: '' })) }, [])
+  // read again each minute: the phone's counts arrive hourly with sync, and the page may stay open
+  useEffect(() => { const read = () => window.drive.dataAll().then(a => setAll(a as All)).catch(() => setAll(was => was ?? { plan: null, devices: {}, me: '' })); read(); const t = setInterval(read, 60_000); return () => clearInterval(t) }, [])
   useEffect(() => { const look = () => window.drive.dataWifi().then(setWifi).catch(() => {}); look(); const t = setInterval(look, 3000); return () => clearInterval(t) }, [])
   const today = new Date(); const todayIso = iso(today)
   const plan = all?.plan ?? null
@@ -94,10 +95,12 @@ export function DataPage() {
     })
     const mobileOf = (d: typeof devices[number]) => [...d.days.values()].reduce((s, l) => s + (l.mobile || 0), 0)
     const phone = devices.slice().sort((a, b) => mobileOf(b) - mobileOf(a))[0]
-    return { devices, phone }
+    // when the phone last counted (its newest month says; a phone before 25 Oct does not)
+    const counted = Math.max(0, ...(phone ? all.devices[phone.id] : []).map(l => (l.deviceName !== undefined && l.counted) || 0))
+    return { devices, phone, counted }
   }, [all])
   if (!all || !view) return <main className="page-scroll"><p className="muted">Reading…</p></main>
-  const { devices, phone } = view
+  const { devices, phone, counted: phoneCounted } = view
 
   // the plan's status, as the phone's DataRules.status
   const cycleDays: string[] = []; for (let d = start; d < end; d = addDays(d, 1)) cycleDays.push(iso(d))
@@ -155,7 +158,7 @@ export function DataPage() {
   if (limited) {
     if (used >= size) tips.push(['The limit is reached', `${bytes(used)} of ${bytes(size)} used, ${daysLeft} days before the renewal.`])
     else if (runsOut) tips.push([`The limit comes ${fmt(parseDay(runsOut))}`, `At your usual pace the ${bytes(size)} run out before ${fmt(end)}. To last, stay near ${bytes(budget)} a day.`])
-    else tips.push([`About ${Math.round(projection * 100 / size)} % of the limit`, `At your usual pace you will use about ${bytes(projection)} of ${bytes(size)}: ${bytes(size - projection)} to spare. Up to ${bytes(budget)} a day still makes it.`])
+    else tips.push([`About ${Math.floor(projection * 100 / size)} % of the limit`, `At your usual pace you will use about ${bytes(projection)} of ${bytes(size)}: ${bytes(size - projection)} to spare. Up to ${bytes(budget)} a day still makes it.`])
   }
   if (hotspotShare >= 40) tips.push([`${hotspotShare} % went through the hotspot`, 'Most of the plan goes to the tablet and this computer. Their updates, downloads, backups and video fill it fastest: leave those for a Wi-Fi that is not the phone\'s, or set them to pause on metered networks (NetworkManager marks the phone\'s hotspot as metered).'])
   if (weekends && workdays && weekends / workdays >= 1.3) tips.push(['Weekends use more', `A weekend day ${bytes(weekends)}, a workday ${bytes(workdays)}: with no Wi-Fi at work to lean on, weekends are where a Wi-Fi saves the most.`])
@@ -185,7 +188,7 @@ export function DataPage() {
           <circle cx={60} cy={60} r={50} fill="none" stroke="var(--thumb-bg)" strokeWidth={12} />
           {limited && <circle cx={60} cy={60} r={50} fill="none" stroke={used > size ? '#e53935' : LIME} strokeWidth={12} strokeLinecap="round"
             strokeDasharray={`${Math.min(1, used / Math.max(1, size)) * 314} 314`} transform="rotate(-90 60 60)" />}
-          <text x={60} y={68} textAnchor="middle" fontSize={24} fontWeight={700} fill="currentColor">{limited ? `${Math.round(used * 100 / Math.max(1, size))} %` : '∞'}</text>
+          <text x={60} y={68} textAnchor="middle" fontSize={24} fontWeight={700} fill="currentColor">{limited ? `${Math.floor(used * 100 / Math.max(1, size))} %` : '∞'}</text>
         </svg>
         <div style={{ display: 'grid', gap: 2 }}>
           <h2 style={h3}>{plan ? `${bytes(used)} ${plan.kind === 'unlimited' ? 'this cycle' : `of ${bytes(size)}${plan.kind === 'fair-use' ? ' fair use' : ''}`}` : 'Data'}
@@ -194,6 +197,7 @@ export function DataPage() {
             <span>{daysLeft} days left · renews {fmt(end)}</span>
             <span>Today {bytes(todayUse)}{limited ? ` · budget ${bytes(budget)}/day` : ''}</span>
             {limited && <span style={{ color: projection > size ? '#e53935' : undefined }}>Forecast: {bytes(projection)} by {fmt(addDays(end, -1))} {projection > size ? '⚠' : '✓'}</span>}
+            {phoneCounted > 0 && <span className="muted">{phone?.name}'s counts from {iso(new Date(phoneCounted)) === todayIso ? '' : `${fmt(new Date(phoneCounted))} `}{new Date(phoneCounted).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>}
           </> : <span className="muted">Set Data up on the phone (Data › Setup); its plan and counts come here with sync.</span>}
         </div>
       </section>
