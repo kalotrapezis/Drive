@@ -73,6 +73,56 @@ function parseMonth(text) {
   return m
 }
 
+// a device's month, "2026-10.24129PN74G.jsonl", and sync's copies of one changed on both sides at once ("… (2).jsonl", "… (2) (3).jsonl")
+const MONTH = /^(\d{4}-\d{2})\.([^ ()]+)((?: \(\d+\))*)\.jsonl$/
+
+/** How far a version of a month goes: when it was counted, else its last day and that day's counts, then its last hour. */
+function reachOf(lines) {
+  const days = lines.filter(l => l.d && !l.app && !l.event), last = days.reduce((a, l) => (!a || l.d > a.d ? l : a), null)
+  return [Math.max(0, ...lines.filter(l => l.deviceName !== undefined).map(l => Number(l.counted) || 0)), last?.d || '',
+    last ? (Number(last.mobile) || 0) + (Number(last.wifi) || 0) + (Number(last.eth) || 0) : 0, lines.reduce((a, l) => (l.h && l.h > a ? l.h : a), '')]
+}
+/** [a] is a newer version of a device's month than [b] (the phone's DataFiles.newer). */
+const newer = (a, b) => { const x = reachOf(a), y = reachOf(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false }
+
+/**
+ * Each device's months, the newest version of each (the file itself or one of sync's copies of it) and the other versions. Not
+ * always the file: on 25 Oct this computer's copy of the phone's month stayed at 10:00 while every newer one came as "(2)",
+ * "(2) (3)"… (41 % on the phone, 40 here), and the copies were removed unread.
+ */
+function versions(dir) {
+  const groups = new Map()
+  let names = []
+  try { names = fs.readdirSync(dir) } catch {}
+  for (const n of names) {
+    const m = MONTH.exec(n)
+    if (m) { const k = `${m[1]}.${m[2]}`; if (!groups.has(k)) groups.set(k, { device: m[2], files: [] }); groups.get(k).files.push(n) }
+  }
+  return [...groups.values()].map(({ device, files }) => {
+    let best = null
+    for (const n of files.sort((a, b) => a.length - b.length)) { // the month itself first: it stays on a tie
+      let lines
+      try { lines = fs.readFileSync(path.join(dir, n), 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean) } catch { continue }
+      if (!best || newer(lines, best.lines)) best = { n, lines }
+    }
+    return { device, lines: best?.lines ?? [], others: files.filter(n => n !== best?.n) }
+  })
+}
+
+/**
+ * The plan: plan.json or one of sync's copies of it, the highest `rev`; on a tie the one written by the device with mobile data
+ * (25 Oct: the tablet's own Setup, rev 1 like the phone's, with the carrier's figure as its offset — 83 % there, 41 % on the phone).
+ */
+function plans(root, months) {
+  let names = []
+  try { names = fs.readdirSync(root).filter(n => /^plan((?: \(\d+\))*)\.json$/.test(n)).sort((a, b) => a.length - b.length) } catch {}
+  const found = names.map(n => { try { return { n, plan: JSON.parse(fs.readFileSync(path.join(root, n), 'utf8')) } } catch { return null } }).filter(Boolean)
+  if (new Set(found.map(f => `${f.plan.rev}|${f.plan.by}`)).size <= 1) return found
+  const mobile = {}
+  for (const v of months ?? versions(path.join(root, 'usage'))) mobile[v.device] = (mobile[v.device] || 0) + v.lines.reduce((s, l) => s + (l.d && !l.app ? Number(l.mobile) || 0 : 0), 0)
+  return found.sort((a, b) => (b.plan.rev || 0) - (a.plan.rev || 0) || (mobile[b.plan.by] || 0) - (mobile[a.plan.by] || 0)) // stable: plan.json first on a tie
+}
+
 class DataCounter {
   constructor(root, device) {
     this.root = root
@@ -234,7 +284,8 @@ class DataCounter {
   }
 
   /**
-   * Nothing left behind (the user, 25 Oct): sync's copies of the months, half-written files of an interrupted write, and — after
+   * Nothing left behind (the user, 25 Oct): sync's copies of the months (but one newer than its month, until the month catches up),
+   * half-written files of an interrupted write, and — after
    * 13 months — this computer's per-program and hourly detail of a month (its days stay).
    */
   clean(now = new Date()) {
@@ -242,10 +293,15 @@ class DataCounter {
     let names = []
     try { names = fs.readdirSync(dir) } catch { return }
     const old = hourKey(new Date(now.getFullYear(), now.getMonth() - 13, 1)).slice(0, 7)
+    for (const v of versions(dir)) for (const n of v.others) if (MONTH.exec(n)[3]) try { fs.unlinkSync(path.join(dir, n)) } catch {}
+    // the plan's copies: the winning plan in plan.json's place (any device may change the plan, so all agree after)
+    const p = plans(this.root)
+    try { if (p[0] && p[0].n !== 'plan.json') fs.copyFileSync(path.join(this.root, p[0].n), path.join(this.root, 'plan.json')) } catch {}
+    for (const { n } of p) if (n !== 'plan.json') try { fs.unlinkSync(path.join(this.root, n)) } catch {}
     for (const n of names) {
       const f = path.join(dir, n)
       try {
-        if (/\.tmp$/.test(n) || /^\d{4}-\d{2}\.[^ ()]+ \(\d+\)\.jsonl$/.test(n)) fs.unlinkSync(f)
+        if (/\.tmp$/.test(n)) fs.unlinkSync(f)
         else if (n.endsWith(`.${this.device}.jsonl`) && n.slice(0, 7) < old) {
           const m = parseMonth(fs.readFileSync(f, 'utf8'))
           if (m.apps.size || m.hours.size) { m.apps.clear(); m.hours.clear(); fs.writeFileSync(f, monthText(m, this.name)) }
@@ -274,21 +330,11 @@ class DataCounter {
   /** Every device's months and the plan, for the Data page. */
   all() {
     const out = { plan: null, devices: {}, me: this.device }
-    try { out.plan = JSON.parse(fs.readFileSync(path.join(this.root, 'plan.json'), 'utf8')) } catch {}
-    let names = []
-    try { names = fs.readdirSync(path.join(this.root, 'usage')) } catch {}
-    for (const n of names) {
-      // a device's month; sync's copies of one changed on both sides at once ("… (2).jsonl") are not it, and go
-      if (/^\d{4}-\d{2}\.[^ ()]+ \(\d+\)\.jsonl$/.test(n)) { try { fs.unlinkSync(path.join(this.root, 'usage', n)) } catch {} ; continue }
-      const m = /^(\d{4}-\d{2})\.([^ ()]+)\.jsonl$/.exec(n)
-      if (!m) continue
-      let text = ''
-      try { text = fs.readFileSync(path.join(this.root, 'usage', n), 'utf8') } catch { continue }
-      const lines = text.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
-      ;(out.devices[m[2]] ||= []).push(...lines)
-    }
+    const months = versions(path.join(this.root, 'usage'))
+    for (const v of months) (out.devices[v.device] ||= []).push(...v.lines)
+    out.plan = plans(this.root, months)[0]?.plan ?? null
     return out
   }
 }
 
-module.exports = { DataCounter, parseIw, parseMonth, monthText, hourKey, parseSs, programName, reach }
+module.exports = { DataCounter, versions, plans, parseIw, parseMonth, monthText, hourKey, parseSs, programName, reach }

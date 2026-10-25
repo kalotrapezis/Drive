@@ -4,13 +4,15 @@
 // sync.js onCall). Here: the call bubble — a small window on top of the others with the contact's face, name and
 // number, Calling… / Ringing / the call's time / Ended, and Answer · Decline · End (sync.js callAction → the phone). The
 // voice is the phone's unless the phone is connected to this computer by Bluetooth as a hands-free kit: that is said in
-// the bubble, shown in Settings › Calls, and a notification says when it connects or drops.
+// the bubble, shown in Settings › Calls, and a notification says when it connects or drops. A call starting with the phone
+// paired but not connected: connected by itself, and the bubble says before Answer if it could not (the user, 25 Oct: answered
+// here with the phone off this computer's Bluetooth, and the sound had nowhere to go).
 const { BrowserWindow, screen } = require('electron')
 const { execFile, execFileSync, spawn } = require('node:child_process')
 const path = require('node:path')
 const fs = require('node:fs')
 
-const run = args => new Promise(r => execFile('bluetoothctl', args, { timeout: 4000 }, (e, out) => r(e ? null : String(out))))
+const run = (args, timeout = 4000) => new Promise(r => execFile('bluetoothctl', args, { timeout }, (e, out) => r(e ? null : String(out))))
 const pactl = args => new Promise(r => execFile('pactl', args, { timeout: 4000 }, (e, out) => r(e ? null : String(out).trim())))
 
 /**
@@ -113,7 +115,26 @@ class Calls {
     return c ? { name: c.info.formatted || [c.info.given, c.info.family].filter(Boolean).join(' '), photo: c.info.photo } : null
   }
 
-  sound() { const on = this.bt.phones.find(p => p.connected); return on ? `Sound on this computer (Bluetooth, ${on.name})` : 'Sound on the phone' }
+  sound() {
+    const on = this.bt.phones.find(p => p.connected)
+    if (on) return `Sound on this computer (Bluetooth, ${on.name})`
+    if (this.connecting) return `Connecting ${this.connecting} by Bluetooth for the sound…`
+    return this.unreached ? `Sound stays on the phone: ${this.unreached} did not connect by Bluetooth` : 'Sound on the phone'
+  }
+
+  /** A call starting with no phone connected for calls: Settings › Calls' "Connect", done by itself, each paired phone in turn. */
+  async reconnect() {
+    this.bt = await bluetooth().catch(() => this.bt)
+    if (!this.bt.available || !this.bt.phones.length || this.bt.phones.some(p => p.connected)) return
+    for (const p of this.bt.phones) {
+      this.connecting = p.name; if (this.state) this.show(this.state)
+      const ok = await this.connect(p.mac).then(() => true, () => false)
+      this.connecting = null
+      if (ok) break
+    }
+    this.unreached = this.bt.phones.some(p => p.connected) ? null : this.bt.phones.map(p => p.name).join(' / ')
+    if (this.state) this.show(this.state)
+  }
 
   /** A call this computer asked the phone to place. */
   outgoing(number, name, device) { this.show({ direction: 'out', state: 'calling', number, name: name || this.who(number)?.name || '', photo: this.who(number)?.photo ?? null, device, since: Date.now() }) }
@@ -134,6 +155,8 @@ class Calls {
 
   show(s) {
     clearTimeout(this.closer)
+    // a call begins (it rings, or the phone dials): its sound needs the phone on this computer's Bluetooth
+    if (['ringing', 'calling'].includes(s.state) && !['ringing', 'calling', 'active', 'held'].includes(this.state?.state)) { this.unreached = null; this.reconnect() }
     if (s.state === 'ended' && recorder.proc) { recorder.stop(); this.notify('Call recorded', path.basename(recorder.file || '')) }
     this.state = { ...s, sound: this.sound(), canRecord: !!echo.module && ['active', 'held'].includes(s.state), recording: !!recorder.proc }
     if (!this.win || this.win.isDestroyed()) {
@@ -190,7 +213,7 @@ class Calls {
   /** Connect a phone already paired with this computer's Bluetooth. */
   async connect(mac) {
     if (!/^[0-9A-F:]{17}$/i.test(String(mac))) throw new Error('Not a Bluetooth address.')
-    const out = await run(['connect', mac])
+    const out = await run(['connect', mac], 15_000) // a phone takes a few seconds to answer
     this.bt = await bluetooth()
     if (!this.bt.phones.find(p => p.mac === mac)?.connected) throw new Error(out?.match(/Failed to connect: (.+)/)?.[1] || 'The phone did not connect. Is its Bluetooth on, and "Phone calls" allowed for this computer there?')
     return this.bt

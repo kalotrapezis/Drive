@@ -94,3 +94,33 @@ test('the cleanup: sync copies, half-written files, and the detail of old months
   assert.deepEqual(fs.readdirSync(dir).sort(), ['2024-01.my-pc.jsonl', '2026-10.phone.jsonl'])
   assert.equal(fs.readFileSync(path.join(dir, '2024-01.my-pc.jsonl'), 'utf8'), '{"deviceName":"my-pc"}\n{"d":"2024-01-02","mobile":0,"wifi":5,"roam":0,"hotspot":0,"via":0}\n')
 })
+
+test('the newest of a month and sync\'s copies of it is read, and only older copies go', () => {
+  const { c, root } = counter()
+  const dir = path.join(root, 'usage'); fs.mkdirSync(dir, { recursive: true })
+  const month = (today, counted) => `{"deviceName":"Phone"${counted ? `,"counted":${counted}` : ''}}\n{"d":"2026-10-24","mobile":9,"wifi":0}\n{"d":"2026-10-25","mobile":${today},"wifi":0}\n`
+  // 25 Oct: the phone's month stuck at 10:00 here, every newer one a copy ("(2)", "(2) (3)")
+  fs.writeFileSync(path.join(dir, '2026-10.phone.jsonl'), month(1)); fs.writeFileSync(path.join(dir, '2026-10.phone (2).jsonl'), month(3))
+  fs.writeFileSync(path.join(dir, '2026-10.phone (2) (3).jsonl'), month(4))
+  const today = () => c.all().devices.phone.find(l => l.d === '2026-10-25').mobile
+  assert.equal(today(), 4)
+  c.clean(new Date(2026, 9, 25))
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['2026-10.phone (2) (3).jsonl', '2026-10.phone.jsonl']) // the newest copy waits for its month
+  fs.writeFileSync(path.join(dir, '2026-10.phone.jsonl'), month(4, 2000)) // the month arrives, stamped
+  assert.equal(c.all().devices.phone.find(l => l.counted).counted, 2000)
+  c.clean(new Date(2026, 9, 25))
+  assert.deepEqual(fs.readdirSync(dir), ['2026-10.phone.jsonl'])
+})
+
+test('of two plans with one rev, the phone\'s wins, and takes plan.json\'s place', () => {
+  const { c, root } = counter(false)
+  const dir = path.join(root, 'usage'); fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, '2026-10.PHONE.jsonl'), '{"d":"2026-10-25","mobile":5,"wifi":0}\n')
+  fs.writeFileSync(path.join(dir, '2026-10.TABLET.jsonl'), '{"d":"2026-10-25","mobile":0,"wifi":9}\n')
+  fs.writeFileSync(path.join(root, 'plan.json'), JSON.stringify({ rev: 1, by: 'TABLET', carrier: { offset: 121 } }))
+  fs.writeFileSync(path.join(root, 'plan (2) (2).json'), JSON.stringify({ rev: 1, by: 'PHONE', carrier: { offset: -7 } }))
+  assert.equal(c.all().plan.by, 'PHONE')
+  c.clean(new Date(2026, 9, 25))
+  assert.deepEqual(fs.readdirSync(root).sort(), ['plan.json', 'usage'])
+  assert.equal(c.all().plan.carrier.offset, -7)
+})
