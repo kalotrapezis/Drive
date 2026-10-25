@@ -489,6 +489,8 @@ class Files {
 
     this.db.exec('BEGIN')
     try {
+      // read inside the transaction: an upload that landed while this reconcile was hashing has set it (received)
+      const agreedNow = new Map(wanted.map(rel => [rel, this.db.prepare('SELECT sha256 FROM sync_manifest WHERE device_id = ? AND path = ?').get(deviceId, rel)?.sha256]))
       if (scope) { // only this part's memory is replaced
         const drop = this.db.prepare('DELETE FROM sync_manifest WHERE device_id = ? AND path = ?')
         for (const id of [deviceId, 'self', `self:${deviceId}`]) for (const r of this.db.prepare('SELECT path FROM sync_manifest WHERE device_id = ?').all(id)) if (inScope(r.path)) drop.run(id, r.path)
@@ -497,7 +499,13 @@ class Files {
         this.db.prepare("DELETE FROM sync_manifest WHERE device_id IN ('self', ?)").run(`self:${deviceId}`)
       }
       const put = this.db.prepare('INSERT INTO sync_manifest(device_id, path, sha256) VALUES(?,?,?)')
-      for (const [rel, sha] of offered) put.run(deviceId, rel, sha)
+      // What is asked for is agreed only once it is here (received): until then both still hold the last version
+      // agreed (25 Oct: an upload that was late or never came made the next sync a conflict, and offer this
+      // computer's older copy back to the phone as "(2)").
+      for (const [rel, sha] of offered) {
+        if (!wanted.includes(rel)) put.run(deviceId, rel, sha)
+        else if (agreedNow.get(rel)) put.run(deviceId, rel, agreedNow.get(rel))
+      }
       for (const [rel, sha] of minePaths) { put.run('self', rel, sha); put.run(`self:${deviceId}`, rel, sha) }
       // What the device is about to send as an edit: its upload replaces this file rather than landing beside it.
       this.updatesTable()
@@ -523,10 +531,20 @@ class Files {
    * A file the device just sent is here now: this computer's snapshot for that device says so at once, so an edit made
    * here before the next sync is known as this computer's (it looked like a conflict).
    */
-  received(deviceId, rel, sha) {
+  received(deviceId, rel, sha, asked = rel) {
     const put = this.db.prepare('INSERT OR REPLACE INTO sync_manifest(device_id, path, sha256) VALUES(?,?,?)')
     put.run(`self:${deviceId}`, rel, sha)
     put.run('self', rel, sha)
+    put.run(deviceId, asked, sha) // the device holds it at the path it sent it from, even when it landed beside as "(2)"
+  }
+  /**
+   * The version this computer and the device last agreed on at [rel], or null. An upload of other bytes there, onto
+   * exactly that version, is the device's edit even when a later sync's answer took the place of its pending update.
+   */
+  agreed(deviceId, rel) {
+    const at = id => this.db.prepare('SELECT sha256 FROM sync_manifest WHERE device_id = ? AND path = ?').get(id, rel)?.sha256
+    const theirs = at(deviceId)
+    return theirs && theirs === at(`self:${deviceId}`) ? theirs : null
   }
   /** The bytes an upload of [sha] at [rel] from [deviceId] is an edit of (reconcile said so), or null: then it is a new file. */
   pendingUpdate(deviceId, rel, sha) { this.updatesTable(); return this.db.prepare('SELECT replaces FROM file_updates WHERE device_id = ? AND path = ? AND sha256 = ?').get(deviceId, rel, sha)?.replaces ?? null }
