@@ -11,26 +11,29 @@ Photos, files, notes, calendar, timers, maps, contacts, calls and data on Linux,
   <a href="https://github.com/kalotrapezis/Drive-Android"><img src="Assets/buttons/get-android.png" alt="Tetra for Android" width="420"></a>
 </p>
 
-![Tetra for the desktop: Calendar and Contacts, with Tetra on a phone](Assets/cards/desktop-hero.jpg)
+![Tetra on a computer, a tablet and a phone](Assets/cards/tetra-devices.jpg)
 
-Tetra for the desktop is the computer half of [Tetra for Android](https://github.com/kalotrapezis/Drive-Android).
-The same applets live on both: what you write, shoot, plan or save on the phone is here, and the other way round.
-Phone, tablet and computer **sync over your own Wi-Fi**: no server, no account, no cloud. Faces, documents and search
-labels are analysed on this computer.
+The computer half of [Tetra for Android](https://github.com/kalotrapezis/Drive-Android): Photos, Files, Notes,
+Calendar, Timer, Maps\*, Contacts, Phone and Data on Linux, in sync with your phone and tablet over your own Wi-Fi.
+Faces, documents and search labels are analysed on this computer.
 
-**Current release: 0.6.0 Beta 21** (Linux, AppImage and `.deb`). A beta: in daily use by its author, but keep your
-own backups.
+**0.6.0 Beta 21** ([what's new](https://github.com/kalotrapezis/Drive/releases/tag/desktop-v0.6.0-beta.21)). A beta: keep
+your own backups. Screenshots use invented sample data.
 
-<sub>Every screenshot here uses invented sample data: made-up people, generated pictures, sample documents.</sub>
+## What Tetra does for you
 
-## New in 0.6 beta
+- **Files to and from your phone in a second.** *Send to phone* in Files or from the tray, and *Send to computer* in
+  the phone's share menu. Over your own Wi-Fi: no cable, no cloud. They land in `From phone` and `From computer`.
+- **Call from your computer.** Click a number in Contacts and your phone dials it; a call bubble answers, holds, mutes
+  and hangs up here, and the phone's Recents and Recordings are here too.
+- **Your data plan, watched.** The phone's and the tablet's usage beside this computer's; the phone notifies you at 50 %,
+  80 % and 100 % of your plan, or at any steps you choose.
+- **Calendar and timers, with AI.** Your calendars and timers are plain files in `~/Tetra/Files`, and Tetra comes with
+  skills for them (*Share with Claude*). Ask Claude, ChatGPT or any assistant that can use your computer to import a
+  timetable, plan your week or set a timer; the result reaches your phone with the next sync.
+- **Maps that work offline\*.** Search Greece, save places, lists and trips, and plan routes by car, on foot or by bike.
 
-- **Contacts** with faces from Photos, favourites, labels and birthdays, the same vCard files as on the phone.
-- **Phone**: call anyone from Contacts and the phone dials; a **call bubble** on the computer answers, holds, mutes
-  and hangs up; the phone's call history, Favourites and Recordings here too.
-- **Maps\*** of Greece offline: search, places, lists, trips, and routes by car, on foot and by bike.
-- **Data**: the phone's and tablet's usage beside this computer's, the plan, Wi-Fi signal and drops.
-- **Calendar and Timer**, file-type icons and thumbnails in Files, and **every page opens fast** (below).
+<sub>\* Maps covers Greece only for now; other countries will follow.</sub>
 
 ## The applets
 
@@ -41,22 +44,10 @@ own backups.
 ![Notes, timers and files](Assets/cards/desktop-notes.jpg)
 ![Files](Assets/cards/card-files.jpg)
 
-| | |
-|---|---|
-| **Photos** | Week, month and year timeline, collections, favourites, folder albums, People, Documents, a map, search, an editor and an encrypted **Hidden** vault. |
-| **Files** | `~/Tetra/Files`, with tags, favourites, folder colours, an icon for every kind of file, a reversible Trash, and import in verified batches. |
-| **Notes** | Notes and checklists with colours, labels, pins and a history of versions. |
-| **Calendar** | iCalendar (`.ics`) files in `~/Tetra/Files/Calendar`: day, week, month and year, repeats, reminders, import and export. |
-| **Timer** | Timers that ring on whichever device you are at. |
-| **Maps\*** | OpenStreetMap of Greece on this computer: search, saved places, lists and trips, routes. |
-| **Contacts** | vCard files with faces, favourites, labels and history. |
-| **Phone** | Calls through your phone: the call bubble, Recents, Favourites, Recordings. |
-| **Data** | Usage across the phone, the tablet and this computer, the plan, Wi-Fi signal and drops. |
-| **Devices** | Pair a phone or tablet by QR code. Every photo and file is checked by SHA-256 on arrival. Rules per device and per kind: send, both ways, or Move. |
-| **Storage drives** | A USB drive as a **backup** (a verified copy) or as **storage**: old photos move there and still show in the library. Tetra tells you before the disk fills up. |
-| **Trash → purgatory → gone** | Deleted items wait 30 days in the Trash, then 30 more in a purgatory, before they are really gone. |
-
-<sub>\* Maps covers Greece only for now; other countries will follow.</sub>
+Also here: **Devices**, to pair a phone or tablet by QR code with rules per device (send, both ways, or Move);
+**storage drives**, a USB disk as a verified backup or as storage that still shows in the library; and a Trash that
+waits 30 days, then 30 more in a purgatory, before anything is really gone. Each applet's screenshots, phone, tablet
+and computer apart, are on [the Tetra page](https://kalotrapezis.github.io/Drive-Android/).
 
 ## Fast
 
@@ -74,16 +65,10 @@ On the phone, the same week, Contacts went from 3.3 s to 0.19 s and the Phone fr
 
 ## Sync
 
-![Sync without a server](Assets/cards/card-sync.jpg)
-
-Pair once by QR code from **Devices**. Photos, files, notes, calendars, contacts, places, timers and calls travel over
-your own network, each file checked by SHA-256. A trusted device is known by its public-key fingerprint, not its IP
+Pair once by QR code from **Devices**; each file is checked by SHA-256 on arrival. A trusted device is known by its public-key fingerprint, not its IP
 address, so it is found again after a network change. Every rule and its reason is in [SYNC_PLAN.md](SYNC_PLAN.md).
 
 ## Install
-
-<a href="https://github.com/kalotrapezis/Drive/releases/download/desktop-v0.6.0-beta.21/Tetra-0.6.0-beta.21.AppImage"><img src="Assets/buttons/download-appimage.png" alt="Download the AppImage" width="420"></a>
-<a href="https://github.com/kalotrapezis/Drive/releases/download/desktop-v0.6.0-beta.21/local-drive-desktop_0.6.0-beta.21_amd64.deb"><img src="Assets/buttons/download-deb.png" alt="Download the .deb" width="420"></a>
 
 On Debian, Ubuntu or Mint:
 
