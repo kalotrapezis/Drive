@@ -31,8 +31,14 @@ your own backups. Screenshots use invented sample data.
 - **Calendar and timers, with AI.** Your calendars and timers are plain files in `~/Tetra/Files`, and Tetra comes with
   skills for them (*Share with Claude*). Ask Claude, ChatGPT or any assistant that can use your computer to import a
   timetable, plan your week or set a timer; the result reaches your phone with the next sync.
+- **Notes and lists, organised.** Notes and shopping lists with tags, the same on the phone and here. Each note is a
+  plain file in your own Tetra folder.
 - **Photos that know who and where.** Bring your Google Photos over (Takeout import, with their dates), then tags, live
   photos, and People and Documents collections from face recognition that runs on this computer. Find photos by place\*.
+- **Keep the internal SSD light.** Pair an external drive with Tetra and it backs everything up automatically, or moves
+  older photos onto it so the computer's own disk stays as empty as possible.
+- **More than one copy, no subscription.** Tetra shows how many places hold each file, the phone, the tablet, the
+  computer or a USB drive, and what still lives in only one. Your own backups, with no cloud plan to pay for.
 - **Maps that work offline\*.** Search Greece, save places, lists and trips, and plan routes by car, on foot or by bike.
 
 <sub>\* Maps and finding photos by place cover Greece only for now; other countries will follow.</sub>
@@ -45,6 +51,7 @@ your own backups. Screenshots use invented sample data.
 ![Contacts and Phone](Assets/cards/card-people.jpg)
 ![Calls on your computer: the call bubble](Assets/cards/card-bubble.jpg)
 ![Notes, timers and files](Assets/cards/desktop-notes.jpg)
+![More than one copy, no subscription](Assets/cards/card-safety.jpg)
 ![Files](Assets/cards/card-files.jpg)
 ![Files both ways: Send to computer on the phone, Send to phone on the computer](Assets/cards/card-send.jpg)
 
