@@ -31,9 +31,11 @@ your own backups. Screenshots use invented sample data.
 - **Calendar and timers, with AI.** Your calendars and timers are plain files in `~/Tetra/Files`, and Tetra comes with
   skills for them (*Share with Claude*). Ask Claude, ChatGPT or any assistant that can use your computer to import a
   timetable, plan your week or set a timer; the result reaches your phone with the next sync.
+- **Photos that know who and where.** Bring your Google Photos over (Takeout import, with their dates), then tags, live
+  photos, and People and Documents collections from face recognition that runs on this computer. Find photos by place\*.
 - **Maps that work offline\*.** Search Greece, save places, lists and trips, and plan routes by car, on foot or by bike.
 
-<sub>\* Maps covers Greece only for now; other countries will follow.</sub>
+<sub>\* Maps and finding photos by place cover Greece only for now; other countries will follow.</sub>
 
 ## The applets
 
