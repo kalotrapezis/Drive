@@ -15,7 +15,7 @@
   .number, .sound { color: #a3a8ac; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .state { margin-top: 2px; color: var(--ct); font-weight: 600; }
   .buttons { display: flex; gap: 10px; justify-content: flex-end; padding: 0 16px 14px; -webkit-app-region: no-drag; }
-  button { border: 0; border-radius: 999px; padding: 9px 18px; font: inherit; font-weight: 600; color: #fff; cursor: pointer; }
+  button { border: 0; border-radius: 999px; padding: 9px 18px; font: inherit; font-weight: 600; color: #fff; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .answer { background: #2e9d4f; } .decline, .end { background: #c62f2f; } .close { background: #3a3f43; }
   .said { color: #ff9b8f; font-size: 12px; padding: 0 16px 8px; }
   .soft { background: #3a3f43; padding: 8px 11px; font-size: 13px; } .soft.on { background: #eceeef; color: #1e2124; }
@@ -33,6 +33,9 @@
 <script>
   let s = null, tick = null, keys = false, asking = false
   const $ = id => document.getElementById(id)
+  // the words in Tetra's language (i18n.js; no plurals here)
+  const W = window.call.words, t = (k, v) => (W.words[k] ?? W.fallback[k] ?? k).replace(/\{(\w+)\}/g, (m, n) => v && n in v ? v[n] : m)
+  document.documentElement.lang = W.lang; document.title = t('calls.windowTitle')
   const time = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` }
   function draw() {
     if (!s) return
@@ -42,33 +45,33 @@
     else { const ch = (s.name || '').trim()[0]; if (ch && /[\p{L}\p{N}]/u.test(ch)) face.textContent = ch.toUpperCase()
       else face.innerHTML = '<svg width="30" height="30" viewBox="0 -960 960 960" fill="#fff"><path d="M480-480q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 66-47 113t-113 47ZM160-160v-112q0-34 17.5-62.5T224-378q62-31 126-46.5T480-440q66 0 130 15.5T736-378q29 15 46.5 43.5T800-272v112H160Z"/></svg>' }
     box.appendChild(face)
-    $('name').textContent = s.name || s.number || 'Unknown number'
-    $('number').textContent = s.name ? s.number : (s.device ? `on ${s.device}` : '')
-    $('state').textContent = s.state === 'calling' ? 'Calling…' : s.state === 'ringing' ? 'Incoming call' : s.state === 'active' ? time(Date.now() - s.since) + (s.muted ? ' · muted' : '')
-      : s.state === 'held' ? 'On hold' : s.missed ? 'Missed call' : 'Call ended'
-    if (s.recording) $('state').textContent += ' · ● recording'
+    $('name').textContent = s.name || s.number || t('calls.unknownNumber')
+    $('number').textContent = s.name ? s.number : (s.device ? t('calls.onDevice', { device: s.device }) : '')
+    $('state').textContent = s.state === 'calling' ? t('calls.stateCalling') : s.state === 'ringing' ? t('calls.stateIncoming') : s.state === 'active' ? time(Date.now() - s.since) + (s.muted ? ' · ' + t('calls.stateMuted') : '')
+      : s.state === 'held' ? t('calls.stateHeld') : s.missed ? t('calls.stateMissed') : t('calls.stateEnded')
+    if (s.recording) $('state').textContent += ' · ● ' + t('calls.stateRecording')
     $('sound').textContent = s.state === 'ended' ? '' : s.sound
     const b = $('buttons'); b.innerHTML = ''
     const add = (cls, label, what) => { const x = document.createElement('button'); x.className = cls; x.textContent = label; x.onclick = () => { $('said').textContent = ''; window.call.press(what) }; b.appendChild(x) }
-    if (s.state === 'ringing') { add('decline', 'Decline', 'decline'); add('answer', 'Answer', 'answer') }
+    if (s.state === 'ringing') { add('decline', t('calls.decline'), 'decline'); add('answer', t('calls.answer'), 'answer') }
     else if (s.state === 'calling' || s.state === 'active' || s.state === 'held') {
       // Tetra the phone's phone app: mute, hold and the keypad from here too (Drive-Android Plan.md § Phone)
       if (s.phoneApp && s.state !== 'calling') {
-        add(`soft ${s.muted ? 'on' : ''}`, s.muted ? 'Muted' : 'Mute', s.muted ? 'unmute' : 'mute')
-        add(`soft ${s.state === 'held' ? 'on' : ''}`, s.state === 'held' ? 'Resume' : 'Hold', s.state === 'held' ? 'unhold' : 'hold')
-        const k = document.createElement('button'); k.className = `soft ${keys ? 'on' : ''}`; k.textContent = 'Keys'; k.onclick = () => { keys = !keys; draw() }; b.appendChild(k)
+        add(`soft ${s.muted ? 'on' : ''}`, s.muted ? t('calls.muted') : t('calls.mute'), s.muted ? 'unmute' : 'mute')
+        add(`soft ${s.state === 'held' ? 'on' : ''}`, s.state === 'held' ? t('common.resume') : t('calls.hold'), s.state === 'held' ? 'unhold' : 'hold')
+        const k = document.createElement('button'); k.className = `soft ${keys ? 'on' : ''}`; k.textContent = t('calls.keys'); k.onclick = () => { keys = !keys; draw() }; b.appendChild(k)
       }
-      if (s.recording) add('soft on', 'Stop rec.', 'stoprec')
-      else if (s.canRecord) { const r = document.createElement('button'); r.className = 'soft'; r.textContent = 'Record'; r.onclick = () => { asking = true; draw() }; b.appendChild(r) }
-      add('end', 'End', 'end')
-    } else add('close', 'Close', 'close')
+      if (s.recording) add('soft on', t('calls.stopRec'), 'stoprec')
+      else if (s.canRecord) { const r = document.createElement('button'); r.className = 'soft'; r.textContent = t('calls.record'); r.onclick = () => { asking = true; draw() }; b.appendChild(r) }
+      add('end', t('calls.end'), 'end')
+    } else add('close', t('common.close'), 'close')
     // the other person's explicit yes first (Greek Penal Code 370A: recording one's own call without it is a crime)
     if (asking && s.canRecord && !s.recording) {
       $('said').innerHTML = ''; $('said').style.color = '#eceeef'
-      $('said').textContent = 'Ask them first: recording a call without the other person\'s explicit yes is a crime in Greece.'
+      $('said').textContent = t('calls.askFirst')
       b.innerHTML = ''
-      const no = document.createElement('button'); no.className = 'close'; no.textContent = 'Cancel'; no.onclick = () => { asking = false; $('said').textContent = ''; draw() }; b.appendChild(no)
-      const yes = document.createElement('button'); yes.className = 'answer'; yes.textContent = 'They agreed — record'; yes.onclick = () => { asking = false; $('said').textContent = ''; window.call.press('record') }; b.appendChild(yes)
+      const no = document.createElement('button'); no.className = 'close'; no.textContent = t('common.cancel'); no.onclick = () => { asking = false; $('said').textContent = ''; draw() }; b.appendChild(no)
+      const yes = document.createElement('button'); yes.className = 'answer'; yes.textContent = t('calls.agreed'); yes.onclick = () => { asking = false; $('said').textContent = ''; window.call.press('record') }; b.appendChild(yes)
     } else $('said').style.color = ''
     const pad = $('keys'); pad.innerHTML = ''
     if (keys && s.phoneApp && s.state === 'active') for (const d of '123456789*0#') {

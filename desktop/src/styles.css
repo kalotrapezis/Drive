@@ -1069,5 +1069,5 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .ph-dock { justify-content: center; }
 
 /* Translations (25 Oct): a label stays on one line and ends in … when a language's words are longer — never wrapped, never shrunk */
-.segmented button, .text-button, .filled-button, .chip, .self-chip, .island-item, .nav-item, .cal-chip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.segmented button, .text-button, .filled-button, .outline-button, .chip, .self-chip, .island-item, .nav-item, .cal-chip, .ct-action small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .island-item > span, .nav-item > span, .filled-button.big > span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }

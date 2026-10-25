@@ -22,15 +22,17 @@ import { PhonePage } from './Phone'
 import { DataPage } from './Data'
 import { NotificationsPage, SettingsPage } from './Settings'
 import { ImportDialog } from './Import'
+import { shownName } from './People'
+import { t, tr } from './i18n'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
   | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' } | { kind: 'calendar' } | { kind: 'timer' } | { kind: 'maps' } | { kind: 'contacts' } | { kind: 'phone' } | { kind: 'data' } | { kind: 'notifications' } | { kind: 'settings' }
 
-const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => boolean }[] = [
-  { id: 'favorites', name: 'Favorites', icon: 'heart', test: m => !!m.favorite },
-  { id: 'videos', name: 'Videos', icon: 'video', test: m => !!m.is_video },
-  { id: 'screenshots', name: 'Screenshots', icon: 'screenshot', test: m => isScreenshot(m.path) },
-  { id: 'documents', name: 'Documents', icon: 'document', test: m => !!m.document },
+const SYSTEM: { id: string; key: string; icon: IconName; test: (m: Media) => boolean }[] = [
+  { id: 'favorites', key: 'files.favorites', icon: 'heart', test: m => !!m.favorite },
+  { id: 'videos', key: 'sync.kindVideos', icon: 'video', test: m => !!m.is_video },
+  { id: 'screenshots', key: 'photos.screenshots', icon: 'screenshot', test: m => isScreenshot(m.path) },
+  { id: 'documents', key: 'files.typeDocuments', icon: 'document', test: m => !!m.document },
 ]
 
 const stored = (key: string, where: Storage = localStorage) => { try { return where.getItem(key) } catch { return null } }
@@ -42,7 +44,7 @@ export function App() {
   const [folders, setFolders] = useState<DeviceFolder[]>([])
   const [members, setMembers] = useState<Set<string> | null>(null)
   const [root, setRoot] = useState('')
-  const [scan, setScan] = useState<string | null>('Looking for photos…')
+  const [scan, setScan] = useState<string | null>(() => t('photos.looking'))
   // Settings › Language reloads the page; it opens again where it was
   const [page, setPage] = useState<Page>(() => { const back = stored('reopen', sessionStorage); store('reopen', '', sessionStorage); return back === 'settings' ? { kind: 'settings' } : { kind: 'photos' } })
   const [level, setLevel] = useState<Level>(() => (stored('level') as Level) || 'month')
@@ -75,7 +77,7 @@ export function App() {
   // In the sidebar under Drives, with its own Screenshots and Documents (drive:<id>:screenshots), to see what to delete.
   const [, driveId = null, driveFilter = null] = page.kind === 'collection' && page.id.startsWith('drive:') ? page.id.split(':') : []
   const custom = page.kind === 'collection' && !SYSTEM.some(s => s.id === page.id) ? (driveId ? `drive:${driveId}` : page.id) : null
-  const driveName = driveId ? collections.find(c => c.id === custom)?.name ?? 'the drive' : ''
+  const driveName = driveId ? collections.find(c => c.id === custom)?.name ?? t('photos.theDrive') : ''
   const memberSource = custom ? () => window.drive.members(custom) : page.kind === 'person' ? () => window.drive.people.shas(page.id) : null
 
   async function reload() {
@@ -85,7 +87,7 @@ export function App() {
   }
 
   async function rescan() {
-    setScan('Looking for photos…')
+    setScan(t('photos.looking'))
     try { await window.drive.scan() } catch (e) { say(errorText(e)) }
     await reload()
     setScan(null)
@@ -95,7 +97,7 @@ export function App() {
     window.drive.info().then(i => setRoot(i.photosRoot))
     reload()
     const offSync = window.drive.sync.onReceived(() => reloadRef.current())
-    const off = window.drive.onScanProgress(p => setScan(p.changed ? `Adding photos… ${p.changed} new` : `Checking… ${p.done}`))
+    const off = window.drive.onScanProgress(p => setScan(p.changed ? t('photos.adding', { n: p.changed }) : t('photos.checking', { n: p.done })))
     let wasRunning = false
     const offPeople = window.drive.people.onProgress(a => {
       setAnalysis(s => ({ ...s, ...a }))
@@ -150,7 +152,6 @@ export function App() {
 
   const picked = items.filter(m => selected.has(m.id))
   const say = (text: string, undo?: () => void) => setToast({ text, undo })
-  const count = (n: number) => n === 1 ? '1 item' : `${n} items`
   const close = () => setDialog(null)
 
   async function run(fn: () => Promise<unknown>, done?: string) {
@@ -160,19 +161,19 @@ export function App() {
 
   const favorite = (list: Media[]) => {
     const on = !list.every(m => m.favorite)
-    return run(() => window.drive.favorite(list.map(m => m.sha256), on), list.length > 1 ? `${on ? 'Added' : 'Removed'} ${count(list.length)} ${on ? 'to' : 'from'} Favorites` : undefined)
+    return run(() => window.drive.favorite(list.map(m => m.sha256), on), list.length > 1 ? t(on ? 'photos.addedFavorites' : 'photos.removedFavorites', { count: list.length }) : undefined)
   }
 
   function newCollection(then?: (c: Collection) => void) {
     setDialog(<NewCollection onClose={close} onCreate={async name => {
       const c = await window.drive.createCollection(name)
       await reload()
-      if (then) then(c); else say(`Created “${c.name}”`)
+      if (then) then(c); else say(t('photos.created', { name: c.name }))
     }} />)
   }
 
   function collect(list: Media[]) {
-    const add = (c: Collection) => run(() => window.drive.setMembership(c.id, list.map(m => m.sha256), true), `Added ${count(list.length)} to “${c.name}”`)
+    const add = (c: Collection) => run(() => window.drive.setMembership(c.id, list.map(m => m.sha256), true), t('photos.addedTo', { count: list.length, name: c.name }))
     setDialog(<CollectionPicker collections={collections} count={list.length} onClose={close} onPick={add} onNew={() => newCollection(add)} />)
   }
 
@@ -182,51 +183,51 @@ export function App() {
     setDialog(<FolderPicker count={list.length} leaving={leaving} onClose={close} onPick={dest => run(async () => {
       const r = await window.drive.moveTo(list.map(m => m.id), dest)
       setSelected(new Set())
-      say(r.failed.length ? `Moved ${r.moved}; ${r.failed.length} stayed: ${r.failed.slice(0, 2).join(', ')}` : `Moved ${count(r.moved)} to ${dest}`)
+      say(r.failed.length ? t('photos.movedSome', { moved: r.moved, failed: r.failed.length, list: r.failed.slice(0, 2).join(', ') }) : t('photos.movedTo', { count: r.moved, dest }))
     })} />)
   }
   const uncollect = (list: Media[]) => driveId && page.kind === 'collection' ? setDialog(
-    <Confirm title={`Take ${count(list.length)} off ${driveName}?`} action="Take off the drive" danger onClose={close}
-      body={`Any that live only on ${driveName} come back to this PC first, checked. Copies of ones this PC has are deleted from the drive, and backup will not put them back unless you add them again.`}
-      onConfirm={() => run(() => window.drive.setMembership(custom!, list.map(m => m.sha256), false), `Took ${count(list.length)} off ${driveName}`).then(() => setSelected(new Set()))} />)
+    <Confirm title={t('photos.takeOffTitle', { count: list.length, drive: driveName })} action={t('photos.takeOff')} danger onClose={close}
+      body={t('photos.takeOffBody', { drive: driveName })}
+      onConfirm={() => run(() => window.drive.setMembership(custom!, list.map(m => m.sha256), false), t('photos.tookOff', { count: list.length, drive: driveName })).then(() => setSelected(new Set()))} />)
     : folderAlbum ? moveTo(list, folderAlbum) : custom && page.kind === 'collection' &&
-    run(() => window.drive.setMembership(custom, list.map(m => m.sha256), false), `Removed ${count(list.length)} from “${page.name}”`)
+    run(() => window.drive.setMembership(custom, list.map(m => m.sha256), false), t('photos.removedFrom', { count: list.length, name: page.name }))
       .then(() => setSelected(new Set()))
 
   function trash(list: Media[]) {
     // In a drive's collection Delete is by hand and final for the library: to the purgatory, where it waits its days.
-    if (driveId) return setDialog(<Confirm title={`Delete ${count(list.length)}?`} action="Delete" danger onClose={close}
-      body={`They leave the library, from ${driveName} and from this PC. One copy waits in the purgatory for its days (Devices → Deleted items), then it is gone.`}
+    if (driveId) return setDialog(<Confirm title={t('photos.deleteTitle', { count: list.length })} action={t('common.delete')} danger onClose={close}
+      body={t('photos.deleteDriveBody', { drive: driveName })}
       onConfirm={() => run(async () => {
         const r = await window.drive.deleteFromDrive(driveId, list.map(m => m.sha256))
         setSelected(new Set())
-        say(r.failed.length ? `Deleted ${r.deleted}; ${r.failed.length} stayed: ${r.failed.slice(0, 2).join(', ')}` : `Deleted ${count(r.deleted)} to the purgatory`)
+        say(r.failed.length ? t('photos.deletedSome', { deleted: r.deleted, failed: r.failed.length, list: r.failed.slice(0, 2).join(', ') }) : t('photos.deletedToPurgatory', { count: r.deleted }))
       })} />)
-    setDialog(<Confirm title={`Move ${count(list.length)} to Trash?`} action="Move to Trash" danger onClose={close}
-      body="They go to the system Trash and can be restored from your file manager. Favorites and collections come back with them."
+    setDialog(<Confirm title={t('photos.trashTitle', { count: list.length })} action={t('photos.moveToTrash')} danger onClose={close}
+      body={t('photos.trashBody')}
       onConfirm={() => run(async () => {
         const r = await window.drive.trash(list.map(m => m.id))
         setSelected(new Set())
-        say(r.failed.length ? `Moved ${r.trashed}; could not move ${r.failed.length}: ${r.failed.slice(0, 3).join(', ')}` : `Moved ${count(r.trashed)} to Trash`)
+        say(r.failed.length ? t('photos.trashedSome', { moved: r.trashed, failed: r.failed.length, list: r.failed.slice(0, 3).join(', ') }) : t('photos.trashed', { count: r.trashed }))
       })} />)
   }
 
   // Hidden needs the vault open: set it up or unlock it first, then encrypt, verify and remove the originals.
   function hide(list: Media[]) {
-    const go = () => setDialog(<Confirm title={`Move ${count(list.length)} to Hidden?`} action="Move to Hidden" onClose={close}
-      body="Each item is encrypted and checked, then removed from Photos. Only your passphrase can open Hidden."
+    const go = () => setDialog(<Confirm title={t('photos.hideTitle', { count: list.length })} action={t('viewer.toHidden')} onClose={close}
+      body={t('photos.hideBody')}
       onConfirm={() => run(async () => {
         const r = await window.drive.vault.hide(list.map(m => m.id))
         setSelected(new Set())
-        say(r.failed.length ? `Hid ${r.hidden}; ${r.failed.length} stayed in Photos: ${r.failed[0]}` : `Moved ${count(r.hidden)} to Hidden`)
+        say(r.failed.length ? t('photos.hidSome', { hidden: r.hidden, failed: r.failed.length, first: r.failed[0] }) : t('photos.hid', { count: r.hidden }))
       })} />)
     if (vault?.unlocked) go()
     else if (vault) setDialog(<VaultGate status={vault} onClose={close} onOpen={async () => { setVault(await window.drive.vault.status()); go() }} />)
   }
 
   function deleteCollection(c: Collection) {
-    setDialog(<Confirm title={`Delete “${c.name}”?`} action="Delete collection" danger onClose={close}
-      body="Only the collection is removed. Its photos and videos stay in Photos." onConfirm={() => run(() => window.drive.deleteCollection(c.id), `Deleted “${c.name}”`)} />)
+    setDialog(<Confirm title={t('photos.deleteCollectionTitle', { name: c.name })} action={t('photos.deleteCollection')} danger onClose={close}
+      body={t('photos.deleteCollectionBody')} onConfirm={() => run(() => window.drive.deleteCollection(c.id), t('photos.deletedNamed', { name: c.name }))} />)
   }
 
   useEffect(() => {
@@ -249,10 +250,10 @@ export function App() {
     setDialog(<CombinePicker person={p} people={people} onClose={close} onPick={others => run(async () => {
       const undos: MergeUndo[] = []
       for (const other of others) undos.push(await window.drive.people.merge(other.id, p.id))
-      const what = others.length === 1 ? others[0].name : `${others.length} people`
-      say(`Combined ${what} into ${p.name}`, () => run(async () => {
+      const what = others.length === 1 ? shownName(others[0].name) : t('photos.nPeople', { count: others.length })
+      say(t('photos.combinedInto', { what, name: shownName(p.name) }), () => run(async () => {
         for (const undo of undos.reverse()) await window.drive.people.undoMerge(undo)
-      }, 'Combine undone'))
+      }, t('photos.combineUndone')))
     })} />)
   }
 
@@ -268,23 +269,23 @@ export function App() {
   const dock = section && (
     <div className="notes-dock"><nav className="notes-island island">
       {section === 'photos' && <>
-        {item({ kind: 'photos' }, page.kind === 'photos', 'photos', 'Gallery')}
-        {item({ kind: 'collections' }, page.kind !== 'photos', 'collections', 'Collections')}
+        {item({ kind: 'photos' }, page.kind === 'photos', 'photos', t('app.gallery'))}
+        {item({ kind: 'collections' }, page.kind !== 'photos', 'collections', t('app.collections'))}
         <span className="island-gap" />
-        <button className="island-item" onClick={() => setDialog(<ImportDialog kind="photos" onClose={close} onDone={reload} />)}><Icon name="add" size={20} /><span>Import</span></button>
+        <button className="island-item" onClick={() => setDialog(<ImportDialog kind="photos" onClose={close} onDone={reload} />)}><Icon name="add" size={20} /><span>{t('common.import')}</span></button>
       </>}
       {section === 'files' && <>
-        {item({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', 'Drive')}
-        {item({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', 'Favorites')}
-        {item({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', 'Recent')}
-        {item({ kind: 'files', mode: 'browse', folder: 'Trash' }, inFilesTrash, 'trash', 'Trash')}
+        {item({ kind: 'files', mode: 'browse', folder: '' }, filesMode === 'browse', 'drive', t('files.drive'))}
+        {item({ kind: 'files', mode: 'favorites', folder: '' }, filesMode === 'favorites', 'heart', t('files.favorites'))}
+        {item({ kind: 'files', mode: 'recent', folder: '' }, filesMode === 'recent', 'recent', t('files.recent'))}
+        {item({ kind: 'files', mode: 'browse', folder: 'Trash' }, inFilesTrash, 'trash', t('photos.trash'))}
         <span className="island-gap" />
-        <button className="island-item" onClick={() => setDialog(<ImportDialog kind="files" onClose={close} onDone={() => setPage({ kind: 'files', mode: 'browse', folder: '' })} />)}><Icon name="add" size={20} /><span>Import</span></button>
+        <button className="island-item" onClick={() => setDialog(<ImportDialog kind="files" onClose={close} onDone={() => setPage({ kind: 'files', mode: 'browse', folder: '' })} />)}><Icon name="add" size={20} /><span>{t('common.import')}</span></button>
       </>}
       {section === 'drive' && <>
-        {item({ kind: 'collection', id: `drive:${driveId}`, name: driveName }, !driveFilter, 'photos', 'Gallery')}
-        {item({ kind: 'collection', id: `drive:${driveId}:screenshots`, name: `${driveName} · Screenshots` }, driveFilter === 'screenshots', 'screenshot', 'Screenshots')}
-        {item({ kind: 'collection', id: `drive:${driveId}:documents`, name: `${driveName} · Documents` }, driveFilter === 'documents', 'document', 'Documents')}
+        {item({ kind: 'collection', id: `drive:${driveId}`, name: driveName }, !driveFilter, 'photos', t('app.gallery'))}
+        {item({ kind: 'collection', id: `drive:${driveId}:screenshots`, name: `${driveName} · ${t('photos.screenshots')}` }, driveFilter === 'screenshots', 'screenshot', t('photos.screenshots'))}
+        {item({ kind: 'collection', id: `drive:${driveId}:documents`, name: `${driveName} · ${t('files.typeDocuments')}` }, driveFilter === 'documents', 'document', t('files.typeDocuments'))}
       </>}
     </nav></div>
   )
@@ -305,25 +306,25 @@ export function App() {
   else if (page.kind === 'settings') content = <SettingsPage />
   else if (page.kind === 'photoTrash') content = <TrashPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (page.kind === 'hidden') content = <HiddenPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
-  else if (loading) content = <div className="empty">Loading…</div>
-  else if (media.length === 0) content = <div className="empty"><p>No photos or videos in <code>{root}</code> yet. Pair your phone in <b>Devices</b> to back it up here.</p></div>
+  else if (loading) content = <div className="empty">{t('common.loading')}</div>
+  else if (media.length === 0) content = <div className="empty"><p>{tr('photos.emptyLibrary', { root: <code>{root}</code>, devices: <b>{t('app.devices')}</b> })}</p></div>
   else if (page.kind === 'people') content = <PeoplePage people={people} status={analysis} onBack={() => setPage({ kind: 'collections' })}
     onOpen={p => setPage({ kind: 'person', id: p.id, name: p.name })}
     onRename={p => setDialog(<RenamePerson person={p} onClose={close} onDone={reload} />)}
     onChooseCover={p => setDialog(<ChooseCover person={p} onClose={close} onDone={reload} />)}
-    onForget={p => run(() => window.drive.people.setHidden(p.id, true), `${p.name} is forgotten`)}
+    onForget={p => run(() => window.drive.people.setHidden(p.id, true), t('photos.forgotten', { name: shownName(p.name) }))}
     onHistory={() => setDialog(<PeopleHistory onClose={close} onChanged={reload} />)} />
   else if (page.kind === 'map') content = <MapView items={items} focus={page.focus} onOpen={(i, group) => { setScope(group ? group.map(g => items[g].sha256) : null); setOpen(i) }} onBack={() => setPage({ kind: 'collections' })} />
   else if (page.kind === 'review') content = <ReviewPage left={analysis?.reviews ?? 0} onBack={() => setPage({ kind: 'collections' })} onChanged={reload} />
   else if (page.kind === 'collections') {
     content = <Collections mine={collections} onNew={() => newCollection()} onDelete={deleteCollection}
       system={[
-        { id: 'people', name: 'People', icon: 'person' as IconName, count: people.length },
-        ...SYSTEM.map(s => ({ ...s, count: media.filter(s.test).length })),
-        { id: 'hidden', name: 'Hidden', icon: 'lock' as IconName, count: vault?.count ?? 0 },
-        { id: 'map', name: 'Map', icon: 'map' as IconName, count: media.filter(m => m.latitude != null).length },
-        { id: 'review', name: 'Help organize', icon: 'tag' as IconName, count: analysis?.reviews ?? 0 },
-        { id: 'photoTrash', name: 'Trash', icon: 'trash' as IconName, count: trashCount },
+        { id: 'people', name: t('people.title'), icon: 'person' as IconName, count: people.length },
+        ...SYSTEM.map(s => ({ ...s, name: t(s.key), count: media.filter(s.test).length })),
+        { id: 'hidden', name: t('hidden.title'), icon: 'lock' as IconName, count: vault?.count ?? 0 },
+        { id: 'map', name: t('maps.photoMap'), icon: 'map' as IconName, count: media.filter(m => m.latitude != null).length },
+        { id: 'review', name: t('people.helpOrganize'), icon: 'tag' as IconName, count: analysis?.reviews ?? 0 },
+        { id: 'photoTrash', name: t('photos.trash'), icon: 'trash' as IconName, count: trashCount },
       ]}
       onOpen={(id, name) => setPage(id === 'people' ? { kind: 'people' } : id === 'review' ? { kind: 'review' } : id === 'map' ? { kind: 'map' } : id === 'hidden' ? { kind: 'hidden' } : id === 'photoTrash' ? { kind: 'photoTrash' } : { kind: 'collection', id, name })} />
   } else {
@@ -331,45 +332,44 @@ export function App() {
     content = (
       <Timeline items={items} level={level} setLevel={setLevel} selected={selected} setSelected={setSelected} onOpen={setOpen}
         title={page.kind === 'person'
-          ? <><button className="round flat" title="Back to People" onClick={() => setPage({ kind: 'people' })}><Icon name="back" /></button><h1>{page.name}</h1></>
+          ? <><button className="round flat" title={t('photos.backToPeople')} onClick={() => setPage({ kind: 'people' })}><Icon name="back" /></button><h1>{shownName(page.name)}</h1></>
           : inCollection
-          ? <>{!driveId && <button className="round flat" title="Back to Collections" onClick={() => setPage({ kind: 'collections' })}><Icon name="back" /></button>}<h1>{driveId ? driveName : page.name}</h1></>
-          : <h1>Photos</h1>}
+          ? <>{!driveId && <button className="round flat" title={t('collections.backTo')} onClick={() => setPage({ kind: 'collections' })}><Icon name="back" /></button>}<h1>{driveId ? driveName : page.name}</h1></>
+          : <h1>{t('app.photos')}</h1>}
         banner={undefined /* "Find documents" hidden for now: desktop increasingly just receives the phone's classification via sync, SYNC_PLAN.md phase 6a */}
-        empty={query ? `Nothing matches “${query}”.` : inCollection ? 'Nothing here yet.' : 'Every item is hidden by Photos tools.'}
+        empty={query ? t('photos.noMatch', { query }) : inCollection ? t('photos.nothingHere') : t('photos.allHidden')}
         tools={!inCollection && <>
           <label className="island search">
             <Icon name="search" size={20} />
-            <input placeholder="Search names and folders" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQuery('') }} />
-            {query && <button className="eraser" title="Clear search" onClick={() => setQuery('')}><Icon name="eraser" size={20} /></button>}
+            <input placeholder={t('photos.searchPlaceholder')} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQuery('') }} />
+            {query && <button className="eraser" title={t('photos.clearSearch')} onClick={() => setQuery('')}><Icon name="eraser" size={20} /></button>}
           </label>
           <details className="menu">
-            <summary className="round" title="Photos tools"><Icon name="tune" /></summary>
+            <summary className="round" title={t('photos.tools')}><Icon name="tune" /></summary>
             <div className="island menu-body">
-              <strong>Hide from Photos</strong>
-              <small>Hidden albums stay in Collections and on disk; only the Photos view skips them.</small>
-              <span className="menu-head">System albums</span>
-              <label><input type="checkbox" checked={hideScreenshots} onChange={e => { setHideScreenshots(e.target.checked); window.drive.setViewSetting('hideScreenshots', e.target.checked) }} /> Screenshots</label>
-              <label><input type="checkbox" checked={hideDocuments} onChange={e => { setHideDocuments(e.target.checked); window.drive.setViewSetting('hideDocuments', e.target.checked) }} /> Documents</label>
-              <span className="menu-head">My albums</span>
-              {collections.length === 0 && <small>No albums yet. Create one in Collections with +.</small>}
+              <strong>{t('photos.hideFrom')}</strong>
+              <small>{t('photos.hideFromNote')}</small>
+              <span className="menu-head">{t('photos.systemAlbums')}</span>
+              <label><input type="checkbox" checked={hideScreenshots} onChange={e => { setHideScreenshots(e.target.checked); window.drive.setViewSetting('hideScreenshots', e.target.checked) }} /> {t('photos.screenshots')}</label>
+              <label><input type="checkbox" checked={hideDocuments} onChange={e => { setHideDocuments(e.target.checked); window.drive.setViewSetting('hideDocuments', e.target.checked) }} /> {t('files.typeDocuments')}</label>
+              <span className="menu-head">{t('photos.myAlbums')}</span>
+              {collections.length === 0 && <small>{t('photos.noAlbums')}</small>}
               {collections.filter(c => !c.drive).map(c => (
                 <label key={c.id}><input type="checkbox" checked={c.hidden}
                   onChange={e => window.drive.setCollectionHidden(c.id, e.target.checked).then(reload)} /> {c.name}<small className="count">{c.count}</small></label>
               ))}
-              <span className="menu-head">Folders</span>
-              <small>Camera, Screenshots and loose photos are always shown. An included folder shows here and is kept as a collection; new ones are asked about in Help organize.</small>
+              <span className="menu-head">{t('photos.folders')}</span>
+              <small>{t('photos.foldersNote')}</small>
               {folders.filter(f => f.included !== null).map(f => (
                 <label key={f.name}><input type="checkbox" checked={!!f.included}
                   onChange={e => window.drive.folders.set(f.name, e.target.checked).then(reload)} /> {f.name}<small className="count">{f.count}</small></label>
               ))}
-              <span className="menu-head">Look again</span>
-              <small>Reads every photo again with the rules as they are now. People you have named keep their faces;
-                only the groups nobody named are worked out afresh.</small>
+              <span className="menu-head">{t('photos.lookAgain')}</span>
+              <small>{t('photos.lookAgainNote')}</small>
               <button className="sheet-row" disabled={!!analysis?.running}
-                onClick={() => run(() => window.drive.people.rescan(), 'Reading every photo again')}><Icon name="person" />Rescan faces</button>
+                onClick={() => run(() => window.drive.people.rescan(), t('photos.readingAgain'))}><Icon name="person" />{t('photos.rescanFaces')}</button>
               <button className="sheet-row" disabled={!!analysis?.running}
-                onClick={() => run(() => window.drive.documents.rescan(), 'Reading every photo again')}><Icon name="fileDoc" />Rescan documents</button>
+                onClick={() => run(() => window.drive.documents.rescan(), t('photos.readingAgain'))}><Icon name="fileDoc" />{t('photos.rescanDocuments')}</button>
             </div>
           </details>
         </>} />
@@ -381,32 +381,32 @@ export function App() {
       <nav className="rail island">
         <div className="brand"><img src="./icon.png" alt="" />Tetra</div>
         {/* One entry each; their parts are an island at the bottom of the page (asked 2026-09-26). */}
-        {nav({ kind: 'photos' }, section === 'photos', 'photos', 'Photos')}
-        {nav({ kind: 'files', mode: 'browse', folder: '' }, section === 'files', 'drive', 'Files')}
-        {nav({ kind: 'notes' }, page.kind === 'notes', 'notes', 'Notes')}
-        {nav({ kind: 'calendar' }, page.kind === 'calendar', 'calendar', 'Calendar')}
-        {nav({ kind: 'timer' }, page.kind === 'timer', 'timer', 'Timer')}
-        {nav({ kind: 'maps' }, page.kind === 'maps', 'map', 'Maps')}
-        {nav({ kind: 'contacts' }, page.kind === 'contacts', 'person', 'Contacts')}
-        {nav({ kind: 'phone' }, page.kind === 'phone', 'call', 'Phone')}
-        {nav({ kind: 'data' }, page.kind === 'data', 'dataUsage', 'Data')}
-        {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', 'Devices')}
+        {nav({ kind: 'photos' }, section === 'photos', 'photos', t('app.photos'))}
+        {nav({ kind: 'files', mode: 'browse', folder: '' }, section === 'files', 'drive', t('app.files'))}
+        {nav({ kind: 'notes' }, page.kind === 'notes', 'notes', t('app.notes'))}
+        {nav({ kind: 'calendar' }, page.kind === 'calendar', 'calendar', t('app.calendar'))}
+        {nav({ kind: 'timer' }, page.kind === 'timer', 'timer', t('app.timer'))}
+        {nav({ kind: 'maps' }, page.kind === 'maps', 'map', t('app.maps'))}
+        {nav({ kind: 'contacts' }, page.kind === 'contacts', 'person', t('app.contacts'))}
+        {nav({ kind: 'phone' }, page.kind === 'phone', 'call', t('app.phone'))}
+        {nav({ kind: 'data' }, page.kind === 'data', 'dataUsage', t('app.data'))}
+        {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', t('app.devices'))}
         {/* A drive is a device: its photos sit under Devices (asked 2026-09-26). */}
         {collections.filter(c => c.drive).map(c => <div key={c.id} className="rail-group">{nav({ kind: 'collection', id: c.id, name: c.name }, driveId === c.id.slice(6), 'database', c.name)}</div>)}
         {analysis?.running && (
           <div className="rail-progress">
-            <span>Analysing… {analysis.done.toLocaleString()}/{analysis.total.toLocaleString()}</span>
+            <span>{t('photos.analysing', { done: analysis.done.toLocaleString(), total: analysis.total.toLocaleString() })}</span>
             <progress value={analysis.done} max={Math.max(analysis.total, 1)} />
           </div>
         )}
         <div className="rail-bottom">
           <button className={`nav-item ${page.kind === 'notifications' ? 'active' : ''}`} onClick={() => setPage({ kind: 'notifications' })}>
-            <Icon name="bell" /><span>Notifications</span>{unread > 0 && <span className="badge-count">{unread}</span>}</button>
-          {nav({ kind: 'settings' }, page.kind === 'settings', 'settings', 'Settings')}
+            <Icon name="bell" /><span>{t('app.notifications')}</span>{unread > 0 && <span className="badge-count">{unread}</span>}</button>
+          {nav({ kind: 'settings' }, page.kind === 'settings', 'settings', t('app.settings'))}
         </div>
         <div className="rail-foot">
-          <span>{scan ?? `${media?.length ?? 0} items`}</span>
-          <button className="round" title="Rescan library" disabled={!!scan} onClick={rescan}><Icon name="refresh" size={20} /></button>
+          <span>{scan ?? t('photos.itemsTotal', { count: media?.length ?? 0 })}</span>
+          <button className="round" title={t('photos.rescanLibrary')} disabled={!!scan} onClick={rescan}><Icon name="refresh" size={20} /></button>
         </div>
       </nav>
       <main className="content">
@@ -414,33 +414,33 @@ export function App() {
         {section && section !== 'files' && ['photos', 'collections', 'collection'].includes(page.kind) && picked.length === 0 && dock}
         {page.kind === 'person' && person && picked.length === 0 && (
           <div className="island selection-bar person-bar">
-            <button className="text-button" onClick={() => combine(person)}><Icon name="merge" size={20} />Combine</button>
-            <button className="text-button" onClick={() => renamePerson(person)}><Icon name="rename" size={20} />Rename</button>
+            <button className="text-button" onClick={() => combine(person)}><Icon name="merge" size={20} />{t('people.combine')}</button>
+            <button className="text-button" onClick={() => renamePerson(person)}><Icon name="rename" size={20} />{t('common.rename')}</button>
             <button className="text-button" onClick={() => setDialog(
-              <MergeHistory person={person} onClose={close} onRestore={m => run(() => window.drive.people.restoreMerge(m.id), `${m.name} is back`)} />,
-            )}><Icon name="undo" size={20} />History</button>
+              <MergeHistory person={person} onClose={close} onRestore={m => run(() => window.drive.people.restoreMerge(m.id), t('photos.isBack', { name: shownName(m.name) }))} />,
+            )}><Icon name="undo" size={20} />{t('people.history')}</button>
           </div>
         )}
         {picked.length > 0 && (
           <div className="island selection-bar">
-            <button className="round flat" title="Clear selection (Esc)" onClick={() => setSelected(new Set())}><Icon name="close" /></button>
-            <strong>{picked.length} selected</strong>
-            <button className="round flat" title={picked.every(m => m.favorite) ? 'Remove from Favorites' : 'Add to Favorites'} onClick={() => favorite(picked)}>
+            <button className="round flat" title={t('photos.clearSelection')} onClick={() => setSelected(new Set())}><Icon name="close" /></button>
+            <strong>{t('photos.selected', { count: picked.length })}</strong>
+            <button className="round flat" title={picked.every(m => m.favorite) ? t('photos.unfavorite') : t('photos.favorite')} onClick={() => favorite(picked)}>
               <Icon name={picked.every(m => m.favorite) ? 'heartFill' : 'heart'} /></button>
             {custom
-              ? <button className="round flat" title={folderAlbum ? `Move out of the ${folderAlbum} folder` : 'Remove from this collection'} onClick={() => uncollect(picked)}><Icon name="uncollect" /></button>
-              : <button className="round flat" title="Add to collection" onClick={() => collect(picked)}><Icon name="collect" /></button>}
+              ? <button className="round flat" title={folderAlbum ? t('photos.moveOutOf', { folder: folderAlbum }) : t('viewer.uncollect')} onClick={() => uncollect(picked)}><Icon name="uncollect" /></button>
+              : <button className="round flat" title={t('viewer.collect')} onClick={() => collect(picked)}><Icon name="collect" /></button>}
             {!driveId && <>
-              <button className="round flat" title="Move to folder…" onClick={() => moveTo(picked)}><Icon name="moveTo" /></button>
-              <button className="round flat" title="Move to Hidden" onClick={() => hide(picked)}><Icon name="lock" /></button>
+              <button className="round flat" title={t('viewer.moveTo')} onClick={() => moveTo(picked)}><Icon name="moveTo" /></button>
+              <button className="round flat" title={t('viewer.toHidden')} onClick={() => hide(picked)}><Icon name="lock" /></button>
             </>}
-            <button className="round flat" title={driveId ? 'Delete to the purgatory (Delete)' : 'Move to Trash (Delete)'} onClick={() => trash(picked)}><Icon name="trash" /></button>
+            <button className="round flat" title={driveId ? t('photos.deleteToPurgatoryKey') : t('viewer.toTrash')} onClick={() => trash(picked)}><Icon name="trash" /></button>
             {page.kind === 'person' && person && (
-              <button className="text-button" title="These are not this person" onClick={() => run(async () => {
+              <button className="text-button" title={t('photos.notThisPersonHint')} onClick={() => run(async () => {
                 const r = await window.drive.people.detach(person.id, picked.map(m => m.sha256))
                 setSelected(new Set())
-                say(`${r.faces === 1 ? 'One face' : `${r.faces} faces`} taken out of ${person.name}`)
-              })}><Icon name="uncollect" size={20} />Not this person</button>
+                say(t('photos.facesTakenOut', { count: r.faces, name: shownName(person.name) }))
+              })}><Icon name="uncollect" size={20} />{t('photos.notThisPerson')}</button>
             )}
           </div>
         )}
@@ -449,16 +449,16 @@ export function App() {
         <Viewer media={scoped ? scoped.map(i => items[i]) : items} index={scoped ? Math.max(0, scoped.indexOf(open)) : open}
           setIndex={i => setOpen(scoped ? scoped[i] : i)} onClose={() => { setOpen(null); setScope(null) }} people={names[items[open].sha256] ?? []}
           onShowOnMap={m => { setOpen(null); setPage({ kind: 'map', focus: m.sha256 }) }}
-          onDocument={(m, on) => run(() => window.drive.documents.set(m.sha256, on), on ? 'Marked as a document' : 'No longer a document')}
+          onDocument={(m, on) => run(() => window.drive.documents.set(m.sha256, on), on ? t('photos.markedDocument') : t('photos.notDocument'))}
           onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={driveId ? undefined : m => hide([m])} onEdit={driveId ? undefined : (item, hide) => setEditing({ item, hide })}
           onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} onMove={driveId ? undefined : m => moveTo([m])}
-          uncollectTitle={folderAlbum ? `Move out of the ${folderAlbum} folder` : undefined} />
+          uncollectTitle={folderAlbum ? t('photos.moveOutOf', { folder: folderAlbum }) : undefined} />
       )}
       {editing && <Editor item={editing.item} hide={editing.hide} onClose={() => setEditing(null)} onSaved={msg => { setEditing(null); say(msg); reload() }} />}
       {dialog}
       <TimerBell />
       {toast && <div className="island toast" role="status">{toast.text}
-        {toast.undo && <button className="text-button" onClick={() => { const u = toast.undo!; setToast(null); u() }}>Undo</button>}</div>}
+        {toast.undo && <button className="text-button" onClick={() => { const u = toast.undo!; setToast(null); u() }}>{t('common.undo')}</button>}</div>}
     </div>
   )
 }

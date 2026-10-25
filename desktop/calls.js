@@ -11,6 +11,7 @@ const { BrowserWindow, screen } = require('electron')
 const { execFile, execFileSync, spawn } = require('node:child_process')
 const path = require('node:path')
 const fs = require('node:fs')
+const { t } = require('./i18n')
 
 const run = (args, timeout = 4000) => new Promise(r => execFile('bluetoothctl', args, { timeout }, (e, out) => r(e ? null : String(out))))
 const pactl = args => new Promise(r => execFile('pactl', args, { timeout: 4000 }, (e, out) => r(e ? null : String(out).trim())))
@@ -117,9 +118,9 @@ class Calls {
 
   sound() {
     const on = this.bt.phones.find(p => p.connected)
-    if (on) return `Sound on this computer (Bluetooth, ${on.name})`
-    if (this.connecting) return `Connecting ${this.connecting} by Bluetooth for the sound…`
-    return this.unreached ? `Sound stays on the phone: ${this.unreached} did not connect by Bluetooth` : 'Sound on the phone'
+    if (on) return t('calls.soundHere', { name: on.name })
+    if (this.connecting) return t('calls.soundConnecting', { name: this.connecting })
+    return this.unreached ? t('calls.soundUnreached', { name: this.unreached }) : t('calls.soundPhone')
   }
 
   /** A call starting with no phone connected for calls: Settings › Calls' "Connect", done by itself, each paired phone in turn. */
@@ -148,8 +149,8 @@ class Calls {
     const c = this.who(number || was?.number)
     const next = { ...was, direction: direction === 'out' ? 'out' : 'in', state, number: number || was?.number || '', name: c?.name || was?.name || '', photo: c?.photo ?? was?.photo ?? null, device: device || was?.device,
       since: state === 'active' && !['active', 'held'].includes(was?.state) ? Date.now() : was?.since ?? Date.now(), missed: !!missed, muted: !!muted, phoneApp: !!phoneApp }
-    if (state === 'ringing' && was?.state !== 'ringing') this.notify(`${next.name || next.number || 'Someone'} is calling`, `On ${next.device || 'the phone'} — answer or decline in the call bubble`)
-    if (state === 'ended' && missed) this.notify(`Missed call: ${next.name || next.number}`, null)
+    if (state === 'ringing' && was?.state !== 'ringing') this.notify(t('calls.calling', { name: next.name || next.number || t('calls.someone') }), next.device ? t('calls.callingOn', { device: next.device }) : t('calls.callingOnPhone'))
+    if (state === 'ended' && missed) this.notify(t('calls.missed', { name: next.name || next.number }), null)
     this.show(next)
   }
 
@@ -157,12 +158,12 @@ class Calls {
     clearTimeout(this.closer)
     // a call begins (it rings, or the phone dials): its sound needs the phone on this computer's Bluetooth
     if (['ringing', 'calling'].includes(s.state) && !['ringing', 'calling', 'active', 'held'].includes(this.state?.state)) { this.unreached = null; this.reconnect() }
-    if (s.state === 'ended' && recorder.proc) { recorder.stop(); this.notify('Call recorded', path.basename(recorder.file || '')) }
+    if (s.state === 'ended' && recorder.proc) { recorder.stop(); this.notify(t('calls.recorded'), path.basename(recorder.file || '')) }
     this.state = { ...s, sound: this.sound(), canRecord: !!echo.module && ['active', 'held'].includes(s.state), recording: !!recorder.proc }
     if (!this.win || this.win.isDestroyed()) {
       const { workArea } = screen.getPrimaryDisplay()
       this.win = new BrowserWindow({ width: 360, height: 150, x: workArea.x + workArea.width - 376, y: workArea.y + workArea.height - 166, frame: false, resizable: false,
-        alwaysOnTop: true, skipTaskbar: true, show: false, title: 'Call', backgroundColor: '#1e2124',
+        alwaysOnTop: true, skipTaskbar: true, show: false, title: t('calls.windowTitle'), backgroundColor: '#1e2124',
         webPreferences: { preload: path.join(__dirname, 'bubble-preload.js'), contextIsolation: true } })
       this.win.setAlwaysOnTop(true, 'screen-saver')
       this.win.loadFile(path.join(__dirname, 'bubble.html'))
@@ -189,7 +190,7 @@ class Calls {
     if (what === 'close') return this.close()
     // recording happens here, not on the phone; the bubble asked "They agreed?" before sending it
     if (what === 'record' && echo.module) { recorder.start(this.recordings, this.state?.name || this.state?.number); return this.show(this.state) }
-    if (what === 'stoprec') { recorder.stop(); this.notify('Call recorded', path.basename(recorder.file || '')); return this.show(this.state) }
+    if (what === 'stoprec') { recorder.stop(); this.notify(t('calls.recorded'), path.basename(recorder.file || '')); return this.show(this.state) }
     const r = await this.act(what).catch(e => ({ error: e.message }))
     if (r?.error) { this.win?.webContents.send('said', r.error); return r }
     if (what === 'end' || what === 'decline') this.show({ ...this.state, state: 'ended', missed: false })
@@ -202,7 +203,7 @@ class Calls {
       const before = this.bt.phones.find(p => p.connected)?.mac
       this.bt = await bluetooth().catch(() => this.bt)
       const now = this.bt.phones.find(p => p.connected)
-      if (before !== undefined && before !== now?.mac) this.notify(now ? `${now.name} connected for calls` : 'Phone disconnected from Bluetooth', now ? 'A call\'s sound is on this computer now.' : 'A call\'s sound stays on the phone.')
+      if (before !== undefined && before !== now?.mac) this.notify(now ? t('calls.btConnected', { name: now.name }) : t('calls.btDropped'), now ? t('calls.btConnectedBody') : t('calls.btDroppedBody'))
       if (this.state) this.show(this.state)
     }
     this.bt.phones = this.bt.phones ?? []
@@ -215,7 +216,7 @@ class Calls {
     if (!/^[0-9A-F:]{17}$/i.test(String(mac))) throw new Error('Not a Bluetooth address.')
     const out = await run(['connect', mac], 15_000) // a phone takes a few seconds to answer
     this.bt = await bluetooth()
-    if (!this.bt.phones.find(p => p.mac === mac)?.connected) throw new Error(out?.match(/Failed to connect: (.+)/)?.[1] || 'The phone did not connect. Is its Bluetooth on, and "Phone calls" allowed for this computer there?')
+    if (!this.bt.phones.find(p => p.mac === mac)?.connected) throw new Error(out?.match(/Failed to connect: (.+)/)?.[1] || t('calls.errNoConnect'))
     return this.bt
   }
 

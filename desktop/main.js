@@ -73,21 +73,22 @@ let contacts = null
 // The Calendar's reminders (Drive-Android Plan.md § Calendar): one timer for the next, the plan made again from the files
 // whenever they change, a reminder is due, the computer wakes or Tetra starts. What came due while it was closed or asleep
 // (up to a day) is shown as missed. Every device reminds; "Reminders on this computer" turns this one off.
-const dayTime = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
-const clock = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' })
 function reminderText(r) {
+  // made each time: the language can change while Tetra runs
+  const dayTime = new Intl.DateTimeFormat(i18n.locale('en-GB'), { weekday: 'short', day: 'numeric', month: 'short' })
+  const clock = new Intl.DateTimeFormat(i18n.locale('en-GB'), { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const day = new Date(r.start); day.setHours(0, 0, 0, 0)
   const n = Math.round((day - today) / 86400000)
-  const words = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : dayTime.format(r.start)
-  return (r.allDay ? `${words}, all day` : `${words} ${clock.format(r.start)} – ${clock.format(r.end)}`) + (r.place ? ` · ${r.place}` : '')
+  const words = n === 0 ? t('common.today') : n === 1 ? t('common.tomorrow') : dayTime.format(r.start)
+  return (r.allDay ? t('main.reminderAllDay', { day: words }) : t('main.reminderTime', { day: words, start: clock.format(r.start), end: clock.format(r.end) })) + (r.place ? ` · ${r.place}` : '')
 }
 function planReminders() {
   clearTimeout(reminderTimer)
   if (!calendar || !db) return
   const now = Date.now(), on = setting('calendarReminders') !== 'off'
   const upTo = Math.max(+(setting('calendarUpTo') || now), now - 86_400_000)
-  if (on) for (const r of calendar.reminders(upTo, now + 1000)) notify(r.title || '(No title)', (now - r.at > 300_000 ? 'Missed · ' : '') + reminderText(r))
+  if (on) for (const r of calendar.reminders(upTo, now + 1000)) notify(r.title || t('common.noTitle'), (now - r.at > 300_000 ? t('main.missed') : '') + reminderText(r))
   setSetting('calendarUpTo', String(now + 1000))
   if (!on) return
   const next = calendar.reminders(now + 1000, now + 120 * 86_400_000)[0]
@@ -108,7 +109,7 @@ function planTimer() {
   const now = Date.now()
   for (const t of timers.active(now)) if (t.ringing && !timerRung.has(`${t.id}|${t.rev}`)) {
     timerRung.add(`${t.id}|${t.rev}`)
-    notify("Time's up", t.label || `${timer.durationText(t.seconds)} timer`)
+    notify(i18n.t('main.timesUp'), t.label || i18n.t('main.timerOf', { length: timer.durationText(t.seconds) }))
     win?.webContents.send('timer-changed')
   }
   const next = timers.nextEnd(now)
@@ -140,7 +141,7 @@ function linkContactFaces() {
 async function contactFacePhoto(faceId) {
   const f = db.prepare(`SELECT f.sha256, f.box_left, f.box_top, f.box_right, f.box_bottom, (SELECT MIN(m.path) FROM media m WHERE m.sha256 = f.sha256 AND m.location IS NULL) AS path
     FROM faces f WHERE f.id = ? AND f.deleted = 0`).get(String(faceId))
-  if (!f?.path) throw new Error('That picture is not on this computer.')
+  if (!f?.path) throw new Error(t('main.errPictureNotHere'))
   const sharp = require('sharp')
   // the upright size (metadata() gives the stored one, before EXIF's turn)
   const { width, height } = (await sharp(path.join(PHOTOS_ROOT, f.path)).rotate().toBuffer({ resolveWithObject: true })).info
@@ -201,7 +202,7 @@ const ask = (what, file) => new Promise((resolve, reject) => { const id = ++last
 function worker() {
   if (analyzer) return analyzer
   analyzer = new (require('node:worker_threads').Worker)(path.join(__dirname, 'analyzer.js'))
-  analyzer.postMessage({ type: 'init', dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, modelDir: path.join(__dirname, 'models') })
+  analyzer.postMessage({ type: 'init', language: i18n.current().lang, dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, modelDir: path.join(__dirname, 'models') })
   analyzer.on('message', m => {
     if (m.type === 'progress') { Object.assign(analysis, m.analysis); sendAnalysis() }
     else if (m.type === 'scan-progress') win?.webContents.send('scan-progress', { done: m.done, changed: m.changed })
@@ -211,10 +212,10 @@ function worker() {
   analyzer.on('error', e => console.error('[analyzer]', e))
   analyzer.on('exit', code => {
     analyzer = null
-    scanDone?.reject(new Error(`The background process stopped (${code}).`)); scanDone = null
-    for (const q of asks.values()) q.reject(new Error(`The background process stopped (${code}).`))
+    scanDone?.reject(new Error(t('main.errBackgroundStopped', { code }))); scanDone = null
+    for (const q of asks.values()) q.reject(new Error(t('main.errBackgroundStopped', { code })))
     asks.clear()
-    if (analysis.running) Object.assign(analysis, { running: false, error: `Analysis stopped unexpectedly (${code}).` })
+    if (analysis.running) Object.assign(analysis, { running: false, error: t('main.errAnalysisStopped', { code }) })
     sendAnalysis()
   })
   return analyzer
@@ -354,22 +355,22 @@ async function checkSpace() {
   if (offer?.rules.auto && Date.now() - (said.auto ?? 0) > HOURS) { // at most hourly: what failed is not retried every minute
     said.auto = Date.now()
     const { name, deviceId } = offer
-    moveToDrive(deviceId, {}).then(r => r.moved && notify(`Freed ${fmtBytes(r.bytes)}`, `${r.moved.toLocaleString()} photos now live on ${name}; they open from there when it is plugged in.`
-      + (r.failed.length ? ` ${r.failed.length} stayed here.` : '')))
-      .catch(e => notify(`Could not free space on ${name}`, e.message))
+    moveToDrive(deviceId, {}).then(r => r.moved && notify(t('main.freed', { size: fmtBytes(r.bytes) }), t('main.freedBody', { count: r.moved, n: r.moved.toLocaleString(), name })
+      + (r.failed.length ? ' ' + t('main.freedStayed', { n: r.failed.length }) : '')))
+      .catch(e => notify(t('main.freeFailed', { name }), e.message))
     return
   }
   if (offer && Date.now() - said.offer > 12 * HOURS) {
     said.offer = Date.now()
-    const why = offer.rules.offload ? `to bring this disk under ${offer.rules.percent} %` : `older than ${offer.rules.keep} ${offer.rules.unit}${offer.rules.keep > 1 ? 's' : ''}`
-    notify(`Free ${fmtBytes(offer.bytes)}?`, `${offer.count.toLocaleString()} photos ${why} are safe on ${offer.name}. Click to review — Yes and they go.`)
+    const why = offer.rules.offload ? t('main.whyUnder', { percent: offer.rules.percent }) : t(`main.olderThan.${offer.rules.unit}`, { count: offer.rules.keep })
+    notify(t('main.freeAsk', { size: fmtBytes(offer.bytes) }), t('main.freeAskBody', { count: offer.count, n: offer.count.toLocaleString(), why, name: offer.name }))
   }
   const storage = sync.devices().find(x => x.rules?.role === 'storage' && x.rules.offload)
   const limit = storage ? storage.rules.percent : 90
   if (disk && disk.percent >= limit && Date.now() - said.full > 6 * HOURS) {
     said.full = Date.now()
-    notify(`This disk is ${disk.percent} % full`, `${fmtBytes(disk.free)} left.` + (offer ? ` ${fmtBytes(offer.bytes)} of photos could go to ${offer.name}.`
-      : storage ? '' : ' Make a drive Storage on the Devices page and old photos can move there.'))
+    notify(t('main.diskFull', { percent: disk.percent }), t('main.diskLeft', { free: fmtBytes(disk.free) }) + (offer ? ' ' + t('main.diskCouldGo', { size: fmtBytes(offer.bytes), name: offer.name })
+      : storage ? '' : ' ' + t('main.diskMakeStorage')))
   }
 }
 /** Trash past its days → the purgatory on the drive; purgatory past its days → gone (SYNC_PLAN.md D6). Hourly. */
@@ -387,7 +388,7 @@ async function sweepPurgatory() {
   if (r.entered) win?.webContents.send('sync-received')
 }
 function moveToDrive(id, options) {
-  if (moving) throw new Error('A move is already running.')
+  if (moving) throw new Error(t('main.errMoveRunning'))
   moving = sync.moveToDrive(id, options, p => win?.webContents.send('move-progress', p))
     .finally(() => {
       sync.releaseTrashedMoved().catch(() => {})
@@ -396,29 +397,29 @@ function moveToDrive(id, options) {
 }
 function updateTray() {
   if (!tray || tray.isDestroyed()) return
-  const status = driveBackup ? `Backing up to ${driveBackup.name}: ${driveBackup.done.toLocaleString()} / ${driveBackup.total.toLocaleString()}`
-    : analysis.running ? `Analysing ${analysis.done.toLocaleString()} / ${analysis.total.toLocaleString()}`
-    : analysis.paused ? 'Analysis paused' : 'Up to date'
+  const status = driveBackup ? t('main.trayBackingUp', { name: driveBackup.name, done: driveBackup.done.toLocaleString(), total: driveBackup.total.toLocaleString() })
+    : analysis.running ? t('main.trayAnalysing', { done: analysis.done.toLocaleString(), total: analysis.total.toLocaleString() })
+    : analysis.paused ? t('main.trayPaused') : t('main.trayUpToDate')
   tray.setToolTip(`Tetra — ${status}`)
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open Tetra', click: showWindow },
+    { label: t('main.trayOpen'), click: showWindow },
     { label: status, enabled: false },
-    { label: offer ? `Free ${fmtBytes(offer.bytes)}: ${offer.count.toLocaleString()} photos to ${offer.name}…` : '', visible: !!offer,
+    { label: offer ? t('main.trayFree', { size: fmtBytes(offer.bytes), count: offer.count, n: offer.count.toLocaleString(), name: offer.name }) : '', visible: !!offer,
       click: () => { showWindow(); win?.webContents.send('offload-offer', offer.deviceId) } },
-    analysis.running ? { label: 'Pause analysis', click: () => { analysis.paused = true; analyzer?.postMessage({ type: 'pause' }) } }
-      : { label: 'Resume analysis', visible: analysis.paused, click: () => analyzeLibrary() },
-    { label: 'Send files to phone…', click: sendFilesToPhone },
+    analysis.running ? { label: t('main.trayPause'), click: () => { analysis.paused = true; analyzer?.postMessage({ type: 'pause' }) } }
+      : { label: t('main.trayResume'), visible: analysis.paused, click: () => analyzeLibrary() },
+    { label: t('main.traySend'), click: sendFilesToPhone },
     { type: 'separator' },
-    { label: 'Quit Tetra', click: () => { quitting = true; app.quit() } },
+    { label: t('main.trayQuit'), click: () => { quitting = true; app.quit() } },
   ]))
 }
 
 /** Send to phone (the user, 23 Oct): any files on this computer, picked, straight into the phone's Files › From computer. */
 async function sendFilesToPhone() {
-  const { filePaths } = await dialog.showOpenDialog({ title: 'Send to phone', properties: ['openFile', 'multiSelections'] })
+  const { filePaths } = await dialog.showOpenDialog({ title: t('main.sendTitle'), properties: ['openFile', 'multiSelections'] })
   if (!filePaths.length) return
   const r = await sync.sendToDevice(filePaths).catch(e => ({ error: e.message }))
-  notify(r.sent ? `Sent ${r.sent} ${r.sent === 1 ? 'file' : 'files'} to ${r.device}` : 'Nothing was sent to the phone', r.error ?? 'In Files › From computer there')
+  notify(r.sent ? t('main.sent', { count: r.sent, device: r.device }) : t('main.sentNothing'), r.error ?? t('main.sentWhere'))
 }
 
 /** `rescan` — 'faces' or 'documents' — reads photos that were read before, because the rules changed since. */
@@ -475,7 +476,7 @@ app.whenReady().then(() => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   }, onSent: ({ device, paths }) => { // Send to computer: the phone's share menu, into Files › From phone
-    notify(`${paths.length} ${paths.length === 1 ? 'file' : 'files'} from ${device}`, [...new Set(paths.map(p => p.split('/').pop()))].join(', '),
+    notify(t('main.received', { count: paths.length, device }), [...new Set(paths.map(p => p.split('/').pop()))].join(', '),
       () => win?.webContents.send('open-files-folder', FROM_PHONE))
     win?.webContents.send('sync-received')
   } })
@@ -547,7 +548,7 @@ app.whenReady().then(() => {
   ipcMain.handle('library:list', () => {
     const c = folders.choices()
     const names = new Map(db.prepare('SELECT id, name FROM sync_devices WHERE volume_uuid IS NOT NULL').all().map(d => [d.id, d.name]))
-    return library.pairMotion(library.list(db).filter(m => folders.isShown(m.path, c)).map(m => m.location ? { ...m, drive: names.get(m.location) ?? 'a drive' } : m))
+    return library.pairMotion(library.list(db).filter(m => folders.isShown(m.path, c)).map(m => m.location ? { ...m, drive: names.get(m.location) ?? t('main.aDrive') } : m))
   })
   ipcMain.handle('folders:list', () => folders.list().map(({ shas, ...f }) => f))
   ipcMain.handle('folders:set', (_, name, included) => { folders.set(name, included); sync.nudge().catch(() => {}) })
@@ -584,7 +585,7 @@ app.whenReady().then(() => {
   ipcMain.handle('collections:set', async (_, id, shas, member) => {
     if (!driveOf(id)) return library.setMembership(db, id, shas, member)
     const r = member ? await sync.addToDrive(driveOf(id), shas) : await sync.removeFromDrive(driveOf(id), shas)
-    if (r.failed.length) throw new Error(`${r.failed.length} could not: ${r.failed.slice(0, 2).join('; ')}`)
+    if (r.failed.length) throw new Error(t('main.errCouldNot', { n: r.failed.length, list: r.failed.slice(0, 2).join('; ') }))
     return r
   })
   ipcMain.handle('drive:delete', (_, id, shas) => sync.deleteFromDrive(String(id), shas))
@@ -649,7 +650,7 @@ app.whenReady().then(() => {
     const result = { hidden: 0, failed: [] }
     for (const id of ids) {
       const row = db.prepare('SELECT * FROM media WHERE id = ? AND location IS NULL').get(Number(id))
-      if (!row) { result.failed.push('A photo on a storage drive cannot be hidden from here.'); continue }
+      if (!row) { result.failed.push(t('main.errHideOnDrive')); continue }
       try {
         await vault.hide(row, path.join(PHOTOS_ROOT, row.path), path.join(DATA_DIR, 'thumbs', row.sha256 + '.webp'))
         // No plaintext traces: thumbnail, HEIC preview and face crops of this photo go too.
@@ -670,7 +671,7 @@ app.whenReady().then(() => {
   // Editor: bytes in (HEIC via its JPEG preview), JPEG out.
   const photoFile = async id => {
     const row = db.prepare('SELECT path, sha256, location FROM media WHERE id = ?').get(Number(id))
-    if (!row) throw new Error('This photo is no longer in the library.')
+    if (!row) throw new Error(t('main.errPhotoGone'))
     const { file: full, why } = await sync.locate(row)
     if (!full) throw new Error(why)
     return { row, full }
@@ -700,13 +701,13 @@ app.whenReady().then(() => {
   ipcMain.handle('maps:phoneLocation', () => sync.phoneLocation()) // this computer has no GPS: the paired phone's fix
   // online: Google's page of the place, with its reviews and photos (the phone's place card does the same)
   // a place's website (or its Διαύγεια decision): web pages only
-  ipcMain.handle('maps:web', (_, url) => { if (typeof url !== 'string' || !/^https?:\/\/[^\s]+$/i.test(url)) throw new Error('Not a web address.'); return shell.openExternal(url) })
-  ipcMain.handle('maps:google', (_, q) => { if (typeof q !== 'string' || !q || q.length > 300) throw new Error('Nothing to look up.'); return shell.openExternal('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q)) })
+  ipcMain.handle('maps:web', (_, url) => { if (typeof url !== 'string' || !/^https?:\/\/[^\s]+$/i.test(url)) throw new Error(t('main.errNotWeb')); return shell.openExternal(url) })
+  ipcMain.handle('maps:google', (_, q) => { if (typeof q !== 'string' || !q || q.length > 300) throw new Error(t('main.errNothingToLookUp')); return shell.openExternal('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q)) })
   ipcMain.handle('editor:save', async (_, id, bytes, mode) => {
     const row = db.prepare('SELECT * FROM media WHERE id = ?').get(Number(id))
-    if (!row) throw new Error('This photo is no longer in the library.')
+    if (!row) throw new Error(t('main.errPhotoGone'))
     // ponytail: saving next to a photo that lives on the storage drive is not built; bring it back first.
-    if (row.location) throw new Error('This photo lives on a storage drive; saving an edit there is not possible yet.')
+    if (row.location) throw new Error(t('main.errEditOnDrive'))
     const full = path.join(PHOTOS_ROOT, row.path)
     const target = mode === 'replace'
       ? await editor.replace(full, bytes, row.taken_at, f => shell.trashItem(f))
@@ -768,10 +769,10 @@ app.whenReady().then(() => {
   ipcMain.handle('import:run', async (_, kind, sources, driveId, move) => {
     move = move === true
     const stop = importStop = { cancelled: false }
-    if (importing) throw new Error('An import is already running.')
-    if (!Array.isArray(sources) || !sources.length) throw new Error('Choose what to import.')
+    if (importing) throw new Error(t('main.errImportRunning'))
+    if (!Array.isArray(sources) || !sources.length) throw new Error(t('main.errChooseImport'))
     const plugged = driveId ? (await sync.drives()).find(d => d.device?.id === driveId && d.mount) : null
-    if (driveId && !plugged) throw new Error('That drive is not plugged in.')
+    if (driveId && !plugged) throw new Error(t('main.errDriveUnplugged'))
     const drive = plugged && { id: plugged.device.id, name: plugged.device.name, mount: plugged.mount }
     const onProgress = p => win?.webContents.send('import-progress', p)
     importing = kind === 'files'
@@ -780,7 +781,8 @@ app.whenReady().then(() => {
     try {
       const r = await importing
       if (kind !== 'files') await startScan()
-      notify(`${r.stopped ? 'Stopped: ' : ''}${move ? 'moved in' : 'imported'} ${r.imported.toLocaleString()} ${kind === 'files' ? 'files' : 'photos'}`, (drive ? `Straight to ${drive.name}. ` : '') + (r.skipped ? `${r.skipped} were already in the library. ` : '') + (r.failed.length ? `${r.failed.length} could not be copied.` : ''))
+      notify((r.stopped ? t('main.importStopped') : '') + t(`main.import.${move ? 'movedIn' : 'imported'}.${kind === 'files' ? 'files' : 'photos'}`, { count: r.imported, n: r.imported.toLocaleString() }),
+        [drive && t('main.importStraight', { name: drive.name }), r.skipped && t('main.importSkipped', { n: r.skipped }), r.failed.length && t('main.importFailed', { n: r.failed.length })].filter(Boolean).join(' '))
       return r
     } finally { importing = null; importStop = null }
   })
@@ -828,14 +830,14 @@ app.whenReady().then(() => {
     return result
   })
   ipcMain.handle('contacts:pickImport', async () => {
-    const r = await dialog.showOpenDialog(win, { title: 'Import contacts', filters: [{ name: 'Contacts (.vcf, Google CSV, Takeout .zip)', extensions: ['vcf', 'csv', 'zip'] }], properties: ['openFile'] })
+    const r = await dialog.showOpenDialog(win, { title: t('main.importContacts'), filters: [{ name: t('main.contactsFilter'), extensions: ['vcf', 'csv', 'zip'] }], properties: ['openFile'] })
     if (r.canceled || !r.filePaths[0]) return null
     const r2 = contacts.import(readContacts(fs.readFileSync(r.filePaths[0]), r.filePaths[0]))
     planReminders()
     return r2
   })
   ipcMain.handle('contacts:export', async (_, uids, name) => {
-    const r = await dialog.showSaveDialog(win, { title: 'Export contacts', defaultPath: path.join(app.getPath('downloads'), `${String(name || 'Contacts').replace(/[/\\:*?"<>|]/g, '-')}.vcf`) })
+    const r = await dialog.showSaveDialog(win, { title: t('main.exportContacts'), defaultPath: path.join(app.getPath('downloads'), `${String(name || 'Contacts').replace(/[/\\:*?"<>|]/g, '-')}.vcf`) })
     if (r.canceled || !r.filePath) return null
     fs.writeFileSync(r.filePath, contacts.exportCards(Array.isArray(uids) ? uids : null))
     return r.filePath
@@ -847,7 +849,7 @@ app.whenReady().then(() => {
       : how === 'whatsapp' && digits ? 'https://wa.me/' + digits.replace(/^\+/, '')
       : how === 'viber' && digits ? 'viber://chat?number=' + encodeURIComponent(digits.startsWith('+') ? digits : '+' + digits)
       : how === 'web' && /^https?:\/\/\S+$/i.test(v) ? v : null
-    if (!url) throw new Error('Nothing to open.')
+    if (!url) throw new Error(t('main.errNothingToOpen'))
     return shell.openExternal(url)
   })
   ipcMain.handle('contacts:phoneCall', async (_, number, name) => {
@@ -880,7 +882,7 @@ app.whenReady().then(() => {
   // Refresh: the phones and tablets are asked to sync now; what they bring shows through the watcher
   ipcMain.handle('calendar:refresh', () => sync.nudge())
   ipcMain.handle('calendar:pickImport', async () => {
-    const r = await dialog.showOpenDialog(win, { title: 'Import calendars', filters: [{ name: 'Calendars (.ics, Google Takeout .zip)', extensions: ['ics', 'zip'] }], properties: ['openFile'] })
+    const r = await dialog.showOpenDialog(win, { title: t('main.importCalendars'), filters: [{ name: t('main.calendarsFilter'), extensions: ['ics', 'zip'] }], properties: ['openFile'] })
     if (r.canceled || !r.filePaths[0]) return null
     calendarIncoming = Calendar.readImport(r.filePaths[0]).filter(i => i.events.size)
     return calendarIncoming.map((i, index) => ({ index, name: i.name, color: i.color, count: i.events.size }))
@@ -894,7 +896,7 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('calendar:export', async (_, id) => {
     const all = id == null
-    const r = await dialog.showSaveDialog(win, { title: all ? 'Export all calendars' : 'Export calendar', defaultPath: path.join(app.getPath('downloads'), all ? 'Tetra calendars.zip' : `${id}.ics`) })
+    const r = await dialog.showSaveDialog(win, { title: all ? t('main.exportAllCalendars') : t('main.exportCalendar'), defaultPath: path.join(app.getPath('downloads'), all ? 'Tetra calendars.zip' : `${id}.ics`) })
     if (r.canceled || !r.filePath) return null
     fs.writeFileSync(r.filePath, all ? calendar.exportAll() : calendar.exportCalendar(id))
     return r.filePath
@@ -905,7 +907,7 @@ app.whenReady().then(() => {
   const skillFiles = name => fs.readdirSync(skillDir(name)).filter(n => !n.startsWith('.') && fs.statSync(path.join(skillDir(name), n)).isFile())
   ipcMain.handle('skill:save', async (_, name) => {
     skillDir(name)
-    const r = await dialog.showSaveDialog(win, { title: 'Save the skill for Claude', defaultPath: path.join(app.getPath('downloads'), `${name}.zip`) })
+    const r = await dialog.showSaveDialog(win, { title: t('main.saveSkill'), defaultPath: path.join(app.getPath('downloads'), `${name}.zip`) })
     if (r.canceled || !r.filePath) return null
     fs.writeFileSync(r.filePath, require('./calendar').zip(skillFiles(name).map(n => ({ name: `${name}/${n}`, data: fs.readFileSync(path.join(skillDir(name), n)) }))))
     return r.filePath
@@ -957,9 +959,9 @@ app.whenReady().then(() => {
   win.webContents.on('context-menu', (_, p) => {
     const items = []
     for (const word of p.dictionarySuggestions ?? []) items.push({ label: word, click: () => win.webContents.replaceMisspelling(word) })
-    if (p.misspelledWord) items.push({ label: 'Add to dictionary', click: () => win.webContents.session.addWordToSpellCheckerDictionary(p.misspelledWord) }, { type: 'separator' })
-    if (p.isEditable) items.push({ role: 'cut', enabled: p.editFlags.canCut }, { role: 'copy', enabled: p.editFlags.canCopy }, { role: 'paste', enabled: p.editFlags.canPaste }, { type: 'separator' }, { role: 'selectAll' })
-    else if (p.selectionText.trim()) items.push({ role: 'copy' })
+    if (p.misspelledWord) items.push({ label: t('main.addToDictionary'), click: () => win.webContents.session.addWordToSpellCheckerDictionary(p.misspelledWord) }, { type: 'separator' })
+    if (p.isEditable) items.push({ role: 'cut', label: t('main.cut'), enabled: p.editFlags.canCut }, { role: 'copy', label: t('common.copy'), enabled: p.editFlags.canCopy }, { role: 'paste', label: t('main.paste'), enabled: p.editFlags.canPaste }, { type: 'separator' }, { role: 'selectAll', label: t('main.selectAll') })
+    else if (p.selectionText.trim()) items.push({ role: 'copy', label: t('common.copy') })
     if (items.length) Menu.buildFromTemplate(items).popup({ window: win })
   })
   watchCalendar()
@@ -1031,7 +1033,7 @@ const spamMatch = (list, n) => list.find(e => e.number.endsWith('*') ? (p => (p.
 function phoneSpam() { try { return spamParse(fs.readFileSync(spamFile(), 'utf8')) } catch { return [] } }
 function setPhoneSpam(number, on) {
   const n = String(number || '').replace(/[^\d+*]/g, '')
-  if (!/\d/.test(n)) throw new Error('Not a phone number.')
+  if (!/\d/.test(n)) throw new Error(t('main.errNotPhone'))
   let text = ''; try { text = fs.readFileSync(spamFile(), 'utf8') } catch { text = SPAM_HEAD }
   if (on) { if (!spamMatch(spamParse(text), n)) text = text.replace(/\n*$/, '\n') + n + '\n' }
   else text = text.split('\n').filter(l => { const e = spamParse(l)[0]; return !e || (n.endsWith('*') ? e.number !== n : (e.number.endsWith('*') || !spamSame(e.number, n))) }).join('\n').replace(/\n*$/, '\n')

@@ -103,6 +103,7 @@ async function readText(file) {
 port.on('message', data => {
   if (data.type === 'init') {
     ({ photosRoot, modelDir, dataDir } = data)
+    require('./i18n').use(data.language) // the scan's errors reach the window in Tetra's language
     db = library.open(dataDir)
     people = new faces.People(db, dataDir)
     documents = new docs.Documents(db)
