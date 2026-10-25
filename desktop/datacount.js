@@ -20,7 +20,7 @@ function parseIw(text) {
 
 /** A month file's lines, as the phone's DataFiles writes them. */
 function monthText(m, name = '') {
-  const days = [...m.days.values()].sort((a, b) => a.d.localeCompare(b.d)).map(d => JSON.stringify({ d: d.d, mobile: 0, wifi: d.wifi, roam: 0, hotspot: 0, via: d.via }))
+  const days = [...m.days.values()].sort((a, b) => a.d.localeCompare(b.d)).map(d => JSON.stringify({ d: d.d, mobile: 0, wifi: d.wifi, roam: 0, hotspot: 0, via: d.via, ...(d.eth ? { eth: d.eth } : {}) }))
   const hours = [...m.hours.entries()].sort().map(([k, b]) => { const [h, net] = k.split('|'); return JSON.stringify({ h, net, bytes: b }) })
   const events = m.events.slice().sort((a, b) => a.at.localeCompare(b.at)).map(e => JSON.stringify({ at: e.at, event: e.event, secs: e.secs, ...(e.note ? { note: e.note } : {}) }))
   return [...(name ? [JSON.stringify({ deviceName: name })] : []), ...days, ...hours, ...events].map(l => l + '\n').join('')
@@ -33,7 +33,7 @@ function parseMonth(text) {
     if (o.event) m.events.push({ at: o.at, event: o.event, secs: o.secs || 0, note: o.note || '' })
     else if (o.deviceName) continue
     else if (o.h) m.hours.set(`${o.h}|${o.net}`, Number(o.bytes) || 0)
-    else if (o.d && !o.app) m.days.set(o.d, { d: o.d, wifi: Number(o.wifi) || 0, via: Number(o.via) || 0 })
+    else if (o.d && !o.app) m.days.set(o.d, { d: o.d, wifi: Number(o.wifi) || 0, via: Number(o.via) || 0, ...(o.eth ? { eth: Number(o.eth) } : {}) })
   }
   return m
 }
@@ -70,6 +70,20 @@ class DataCounter {
     return out
   }
 
+  /** A cable plugged in: the first wired, physical interface that is up, and its speed (Mb/s) as the card says it. */
+  ethernet() {
+    const base = '/sys/class/net'
+    let names = []
+    try { names = fs.readdirSync(base) } catch { return null }
+    for (const n of names) {
+      if (n === 'lo' || /^(docker|veth|br-|virbr|tun|tap|wg)/.test(n)) continue
+      const p = f => { try { return fs.readFileSync(path.join(base, n, f), 'utf8').trim() } catch { return '' } }
+      if (fs.existsSync(path.join(base, n, 'wireless')) || fs.existsSync(path.join(base, n, 'phy80211')) || !fs.existsSync(path.join(base, n, 'device'))) continue
+      if (p('operstate') === 'up' && p('carrier') === '1') return { iface: n, speed: Math.max(0, Number(p('speed')) || 0) }
+    }
+    return null
+  }
+
   /** NetworkManager says a Wi-Fi is metered when it is an Android hotspot (it sends that over DHCP), so: on the phone's hotspot. */
   async metered(iface) { return /yes/.test(await run('nmcli', ['-g', 'GENERAL.METERED', 'device', 'show', iface])) }
 
@@ -92,6 +106,7 @@ class DataCounter {
       if (!bytes) continue
       m.hours.set(`${hourKey(now)}|${net}`, (m.hours.get(`${hourKey(now)}|${net}`) || 0) + bytes)
       if (net === 'wifi') { d.wifi += bytes; if (via) d.via += viaBytes ?? bytes }
+      else d.eth = (d.eth || 0) + bytes // the cable: counted apart (the user, 25 Oct: "recognize when I connect ethernet")
     }
     m.days.set(day, d)
   }
@@ -123,6 +138,10 @@ class DataCounter {
       this.lostAt = 0
     }
     this.link = link ? { ...link, iface: wifi, metered } : null
+    // a cable plugged in or out: a line in the month (not a drop), so the page can say when the computer was on Ethernet
+    const eth = this.ethernet()
+    if (this.started && !!eth !== !!this.eth) this.note({ at: localIso(now), event: eth ? 'ethernet-on' : 'ethernet-off', secs: 0, note: eth ? `${eth.speed} Mb/s` : '' })
+    this.eth = eth; this.started = true
     this.last = { at: now.getTime(), ifaces }
     if (!this.flushedAt || now.getTime() - this.flushedAt >= 10 * 60_000) this.flush(now)
   }
@@ -154,9 +173,10 @@ class DataCounter {
   async wifi() {
     const ifaces = this.readCounters()
     const w = Object.keys(ifaces).find(n => ifaces[n].wireless)
-    if (!w) return { error: 'This computer has no Wi-Fi.' }
-    const link = parseIw(await run('iw', ['dev', w, 'link']))
-    return link || { error: 'This computer is not on Wi-Fi.' }
+    const link = w ? parseIw(await run('iw', ['dev', w, 'link'])) : null
+    const ethernet = this.ethernet()
+    if (!link && !ethernet) return { error: 'This computer is on neither Wi-Fi nor a cable.' }
+    return { ...(link || {}), ...(ethernet ? { ethernet } : {}) }
   }
 
   /** Every device's months and the plan, for the Data page. */

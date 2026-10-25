@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 // Files/Data/usage say, the phone's hotspot split, the drops, and this computer's own Wi-Fi now. Read only: the plan is
 // set up on the phone (Setup there); this computer adds its own counts (datacount.js).
 
-type Line = { deviceName?: string; d?: string; h?: string; app?: string; net?: string; mobile?: number; wifi?: number; roam?: number; hotspot?: number; via?: number; bytes?: number; at?: string; event?: string; secs?: number; note?: string }
+type Line = { deviceName?: string; d?: string; h?: string; app?: string; net?: string; mobile?: number; wifi?: number; roam?: number; hotspot?: number; via?: number; eth?: number; bytes?: number; at?: string; event?: string; secs?: number; note?: string }
 type Plan = { kind: string; size: number; every: string; day: number; days: number; from: string; warn: number[] }
 type All = { plan: Plan | null; devices: Record<string, Line[]>; me: string }
-type Wifi = { rssi?: number; speed?: number; mhz?: number; ssid?: string; error?: string }
+type Wifi = { rssi?: number; speed?: number; mhz?: number; ssid?: string; ethernet?: { iface: string; speed: number }; error?: string }
 const LIME = '#7cc417'
 const WIFI = '#4f86e8'
 const HOTSPOT = '#ff9f1c' // another phone's hotspot: neither mobile nor plain Wi-Fi (the user, 25 Oct)
@@ -58,9 +58,9 @@ export function DataPage() {
       const m = days(lines)
       const cyc = [...m.values()].filter(l => inCycle(l.d!))
       return { name: lines.find(l => l.deviceName)?.deviceName || name, id: name, days: m, mobile: cyc.reduce((s, l) => s + (l.mobile || 0), 0), wifi: cyc.reduce((s, l) => s + (l.wifi || 0), 0),
-        hotspot: cyc.reduce((s, l) => s + (l.hotspot || 0), 0), via: cyc.reduce((s, l) => s + (l.via || 0), 0),
+        hotspot: cyc.reduce((s, l) => s + (l.hotspot || 0), 0), via: cyc.reduce((s, l) => s + (l.via || 0), 0), eth: cyc.reduce((s, l) => s + (l.eth || 0), 0),
         drops: lines.filter(l => l.event && DROPS[l.event]).map(l => ({ ...l, device: name })) }
-    }).filter(d => d.mobile + d.wifi > 0 || d.drops.length)
+    }).filter(d => d.mobile + d.wifi + d.eth > 0 || d.drops.length)
     const phone = devices.slice().sort((a, b) => b.mobile - a.mobile)[0]
     return { devices, phone }
   }, [all, start.getTime()])
@@ -100,7 +100,7 @@ export function DataPage() {
       <section>
         <h3>This cycle, by device</h3>
         {devices.length === 0 && <p className="muted">Nothing counted yet.</p>}
-        {devices.map(d => <p key={d.name} style={{ margin: '4px 0' }}><b>{d.name}{d.id === all.me ? ' (this computer)' : ''}</b>: {[d.mobile ? `Mobile ${bytes(d.mobile)}` : '', d.via ? `Hotspot ${bytes(d.via)}` : '', `Wi-Fi ${bytes(d.wifi - d.via)}`].filter(Boolean).join(' · ')}</p>)}
+        {devices.map(d => <p key={d.name} style={{ margin: '4px 0' }}><b>{d.name}{d.id === all.me ? ' (this computer)' : ''}</b>: {[d.mobile ? `Mobile ${bytes(d.mobile)}` : '', d.via ? `Hotspot ${bytes(d.via)}` : '', `Wi-Fi ${bytes(d.wifi - d.via)}`, d.eth ? `Ethernet ${bytes(d.eth)}` : ''].filter(Boolean).join(' · ')}</p>)}
       </section>
 
       {(hotspot > 0 || clients.length > 0) && <section>
@@ -111,8 +111,10 @@ export function DataPage() {
       </section>}
 
       <section>
-        <h3>This computer's Wi-Fi now</h3>
-        {wifi?.rssi !== undefined ? <p style={{ margin: 0 }}><b style={{ fontSize: 28 }}>{wifi.rssi} dBm</b> · {quality(wifi.rssi)} · {wifi.speed} Mb/s · {wifi.ssid} · {wifi.mhz && wifi.mhz >= 4900 ? '5 GHz' : '2.4 GHz'}</p> : <p className="muted">{wifi?.error ?? 'Reading…'}</p>}
+        <h3>This computer's connection now</h3>
+        {wifi?.ethernet && <p style={{ margin: '0 0 6px' }}><b style={{ fontSize: 28 }}>Ethernet</b> · {wifi.ethernet.speed ? `${wifi.ethernet.speed} Mb/s` : 'connected'} ({wifi.ethernet.iface})</p>}
+        {wifi?.rssi !== undefined ? <p style={{ margin: 0 }}><b style={{ fontSize: wifi.ethernet ? 18 : 28 }}>Wi-Fi {wifi.rssi} dBm</b> · {quality(wifi.rssi)} · {wifi.speed} Mb/s · {wifi.ssid} · {wifi.mhz && wifi.mhz >= 4900 ? '5 GHz' : '2.4 GHz'}</p>
+          : !wifi?.ethernet && <p className="muted">{wifi?.error ?? 'Reading…'}</p>}
       </section>
 
       <section>

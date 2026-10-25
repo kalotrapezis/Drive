@@ -33,7 +33,7 @@ test('each minute adds what the counters moved; a counter that went back counts 
   set({ wlan0: { rx: 300, tx: 0, wireless: true }, eth0: { rx: 40, tx: 0, wireless: false } }); await c.tick(t(11)) // a restart: 300 new
   c.flush(t(11))
   const m = parseMonth(fs.readFileSync(path.join(root, 'usage', '2026-10.my-pc.jsonl'), 'utf8'))
-  assert.deepEqual(m.days.get('2026-10-25'), { d: '2026-10-25', wifi: 5800, via: 300 })
+  assert.deepEqual(m.days.get('2026-10-25'), { d: '2026-10-25', wifi: 5800, via: 300, eth: 40 }) // the cable counted apart
   assert.equal(m.hours.get('2026-10-25T10|wifi'), 5500)
   assert.equal(m.hours.get('2026-10-25T10|wired'), 40)
 })
