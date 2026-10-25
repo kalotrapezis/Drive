@@ -12,6 +12,7 @@ const os = require('node:os')
 const path = require('node:path')
 const net = require('node:net')
 const { spawn, spawnSync } = require('node:child_process')
+const { t } = require('./i18n')
 
 const JAR = 'graphhopper-web-10.2.jar'
 /** The graph's profiles exactly as made (tools/maps-graph.yml): GraphHopper refuses a graph whose profiles differ. */
@@ -73,17 +74,17 @@ class Router {
   tools() {
     const jar = [process.env.TETRA_GRAPHHOPPER_JAR, path.join(os.homedir(), 'Tetra-maps', 'bin', JAR)].find(f => f && fs.existsSync(f))
     const java = [process.env.JAVA, '/usr/lib/jvm/java-17-openjdk-amd64/bin/java', 'java'].find(j => j && works(j))
-    if (!fs.existsSync(path.join(this.graphDir, 'properties'))) return { why: 'The routing graph is not on this computer yet (Files/Maps/greece-gh).' }
-    if (!java) return { why: 'Directions on the computer need Java 17 or newer.' }
-    if (!jar) return { why: `Directions on the computer need ${JAR} in ~/Tetra-maps/bin (tools/maps-greece.sh puts it there).` }
+    if (!fs.existsSync(path.join(this.graphDir, 'properties'))) return { why: t('maps.noGraph') }
+    if (!java) return { why: t('maps.needJava') }
+    if (!jar) return { why: t('maps.needJar', { jar: JAR }) }
     return { java, jar }
   }
 
   stamp() { try { return fs.statSync(path.join(this.graphDir, 'properties')).mtimeMs } catch { return 0 } }
 
   async start() {
-    const t = this.tools()
-    if (t.why) throw new Error(t.why)
+    const tools = this.tools()
+    if (tools.why) throw new Error(tools.why)
     const links = path.join(this.workDir, 'graph')
     fs.rmSync(this.workDir, { recursive: true, force: true })
     fs.mkdirSync(links, { recursive: true })
@@ -93,17 +94,17 @@ class Router {
     fs.writeFileSync(path.join(this.workDir, 'config.yml'), `graphhopper:\n  graph.location: ${JSON.stringify(links)}\n  graph.dataaccess.default_type: MMAP_RO\n${PROFILES}` +
       `server:\n  application_connectors:\n    - type: http\n      port: ${this.port}\n      bind_host: localhost\n  admin_connectors:\n    - type: http\n      port: ${admin}\n      bind_host: localhost\n`)
     const log = fs.openSync(path.join(this.workDir, 'graphhopper.log'), 'w')
-    this.proc = spawn(t.java, ['-Xmx1g', '-jar', t.jar, 'server', 'config.yml'], { cwd: this.workDir, stdio: ['ignore', log, log] })
+    this.proc = spawn(tools.java, ['-Xmx1g', '-jar', tools.jar, 'server', 'config.yml'], { cwd: this.workDir, stdio: ['ignore', log, log] })
     this.graphStamp = this.stamp()
     const proc = this.proc
     proc.on('exit', () => { if (this.proc === proc) this.proc = null })
     for (let i = 0; i < 120; i++) {
-      if (!this.proc) throw new Error('The routing server stopped; see graphhopper.log in the app data.')
+      if (!this.proc) throw new Error(t('maps.routerStopped'))
       if (await fetch(`http://localhost:${this.port}/health`).then(r => r.ok, () => false)) return
       await new Promise(r => setTimeout(r, 500))
     }
     this.stop()
-    throw new Error('The routing server did not start in a minute.')
+    throw new Error(t('maps.routerSlow'))
   }
 
   async ready() {
@@ -114,7 +115,7 @@ class Router {
   /** From the first point through each next one: its line, metres, minutes and turns (Greek, as the phone says them). */
   async route(points, mode = 'car', main = false) {
     const profile = ['car', 'foot', 'bike', 'wheelchair'].includes(mode) ? mode : 'car'
-    if (!Array.isArray(points) || points.length < 2 || !points.every(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))) throw new Error('Directions need two places.')
+    if (!Array.isArray(points) || points.length < 2 || !points.every(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))) throw new Error(t('maps.needTwoPlaces'))
     await this.ready()
     let body
     if (main && profile === 'car') {
@@ -139,10 +140,10 @@ class Router {
 
 /** GraphHopper's errors in plain words (the phone: "routing errors in plain words"). */
 function plain(message = '') {
-  if (/Cannot find point|PointNotFound/i.test(message)) return 'No road near one of the places.'
-  if (/Connection between locations not found|ConnectionNotFound/i.test(message)) return 'No way there by this mode (an island without a ferry, or a road closed to it).'
-  if (/out of bounds/i.test(message)) return 'One of the places is outside the map (Greece).'
-  return message || 'No route.'
+  if (/Cannot find point|PointNotFound/i.test(message)) return t('maps.noRoadNear')
+  if (/Connection between locations not found|ConnectionNotFound/i.test(message)) return t('maps.noWay')
+  if (/out of bounds/i.test(message)) return t('maps.outsideMap')
+  return message || t('maps.noRoute')
 }
 
 const freePort = () => new Promise((resolve, reject) => {

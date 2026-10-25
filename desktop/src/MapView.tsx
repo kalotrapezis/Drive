@@ -7,10 +7,11 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 maplibregl.setWorkerUrl(workerUrl)
 import type { Media } from './timeline'
 import { Icon } from './Icon'
+import { lang, t } from './i18n'
 
 // OpenFreeMap, as on the phone. Tiles need internet; coordinates and place names stay local.
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty'
-const when = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+const when = new Intl.DateTimeFormat(lang() === 'en' ? 'en-GB' : lang(), { day: 'numeric', month: 'short', year: 'numeric' })
 
 /** `group` is the indices the viewer may page through: a group's photos, not every located photo. */
 export function MapView({ items, focus, onOpen, onBack }: { items: Media[]; focus?: string; onOpen: (index: number, group?: number[]) => void; onBack: () => void }) {
@@ -77,19 +78,19 @@ export function MapView({ items, focus, onOpen, onBack }: { items: Media[]; focu
     <div className="map-page">
       <div ref={box} className="map" />
       <header className="map-bar">
-        <div className="island title-island"><button className="round flat" title="Back to Collections" onClick={onBack}><Icon name="back" /></button><h1>Map</h1><span className="pill">{items.length} located</span></div>
+        <div className="island title-island"><button className="round flat" title={t('maps.backToCollections')} onClick={onBack}><Icon name="back" /></button><h1>{t('maps.photoMap')}</h1><span className="pill">{t('maps.located', { count: items.length })}</span></div>
       </header>
-      {state === 'loading' && <div className="island map-note"><span className="spinner" /> Loading the map…</div>}
-      {state === 'offline' && <div className="island map-note">The map background needs internet. Locations are still in each photo’s Details.</div>}
-      {items.length === 0 && state === 'ready' && <div className="island map-note">No photos with a location yet.</div>}
+      {state === 'loading' && <div className="island map-note"><span className="spinner" /> {t('maps.loadingMap')}</div>}
+      {state === 'offline' && <div className="island map-note">{t('maps.needsInternet')}</div>}
+      {items.length === 0 && state === 'ready' && <div className="island map-note">{t('maps.noLocated')}</div>}
       {group && (
         <div className="island map-sheet">
           <header>
-            <strong>{group.indices.length.toLocaleString()} photos</strong>
+            <strong>{t('maps.photos', { count: group.indices.length, n: group.indices.length.toLocaleString() })}</strong>
             {places && places.length > 0 && <small>{places.slice(0, 3).join(' · ')}{places.length > 3 ? ` · +${places.length - 3}` : ''}</small>}
             <button className="text-button" onClick={() => { map.current?.easeTo({ center: group.center, zoom: group.zoom }); setGroup(null) }}>
-              <Icon name="zoomIn" size={18} /> Zoom in</button>
-            <button className="round flat" title="Close" onClick={() => setGroup(null)}><Icon name="close" /></button>
+              <Icon name="zoomIn" size={18} /> {t('maps.zoomIn')}</button>
+            <button className="round flat" title={t('common.close')} onClick={() => setGroup(null)}><Icon name="close" /></button>
           </header>
           <div className="map-sheet-grid">
             {group.indices.map(i => (
@@ -107,11 +108,11 @@ export function MapView({ items, focus, onOpen, onBack }: { items: Media[]; focu
             <strong>{it.place || it.path.split('/').pop()}</strong>
             <small>{when.format(it.taken_at)} · {it.latitude!.toFixed(5)}, {it.longitude!.toFixed(5)}</small>
             <div className="map-card-actions">
-              <button className="filled-button" onClick={() => onOpen(selected!)}>Open</button>
+              <button className="filled-button" onClick={() => onOpen(selected!)}>{t('common.open')}</button>
               <button className="text-button" onClick={() => window.drive.openMap(it.latitude!, it.longitude!)}><Icon name="external" size={18} /> OpenStreetMap</button>
             </div>
           </div>
-          <button className="round flat" title="Close" onClick={() => setSelected(null)}><Icon name="close" /></button>
+          <button className="round flat" title={t('common.close')} onClick={() => setSelected(null)}><Icon name="close" /></button>
         </div>
       )}
     </div>

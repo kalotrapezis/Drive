@@ -6,6 +6,7 @@ import type { MapList, MapPlace, MapStop, MapTrip, Poi } from './drive'
 import { Icon } from './Icon'
 import { errorText } from './Dialogs'
 import { CATEGORIES, EMBLEMS } from './emblems'
+import { lang, t, tr } from './i18n'
 
 maplibregl.setWorkerUrl(workerUrl) // the page loads from file://, where MapLibre cannot find its worker by itself
 
@@ -17,26 +18,27 @@ const GREECE: [[number, number], [number, number]] = [[18.6, 34.2], [30.2, 42.2]
 const MAPS_COLOR = '#5c6bc0'
 const FONT = ['Noto Sans Regular']
 
-/** Search's pills, in the phone's order (MapsSearch.PILLS). */
-const PILLS: [key: string, label: string, emoji: string][] = [
-  ['restaurant', 'Restaurants', '🍽️'], ['cafe', 'Cafés', '☕'], ['supermarket', 'Supermarkets', '🛒'], ['pharmacy', 'Pharmacies', '💊'],
-  ['eopyy', 'EOPYY pharmacies', '⚕️'], ['fuel', 'Fuel', '⛽'], ['charging', 'EV charging', '🔌'], ['disabled_parking', 'Disabled parking', '♿'],
-  ['parking', 'Parking', '🅿️'], ['hospital', 'Hospitals', '🏥'], ['bakery', 'Bakeries', '🥖'], ['fast_food', 'Fast food', '🍔'], ['atm', 'ATMs', '🏧'],
-  ['hotel', 'Hotels', '🛏️'], ['beach', 'Beaches', '🏖️'], ['museum', 'Museums', '🏛️'], ['toilets', 'Toilets', '🚻'], ['toll', 'Tolls', '💶'],
-  ['kindergarten', 'Kindergartens', '🧸'], ['primary_school', 'Primary schools', '🎒'], ['secondary_school', 'High schools', '🏫'],
-  ['school', 'Other schools', '🏫'], ['university', 'Universities', '🎓'],
+/** Search's pills, in the phone's order (MapsSearch.PILLS); their words are maps.pill.<key> (many) and maps.kind.<key> (one). */
+const PILLS: [key: string, emoji: string][] = [
+  ['restaurant', '🍽️'], ['cafe', '☕'], ['supermarket', '🛒'], ['pharmacy', '💊'],
+  ['eopyy', '⚕️'], ['fuel', '⛽'], ['charging', '🔌'], ['disabled_parking', '♿'],
+  ['parking', '🅿️'], ['hospital', '🏥'], ['bakery', '🥖'], ['fast_food', '🍔'], ['atm', '🏧'],
+  ['hotel', '🛏️'], ['beach', '🏖️'], ['museum', '🏛️'], ['toilets', '🚻'], ['toll', '💶'],
+  ['kindergarten', '🧸'], ['primary_school', '🎒'], ['secondary_school', '🏫'],
+  ['school', '🏫'], ['university', '🎓'],
 ]
-const SETTLEMENTS: Record<string, string> = { city: 'City', town: 'Town', village: 'Village', suburb: 'Suburb', neighbourhood: 'Neighbourhood', hamlet: 'Hamlet', island: 'Island', islet: 'Islet', locality: 'Place' }
-const ONE: Record<string, string> = { toll: 'Toll', eopyy: 'EOPYY pharmacy', university: 'University', school: 'School', pharmacy: 'Pharmacy', charging: 'EV charging', disabled_parking: 'Disabled parking', fast_food: 'Fast food' }
-const kindLabel = (k: string) => ONE[k] ?? PILLS.find(p => p[0] === k)?.[1].replace(/s$/, '') ?? SETTLEMENTS[k] ?? k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
-const kindEmoji = (k: string) => PILLS.find(p => p[0] === k)?.[2] ?? (SETTLEMENTS[k] ? '🏘️' : '📍')
+const SETTLEMENTS = new Set(['city', 'town', 'village', 'suburb', 'neighbourhood', 'hamlet', 'island', 'islet', 'locality'])
+const pillLabel = (k: string) => t(`maps.pill.${k}`)
+const kindLabel = (k: string) => PILLS.some(p => p[0] === k) || SETTLEMENTS.has(k) ? t(`maps.kind.${k}`) : k.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())
+const kindEmoji = (k: string) => PILLS.find(p => p[0] === k)?.[1] ?? (SETTLEMENTS.has(k) ? '🏘️' : '📍')
 const poiTitle = (p: Poi) => p.name || p.nameEn || kindLabel(p.kind)
 const NO_STOPS: MapStop[] = []
 const letter = (i: number) => String.fromCharCode(65 + i % 26)
 
 /** "350 m", "1.4 km", "12 km" (Maps.kt metresText). */
 function metresText(m: number) {
-  return m < 950 ? `${Math.max(0, Math.round(m / 10) * 10)} m` : m < 9950 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m / 1000)} km`
+  const tenth = (n: number) => lang() === 'en' ? n.toFixed(1) : n.toLocaleString(lang(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  return m < 950 ? t('maps.metres', { n: Math.max(0, Math.round(m / 10) * 10) }) : m < 9950 ? t('maps.km', { n: tenth(m / 1000) }) : t('maps.km', { n: Math.round(m / 1000) })
 }
 function metres(lat1: number, lng1: number, lat2: number, lng2: number) {
   const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180
@@ -51,7 +53,8 @@ export function Emblem({ icon, size = 18 }: { icon: string; size?: number }) {
 
 type Card = { kind: 'poi'; poi: Poi } | { kind: 'place'; place: MapPlace } | { kind: 'pin'; lat: number; lng: number; road?: string }
   | { kind: 'me'; lat: number; lng: number; accuracy: number; device: string }
-const ME = 'My location' // the phone's fix as a trip's stop
+const ME = 'My location' // the phone's fix as a trip's stop: kept so in the trip's file (the phone's word), shown in the language
+const stopName = (name: string) => name === ME ? t('maps.myLocation') : name
 type Draft = { id?: string; name: string; stops: MapStop[] }
 const cardSpot = (c: Card) => c.kind === 'poi' ? c.poi : c.kind === 'place' ? c.place : c
 
@@ -151,7 +154,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
       const el = document.createElement('div')
       el.className = 'map-stop'
       el.textContent = letter(i)
-      el.title = s.name
+      el.title = stopName(s.name)
       return new maplibregl.Marker({ element: el }).setLngLat([s.lng, s.lat]).addTo(m)
     })
     const src = m.getSource('trip') as maplibregl.GeoJSONSource | undefined
@@ -164,7 +167,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
     setLegs(null); setRouteLine(null); setRouteNote('')
     if (tripStops.length < 2) return
     let live = true
-    setRouteNote('Finding the roads…')
+    setRouteNote(t('maps.findingRoads'))
     Promise.all(tripStops.slice(1).map((s, i) => window.drive.mapsRoute([tripStops[i], s], mode, main)))
       .then(rs => { if (!live) return; setLegs(rs.map(r => ({ metres: r.metres, seconds: r.seconds }))); setRouteLine(rs.flatMap(r => r.line)); setRouteNote('') },
         e => { if (live) setRouteNote(errorText(e)) })
@@ -190,7 +193,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
     if (r.error !== undefined) { say(r.error); return null }
     const el = document.createElement('div')
     el.className = 'map-me'
-    el.title = `${ME} (${r.device})`
+    el.title = t('maps.myLocationOn', { device: r.device })
     meMarker.current?.remove()
     meMarker.current = new maplibregl.Marker({ element: el }).setLngLat([r.lng, r.lat]).addTo(map.current!)
     return { kind: 'me' as const, lat: r.lat, lng: r.lng, accuracy: r.accuracy, device: r.device }
@@ -235,7 +238,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
         }
       }
       setResults(found)
-      if (!found.length) say('Nothing found.')
+      if (!found.length) say(t('maps.nothingFound'))
     } catch (e) { say(errorText(e)) }
   }
   // as you type: the nearest names first
@@ -262,20 +265,20 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
   async function savePlace(p: MapPlace) {
     try {
       const saved = await window.drive.mapsSavePlace(p)
-      say(`Saved: ${saved.name}`)
+      say(t('maps.saved', { name: saved.name }))
       setEdit(null)
       await reload()
       open({ kind: 'place', place: saved }, false)
     } catch (e) { say(errorText(e)) }
   }
   async function deletePlace(p: MapPlace) {
-    try { await window.drive.mapsDeletePlace(p.id); say(`${p.name} is in Files' Trash.`); closeCard(); reload() } catch (e) { say(errorText(e)) }
+    try { await window.drive.mapsDeletePlace(p.id); say(t('maps.inTrash', { name: p.name })); closeCard(); reload() } catch (e) { say(errorText(e)) }
   }
   function startSave(c: Card) {
     if (c.kind === 'place') { setEdit(c.place); return }
     const s = cardSpot(c)
-    const name = c.kind === 'poi' ? poiTitle(c.poi) : address?.split(',')[0] || 'Place'
-    const icon = c.kind === 'poi' ? (PILLS.find(p => p[0] === c.poi.kind) ? emblemOf(c.poi.kind) : 'pin') : 'pin'
+    const name = c.kind === 'poi' ? poiTitle(c.poi) : address?.split(',')[0] || t('maps.place')
+    const icon = c.kind === 'poi' ? (PILLS.some(p => p[0] === c.poi.kind) ? emblemOf(c.poi.kind) : 'pin') : 'pin'
     setEdit({ id: '', name, lat: s.lat, lng: s.lng, icon, slot: 0, mode: 'car', lists: [], label: '' })
   }
 
@@ -283,7 +286,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
 
   function addStop(c: Card) {
     const s = cardSpot(c)
-    const name = c.kind === 'me' ? ME : c.kind === 'poi' ? poiTitle(c.poi) : c.kind === 'place' ? c.place.name : address?.split(',')[0] || `Stop ${letter(draft?.stops.length ?? 0)}`
+    const name = c.kind === 'me' ? ME : c.kind === 'poi' ? poiTitle(c.poi) : c.kind === 'place' ? c.place.name : address?.split(',')[0] || t('maps.stop', { letter: letter(draft?.stops.length ?? 0) })
     // where I am is where the trip starts: A, in place of an older fix
     const stops = c.kind === 'me' ? [{ name, lat: s.lat, lng: s.lng }, ...(draft?.stops ?? []).filter(x => x.name !== ME)] : [...(draft?.stops ?? []), { name, lat: s.lat, lng: s.lng }]
     setDraft({ name: draft?.name ?? '', id: draft?.id, stops })
@@ -292,11 +295,11 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
   }
   async function saveDraft() {
     if (!draft || !draft.stops.length) return
-    const name = draft.name.trim() || draft.stops.map(s => s.name).join(' → ')
+    const name = draft.name.trim() || draft.stops.map(s => stopName(s.name)).join(' → ')
     try {
-      const t = await window.drive.mapsSaveTrip({ id: draft.id, name, stops: draft.stops })
-      say(`Trip saved: ${t.name}. It is on the phone at the next sync.`)
-      setDraft(null); setShown(t); reload()
+      const trip = await window.drive.mapsSaveTrip({ id: draft.id, name, stops: draft.stops })
+      say(t('maps.tripSaved', { name: trip.name }))
+      setDraft(null); setShown(trip); reload()
     } catch (e) { say(errorText(e)) }
   }
   function fitStops(stops: MapStop[]) {
@@ -305,8 +308,8 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
     map.current?.fitBounds(bounds, { padding: { top: 80, bottom: 80, left: 460, right: 80 }, maxZoom: 15 })
   }
   function showTrip(t: MapTrip) { setShown(t); setDraft(null); fitStops(t.stops) }
-  async function deleteTrip(t: MapTrip) {
-    try { await window.drive.mapsDeleteTrip(t.id); say(`${t.name} is in Files' Trash.`); setShown(null); reload() } catch (e) { say(errorText(e)) }
+  async function deleteTrip(trip: MapTrip) {
+    try { await window.drive.mapsDeleteTrip(trip.id); say(t('maps.inTrash', { name: trip.name })); setShown(null); reload() } catch (e) { say(errorText(e)) }
   }
   const moveStop = (i: number, by: number) => setDraft(d => {
     if (!d || i + by < 0 || i + by >= d.stops.length) return d
@@ -323,19 +326,19 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
   return (
     <div className="maps-page">
       <div ref={box} className="maps-canvas" />
-      <button className="round maps-here" title="Where I am (asks the phone)" disabled={asking} onClick={showMe}><Icon name="myLocation" size={22} /></button>
-      {asking && <div className="island maps-waiting">Waiting for the phone's location…<small>Tetra in the background there? Tap its notification.</small></div>}
-      {missing && <div className="island maps-missing">The map is not on this computer yet: <code>Files/Maps/greece.pmtiles</code> comes from <code>tools/maps-greece.sh</code> or from the phone by sync.</div>}
+      <button className="round maps-here" title={t('maps.whereIAm')} disabled={asking} onClick={showMe}><Icon name="myLocation" size={22} /></button>
+      {asking && <div className="island maps-waiting">{t('maps.waitingPhone')}<small>{t('maps.waitingPhoneHint')}</small></div>}
+      {missing && <div className="island maps-missing">{tr('maps.missing', { file: <code>Files/Maps/greece.pmtiles</code>, tool: <code>tools/maps-greece.sh</code> })}</div>}
       <aside className="island maps-panel">
         <div className="maps-search">
           <Icon name="search" size={20} />
-          <input className="maps-query" placeholder="Search places, addresses, towns" value={query} onChange={e => setQuery(e.target.value)}
+          <input className="maps-query" placeholder={t('maps.searchPlaceholder')} value={query} onChange={e => setQuery(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') searchHere(); if (e.key === 'Escape') clearSearch() }} />
-          {(query || kind || results) && <button className="round flat" title="Clear" onClick={clearSearch}><Icon name="close" size={18} /></button>}
+          {(query || kind || results) && <button className="round flat" title={t('common.clear')} onClick={clearSearch}><Icon name="close" size={18} /></button>}
         </div>
         <div className="chips wrap maps-pills">
-          {PILLS.filter(([k], i) => allPills || i < 8 || k === kind).map(([k, label, emoji]) => <button key={k} className={`chip ${kind === k ? 'on' : ''}`} onClick={() => pill(k)}>{emoji} {label}</button>)}
-          <button className="chip" onClick={() => setAllPills(a => !a)}>{allPills ? 'Fewer' : `More… (${PILLS.length - 8})`}</button>
+          {PILLS.filter(([k], i) => allPills || i < 8 || k === kind).map(([k, emoji]) => <button key={k} className={`chip ${kind === k ? 'on' : ''}`} onClick={() => pill(k)}>{emoji} {pillLabel(k)}</button>)}
+          <button className="chip" onClick={() => setAllPills(a => !a)}>{allPills ? t('maps.fewer') : t('maps.more', { n: PILLS.length - 8 })}</button>
         </div>
 
         {edit ? <PlaceForm place={edit} lists={lists} onCancel={() => setEdit(null)} onSave={savePlace} onListsChanged={reload} say={say} />
@@ -344,7 +347,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
               onNearby={() => { const s = cardSpot(card); nearby(s.lat, s.lng); setCard(null) }} />
           : results ? (
             <section className="maps-results">
-              <h3>{kind ? `${kindEmoji(kind)} ${PILLS.find(p => p[0] === kind)?.[1]}` : 'Results'} · {results.length}</h3>
+              <h3>{kind ? `${kindEmoji(kind)} ${pillLabel(kind)}` : t('maps.results')} · {results.length}</h3>
               {results.map((p, i) => (
                 <button key={i} className="maps-row" onClick={() => open({ kind: 'poi', poi: p })}>
                   <span className="maps-row-icon">{kindEmoji(p.kind)}</span>
@@ -355,12 +358,12 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
             </section>)
           : <>
             <div className="segmented maps-tabs">
-              <button className={tab === 'saved' ? 'on' : ''} onClick={() => setTab('saved')}>Saved</button>
-              <button className={tab === 'trips' ? 'on' : ''} onClick={() => setTab('trips')}>Trips</button>
+              <button className={tab === 'saved' ? 'on' : ''} onClick={() => setTab('saved')}>{t('maps.tabSaved')}</button>
+              <button className={tab === 'trips' ? 'on' : ''} onClick={() => setTab('trips')}>{t('maps.tabTrips')}</button>
             </div>
             {tab === 'saved' ? (
               <section>
-                <h3>Home</h3>
+                <h3>{t('maps.home')}</h3>
                 <div className="maps-slots">
                   {slots.map((p, i) => p
                     ? <button key={i} className="maps-slot" title={p.name} onClick={() => open({ kind: 'place', place: p })}><span className="map-place static"><Emblem icon={p.icon} /></span><span>{p.label || p.name}</span></button>
@@ -370,39 +373,39 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
                   const inList = places.filter(p => p.lists.includes(l.id))
                   return inList.length ? <div key={l.id}><h3>{l.emoji} {l.name} · {inList.length}</h3>{inList.map(p => <PlaceRow key={p.id} p={p} onOpen={() => open({ kind: 'place', place: p })} />)}</div> : null
                 })}
-                {places.some(p => !listed.has(p.id)) && <><h3>Other places</h3>{places.filter(p => !listed.has(p.id)).map(p => <PlaceRow key={p.id} p={p} onOpen={() => open({ kind: 'place', place: p })} />)}</>}
-                {!places.length && <p className="hint">Click anywhere on the map, or search, then Save. Places saved on the phone show here too.</p>}
+                {places.some(p => !listed.has(p.id)) && <><h3>{t('maps.otherPlaces')}</h3>{places.filter(p => !listed.has(p.id)).map(p => <PlaceRow key={p.id} p={p} onOpen={() => open({ kind: 'place', place: p })} />)}</>}
+                {!places.length && <p className="hint">{t('maps.savedHint')}</p>}
               </section>
             ) : (
               <section>
                 {draft ? <>
-                  <h3>Plan a trip</h3>
-                  <input className="field" placeholder="Name (A → B when empty)" value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
+                  <h3>{t('maps.planTrip')}</h3>
+                  <input className="field" placeholder={t('maps.tripNamePlaceholder')} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
                   {draft.stops.map((s, i) => (
                     <div key={i} className="maps-row static">
                       <span className="map-stop static">{letter(i)}</span>
-                      <span className="maps-row-text"><b>{s.name}</b></span>
-                      <button className="round flat" title="Earlier" disabled={!i} onClick={() => moveStop(i, -1)}><Icon name="arrowUp" size={18} /></button>
-                      <button className="round flat" title="Remove" onClick={() => setDraft({ ...draft, stops: draft.stops.filter((_, j) => j !== i) })}><Icon name="close" size={18} /></button>
+                      <span className="maps-row-text"><b>{stopName(s.name)}</b></span>
+                      <button className="round flat" title={t('maps.earlier')} disabled={!i} onClick={() => moveStop(i, -1)}><Icon name="arrowUp" size={18} /></button>
+                      <button className="round flat" title={t('common.remove')} onClick={() => setDraft({ ...draft, stops: draft.stops.filter((_, j) => j !== i) })}><Icon name="close" size={18} /></button>
                     </div>
                   ))}
-                  {draft.stops[0]?.name !== ME && <button className="text-button" disabled={asking} onClick={startHere}><Icon name="myLocation" size={18} /> Start from where I am</button>}
+                  {draft.stops[0]?.name !== ME && <button className="text-button" disabled={asking} onClick={startHere}><Icon name="myLocation" size={18} /> {t('maps.startHere')}</button>}
                   <RouteSummary stops={draft.stops} legs={legs} note={routeNote} mode={mode} setMode={setMode} main={main} setMain={setMain} />
-                  <p className="hint">Add stop {letter(draft.stops.length)}: click the map, a search result or a saved place, then <b>Add as stop</b>.</p>
+                  <p className="hint">{tr('maps.addStopHint', { letter: letter(draft.stops.length), button: <b>{t('maps.addAsStopButton')}</b> })}</p>
                   <div className="maps-actions">
-                    <button className="filled-button" disabled={!draft.stops.length} onClick={saveDraft}>Save trip</button>
-                    <button className="text-button" onClick={() => setDraft(null)}>Cancel</button>
+                    <button className="filled-button" disabled={!draft.stops.length} onClick={saveDraft}>{t('maps.saveTrip')}</button>
+                    <button className="text-button" onClick={() => setDraft(null)}>{t('common.cancel')}</button>
                   </div>
                 </> : <>
-                  <button className="filled-button big" onClick={() => { setDraft({ name: '', stops: [] }); setShown(null) }}><Icon name="add" size={20} /> Plan a trip</button>
-                  <p className="hint">A trip saved here is on the phone at the next sync: Directions › its name, and each next stop starts by itself.</p>
+                  <button className="filled-button big" onClick={() => { setDraft({ name: '', stops: [] }); setShown(null) }}><Icon name="add" size={20} /> <span>{t('maps.planTrip')}</span></button>
+                  <p className="hint">{t('maps.tripHint')}</p>
                   {shown && <RouteSummary stops={shown.stops} legs={legs} note={routeNote} mode={mode} setMode={setMode} main={main} setMain={setMain} />}
-                  {trips.map(t => (
-                    <div key={t.id} className={`maps-row ${shown?.id === t.id ? 'on' : ''}`} onClick={() => showTrip(t)}>
+                  {trips.map(trip => (
+                    <div key={trip.id} className={`maps-row ${shown?.id === trip.id ? 'on' : ''}`} onClick={() => showTrip(trip)}>
                       <span className="maps-row-icon">🧭</span>
-                      <span className="maps-row-text"><b>{t.name}</b><small>{t.stops.map((s, i) => `${letter(i)} ${s.name}`).join(' · ')}</small></span>
-                      <button className="round flat" title="Change" onClick={e => { e.stopPropagation(); setDraft({ id: t.id, name: t.name, stops: t.stops }); setShown(null) }}><Icon name="edit" size={18} /></button>
-                      <button className="round flat" title="Delete" onClick={e => { e.stopPropagation(); deleteTrip(t) }}><Icon name="trash" size={18} /></button>
+                      <span className="maps-row-text"><b>{trip.name}</b><small>{trip.stops.map((s, i) => `${letter(i)} ${stopName(s.name)}`).join(' · ')}</small></span>
+                      <button className="round flat" title={t('maps.change')} onClick={e => { e.stopPropagation(); setDraft({ id: trip.id, name: trip.name, stops: trip.stops }); setShown(null) }}><Icon name="edit" size={18} /></button>
+                      <button className="round flat" title={t('common.delete')} onClick={e => { e.stopPropagation(); deleteTrip(trip) }}><Icon name="trash" size={18} /></button>
                     </div>
                   ))}
                 </>}
@@ -426,7 +429,7 @@ function emblemSvg(icon: string) {
 /** "1 h 25 min", "12 min" (the phone's way). */
 function minutesText(seconds: number) {
   const m = Math.max(1, Math.round(seconds / 60)), h = Math.floor(m / 60)
-  return h ? `${h} h ${m % 60} min` : `${m} min`
+  return h ? t('maps.hoursMinutes', { h, m: m % 60 }) : t('maps.minutes', { m })
 }
 
 /** The trip's legs by road: A → B, each with its length and time, then the whole; Car / Walk / Bike as the phone's directions. */
@@ -437,11 +440,11 @@ function RouteSummary({ stops, legs, note, mode, setMode, main, setMain }: {
   if (stops.length < 2) return null
   return (
     <div className="maps-route">
-      <div className="segmented small">{(['car', 'foot', 'bike'] as const).map(m => <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{m === 'car' ? 'Car' : m === 'foot' ? 'Walk' : 'Bike'}</button>)}</div>
-      {mode === 'car' && <div className="segmented small"><button className={main ? 'on' : ''} onClick={() => setMain(true)}>Main roads</button><button className={main ? '' : 'on'} onClick={() => setMain(false)}>Shortest</button></div>}
+      <div className="segmented small">{(['car', 'foot', 'bike'] as const).map(m => <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>{t(`maps.mode.${m}`)}</button>)}</div>
+      {mode === 'car' && <div className="segmented small"><button className={main ? 'on' : ''} onClick={() => setMain(true)}>{t('maps.mainRoads')}</button><button className={main ? '' : 'on'} onClick={() => setMain(false)}>{t('maps.shortest')}</button></div>}
       {legs ? <>
         {legs.map((l, i) => <div key={i} className="maps-leg"><span>{letter(i)} → {letter(i + 1)}</span><span>{metresText(l.metres)} · {minutesText(l.seconds)}</span></div>)}
-        {legs.length > 1 && <div className="maps-leg total"><span>All of it</span><span>{metresText(legs.reduce((a, l) => a + l.metres, 0))} · {minutesText(legs.reduce((a, l) => a + l.seconds, 0))}</span></div>}
+        {legs.length > 1 && <div className="maps-leg total"><span>{t('maps.allOfIt')}</span><span>{metresText(legs.reduce((a, l) => a + l.metres, 0))} · {minutesText(legs.reduce((a, l) => a + l.seconds, 0))}</span></div>}
       </> : <p className="hint">{note}</p>}
     </div>
   )
@@ -459,31 +462,31 @@ function PlaceCard({ card, address, places, draft, onClose, onSave, onDelete, on
   const poi = card.kind === 'poi' ? card.poi : null
   const saved = card.kind === 'place' ? card.place : places.find(p => Math.abs(p.lat - s.lat) < 1e-5 && Math.abs(p.lng - s.lng) < 1e-5) ?? null
   const me = card.kind === 'me' ? card : null
-  const title = me ? ME : saved?.name ?? (poi ? poiTitle(poi) : address?.split(',')[0] ?? 'Dropped pin')
+  const title = me ? t('maps.myLocation') : saved?.name ?? (poi ? poiTitle(poi) : address?.split(',')[0] ?? t('maps.droppedPin'))
   const google = poi && poi.name ? `${poi.name}, ${poi.more || `${s.lat.toFixed(6)},${s.lng.toFixed(6)}`}` : `${s.lat.toFixed(6)},${s.lng.toFixed(6)}`
   return (
     <section className="maps-card">
       <div className="maps-card-head">
         {me ? <span className="maps-row-icon big"><span className="map-me" /></span> : saved ? <span className="map-place static big"><Emblem icon={saved.icon} size={22} /></span> : <span className="maps-row-icon big">{poi ? kindEmoji(poi.kind) : '📍'}</span>}
-        <div><h2>{title}</h2><small>{me ? `From ${me.device} · ±${metresText(me.accuracy)}` : poi ? kindLabel(poi.kind) : saved ? 'Saved place' : 'A spot on the map'}</small></div>
-        <button className="round flat" title="Close" onClick={onClose}><Icon name="close" size={20} /></button>
+        <div><h2>{title}</h2><small>{me ? t('maps.fromDevice', { device: me.device, accuracy: metresText(me.accuracy) }) : poi ? kindLabel(poi.kind) : saved ? t('maps.savedPlace') : t('maps.spotOnMap')}</small></div>
+        <button className="round flat" title={t('common.close')} onClick={onClose}><Icon name="close" size={20} /></button>
       </div>
       <dl>
-        {address && <><dt>Address</dt><dd>{address}</dd></>}
-        {poi?.more && <><dt>Where</dt><dd>{poi.more}</dd></>}
-        {poi?.hours && <><dt>Hours</dt><dd>{poi.hours}</dd></>}
-        {poi?.phone && <><dt>Phone</dt><dd>{poi.phone}</dd></>}
-        {poi?.web && <><dt>Website</dt><dd><button className="link-button" onClick={() => window.drive.mapsWeb(/^https?:/i.test(poi.web) ? poi.web : `https://${poi.web}`)}>{poi.web.replace(/^https?:\/\//i, '')}</button></dd></>}
-        {poi?.wheelchair && <><dt>Wheelchair</dt><dd>{poi.wheelchair === 'yes' ? '♿ Yes' : poi.wheelchair === 'limited' ? '♿ Limited' : poi.wheelchair === 'no' ? 'No' : poi.wheelchair}</dd></>}
-        {poi?.note && <><dt>Note</dt><dd>{poi.note}</dd></>}
-        <dt>Coordinates</dt><dd className="mono">{s.lat.toFixed(5)}, {s.lng.toFixed(5)}</dd>
+        {address && <><dt>{t('maps.address')}</dt><dd>{address}</dd></>}
+        {poi?.more && <><dt>{t('maps.where')}</dt><dd>{poi.more}</dd></>}
+        {poi?.hours && <><dt>{t('maps.hours')}</dt><dd>{poi.hours}</dd></>}
+        {poi?.phone && <><dt>{t('app.phone')}</dt><dd>{poi.phone}</dd></>}
+        {poi?.web && <><dt>{t('maps.website')}</dt><dd><button className="link-button" onClick={() => window.drive.mapsWeb(/^https?:/i.test(poi.web) ? poi.web : `https://${poi.web}`)}>{poi.web.replace(/^https?:\/\//i, '')}</button></dd></>}
+        {poi?.wheelchair && <><dt>{t('maps.wheelchair')}</dt><dd>{poi.wheelchair === 'yes' ? `♿ ${t('common.yes')}` : poi.wheelchair === 'limited' ? `♿ ${t('maps.limited')}` : poi.wheelchair === 'no' ? t('common.no') : poi.wheelchair}</dd></>}
+        {poi?.note && <><dt>{t('maps.note')}</dt><dd>{poi.note}</dd></>}
+        <dt>{t('maps.coordinates')}</dt><dd className="mono">{s.lat.toFixed(5)}, {s.lng.toFixed(5)}</dd>
       </dl>
       <div className="maps-actions">
-        <button className="filled-button" onClick={onStop}>{me ? 'Start a trip here (A)' : draft ? `Add as stop ${letter(draft.stops.length)}` : 'Add to a trip'}</button>
-        <button className="text-button" onClick={onSave}><Icon name={saved ? 'edit' : 'add'} size={18} /> {saved ? 'Change' : 'Save'}</button>
-        <button className="text-button" onClick={onNearby}><Icon name="place" size={18} /> Nearby</button>
+        <button className="filled-button" onClick={onStop}>{me ? t('maps.startTripHere') : draft ? t('maps.addAsStop', { letter: letter(draft.stops.length) }) : t('maps.addToTrip')}</button>
+        <button className="text-button" onClick={onSave}><Icon name={saved ? 'edit' : 'add'} size={18} /> {saved ? t('maps.change') : t('common.save')}</button>
+        <button className="text-button" onClick={onNearby}><Icon name="place" size={18} /> {t('maps.nearby')}</button>
         <button className="text-button" onClick={() => window.drive.mapsGoogle(google)}><Icon name="external" size={18} /> Google Maps</button>
-        {saved && card.kind === 'place' && <button className="text-button danger" onClick={() => onDelete(saved)}><Icon name="trash" size={18} /> Delete</button>}
+        {saved && card.kind === 'place' && <button className="text-button danger" onClick={() => onDelete(saved)}><Icon name="trash" size={18} /> {t('common.delete')}</button>}
       </div>
     </section>
   )
@@ -507,34 +510,34 @@ function PlaceForm({ place, lists, onCancel, onSave, onListsChanged, say }: {
   }
   return (
     <section className="maps-card">
-      <h2>{place.id ? 'Change the place' : 'Save this place'}</h2>
-      <label className="editor-label">Name</label>
+      <h2>{place.id ? t('maps.changePlace') : t('maps.savePlace')}</h2>
+      <label className="editor-label">{t('common.name')}</label>
       <input className="field" value={p.name} onChange={e => setP({ ...p, name: e.target.value })} />
-      <label className="editor-label">On Home's card as (optional)</label>
+      <label className="editor-label">{t('maps.homeCardAs')}</label>
       <input className="field" value={p.label} placeholder={p.name} onChange={e => setP({ ...p, label: e.target.value })} />
-      <label className="editor-label">Emblem</label>
-      <div className="chips wrap">{CATEGORIES.map(([c]) => <button key={c} className={`chip ${cat === c ? 'on' : ''}`} onClick={() => setCat(c)}>{c}</button>)}</div>
+      <label className="editor-label">{t('maps.emblem')}</label>
+      <div className="chips wrap">{CATEGORIES.map(([c]) => <button key={c} className={`chip ${cat === c ? 'on' : ''}`} onClick={() => setCat(c)}>{t(`maps.category${c}`)}</button>)}</div>
       <div className="maps-emblems">
         {CATEGORIES.find(([c]) => c === cat)![1].map(icon => (
-          <button key={icon} className={`map-place static big ${p.icon === icon ? 'on' : ''}`} title={icon} onClick={() => setP({ ...p, icon })}><Emblem icon={icon} size={22} /></button>
+          <button key={icon} className={`map-place static big ${p.icon === icon ? 'on' : ''}`} title={t(`maps.emblem.${icon}`)} onClick={() => setP({ ...p, icon })}><Emblem icon={icon} size={22} /></button>
         ))}
       </div>
-      <label className="editor-label">Home slot</label>
+      <label className="editor-label">{t('maps.homeSlot')}</label>
       <div className="maps-slot-pick">
-        <button className={`chip ${!p.slot ? 'on' : ''}`} onClick={() => setP({ ...p, slot: 0 })}>None</button>
+        <button className={`chip ${!p.slot ? 'on' : ''}`} onClick={() => setP({ ...p, slot: 0 })}>{t('common.none')}</button>
         {Array.from({ length: 12 }, (_, i) => <button key={i} className={`chip ${p.slot === i + 1 ? 'on' : ''}`} onClick={() => setP({ ...p, slot: i + 1 })}>{i + 1}</button>)}
       </div>
-      <label className="editor-label">Home's one tap goes by</label>
-      <div className="segmented small">{(['car', 'foot', 'bike'] as const).map(m => <button key={m} className={p.mode === m ? 'on' : ''} onClick={() => setP({ ...p, mode: m })}>{m === 'car' ? 'Car' : m === 'foot' ? 'Walk' : 'Bike'}</button>)}</div>
-      <label className="editor-label">Lists</label>
+      <label className="editor-label">{t('maps.homeTapBy')}</label>
+      <div className="segmented small">{(['car', 'foot', 'bike'] as const).map(m => <button key={m} className={p.mode === m ? 'on' : ''} onClick={() => setP({ ...p, mode: m })}>{t(`maps.mode.${m}`)}</button>)}</div>
+      <label className="editor-label">{t('maps.lists')}</label>
       <div className="chips wrap">
         {lists.map(l => <button key={l.id} className={`chip ${p.lists.includes(l.id) ? 'on' : ''}`}
           onClick={() => setP({ ...p, lists: p.lists.includes(l.id) ? p.lists.filter(x => x !== l.id) : [...p.lists, l.id] })}>{l.emoji} {l.name}</button>)}
-        <input className="chip-input" placeholder="+ New list" value={newList} onChange={e => setNewList(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addList() }} />
+        <input className="chip-input" placeholder={t('maps.newList')} value={newList} onChange={e => setNewList(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addList() }} />
       </div>
       <div className="maps-actions">
-        <button className="filled-button" disabled={!p.name.trim()} onClick={() => onSave({ ...p, name: p.name.trim() })}>Save</button>
-        <button className="text-button" onClick={onCancel}>Cancel</button>
+        <button className="filled-button" disabled={!p.name.trim()} onClick={() => onSave({ ...p, name: p.name.trim() })}>{t('common.save')}</button>
+        <button className="text-button" onClick={onCancel}>{t('common.cancel')}</button>
       </div>
     </section>
   )

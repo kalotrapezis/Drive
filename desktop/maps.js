@@ -14,6 +14,7 @@ const fs = require('node:fs')
 const fsp = fs.promises
 const path = require('node:path')
 const crypto = require('node:crypto')
+const { t } = require('./i18n')
 
 const MAP = 'greece.pmtiles', PLACES = 'Places', LISTS = 'Lists', TRIPS = 'Trips', SLOTS = 12
 const ICONS = ['pin', 'star', 'heart', 'accessible', 'home', 'work', 'school', 'family', 'friend', 'pharmacy', 'hospital', 'doctor', 'travel',
@@ -175,7 +176,7 @@ class Maps {
   /** Taking a Home slot frees it on any other place (MapsFiles.save). */
   async savePlace(raw) {
     const p = parsePlace(JSON.stringify({ ...raw, id: raw.id || newId() }))
-    if (!p) throw new Error('This place has no position.')
+    if (!p) throw new Error(t('maps.noPosition'))
     if (p.slot > 0) for (const o of await this.places()) if (o.slot === p.slot && o.id !== p.id) await this.write(PLACES, o.id, placeJson({ ...o, slot: 0 }))
     await this.write(PLACES, p.id, placeJson(p))
     await this.remove(PLACES, p.id, `${p.id}.json`) // its sync copies: this save is the place
@@ -192,10 +193,10 @@ class Maps {
   async deleteList(id) { await this.remove(LISTS, id) }
 
   async saveTrip(raw) {
-    const t = parseTrip(JSON.stringify({ ...raw, id: raw.id || newId() }))
-    if (!t) throw new Error('A trip needs at least one stop.')
-    await this.write(TRIPS, t.id, { id: t.id, name: t.name, stops: t.stops })
-    return t
+    const trip = parseTrip(JSON.stringify({ ...raw, id: raw.id || newId() }))
+    if (!trip) throw new Error(t('maps.tripNeedsStop'))
+    await this.write(TRIPS, trip.id, { id: trip.id, name: trip.name, stops: trip.stops })
+    return trip
   }
   async deleteTrip(id) { await this.remove(TRIPS, id) }
 
