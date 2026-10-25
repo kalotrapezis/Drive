@@ -2463,3 +2463,29 @@ user. The phone's notification was hidden by Bedtime (Do Not Disturb), not by Te
   was in the PC's file 4 s later; the contact moved to the Trash on the PC was in the phone's Trash 6 s later, its event
   too. Not checked: the tablet (not connected), two devices changing one contact at once (shown as one with
   "Keep this one", as the Calendar's).
+
+### 6aq. What is asked for is agreed only once it arrives (found and fixed 2026-10-25, Drive branch `sync-one-writer`)
+
+**What happened.** The Data applet's month file (`Data/usage/2026-10.<phone>.jsonl`), written only by the phone and
+rewritten every few minutes, came to the computer as "(2)", "(3)", "(4)" — and the computer sent its own older copy of
+it to the phone (history 11:00:48 "sent", then "received …(2)" two seconds later: the phone kept the offer beside its
+newer file, and sent that back).
+
+**Why.** `reconcile` wrote the device's offered version into `sync_manifest[device]` — "what both last agreed on" —
+even for a path it had just asked for (`want`), before the upload came. When the upload was late (a part's sync and the
+whole sync at once: the second reconcile ran before the first one's upload landed) or never came (the file rewritten
+between the list and the upload: refused as changed on the way), the next reconcile read memory saying the device held
+the new bytes while this computer still held the old: (a) "both changed" → a conflict, the upload kept beside as "(n)";
+(b) the computer's version not in the device's memory → not "gone" → offered to the device as a new file → "(2)" there.
+And the second reconcile's answer replaced the first one's pending update (`file_updates`), so the late upload found
+none and landed beside too.
+
+**The rule now.** A path in `want` keeps the device's last agreed version in memory (read inside the write transaction,
+so an upload that landed meanwhile counts); `received` sets it once the bytes are here, at the path the device sent
+from. An upload with no pending update is still an edit when it lands on exactly the version both last agreed on
+(`files.agreed`: the device's and `self:<device>` memory equal, and the file here still those bytes).
+
+**Checked:** `desktop/test/sync.test.js` "a file only the phone writes, rewritten between syncs…" (a part's sync and a
+whole sync with the file rewritten in between, the first upload landing late; an upload that never came) — fails
+without either half; all 136 desktop tests. **Not yet run between real devices** (needs the desktop from this branch;
+the phone needs nothing new).
