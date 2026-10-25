@@ -972,6 +972,11 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .ct-action { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .ct-action > svg, .ct-action > span { width: 56px; height: 56px; padding: 16px; border-radius: 50%; background: var(--ct); color: #fff; box-sizing: border-box; }
 .ct-action:disabled { opacity: .4; cursor: default; }
+.ct-section { align-self: stretch; display: flex; align-items: center; justify-content: space-between; margin: 10px 8px 0; }
+.ct-section h3 { font-size: 16px; margin: 0; }
+.ct-none { margin: 8px 16px; }
+.ct-all { max-height: 60vh; overflow: auto; }
+.call-badge { display: inline-grid; place-items: center; flex: none; border-radius: 50%; color: #fff; vertical-align: middle; }
 .ct-card { align-self: stretch; background: var(--island); border-radius: var(--radius); padding: 6px 0; }
 .ct-detail { display: flex; align-items: center; gap: 8px; padding: 8px 16px; }
 .ct-detail > div { flex: 1; display: flex; flex-direction: column; min-width: 0; }
