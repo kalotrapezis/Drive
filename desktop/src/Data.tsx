@@ -10,6 +10,7 @@ type All = { plan: Plan | null; devices: Record<string, Line[]>; me: string }
 type Wifi = { rssi?: number; speed?: number; mhz?: number; ssid?: string; error?: string }
 const LIME = '#7cc417'
 const WIFI = '#4f86e8'
+const HOTSPOT = '#ff9f1c' // another phone's hotspot: neither mobile nor plain Wi-Fi (the user, 25 Oct)
 
 export const bytes = (b: number) => {
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
@@ -86,20 +87,20 @@ export function DataPage() {
         <svg viewBox="0 0 600 160" style={{ width: '100%', maxWidth: 900, height: 180 }}>
           {last30.map((d, i) => {
             let y = 150
-            return <g key={d}>{devices.flatMap(dev => [['m', dev.days.get(d)?.mobile || 0], ['w', dev.days.get(d)?.wifi || 0]] as const).map(([k, v], j) => {
+            return <g key={d}>{devices.flatMap(dev => { const l = dev.days.get(d); return [[LIME, l?.mobile || 0], [HOTSPOT, l?.via || 0], [WIFI, (l?.wifi || 0) - (l?.via || 0)]] as const }).map(([color, v], j) => {
               const h = (v / top) * 140; y -= h
-              return <rect key={j} x={i * 20 + 3} y={y} width={14} height={h} fill={k === 'm' ? LIME : WIFI} opacity={0.6 + 0.4 * ((j >> 1) % 2)} />
+              return <rect key={j} x={i * 20 + 3} y={y} width={14} height={h} fill={color} opacity={0.6 + 0.4 * (Math.floor(j / 3) % 2)} />
             })}{i % 5 === 0 && <text x={i * 20 + 10} y={159} fontSize={8} textAnchor="middle" fill="currentColor">{Number(d.slice(8))}</text>}</g>
           })}
           <text x={0} y={8} fontSize={8} fill="currentColor">{bytes(top)}</text>
         </svg>
-        <p className="muted" style={{ margin: 0 }}><span style={{ color: LIME }}>■</span> mobile · <span style={{ color: WIFI }}>■</span> Wi-Fi · darker: the second device</p>
+        <p className="muted" style={{ margin: 0 }}><span style={{ color: LIME }}>■</span> mobile · <span style={{ color: HOTSPOT }}>■</span> hotspot · <span style={{ color: WIFI }}>■</span> Wi-Fi · darker: the second device</p>
       </section>
 
       <section>
         <h3>This cycle, by device</h3>
         {devices.length === 0 && <p className="muted">Nothing counted yet.</p>}
-        {devices.map(d => <p key={d.name} style={{ margin: '4px 0' }}><b>{d.name}{d.id === all.me ? ' (this computer)' : ''}</b>: {[d.mobile ? `mobile ${bytes(d.mobile)}` : '', `Wi-Fi ${bytes(d.wifi)}`, d.via ? `over the phone's hotspot ${bytes(d.via)}` : ''].filter(Boolean).join(' · ')}</p>)}
+        {devices.map(d => <p key={d.name} style={{ margin: '4px 0' }}><b>{d.name}{d.id === all.me ? ' (this computer)' : ''}</b>: {[d.mobile ? `Mobile ${bytes(d.mobile)}` : '', d.via ? `Hotspot ${bytes(d.via)}` : '', `Wi-Fi ${bytes(d.wifi - d.via)}`].filter(Boolean).join(' · ')}</p>)}
       </section>
 
       {(hotspot > 0 || clients.length > 0) && <section>

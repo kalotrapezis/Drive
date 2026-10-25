@@ -451,6 +451,15 @@ app.whenReady().then(() => {
   watchMaps()
   dataCounter = new DataCounter(path.join(FILES_ROOT, 'Data'), os.hostname())
   dataCounter.start()
+  // Data's plan set on the phone: the tablets told at once, as for a timer — the plan is the phone's
+  try {
+    // shortcut: watched only when Data is there at start (a computer that does not use Data gets no folder); a first plan waits for the next start
+    let settle = null
+    if (fs.existsSync(dataCounter.root)) fs.watch(dataCounter.root, (_, name) => {
+      if (name !== 'plan.json') return
+      clearTimeout(settle); settle = setTimeout(() => sync?.nudge().catch(() => {}), 500)
+    })
+  } catch (e) { console.warn('[data] cannot watch', e.message) }
   people = new faces.People(db, DATA_DIR)
   vault = new Vault(db, DATA_DIR)
   documents = new docs.Documents(db)
