@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { DataCounter, parseIw, parseMonth, monthText } = require('../datacount')
+const { DataCounter, parseIw, parseMonth, monthText, reach } = require('../datacount')
 
 function counter(withPlan = true) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-'))
@@ -76,4 +76,10 @@ test('each program\'s bytes from ss, and what TCP did not show as Other', async 
   const apps = text.split('\n').filter(l => l.includes('"app"')).map(l => JSON.parse(l))
   assert.deepEqual(apps.map(a => [a.app, a.net, a.fg]).sort(), [['Chrome', 'hotspot', 5000], ['Viber', 'hotspot', 1000], ['other', 'hotspot', 4000]])
   assert.equal(apps.find(a => a.app === 'other').name, 'Other (calls, video, UDP)')
+})
+
+test('this computer, the local network, the internet', () => {
+  assert.equal(reach('127.0.0.1:5037'), 'self'); assert.equal(reach('[::1]:5277'), 'self')
+  assert.equal(reach('10.71.129.171:43180'), 'lan'); assert.equal(reach('192.168.1.19:443'), 'lan'); assert.equal(reach('[fe80::1%wlan0]:80'), 'lan')
+  assert.equal(reach('172.217.168.129:443'), 'internet'); assert.equal(reach('[2a00:1450::1]:443'), 'internet')
 })

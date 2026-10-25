@@ -31,14 +31,24 @@ function parseSs(text) {
   for (const line of String(text).split('\n')) {
     if (!line.startsWith('\t') && !line.startsWith(' ') && line.trim()) {
       const m = /^\S+\s+\S+\s+(\S+)\s+(\S+)\s+users:\(\("([^"]+)",pid=(\d+)/.exec(line.trim())
-      head = m ? { key: `${m[1]}|${m[2]}|${m[4]}`, name: m[3] } : null
+      head = m ? { key: `${m[1]}|${m[2]}|${m[4]}`, name: m[3], peer: m[2] } : null
     } else if (head) {
       const acked = /bytes_acked:(\d+)/.exec(line), received = /bytes_received:(\d+)/.exec(line)
-      out.set(head.key, { name: head.name, bytes: (acked ? Number(acked[1]) : 0) + (received ? Number(received[1]) : 0) })
+      out.set(head.key, { name: head.name, peer: head.peer, bytes: (acked ? Number(acked[1]) : 0) + (received ? Number(received[1]) : 0) })
       head = null
     }
   }
   return out
+}
+
+/** Where a connection goes: this computer itself (adb, the head unit: not on any network), the local network (the phone, the
+ * tablet, a printer: never on the mobile data), or the internet. */
+function reach(peer) {
+  const p = String(peer) // "1.2.3.4:443", "[2a00::1]:443"
+  const host = (p.startsWith('[') ? p.slice(1, p.indexOf(']')) : p.replace(/:\d+$/, '')).replace(/^::ffff:/, '').replace(/%.*$/, '')
+  if (/^127\./.test(host) || host === '::1') return 'self'
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(host) || /^f[cde]/i.test(host)) return 'lan'
+  return 'internet'
 }
 
 /** A month file's lines, as the phone's DataFiles writes them. */
@@ -83,7 +93,11 @@ class DataCounter {
     for (const [key, s] of now) {
       const before = this.sockets.get(key)?.bytes ?? 0
       const delta = s.bytes >= before ? s.bytes - before : s.bytes
-      if (delta > 0) this.appBytes.set(programName(s.name), (this.appBytes.get(programName(s.name)) || 0) + delta)
+      const where = reach(s.peer)
+      if (delta <= 0 || where === 'self') continue
+      // to the local network (the phone, the tablet): never through the mobile data, so Wi-Fi even over the hotspot
+      const slot = `${programName(s.name)}${where === 'lan' ? '|lan' : ''}`
+      this.appBytes.set(slot, (this.appBytes.get(slot) || 0) + delta)
     }
     this.sockets = now
   }
@@ -173,8 +187,9 @@ class DataCounter {
       let named = 0
       const m = this.month(hourKey(now).slice(0, 7)); m.apps ||= new Map()
       const day = hourKey(now).slice(0, 10)
-      for (const [app, b] of this.appBytes) {
-        const net = app === 'Tetra' ? 'wifi' : kind // Tetra's own sync is with the phone, on the LAN
+      for (const [key, b] of this.appBytes) {
+        const [app, lan] = key.split('|')
+        const net = lan ? (kind === 'wired' ? 'wired' : 'wifi') : kind
         m.apps.set(`${day}|${app}|${net}`, (m.apps.get(`${day}|${app}|${net}`) || 0) + b); named += b
       }
       if (total > named) m.apps.set(`${day}|other|${kind}`, (m.apps.get(`${day}|other|${kind}`) || 0) + total - named)
@@ -250,4 +265,4 @@ class DataCounter {
   }
 }
 
-module.exports = { DataCounter, parseIw, parseMonth, monthText, hourKey, parseSs, programName }
+module.exports = { DataCounter, parseIw, parseMonth, monthText, hourKey, parseSs, programName, reach }
