@@ -37,19 +37,16 @@ your own backups. Screenshots use invented sample data.
 
 <sub>\* Maps and finding photos by place cover Greece only for now; other countries will follow.</sub>
 
-## See it work
-
-![Files both ways: Send to computer on the phone, Send to phone on the computer](Assets/cards/card-send.jpg)
-![Calls on your computer: the call bubble](Assets/cards/card-bubble.jpg)
-
 ## The applets
 
 ![Photos](Assets/cards/card-photos.jpg)
 ![Calendar and Timer](Assets/cards/card-calendar.jpg)
 ![Maps and calls on the computer](Assets/cards/desktop-maps.jpg)
 ![Contacts and Phone](Assets/cards/card-people.jpg)
+![Calls on your computer: the call bubble](Assets/cards/card-bubble.jpg)
 ![Notes, timers and files](Assets/cards/desktop-notes.jpg)
 ![Files](Assets/cards/card-files.jpg)
+![Files both ways: Send to computer on the phone, Send to phone on the computer](Assets/cards/card-send.jpg)
 
 Also here: **Devices**, to pair a phone or tablet by QR code with rules per device (send, both ways, or Move);
 **storage drives**, a USB disk as a verified backup or as storage that still shows in the library; and a Trash that
