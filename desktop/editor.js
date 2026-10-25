@@ -4,6 +4,7 @@
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
+const { t } = require('./i18n')
 
 const MAX_BYTES = 200 * 1024 * 1024
 
@@ -39,7 +40,7 @@ async function withOriginalExif(jpeg, originalPath, takenAt) {
 
 function checkJpeg(bytes) {
   const b = Buffer.from(bytes)
-  if (b.length < 4 || b.length > MAX_BYTES || b[0] !== 0xff || b[1] !== 0xd8) throw new Error('The edited image is not a valid JPEG.')
+  if (b.length < 4 || b.length > MAX_BYTES || b[0] !== 0xff || b[1] !== 0xd8) throw new Error(t('editor.errNotJpeg'))
   return b
 }
 
@@ -59,7 +60,7 @@ async function replace(originalPath, bytes, takenAt, trashItem) {
   const jpeg = await withOriginalExif(checkJpeg(bytes), originalPath, takenAt) // fully built before the original is touched
   const st = await fsp.stat(originalPath)
   const target = path.join(path.dirname(originalPath), path.parse(originalPath).name + '.jpg')
-  if (target !== originalPath && fs.existsSync(target)) throw new Error(`${path.basename(target)} already exists; use Save as copy.`)
+  if (target !== originalPath && fs.existsSync(target)) throw new Error(t('editor.errExists', { name: path.basename(target) }))
   await trashItem(originalPath)
   await fsp.writeFile(target, jpeg, { flag: 'wx' })
   await fsp.utimes(target, st.atime, st.mtime)

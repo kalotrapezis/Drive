@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import type { Analysis, DeviceFolder, Person, PersonFace, PersonMerge, Review } from './drive'
 import { Icon } from './Icon'
 import { Modal, errorText } from './Dialogs'
+import { locale, t } from './i18n'
+
+/** A name the analysis made up ("Person 41", kept as it is: devices match on it) in the window's language. */
+export const shownName = (name: string) => { const n = /^Person (\d+)$/.exec(name); return n ? t('people.generatedName', { n: n[1] }) : name }
 
 export const FaceCircle = ({ face, size = 96 }: { face: string | null; size?: number }) => (
   <span className="face" style={{ width: size, height: size }}>{face ? <img src={`media://face/${face}`} alt="" /> : <Icon name="photos" size={size / 2.5} />}</span>
@@ -15,17 +19,17 @@ export function AnalysisBar({ status, kind = 'people' }: { status: Analysis | nu
   if (status.running) return (
     <div className="island analysis">
       <span className="spinner" />
-      <span>Analysing photos… {status.done.toLocaleString()} / {status.total.toLocaleString()}</span>
-      <button className="text-button" onClick={() => window.drive.people.pause()}>Pause</button>
+      <span>{t('people.analysing', { done: status.done.toLocaleString(), total: status.total.toLocaleString() })}</span>
+      <button className="text-button" onClick={() => window.drive.people.pause()}>{t('common.pause')}</button>
     </div>
   )
   return (
     <div className="island analysis">
       <Icon name="info" />
-      <span>{status.error ? `Analysis stopped: ${status.error}` : enabled
-        ? status.paused ? `Paused at ${status.done} of ${status.total}.` : 'New photos are analysed after each rescan.'
-        : `${kind === 'people' ? 'Find people' : 'Find documents'} runs on this computer only. Nothing is uploaded.`}</span>
-      <button className="filled-button" onClick={start}>{enabled ? (status.paused ? 'Resume' : 'Check again') : kind === 'people' ? 'Find people' : 'Find documents'}</button>
+      <span>{status.error ? t('people.analysisStopped', { error: status.error }) : enabled
+        ? status.paused ? t('people.pausedAt', { done: status.done, total: status.total }) : t('people.analysedAfterRescan')
+        : kind === 'people' ? t('people.findPeopleRuns') : t('people.findDocumentsRuns')}</span>
+      <button className="filled-button" onClick={start}>{enabled ? (status.paused ? t('common.resume') : t('people.checkAgain')) : kind === 'people' ? t('people.findPeople') : t('people.findDocuments')}</button>
     </div>
   )
 }
@@ -41,20 +45,20 @@ export function ChooseCover({ person, onClose, onDone }: { person: Person; onClo
   const choose = async (faceId: string | null) => { await window.drive.people.setCover(person.id, faceId); onDone(); onClose() }
   return (
     <Modal onClose={onClose}>
-      <h3>Show {person.name} by</h3>
-      {faces === null && <p className="hint">Looking…</p>}
-      {faces?.length === 0 && <p className="hint">No faces to choose from yet.</p>}
-      {!!faces?.length && <p>Pick the face this person is shown by, here and on your phone.</p>}
+      <h3>{t('people.showBy', { name: shownName(person.name) })}</h3>
+      {faces === null && <p className="hint">{t('people.looking')}</p>}
+      {faces?.length === 0 && <p className="hint">{t('people.noFacesYet')}</p>}
+      {!!faces?.length && <p>{t('people.pickFace')}</p>}
       <div className="cover-choices">
         {faces?.map(f => (
-          <button key={f.id} className={`cover-choice${f.chosen ? ' on' : ''}`} onClick={() => choose(f.id)} title={new Date(f.takenAt).toLocaleDateString()}>
+          <button key={f.id} className={`cover-choice${f.chosen ? ' on' : ''}`} onClick={() => choose(f.id)} title={new Date(f.takenAt).toLocaleDateString(locale())}>
             <FaceCircle face={f.id} size={84} />
           </button>
         ))}
       </div>
       <div className="dialog-actions">
-        {faces?.some(f => f.chosen) && <button className="text-button" onClick={() => choose(null)}>Use the best one instead</button>}
-        <button className="filled-button" onClick={onClose}>Done</button>
+        {faces?.some(f => f.chosen) && <button className="text-button" onClick={() => choose(null)}>{t('people.useBest')}</button>}
+        <button className="filled-button" onClick={onClose}>{t('common.done')}</button>
       </div>
     </Modal>
   )
@@ -67,26 +71,26 @@ export function PeoplePage({ people, status, onOpen, onRename, onChooseCover, on
   return (
     <div className="timeline">
       <header className="topbar">
-        <div className="island title-island"><button className="round flat" title="Back to Collections" onClick={onBack}><Icon name="back" /></button><h1>People</h1></div>
-        <button className="round island" title="History: forgotten and combined people" onClick={onHistory}><Icon name="recent" /></button>
+        <div className="island title-island"><button className="round flat" title={t('people.backToCollections')} onClick={onBack}><Icon name="back" /></button><h1>{t('people.title')}</h1></div>
+        <button className="round island" title={t('people.historyTitle')} onClick={onHistory}><Icon name="recent" /></button>
       </header>
       <AnalysisBar status={status} />
-      {people.length === 0 && <p className="hint">{status?.enabled ? 'No people found yet.' : 'Start Find people to group the faces in your photos.'}</p>}
+      {people.length === 0 && <p className="hint">{status?.enabled ? t('people.noneFound') : t('people.startFind')}</p>}
       <div className="people-grid">
         {people.map(p => (
           <div key={p.id} className="person-wrap">
             <button className="person" onClick={() => onOpen(p)}
               onContextMenu={e => { e.preventDefault(); onChooseCover(p) }}
-              title={`${p.name} — right-click to choose the face they are shown by`}>
+              title={t('people.personTitle', { name: shownName(p.name) })}>
               <FaceCircle face={p.cover} />
-              <strong>{p.name}</strong><small>{p.count}</small>
+              <strong>{shownName(p.name)}</strong><small>{p.count}</small>
             </button>
             <details className="menu person-edit">
-              <summary className="round" title={`Edit ${p.name}`}><Icon name="edit" size={18} /></summary>
+              <summary className="round" title={t('people.editPerson', { name: shownName(p.name) })}><Icon name="edit" size={18} /></summary>
               <div className="island menu-body" onClick={e => (e.currentTarget.parentElement as HTMLDetailsElement).open = false}>
-                <button className="sheet-row" onClick={() => onRename(p)}><Icon name="rename" />Rename</button>
-                <button className="sheet-row" onClick={() => onChooseCover(p)}><Icon name="person" />Choose face</button>
-                <button className="sheet-row" onClick={() => onForget(p)}><Icon name="visibilityOff" />Forget this person</button>
+                <button className="sheet-row" onClick={() => onRename(p)}><Icon name="rename" />{t('common.rename')}</button>
+                <button className="sheet-row" onClick={() => onChooseCover(p)}><Icon name="person" />{t('people.chooseFace')}</button>
+                <button className="sheet-row" onClick={() => onForget(p)}><Icon name="visibilityOff" />{t('people.forget')}</button>
               </div>
             </details>
           </div>
@@ -108,34 +112,34 @@ export function PeopleHistory({ onClose, onChanged }: { onClose: () => void; onC
     window.drive.people.mergeHistory().then(setMerges, () => setMerges([]))
   }
   useEffect(load, [])
-  const when = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  const when = new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   const back = async (fn: () => Promise<unknown>) => { await fn(); load(); onChanged() }
   return (
     <Modal onClose={onClose}>
-      <h3>History</h3>
-      <span className="menu-head">Forgotten</span>
-      {forgotten?.length === 0 && <p className="hint">Nobody has been forgotten.</p>}
+      <h3>{t('people.history')}</h3>
+      <span className="menu-head">{t('people.forgotten')}</span>
+      {forgotten?.length === 0 && <p className="hint">{t('people.nobodyForgotten')}</p>}
       <div className="picker">
         {forgotten?.map(p => (
           <div key={p.id} className="picker-row">
             <FaceCircle face={p.cover} size={44} />
-            <span>{p.name}<small>{p.count} {p.count === 1 ? 'photo' : 'photos'}</small></span>
-            <button className="filled-button" onClick={() => back(() => window.drive.people.setHidden(p.id, false))}>Restore</button>
+            <span>{shownName(p.name)}<small>{t('people.photos', { count: p.count })}</small></span>
+            <button className="filled-button" onClick={() => back(() => window.drive.people.setHidden(p.id, false))}>{t('common.restore')}</button>
           </div>
         ))}
       </div>
-      <span className="menu-head">Combined</span>
-      {merges?.length === 0 && <p className="hint">Nothing has been combined.</p>}
+      <span className="menu-head">{t('people.combined')}</span>
+      {merges?.length === 0 && <p className="hint">{t('people.nothingCombined')}</p>}
       <div className="picker">
         {merges?.map(m => (
           <div key={m.id} className="picker-row">
             <FaceCircle face={m.cover} size={44} />
-            <span>{m.name}<small>{m.count} {m.count === 1 ? 'face' : 'faces'} · {when.format(m.mergedAt)}</small></span>
-            <button className="filled-button" onClick={() => back(() => window.drive.people.restoreMerge(m.id))}>Restore</button>
+            <span>{shownName(m.name)}<small>{t('people.faces', { count: m.count })} · {when.format(m.mergedAt)}</small></span>
+            <button className="filled-button" onClick={() => back(() => window.drive.people.restoreMerge(m.id))}>{t('common.restore')}</button>
           </div>
         ))}
       </div>
-      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Close</button></div>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.close')}</button></div>
     </Modal>
   )
 }
@@ -146,12 +150,12 @@ export function RenamePerson({ person, onClose, onDone }: { person: Person; onCl
   return (
     <Modal onClose={onClose}>
       <form onSubmit={async e => { e.preventDefault(); try { onDone(await window.drive.people.rename(person.id, name)); onClose() } catch (err) { setError(errorText(err)) } }}>
-        <div className="sheet-head"><FaceCircle face={person.cover} size={56} /><h3>Name this person</h3></div>
-        <input className="field" autoFocus maxLength={60} placeholder={person.name} value={name} onChange={e => { setName(e.target.value); setError('') }} />
+        <div className="sheet-head"><FaceCircle face={person.cover} size={56} /><h3>{t('people.nameThis')}</h3></div>
+        <input className="field" autoFocus maxLength={60} placeholder={shownName(person.name)} value={name} onChange={e => { setName(e.target.value); setError('') }} />
         {error && <p className="error">{error}</p>}
         <div className="dialog-actions">
-          <button type="button" className="text-button" onClick={onClose}>Cancel</button>
-          <button className="filled-button" disabled={!name.trim()}>Save</button>
+          <button type="button" className="text-button" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="filled-button" disabled={!name.trim()}>{t('common.save')}</button>
         </div>
       </form>
     </Modal>
@@ -170,22 +174,22 @@ export function CombinePicker({ person, people, onClose, onPick }: { person: Per
   const picked = people.filter(p => chosen.has(p.id))
   return (
     <Modal onClose={onClose}>
-      <h3>Combine with {person.name}</h3>
-      <p>Pick the same person shown more than once. Their photos move into {person.name}.</p>
-      <input className="field" autoFocus placeholder="Find a person" value={query} onChange={e => setQuery(e.target.value)} />
+      <h3>{t('people.combineWith', { name: shownName(person.name) })}</h3>
+      <p>{t('people.combineHint', { name: shownName(person.name) })}</p>
+      <input className="field" autoFocus placeholder={t('people.findPerson')} value={query} onChange={e => setQuery(e.target.value)} />
       <div className="picker">
-        {choices.length === 0 && <p className="hint">{people.length > 1 ? 'No people match this name.' : 'There are no other people yet.'}</p>}
+        {choices.length === 0 && <p className="hint">{people.length > 1 ? t('people.noMatch') : t('people.noOthers')}</p>}
         {choices.map(p => (
           <button key={p.id} className={`picker-row ${chosen.has(p.id) ? 'on' : ''}`} onClick={() => toggle(p.id)}>
-            <FaceCircle face={p.cover} size={44} /><span>{p.name}<small>{p.count}</small></span>
+            <FaceCircle face={p.cover} size={44} /><span>{shownName(p.name)}<small>{p.count}</small></span>
             <Icon name={chosen.has(p.id) ? 'checked' : 'unchecked'} size={22} />
           </button>
         ))}
       </div>
       <div className="dialog-actions">
-        <button className="text-button" onClick={onClose}>Cancel</button>
+        <button className="text-button" onClick={onClose}>{t('common.cancel')}</button>
         <button className="filled-button" disabled={picked.length === 0} onClick={() => { onClose(); onPick(picked) }}>
-          {picked.length > 1 ? `Combine ${picked.length} people` : 'Combine'}
+          {picked.length > 1 ? t('people.combineMany', { n: picked.length }) : t('people.combine')}
         </button>
       </div>
     </Modal>
@@ -212,48 +216,47 @@ export function ReviewPage({ left, onBack, onChanged }: { left: number; onBack: 
   return (
     <div className="timeline">
       <header className="topbar">
-        <div className="island title-island"><button className="round flat" title="Back to Collections" onClick={onBack}><Icon name="back" /></button><h1>Help organize</h1></div>
+        <div className="island title-island"><button className="round flat" title={t('people.backToCollections')} onClick={onBack}><Icon name="back" /></button><h1>{t('people.helpOrganize')}</h1></div>
       </header>
       {folders.map(f => (
         <div key={f.name} className="island review">
-          <h2>Include {f.name} in Tetra?</h2>
-          <p className="hint center">{f.count} {f.count === 1 ? 'photo or video' : 'photos and videos'}. Yes shows them in Photos and keeps them as a
-            collection named {f.name}. Nothing is moved or copied.</p>
+          <h2>{t('people.includeFolder', { name: f.name })}</h2>
+          <p className="hint center">{t('people.includeFolderHint', { count: f.count, name: f.name })}</p>
           <div className="folder-samples">{f.samples.map(s => <img key={s} src={`media://thumb/${s}`} alt="" />)}</div>
           <div className="dialog-actions center">
-            <button className="filled-button secondary" onClick={() => window.drive.folders.set(f.name, false).then(() => { onChanged(); load() })}>No</button>
-            <button className="filled-button" onClick={() => window.drive.folders.set(f.name, true).then(() => { onChanged(); load() })}>Yes</button>
+            <button className="filled-button secondary" onClick={() => window.drive.folders.set(f.name, false).then(() => { onChanged(); load() })}>{t('common.no')}</button>
+            <button className="filled-button" onClick={() => window.drive.folders.set(f.name, true).then(() => { onChanged(); load() })}>{t('common.yes')}</button>
           </div>
         </div>
       ))}
-      {review === null && !doc && folders.length === 0 && <div className="empty">Thanks, no more questions for now! That's it.</div>}
+      {review === null && !doc && folders.length === 0 && <div className="empty">{t('people.noMoreQuestions')}</div>}
       {doc && (
         <div className="island review">
-          <h2>Is this a document?</h2>
+          <h2>{t('people.isDocument')}</h2>
           <img className="review-photo large" src={`media://thumb/${doc.sha256}`} alt="" />
           <div className="dialog-actions center">
-            <button className="text-button" onClick={() => answer('skip')}>Skip</button>
-            <button className="filled-button secondary" onClick={() => answer('no')}>No</button>
-            <button className="filled-button" onClick={() => answer('yes')}>Yes, a document</button>
+            <button className="text-button" onClick={() => answer('skip')}>{t('people.skip')}</button>
+            <button className="filled-button secondary" onClick={() => answer('no')}>{t('common.no')}</button>
+            <button className="filled-button" onClick={() => answer('yes')}>{t('people.yesDocument')}</button>
           </div>
         </div>
       )}
       {review && (
         <div className="island review">
-          <h2>Is this the same person?</h2>
+          <h2>{t('people.samePerson')}</h2>
           <div className="review-faces">
-            <div><FaceCircle face={review.faceId} size={160} /><small>This photo</small></div>
-            <div><FaceCircle face={review.personFace} size={160} /><small>{review.name}</small></div>
+            <div><FaceCircle face={review.faceId} size={160} /><small>{t('people.thisPhoto')}</small></div>
+            <div><FaceCircle face={review.personFace} size={160} /><small>{shownName(review.name)}</small></div>
           </div>
           <img className="review-photo" src={`media://thumb/${review.sha256}`} alt="" />
           <div className="dialog-actions center">
-            <button className="text-button" onClick={() => answer('skip')}>Skip</button>
-            <button className="filled-button secondary" onClick={() => answer('no')}>No</button>
-            <button className="filled-button" onClick={() => answer('yes')}>Yes, same person</button>
+            <button className="text-button" onClick={() => answer('skip')}>{t('people.skip')}</button>
+            <button className="filled-button secondary" onClick={() => answer('no')}>{t('common.no')}</button>
+            <button className="filled-button" onClick={() => answer('yes')}>{t('people.yesSame')}</button>
           </div>
         </div>
       )}
-      {(doc || review || folders.length > 0) && left > 0 && <p className="hint center">{left} {left === 1 ? 'question' : 'questions'} left</p>}
+      {(doc || review || folders.length > 0) && left > 0 && <p className="hint center">{t('people.questionsLeft', { count: left })}</p>}
     </div>
   )
 }
@@ -266,23 +269,23 @@ export function ReviewPage({ left, onBack, onChanged }: { left: number; onBack: 
 export function MergeHistory({ person, onClose, onRestore }: { person: Person; onClose: () => void; onRestore: (m: PersonMerge) => void }) {
   const [merges, setMerges] = useState<PersonMerge[] | null>(null)
   useEffect(() => { window.drive.people.mergeHistory(person.id).then(setMerges, () => setMerges([])) }, [person.id])
-  const when = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  const when = new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   return (
     <Modal onClose={onClose}>
-      <h3>Combined into {person.name}</h3>
-      {merges === null && <p className="hint">Looking…</p>}
-      {merges?.length === 0 && <p className="hint">Nothing has been combined into this person yet.</p>}
-      {!!merges?.length && <p>Restore puts a group back the way it was, with the same faces.</p>}
+      <h3>{t('people.combinedInto', { name: shownName(person.name) })}</h3>
+      {merges === null && <p className="hint">{t('people.looking')}</p>}
+      {merges?.length === 0 && <p className="hint">{t('people.nothingCombinedInto')}</p>}
+      {!!merges?.length && <p>{t('people.restoreHint')}</p>}
       <div className="picker">
         {merges?.map(m => (
           <div key={m.id} className="picker-row">
             <FaceCircle face={m.cover} size={44} />
-            <span>{m.name}<small>{m.count} {m.count === 1 ? 'face' : 'faces'} · {when.format(m.mergedAt)}</small></span>
-            <button className="filled-button" onClick={() => { onClose(); onRestore(m) }}>Restore</button>
+            <span>{shownName(m.name)}<small>{t('people.faces', { count: m.count })} · {when.format(m.mergedAt)}</small></span>
+            <button className="filled-button" onClick={() => { onClose(); onRestore(m) }}>{t('common.restore')}</button>
           </div>
         ))}
       </div>
-      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Close</button></div>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.close')}</button></div>
     </Modal>
   )
 }

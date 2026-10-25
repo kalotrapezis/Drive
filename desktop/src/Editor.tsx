@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Media } from './timeline'
 import { Icon, type IconName } from './Icon'
 import { Modal, errorText } from './Dialogs'
+import { t } from './i18n'
 import { FULL, clampRect, coverHas, coverScale, drawCover, eyeCovers, frameSize, turnPoint, turnRect, type Cover, type Eyes, type Rect, type Stroke, type Turn } from './edit'
 
 // Phone editor: crop & straighten, rotate, markup, hide eyes or text; Save / Save as copy / Discard. Full resolution up to 8192 px.
@@ -134,11 +135,11 @@ export function Editor({ item, onClose, onSaved, hide }: { item: Media; onClose:
         const found = await window.drive.photoAsk(item.id, 'eyes')
         setEyes(found)
         setCovers(list => [...list.filter(c => !c.eye), ...eyeCovers(found.eyes, found.width, found.height, stars)])
-        if (!found.eyes.length) setNote('No faces found. Drag over the eyes to hide them.')
+        if (!found.eyes.length) setNote(t('editor.noFaces'))
       } else {
         const found = await window.drive.photoAsk(item.id, 'text')
         setWords(found.words)
-        if (!found.words.length) setNote('No words found. Drag over the text to hide it.')
+        if (!found.words.length) setNote(t('editor.noWords'))
       }
     } catch (e) { setNote(errorText(e)) }
     setFinding(false)
@@ -195,9 +196,9 @@ export function Editor({ item, onClose, onSaved, hide }: { item: Media; onClose:
     try {
       const out = renderOutput(MAX_OUTPUT)
       const blob = await new Promise<Blob | null>(r => out.toBlob(r, 'image/jpeg', 0.92))
-      if (!blob) throw new Error('Could not encode the edited photo.')
+      if (!blob) throw new Error(t('editor.encodeFailed'))
       const saved = await window.drive.editorSave(item.id, new Uint8Array(await blob.arrayBuffer()), kind)
-      onSaved(kind === 'copy' ? `Saved a copy: ${saved.split('/').pop()}` : 'Saved. The original is in the system Trash.')
+      onSaved(kind === 'copy' ? t('editor.savedCopy', { name: saved.split('/').pop() ?? '' }) : t('editor.savedReplaced'))
     } catch (e) { setError(errorText(e)); setBusy(false); setSheet(false) }
   }
 
@@ -208,8 +209,8 @@ export function Editor({ item, onClose, onSaved, hide }: { item: Media; onClose:
   return (
     <div className="editor">
       <div className="viewer-bar">
-        <button className="round" title="Close" onClick={() => changed ? setSheet(true) : onClose()}><Icon name="close" /></button>
-        <div className="island viewer-title"><strong>Edit · {item.path.split('/').pop()}</strong><span>{changed ? 'Edited' : 'No changes yet'}</span></div>
+        <button className="round" title={t('common.close')} onClick={() => changed ? setSheet(true) : onClose()}><Icon name="close" /></button>
+        <div className="island viewer-title"><strong>{t('editor.title', { name: item.path.split('/').pop() ?? '' })}</strong><span>{changed ? t('editor.edited') : t('editor.noChanges')}</span></div>
       </div>
       <div className="editor-stage" ref={stage}>
         {!image && !error && <span className="spinner" />}
@@ -230,48 +231,48 @@ export function Editor({ item, onClose, onSaved, hide }: { item: Media; onClose:
       <div className="editor-tools">
         {mode === 'crop' && (
           <div className="island tool-panel">
-            <label>Straighten <input type="range" min={-45} max={45} step={0.5} value={angle} onChange={e => setAngle(Number(e.target.value))} /> <span>{angle.toFixed(1)}°</span></label>
-            <button className="text-button" onClick={() => { setCrop(FULL); setAngle(0) }}>Reset crop</button>
+            <label>{t('editor.straighten')} <input type="range" min={-45} max={45} step={0.5} value={angle} onChange={e => setAngle(Number(e.target.value))} /> <span>{angle.toFixed(1)}°</span></label>
+            <button className="text-button" onClick={() => { setCrop(FULL); setAngle(0) }}>{t('editor.resetCrop')}</button>
           </div>
         )}
         {mode === 'markup' && (
           <div className="island tool-panel">
             {SWATCHES.map(c => <button key={c} className={`swatch small ${color === c ? 'on' : ''}`} style={{ background: c }} title={c} onClick={() => setColor(c)} />)}
-            <label className="swatch small custom" title="Custom colour"><Icon name="palette" size={18} /><input type="color" value={color} onChange={e => setColor(e.target.value)} /></label>
-            <label>Size <input type="range" min={2} max={48} value={brush} onChange={e => setBrush(Number(e.target.value))} /></label>
-            <button className="text-button" disabled={!strokes.length} onClick={() => setStrokes(s => s.slice(0, -1))}><Icon name="undo" size={18} /> Undo</button>
+            <label className="swatch small custom" title={t('editor.customColour')}><Icon name="palette" size={18} /><input type="color" value={color} onChange={e => setColor(e.target.value)} /></label>
+            <label>{t('editor.size')} <input type="range" min={2} max={48} value={brush} onChange={e => setBrush(Number(e.target.value))} /></label>
+            <button className="text-button" disabled={!strokes.length} onClick={() => setStrokes(s => s.slice(0, -1))}><Icon name="undo" size={18} /> {t('common.undo')}</button>
           </div>
         )}
         {mode === 'hide' && (
           <div className="island tool-panel">
-            <button className="text-button" disabled={finding} onClick={() => find('eyes')}><Icon name="visibilityOff" size={18} /> Find eyes</button>
-            <button className="text-button" disabled={finding} onClick={() => find('text')}><Icon name="textFields" size={18} /> Find text</button>
+            <button className="text-button" disabled={finding} onClick={() => find('eyes')}><Icon name="visibilityOff" size={18} /> {t('editor.findEyes')}</button>
+            <button className="text-button" disabled={finding} onClick={() => find('text')}><Icon name="textFields" size={18} /> {t('editor.findText')}</button>
             {words.length > 0 && <button className="text-button" onClick={() => setCovers(list => [...list, ...words.filter(w => !list.some(c => c.x === w.x && c.y === w.y)).map(w => ({ ...w, stars: false }))])}>
-              <Icon name="textFields" size={18} /> Hide all the text</button>}
-            <button className={`text-button ${!stars ? 'on' : ''}`} onClick={() => setStyle(false)}><Icon name="square" size={18} /> Black bar</button>
-            <button className={`text-button ${stars ? 'on' : ''}`} onClick={() => setStyle(true)}><Icon name="star" size={18} /> Stars</button>
-            <button className="text-button" disabled={!covers.length} onClick={() => setCovers(c => c.slice(0, -1))}><Icon name="undo" size={18} /> Undo</button>
-            {finding ? <span className="spinner" /> : <span className="hint">{note || (words.length ? 'Click words to hide them, a cover to show it again; drag to hide any part.' : 'Click a cover to show it again; drag to hide any part.')}</span>}
+              <Icon name="textFields" size={18} /> {t('editor.hideAllText')}</button>}
+            <button className={`text-button ${!stars ? 'on' : ''}`} onClick={() => setStyle(false)}><Icon name="square" size={18} /> {t('editor.blackBar')}</button>
+            <button className={`text-button ${stars ? 'on' : ''}`} onClick={() => setStyle(true)}><Icon name="star" size={18} /> {t('editor.stars')}</button>
+            <button className="text-button" disabled={!covers.length} onClick={() => setCovers(c => c.slice(0, -1))}><Icon name="undo" size={18} /> {t('common.undo')}</button>
+            {finding ? <span className="spinner" /> : <span className="hint">{note || (words.length ? t('editor.hideHintWords') : t('editor.hideHint'))}</span>}
           </div>
         )}
         <div className="island tool-bar">
-          {tool('crop', 'Crop & straighten', () => setMode(m => m === 'crop' ? null : 'crop'), mode === 'crop', !image)}
-          {tool('rotateLeft', 'Rotate left', () => turn('left'), false, !image)}
-          {tool('rotateRight', 'Rotate right', () => turn('right'), false, !image)}
-          {tool('edit', 'Markup', () => setMode(m => m === 'markup' ? null : 'markup'), mode === 'markup', !image)}
-          {tool('visibilityOff', 'Hide eyes or text', () => setMode(m => m === 'hide' ? null : 'hide'), mode === 'hide', !image)}
-          {tool('save', 'Save…', () => setSheet(true), false, !changed)}
+          {tool('crop', t('editor.crop'), () => setMode(m => m === 'crop' ? null : 'crop'), mode === 'crop', !image)}
+          {tool('rotateLeft', t('editor.rotateLeft'), () => turn('left'), false, !image)}
+          {tool('rotateRight', t('editor.rotateRight'), () => turn('right'), false, !image)}
+          {tool('edit', t('editor.markup'), () => setMode(m => m === 'markup' ? null : 'markup'), mode === 'markup', !image)}
+          {tool('visibilityOff', t('editor.hide'), () => setMode(m => m === 'hide' ? null : 'hide'), mode === 'hide', !image)}
+          {tool('save', t('editor.saveMenu'), () => setSheet(true), false, !changed)}
         </div>
       </div>
       {sheet && (
         <Modal onClose={() => !busy && setSheet(false)}>
-          <h3>{changed ? 'Save your edit?' : 'Leave the editor?'}</h3>
+          <h3>{changed ? t('editor.saveAsk') : t('editor.leaveAsk')}</h3>
           {changed && <>
-            <button className="sheet-row" disabled={busy} onClick={() => save('copy')}><Icon name="copy" />Save as copy<small>&nbsp;· new file beside the original</small></button>
-            <button className="sheet-row" disabled={busy} onClick={() => save('replace')}><Icon name="save" />Save<small>&nbsp;· replaces the original; it goes to the system Trash</small></button>
+            <button className="sheet-row" disabled={busy} onClick={() => save('copy')}><Icon name="copy" />{t('editor.saveCopy')}<small>&nbsp;· {t('editor.saveCopyNote')}</small></button>
+            <button className="sheet-row" disabled={busy} onClick={() => save('replace')}><Icon name="save" />{t('common.save')}<small>&nbsp;· {t('editor.saveNote')}</small></button>
           </>}
-          <button className="sheet-row danger" disabled={busy} onClick={onClose}><Icon name="trash" />Discard changes</button>
-          {busy && <p className="hint">Saving at full resolution…</p>}
+          <button className="sheet-row danger" disabled={busy} onClick={onClose}><Icon name="trash" />{t('editor.discard')}</button>
+          {busy && <p className="hint">{t('editor.saving')}</p>}
         </Modal>
       )}
     </div>

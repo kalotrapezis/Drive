@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { group, LEVELS, type Level, type Media } from './timeline'
 import { Icon } from './Icon'
+import { t } from './i18n'
 
 const THUMB: Record<Level, number> = { week: 240, month: 160, year: 88 }
 const GAP = 4
@@ -115,7 +116,7 @@ export function Timeline({ items, title, tools, empty, level, setLevel, selected
         <div className="tools">
           {tools}
           <div className="island segmented">
-            {LEVELS.map(l => <button key={l} className={l === level ? 'on' : ''} onClick={() => setLevel(l)}>{l[0].toUpperCase() + l.slice(1)}</button>)}
+            {LEVELS.map(l => <button key={l} className={l === level ? 'on' : ''} onClick={() => setLevel(l)}>{t(`timeline.${l}`)}</button>)}
           </div>
         </div>
       </header>
@@ -135,7 +136,7 @@ export function Timeline({ items, title, tools, empty, level, setLevel, selected
                 {m.thumb ? <img src={thumbUrl(m)} loading="lazy" decoding="async" draggable={false} alt="" /> : <span className="no-thumb">{m.path.split('.').pop()}</span>}
                 {m.is_video ? <span className="badge"><Icon name="play" size={16} /></span> : null}
                 {m.favorite ? <span className="badge fav"><Icon name="heartFill" size={16} /></span> : null}
-                <span className="check" title="Select"><Icon name={selected.has(m.id) ? 'checked' : 'unchecked'} size={24} /></span>
+                <span className="check" title={t('timeline.select')}><Icon name={selected.has(m.id) ? 'checked' : 'unchecked'} size={24} /></span>
               </button>
             ))}
           </div>}</Near>

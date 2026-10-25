@@ -3,9 +3,11 @@ import { formatBytes, type Media } from './timeline'
 import { Icon } from './Icon'
 import { errorText } from './Dialogs'
 import type { Hide } from './Editor'
+import { lang, t } from './i18n'
+import { shownName } from './People'
 
 const MAX_ZOOM = 5
-const when = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+const when = new Intl.DateTimeFormat(lang() === 'en' ? 'en-GB' : lang(), { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
 interface View { scale: number; x: number; y: number }
 const RESET: View = { scale: 1, x: 0, y: 0 }
@@ -124,30 +126,30 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
   return (
     <div className="viewer">
       <div className="viewer-bar">
-        <button className="round" title="Close (Esc)" onClick={onClose}><Icon name="close" /></button>
+        <button className="round" title={t('viewer.close')} onClick={onClose}><Icon name="close" /></button>
         <div className="island viewer-title"><strong>{name}</strong><span>{when.format(item.taken_at)}</span></div>
         <div className="island viewer-actions">
           {!item.is_video && <>
-            <button className="round flat" title="Zoom out (−)" onClick={() => zoomAt(view.scale / 1.5)}><Icon name="zoomOut" /></button>
-            <button className="round flat" title="Zoom in (+)" onClick={() => zoomAt(view.scale * 1.5)}><Icon name="zoomIn" /></button>
+            <button className="round flat" title={t('viewer.zoomOut')} onClick={() => zoomAt(view.scale / 1.5)}><Icon name="zoomOut" /></button>
+            <button className="round flat" title={t('viewer.zoomIn')} onClick={() => zoomAt(view.scale * 1.5)}><Icon name="zoomIn" /></button>
           </>}
-          {onFavorite && <button className="round flat" title={item.favorite ? 'Remove from Favorites (F)' : 'Add to Favorites (F)'} onClick={() => onFavorite(item)}>
+          {onFavorite && <button className="round flat" title={item.favorite ? t('viewer.unfavorite') : t('viewer.favorite')} onClick={() => onFavorite(item)}>
             <Icon name={item.favorite ? 'heartFill' : 'heart'} /></button>}
-          {onCollect && <button className="round flat" title="Add to collection" onClick={() => onCollect(item)}><Icon name="collect" /></button>}
-          {onUncollect && <button className="round flat" title={uncollectTitle ?? 'Remove from this collection'} onClick={() => onUncollect(item)}><Icon name="uncollect" /></button>}
-          {onMove && !item.location && <button className="round flat" title="Move to folder…" onClick={() => onMove(item)}><Icon name="moveTo" /></button>}
-          {onEdit && !item.is_video && <button className="round flat" title="Edit" onClick={() => onEdit(item)}><Icon name="edit" /></button>}
+          {onCollect && <button className="round flat" title={t('viewer.collect')} onClick={() => onCollect(item)}><Icon name="collect" /></button>}
+          {onUncollect && <button className="round flat" title={uncollectTitle ?? t('viewer.uncollect')} onClick={() => onUncollect(item)}><Icon name="uncollect" /></button>}
+          {onMove && !item.location && <button className="round flat" title={t('viewer.moveTo')} onClick={() => onMove(item)}><Icon name="moveTo" /></button>}
+          {onEdit && !item.is_video && <button className="round flat" title={t('common.edit')} onClick={() => onEdit(item)}><Icon name="edit" /></button>}
           {onEdit && !item.is_video && <>
-            <button className={`round flat ${text !== null ? 'on' : ''}`} title="Text in the photo" onClick={readText}><Icon name="textFields" /></button>
-            <button className="round flat" title="Hide eyes" onClick={() => onEdit(item, 'eyes')}><Icon name="visibilityOff" /></button>
-            <button className="round flat" title="Hide text" onClick={() => onEdit(item, 'text')}><Icon name="square" /></button>
+            <button className={`round flat ${text !== null ? 'on' : ''}`} title={t('viewer.textInPhoto')} onClick={readText}><Icon name="textFields" /></button>
+            <button className="round flat" title={t('viewer.hideEyes')} onClick={() => onEdit(item, 'eyes')}><Icon name="visibilityOff" /></button>
+            <button className="round flat" title={t('viewer.hideText')} onClick={() => onEdit(item, 'text')}><Icon name="square" /></button>
           </>}
-          {onHide && <button className="round flat" title="Move to Hidden" onClick={() => onHide(item)}><Icon name="lock" /></button>}
-          {onRestore && <button className="round flat" title="Restore to Photos" onClick={() => onRestore(item)}><Icon name="lockOpen" /></button>}
-          {onTrash && <button className="round flat" title="Move to Trash (Delete)" onClick={() => onTrash(item)}><Icon name="trash" /></button>}
-          {onTrash && <button className="round flat" title="Show in folder" onClick={() => window.drive.show(item.id)}><Icon name="folder" /></button>}
-          <button className={`round flat ${details ? 'on' : ''}`} title="Details (i)" onClick={() => setDetails(d => !d)}><Icon name="info" /></button>
-          {motionUrl && <button className={`round flat ${playing ? 'on' : ''}`} title={playing ? 'Stop the motion' : 'Play the motion'} onClick={() => setMotionPlay(p => !p)}><Icon name={playing ? 'motion' : 'motionOff'} /></button>}
+          {onHide && <button className="round flat" title={t('viewer.toHidden')} onClick={() => onHide(item)}><Icon name="lock" /></button>}
+          {onRestore && <button className="round flat" title={t('viewer.restoreToPhotos')} onClick={() => onRestore(item)}><Icon name="lockOpen" /></button>}
+          {onTrash && <button className="round flat" title={t('viewer.toTrash')} onClick={() => onTrash(item)}><Icon name="trash" /></button>}
+          {onTrash && <button className="round flat" title={t('viewer.showInFolder')} onClick={() => window.drive.show(item.id)}><Icon name="folder" /></button>}
+          <button className={`round flat ${details ? 'on' : ''}`} title={t('viewer.detailsKey')} onClick={() => setDetails(d => !d)}><Icon name="info" /></button>
+          {motionUrl && <button className={`round flat ${playing ? 'on' : ''}`} title={playing ? t('viewer.stopMotion') : t('viewer.playMotion')} onClick={() => setMotionPlay(p => !p)}><Icon name={playing ? 'motion' : 'motionOff'} /></button>}
         </div>
       </div>
 
@@ -165,41 +167,41 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
                 src={failed ? thumbUrl(item) : fileUrl(item)}
                 onError={() => setFailed(true)} // formats Chromium cannot draw (HEIC) fall back to the thumbnail
                 style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }} />}
-          {item.location && failed && <div className="island plug-in"><Icon name="database" size={20} />Plug in {item.drive} to open this — it lives there now.</div>}
-          {index > 0 && <button className="round nav prev" title="Previous (←)" onClick={() => go(index - 1)}><Icon name="back" /></button>}
-          {index < media.length - 1 && <button className="round nav next" title="Next (→)" onClick={() => go(index + 1)}><Icon name="forward" /></button>}
+          {item.location && failed && <div className="island plug-in"><Icon name="database" size={20} />{t('viewer.plugIn', { drive: item.drive ?? '' })}</div>}
+          {index > 0 && <button className="round nav prev" title={t('viewer.previous')} onClick={() => go(index - 1)}><Icon name="back" /></button>}
+          {index < media.length - 1 && <button className="round nav next" title={t('viewer.next')} onClick={() => go(index + 1)}><Icon name="forward" /></button>}
         </div>
         {text !== null && (
           <aside className="island details photo-text">
-            <h3>Text in the photo</h3>
+            <h3>{t('viewer.textInPhoto')}</h3>
             {text === '' ? <span className="spinner" />
-              : text === '\u0000' ? <p className="hint">{textError || 'No words found in this photo.'}</p>
+              : text === '\u0000' ? <p className="hint">{textError || t('viewer.noWords')}</p>
               : <>
-                <p className="hint">Select part of it to copy only that. You can fix the words here too.</p>
+                <p className="hint">{t('viewer.textHint')}</p>
                 <textarea ref={textBox} defaultValue={text} spellCheck={false} onSelect={pick} onMouseUp={pick} onKeyUp={pick} />
-                <button className="text-button" onClick={copyText}><Icon name="copy" size={18} /> {picked ? 'Copy selected' : 'Copy all'}</button>
+                <button className="text-button" onClick={copyText}><Icon name="copy" size={18} /> {picked ? t('viewer.copySelected') : t('viewer.copyAll')}</button>
               </>}
           </aside>
         )}
         {details && (
           <aside className="island details">
-            <h3>Details</h3>
+            <h3>{t('viewer.details')}</h3>
             <dl>
-              <dt>Date</dt><dd>{when.format(item.taken_at)}</dd>
-              <dt>Name</dt><dd>{name}</dd>
-              <dt>Folder</dt><dd>{folder}</dd>
-              {item.location && <><dt>Where</dt><dd><Icon name="database" size={16} /> On {item.drive}</dd></>}
-              <dt>Size</dt><dd>{formatBytes(item.size)}{item.width ? ` · ${item.width} × ${item.height}` : ''}</dd>
-              {people.length > 0 && <><dt>People</dt><dd>{people.join(', ')}</dd></>}
-              {item.labels && <><dt>Labels</dt><dd>{item.labels.replace(/Scene: /g, '')}</dd></>}
-              {onDocument && !item.is_video && <><dt>Document</dt>
-                <dd>{item.document ? 'Yes' : 'No'}</dd>
-                <dd><button className="text-button" onClick={() => onDocument(item, !item.document)}>{item.document ? 'Mark as not a document' : 'Mark as document'}</button></dd></>}
-              {item.camera && <><dt>Camera</dt><dd>{item.camera}</dd></>}
-              {item.latitude != null && <><dt>Location</dt>
-                <dd><Icon name="place" size={16} /> {item.place || 'Not named'}</dd>
+              <dt>{t('viewer.date')}</dt><dd>{when.format(item.taken_at)}</dd>
+              <dt>{t('common.name')}</dt><dd>{name}</dd>
+              <dt>{t('viewer.folder')}</dt><dd>{folder}</dd>
+              {item.location && <><dt>{t('viewer.where')}</dt><dd><Icon name="database" size={16} /> {t('viewer.onDrive', { drive: item.drive ?? '' })}</dd></>}
+              <dt>{t('viewer.size')}</dt><dd>{formatBytes(item.size)}{item.width ? ` · ${item.width} × ${item.height}` : ''}</dd>
+              {people.length > 0 && <><dt>{t('people.title')}</dt><dd>{people.map(shownName).join(', ')}</dd></>}
+              {item.labels && <><dt>{t('viewer.labels')}</dt><dd>{item.labels.replace(/Scene: /g, '')}</dd></>}
+              {onDocument && !item.is_video && <><dt>{t('viewer.document')}</dt>
+                <dd>{item.document ? t('common.yes') : t('common.no')}</dd>
+                <dd><button className="text-button" onClick={() => onDocument(item, !item.document)}>{item.document ? t('viewer.markNotDocument') : t('viewer.markDocument')}</button></dd></>}
+              {item.camera && <><dt>{t('viewer.camera')}</dt><dd>{item.camera}</dd></>}
+              {item.latitude != null && <><dt>{t('viewer.location')}</dt>
+                <dd><Icon name="place" size={16} /> {item.place || t('viewer.notNamed')}</dd>
                 <dd className="mono">{item.latitude.toFixed(5)}, {item.longitude!.toFixed(5)}</dd>
-                <dd><button className="text-button" onClick={() => onShowOnMap?.(item)}><Icon name="map" size={18} /> Show on map</button></dd></>}
+                <dd><button className="text-button" onClick={() => onShowOnMap?.(item)}><Icon name="map" size={18} /> {t('viewer.showOnMap')}</button></dd></>}
               <dt>SHA-256</dt><dd className="mono">{item.sha256}</dd>
             </dl>
           </aside>

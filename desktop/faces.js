@@ -6,6 +6,7 @@ const path = require('node:path')
 // Half the cores: analysis is background work, and the whole desktop crawled when it took all of them.
 const SESSION_OPTIONS = { intraOpNumThreads: Math.max(1, Math.floor(require('node:os').cpus().length / 2)), interOpNumThreads: 1 }
 const crypto = require('node:crypto')
+const { t } = require('./i18n')
 
 const EMBEDDING_MODEL = 'mobilefacenet-192-eyes38x44-74x44' // phone: PhotoClassifier.embed
 const ANALYSIS_VERSION = 'yunet2023mar-2pass+' + EMBEDDING_MODEL
@@ -400,7 +401,7 @@ class People {
   setCover(personId, faceId) {
     this.live(personId)
     if (faceId && !this.db.prepare('SELECT 1 FROM faces WHERE id = ? AND person_id = ? AND deleted = 0').get(faceId, String(personId))) {
-      throw new Error('That face does not belong to this person.')
+      throw new Error(t('people.errFaceNotTheirs'))
     }
     this.db.prepare('UPDATE people SET cover_face_id = ?, updated_at = ? WHERE id = ?').run(faceId ?? null, Date.now(), String(personId))
   }
@@ -591,11 +592,11 @@ class People {
 
   restoreMerge(id) {
     const row = this.db.prepare('SELECT source_id, face_ids FROM people_merges WHERE id = ?').get(Number(id))
-    if (!row) throw new Error('This combine has already been undone.')
+    if (!row) throw new Error(t('people.errUndone'))
     this.undoMerge({ sourceId: row.source_id, faceIds: row.face_ids.split(',').filter(Boolean) })
   }
 
-  live(id) { if (!this.db.prepare('SELECT 1 FROM people WHERE id = ? AND deleted = 0').get(String(id))) throw new Error('This person no longer exists.') }
+  live(id) { if (!this.db.prepare('SELECT 1 FROM people WHERE id = ? AND deleted = 0').get(String(id))) throw new Error(t('people.errGone')) }
 
   rename(id, raw) {
     this.live(id)
@@ -606,7 +607,7 @@ class People {
 
   /** Phone: mergeFaceGroups — keep the open person, move the other's faces into it. Returns what undo needs. */
   merge(sourceId, targetId) {
-    if (sourceId === targetId) throw new Error('Choose two different people.')
+    if (sourceId === targetId) throw new Error(t('people.errSame'))
     this.live(sourceId); this.live(targetId)
     const now = Date.now()
     return this.tx(() => {
@@ -640,9 +641,9 @@ class People {
     return this.tx(() => {
       const marks = shas.map(() => '?').join(',')
       const ids = this.db.prepare(`SELECT id FROM faces WHERE person_id = ? AND deleted = 0 AND sha256 IN (${marks})`).all(personId, ...shas).map(r => r.id)
-      if (!ids.length) throw new Error('Nothing to take out of this person.')
+      if (!ids.length) throw new Error(t('people.errNothingToDetach'))
       const left = this.db.prepare(`SELECT COUNT(*) AS n FROM faces WHERE person_id = ? AND deleted = 0 AND id NOT IN (${ids.map(() => '?').join(',')})`).get(personId, ...ids).n
-      if (!left) throw new Error('Taking every photo out would leave nobody here. Leave one behind, or combine this person into another.')
+      if (!left) throw new Error(t('people.errDetachAll'))
       const person = this.createPerson(now)
       this.db.prepare(`DELETE FROM face_reviews WHERE face_id IN (${ids.map(() => '?').join(',')})`).run(...ids)
       const move = this.db.prepare('UPDATE faces SET person_id = ?, updated_at = ? WHERE id = ?')

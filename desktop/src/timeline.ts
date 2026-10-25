@@ -1,3 +1,5 @@
+import { lang } from './i18n.ts'
+
 export type Level = 'week' | 'month' | 'year'
 export const LEVELS: Level[] = ['week', 'month', 'year']
 
@@ -32,7 +34,7 @@ export function periodKey(t: number, level: Level): string {
   return `${w.getFullYear()}-${String(w.getMonth() + 1).padStart(2, '0')}-${String(w.getDate()).padStart(2, '0')}`
 }
 
-const fmt = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-GB', o)
+const fmt = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(lang() === 'en' ? 'en-GB' : lang(), o)
 const monthYear = fmt({ month: 'long', year: 'numeric' })
 const dayMonth = fmt({ day: 'numeric', month: 'short' })
 const dayMonthYear = fmt({ day: 'numeric', month: 'short', year: 'numeric' })
