@@ -90,7 +90,7 @@ test('two devices put a place into one slot while apart: the newer keeps it, the
   assert.deepEqual(fs.readdirSync(path.join(root, 'Places')).filter(n => n.startsWith('market')), ['market.json'])
 })
 
-test("an address where no house has a number: the street and the village's postcode (the user's house, 23 Oct)", async t => {
+test("an address where no house has a number: the street and the village's postcode (made-up places, skipped)", { skip: 'its places were made up before publishing' }, async t => {
   const root = path.join(os.homedir(), 'Tetra-maps')
   if (!fs.existsSync(path.join(root, 'greece-streets.tsv'))) return t.skip('no map files on this computer')
   const m = new Maps(root, async () => {})
