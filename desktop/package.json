@@ -44,6 +44,8 @@
     "files": [
       "main.js",
       "preload.js",
+      "i18n.js",
+      "locales/*.json",
       "library.js",
       "files.js",
       "faces.js",

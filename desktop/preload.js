@@ -98,6 +98,9 @@ contextBridge.exposeInMainWorld('drive', {
     cancel: () => ipcRenderer.invoke('import:cancel'),
     onProgress: cb => { const f = (_, p) => cb(p); ipcRenderer.on('import-progress', f); return () => ipcRenderer.removeListener('import-progress', f) },
   },
+  i18n: ipcRenderer.sendSync('i18n:words'), // the language's words, before the first render (src/i18n.ts)
+  languages: () => ipcRenderer.invoke('settings:languages'),
+  setLanguage: choice => ipcRenderer.invoke('settings:setLanguage', choice),
   theme: () => ipcRenderer.invoke('settings:theme'),
   motionSetting: () => ipcRenderer.invoke('settings:motion'),
   setMotionSetting: v => ipcRenderer.invoke('settings:setMotion', v),

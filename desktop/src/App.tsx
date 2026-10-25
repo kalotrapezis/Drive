@@ -33,8 +33,8 @@ const SYSTEM: { id: string; name: string; icon: IconName; test: (m: Media) => bo
   { id: 'documents', name: 'Documents', icon: 'document', test: m => !!m.document },
 ]
 
-const stored = (key: string) => { try { return localStorage.getItem(key) } catch { return null } }
-const store = (key: string, value: string) => { try { localStorage.setItem(key, value) } catch {} }
+const stored = (key: string, where: Storage = localStorage) => { try { return where.getItem(key) } catch { return null } }
+const store = (key: string, value: string, where: Storage = localStorage) => { try { where.setItem(key, value) } catch {} }
 
 export function App() {
   const [media, setMedia] = useState<Media[] | null>(null)
@@ -43,7 +43,8 @@ export function App() {
   const [members, setMembers] = useState<Set<string> | null>(null)
   const [root, setRoot] = useState('')
   const [scan, setScan] = useState<string | null>('Looking for photos…')
-  const [page, setPage] = useState<Page>({ kind: 'photos' })
+  // Settings › Language reloads the page; it opens again where it was
+  const [page, setPage] = useState<Page>(() => { const back = stored('reopen', sessionStorage); store('reopen', '', sessionStorage); return back === 'settings' ? { kind: 'settings' } : { kind: 'photos' } })
   const [level, setLevel] = useState<Level>(() => (stored('level') as Level) || 'month')
   const [query, setQuery] = useState('')
   // These three describe the library, not this computer, so they come from the database and sync with the phone.
@@ -256,7 +257,7 @@ export function App() {
   }
 
   const nav = (target: Page, active: boolean, icon: IconName, label: string) => (
-    <button className={`nav-item ${active ? 'active' : ''}`} onClick={() => setPage(target)}><Icon name={icon} />{label}</button>
+    <button className={`nav-item ${active ? 'active' : ''}`} onClick={() => setPage(target)}><Icon name={icon} /><span>{label}</span></button>
   )
   const filesMode = page.kind === 'files' && !(page.mode === 'browse' && page.folder.startsWith('Trash')) ? page.mode : null
   const inFilesTrash = page.kind === 'files' && page.mode === 'browse' && page.folder.startsWith('Trash')
@@ -400,7 +401,7 @@ export function App() {
         )}
         <div className="rail-bottom">
           <button className={`nav-item ${page.kind === 'notifications' ? 'active' : ''}`} onClick={() => setPage({ kind: 'notifications' })}>
-            <Icon name="bell" />Notifications{unread > 0 && <span className="badge-count">{unread}</span>}</button>
+            <Icon name="bell" /><span>Notifications</span>{unread > 0 && <span className="badge-count">{unread}</span>}</button>
           {nav({ kind: 'settings' }, page.kind === 'settings', 'settings', 'Settings')}
         </div>
         <div className="rail-foot">

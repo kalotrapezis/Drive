@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AppNotification } from './drive'
 import { Icon } from './Icon'
+import { locale, t } from './i18n'
 
 // The foot of the sidebar (asked 2026-09-26): what Tetra said, kept — a notification goes by in seconds — and Settings.
 
@@ -8,21 +9,21 @@ export function NotificationsPage() {
   const [list, setList] = useState<AppNotification[] | null>(null)
   const load = () => window.drive.notifications.list().then(l => { setList(l); window.drive.notifications.read() })
   useEffect(() => { load(); return window.drive.notifications.onChange(load) }, [])
-  const day = (at: number) => new Date(at).toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' })
+  const day = (at: number) => new Date(at).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' })
   return (
     <div className="page-scroll">
       <header className="page-head">
-        <h1>Notifications</h1>
-        {!!list?.length && <button className="text-button" onClick={() => window.drive.notifications.clear().then(load)}>Clear all</button>}
+        <h1>{t('app.notifications')}</h1>
+        {!!list?.length && <button className="text-button" onClick={() => window.drive.notifications.clear().then(load)}>{t('notifications.clearAll')}</button>}
       </header>
-      {list?.length === 0 && <div className="empty"><p>Nothing yet. What Tetra tells you — space freed, a disk filling up, a drive backed up — is kept here.</p></div>}
+      {list?.length === 0 && <div className="empty"><p>{t('notifications.empty')}</p></div>}
       <div className="notice-list">
         {list?.map((n, i) => <div key={n.id}>
           {(i === 0 || day(list[i - 1].at) !== day(n.at)) && <h4 className="notice-day">{day(n.at)}</h4>}
           <div className={`notice island ${n.read ? '' : 'unread'}`}>
             <Icon name="bell" size={20} />
             <div><strong>{n.title}</strong>{n.body && <p>{n.body}</p>}</div>
-            <small>{new Date(n.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
+            <small>{new Date(n.at).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}</small>
           </div>
         </div>)}
       </div>
@@ -42,33 +43,61 @@ export function SettingsPage() {
   const pickAutoplay = (on: boolean) => { setAutoplay(on); window.drive.setMotionAutoplay(on) }
   return (
     <div className="page-scroll">
-      <header className="page-head"><h1>Settings</h1></header>
+      <header className="page-head"><h1>{t('app.settings')}</h1></header>
       <section className="settings-card island">
-        <h3>Appearance</h3>
+        <h3>{t('settings.appearance')}</h3>
         <div className="segmented">
-          {([['system', 'Auto'], ['light', 'Light'], ['dark', 'Dark']] as const).map(([id, name]) =>
-            <button key={id} className={theme === id ? 'on' : ''} onClick={() => pick(id)}>{name}</button>)}
+          {([['system', 'settings.themeAuto'], ['light', 'settings.themeLight'], ['dark', 'settings.themeDark']] as const).map(([id, name]) =>
+            <button key={id} className={theme === id ? 'on' : ''} onClick={() => pick(id)}>{t(name)}</button>)}
         </div>
-        <p className="muted">Auto follows the system's light or dark setting.</p>
+        <p className="muted">{t('settings.themeAutoNote')}</p>
       </section>
+      <LanguageCard />
       <CallsCard />
       <section className="settings-card island">
-        <h3><span className="cat photos"><Icon name="photos" size={20} /></span>Motion photos</h3>
+        <h3><span className="cat photos"><Icon name="photos" size={20} /></span>{t('settings.motionPhotos')}</h3>
         <div className="segmented">
-          {([['one', 'Show as one'], ['remove', 'Remove on import']] as const).map(([id, name]) =>
-            <button key={id} className={motion === id ? 'on' : ''} onClick={() => pickMotion(id)}>{name}</button>)}
+          {([['one', 'settings.motionAsOne'], ['remove', 'settings.motionRemove']] as const).map(([id, name]) =>
+            <button key={id} className={motion === id ? 'on' : ''} onClick={() => pickMotion(id)}>{t(name)}</button>)}
         </div>
         <p className="muted">{motion === 'remove'
-          ? 'An import leaves out the few seconds of video beside a picture (MVIMG_….MP4 next to MVIMG_….jpg). The picture comes in on its own.'
-          : 'A picture and its few seconds of video show as one photo; the Motion button in the viewer plays them. Pictures with the video inside (Pixel, Samsung) play too.'}</p>
-        <h4>Autoplay motion photos</h4>
+          ? t('settings.motionRemoveNote')
+          : t('settings.motionAsOneNote')}</p>
+        <h4>{t('settings.motionAutoplay')}</h4>
         <div className="segmented">
-          {([[false, 'Off'], [true, 'On']] as const).map(([on, name]) =>
-            <button key={name} className={autoplay === on ? 'on' : ''} onClick={() => pickAutoplay(on)}>{name}</button>)}
+          {([[false, 'common.off'], [true, 'common.on']] as const).map(([on, name]) =>
+            <button key={name} className={autoplay === on ? 'on' : ''} onClick={() => pickAutoplay(on)}>{t(name)}</button>)}
         </div>
-        <p className="muted">{autoplay ? 'A motion photo plays its few seconds as soon as it opens.' : 'Motion photos open still; the Motion button plays them.'}</p>
+        <p className="muted">{autoplay ? t('settings.motionAutoplayOn') : t('settings.motionAutoplayOff')}</p>
       </section>
     </div>
+  )
+}
+
+/**
+ * Settings › Language (the user, 25 Oct): System default, then every language there is a file for in locales/, each
+ * by its own name. Kept with the other settings (main: settings table, "language"); the page reloads to show it, and
+ * comes back here.
+ */
+function LanguageCard() {
+  const [now, setNow] = useState<{ choice: string; languages: string[] } | null>(null)
+  useEffect(() => { window.drive.languages().then(setNow) }, [])
+  const own = (tag: string) => { const n = new Intl.DisplayNames([tag], { type: 'language' }).of(tag) ?? tag; return n.charAt(0).toLocaleUpperCase(tag) + n.slice(1) }
+  const pick = async (choice: string) => {
+    if (choice === now?.choice) return
+    await window.drive.setLanguage(choice)
+    try { sessionStorage.setItem('reopen', 'settings') } catch {}
+    location.reload()
+  }
+  return (
+    <section className="settings-card island">
+      <h3>{t('settings.language')}</h3>
+      <div className="segmented">
+        {now && ['system', ...now.languages].map(id =>
+          <button key={id} className={now.choice === id ? 'on' : ''} onClick={() => pick(id)}>{id === 'system' ? t('settings.languageSystem') : own(id)}</button>)}
+      </div>
+      <p className="muted">{t('settings.languageNote')}</p>
+    </section>
   )
 }
 
@@ -85,16 +114,16 @@ function CallsCard() {
   const on = bt?.phones.find(p => p.connected)
   return (
     <section className="settings-card island">
-      <h3><Icon name="call" size={20} />Calls</h3>
-      <p><strong>{bt === null ? 'Looking at Bluetooth…' : on ? `Connected for calls: ${on.name}` : bt.phones.length ? 'Paired, not connected' : 'No phone paired by Bluetooth'}</strong></p>
-      <p className="muted">{on ? "A call's sound is on this computer: its speakers and microphone." : "A call's sound stays on the phone. Call, Answer and End in Contacts and the call bubble work either way."}</p>
-      {bt?.phones.filter(p => !p.connected).map(p => <button key={p.mac} className="filled-button secondary" onClick={() => { setSaid('Connecting…'); window.drive.callsConnect(p.mac).then(() => { setSaid(''); load() }, e => setSaid(String(e.message ?? e).replace(/^.*?Error: /, ''))) }}>Connect {p.name}</button>)}
+      <h3><Icon name="call" size={20} />{t('settings.calls')}</h3>
+      <p><strong>{bt === null ? t('settings.btLooking') : on ? t('settings.btConnected', { name: on.name }) : bt.phones.length ? t('settings.btPaired') : t('settings.btNone')}</strong></p>
+      <p className="muted">{on ? t('settings.callSoundHere') : t('settings.callSoundPhone')}</p>
+      {bt?.phones.filter(p => !p.connected).map(p => <button key={p.mac} className="filled-button secondary" onClick={() => { setSaid(t('settings.btConnecting')); window.drive.callsConnect(p.mac).then(() => { setSaid(''); load() }, e => setSaid(String(e.message ?? e).replace(/^.*?Error: /, ''))) }}>{t('settings.btConnect', { name: p.name })}</button>)}
       {!on && <>
-        <p className="muted">To hear calls here: pair the phone with this computer in the system's Bluetooth settings, then on the phone open Bluetooth › this computer › and allow "Phone calls". Tetra then shows it connected here, and says so when it connects or drops.</p>
-        <button className="text-button" onClick={() => window.drive.callsSystemBluetooth()}>Open Bluetooth settings</button>
+        <p className="muted">{t('settings.btHowTo')}</p>
+        <button className="text-button" onClick={() => window.drive.callsSystemBluetooth()}>{t('settings.btOpenSettings')}</button>
       </>}
       {said && <p className="muted">{said}</p>}
-      {bt && !bt.available && <p className="muted">bluetoothctl is not installed, so Tetra cannot see Bluetooth here.</p>}
+      {bt && !bt.available && <p className="muted">{t('settings.btMissing')}</p>}
     </section>
   )
 }

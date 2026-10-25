@@ -26,6 +26,8 @@ const { Maps } = require('./maps')
 const { Router } = require('./router')
 const { Thumbs } = require('./thumbs')
 const importer = require('./importer')
+const i18n = require('./i18n')
+const { t } = i18n
 
 const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'local-drive-desktop')
 // ~/Tetra/Photos and ~/Tetra/Files, moved from ~/Drive once (home.js). Never from a hidden QA copy (scripts/shot.js),
@@ -431,6 +433,7 @@ function analyzeLibrary(rescan = null) {
 app.whenReady().then(() => {
   db = library.open(DATA_DIR)
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)') // read below (Contacts) before the line that made it; a new computer's first start failed
+  i18n.use(setting('language') || 'system', [app.getLocale()]) // before anything says a word: reminders, the tray
   files = new Files(db, FILES_ROOT)
   // Notes live in a hidden folder of Files (notes.js), and sync through their own step, newest edit wins.
   notes = new Notes(path.join(FILES_ROOT, '.notes'), 'tetra-desktop')
@@ -787,6 +790,14 @@ app.whenReady().then(() => {
   ipcMain.handle('notifications:clear', () => { db.exec('DELETE FROM notifications') })
   // Appearance: Auto follows the system, or Light / Dark whatever it says. The page's colours follow nativeTheme.
   ipcMain.handle('settings:theme', () => setting('theme') || 'system')
+  // Language: System default (the system's, English when Tetra has no file for it) or one of locales/*.json. The window
+  // reloads to show it; the tray and what main says change at once.
+  ipcMain.on('i18n:words', e => { e.returnValue = i18n.current() })
+  ipcMain.handle('settings:languages', () => ({ choice: i18n.current().choice, languages: i18n.languages() }))
+  ipcMain.handle('settings:setLanguage', (_, choice) => {
+    if (choice !== 'system' && !i18n.languages().includes(choice)) return
+    setSetting('language', choice); i18n.use(choice, [app.getLocale()]); updateTray()
+  })
   ipcMain.handle('settings:setTheme', (_, t) => { if (!['system', 'light', 'dark'].includes(t)) return; setSetting('theme', t); nativeTheme.themeSource = t })
   ipcMain.handle('calendar:call', (_, method, ...args) => {
     if (!CALENDAR_CALLS.includes(method)) throw new Error('Unknown Calendar action.')
