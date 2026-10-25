@@ -570,6 +570,49 @@ test('a file only the phone writes, rewritten between syncs, is never sent back 
   }
 })
 
+test('the same size and the same date are not the same file; a device moving on from its own version is an edit (25 Oct, evening)', async () => {
+  // The phone's storage keeps a rewritten file's first date (every version of Data's month said 09:11:59.373), and a
+  // month's counts mostly change digits, not length: a hash cached by size and date said the computer still held the old one.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-same-size-'))
+  const root = path.join(tmp, 'Drive')
+  fs.mkdirSync(root, { recursive: true })
+  const db = library.open(path.join(tmp, 'data'))
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files: new Files(db, root),
+    dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex')
+  const rel = 'Timer/2026-10.phone.json', stuck = 1792912319373
+  try {
+    const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    server.setConnection(paired.deviceId, 'files', { direction: 'both', keep: 'everything' })
+    const token = paired.token
+    const whole = b => call('POST', '/files/manifest', { token, json: { files: [{ path: rel, sha256: sha(b), size: b.length, modified: stuck }] } })
+    const put = b => call('PUT', `/file/${sha(b)}?path=${encodeURIComponent(rel)}&modified=${stuck}`, { token, body: b })
+    const v = n => Buffer.from(`{"month":"2026-10","rx":${n}}`) // 1000…9999: one length
+    const noCopies = () => assert.deepEqual(fs.readdirSync(path.join(root, 'Timer')), ['2026-10.phone.json'])
+
+    for (const n of [1001, 1002, 1003]) {
+      assert.deepEqual((await whole(v(n))).body.want, [rel])
+      assert.equal((await put(v(n))).body.path, rel, `version ${n} replaces, no "(2)"`)
+      assert.deepEqual((await whole(v(n))).body, { want: [], moved: [], have: [], moveTo: [] }, `version ${n} is known to be here`)
+    }
+    noCopies()
+
+    // Memory left disagreeing by the older bugs (the phone's row another version, this computer's its own): the bytes here
+    // are the phone's own earlier upload, so its newer version is its edit, not a conflict, and nothing is offered back.
+    db.prepare('UPDATE sync_manifest SET sha256 = ? WHERE device_id = ? AND path = ?').run('f'.repeat(64), paired.deviceId, rel)
+    const r = await whole(v(1004))
+    assert.deepEqual(r.body.want, [rel])
+    assert.deepEqual(r.body.have, [])
+    assert.equal((await put(v(1004))).body.path, rel)
+    assert.equal(fs.readFileSync(path.join(root, rel), 'utf8'), v(1004).toString())
+    noCopies()
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
 test('settings: only what describes the library crosses; a hidden album travels with the album', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-settings-'))
   const db = library.open(path.join(tmp, 'data'))

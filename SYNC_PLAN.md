@@ -2489,3 +2489,30 @@ from. An upload with no pending update is still an edit when it lands on exactly
 whole sync with the file rewritten in between, the first upload landing late; an upload that never came) — fails
 without either half; all 136 desktop tests. **Not yet run between real devices** (needs the desktop from this branch;
 the phone needs nothing new).
+
+### 6ar. The same size and the same date are not the same file (found and fixed 2026-10-25 evening)
+
+**What happened.** After 6aq the phone's Data month file still reached the computer and the tablet as "(n)" copies all
+day, the computer's own copy stuck at the morning's counts. Every version of it, on the computer and the tablet, had one
+date: 09:11:59.373.
+
+**Why.** (1) The phone's storage keeps a renamed-over file's first date (seen before with Writer's saves, 6ak), and Data
+writes its month beside and renames it over. The date sent with it, and so the date the computer and the tablet stamp on
+what they receive, never changed. (2) Both sides cache a file's hash by size and date (`files.js hash`, phone
+`DriveManifest`), and a month's counts mostly change digits, not length: a new version of the same size looked like the
+old one, so the computer believed it still held the old version, asked again, offered "its" old version back, and kept the
+next upload beside it. (3) Once the memory of the two sides disagreed at that path, nothing healed it: every later
+version was "both changed", one more "(n)".
+
+**The fix.**
+- Computer: what is received is put in the hash cache with its known hash (`files.remember`), whatever date it carries.
+- Computer: bytes here that this device itself sent at this path (a receipt in `sync_receipts`) are its own earlier
+  version, so its newer one is an edit (it replaces them) and they are not offered back to it, whatever the memory says.
+  This also heals the paths already stuck.
+- Phone: Data, Calendar, Timer and Contacts stamp the time on a file they rename over (as Writer does); what is received
+  goes into `DriveManifest`'s cache with its known hash.
+
+**Checked:** `desktop/test/sync.test.js` "the same size and the same date are not the same file…" (three same-length
+versions with one date: each replaces, none comes back; memory left disagreeing heals) — fails without either computer
+half; all desktop tests; the Android unit suite. **Not yet run between real devices.** The copies already made stay until
+Data's cleanup takes them.

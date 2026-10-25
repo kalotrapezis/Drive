@@ -440,7 +440,7 @@ class Files {
         // the first sync): no memory to say so, and both are kept, as before — once: when those bytes are already
         // here (kept beside it last time), asking again only made "(3)", "(4)"… on every sync (29 September).
         const here = minePaths.get(rel)
-        if (here && here !== sha && lastTheirs(rel) === here) updates.push({ path: rel, sha256: sha, replaces: here })
+        if (here && here !== sha && (lastTheirs(rel) === here || this.sentHere(deviceId, rel, here))) updates.push({ path: rel, sha256: sha, replaces: here })
         else if (here && mine.has(sha)) continue
         want.push(rel)
       }
@@ -468,6 +468,7 @@ class Files {
         have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel), replaces: theirsHere })
         continue
       }
+      if (theirsHere && this.sentHere(deviceId, rel, sha)) continue // the device moved on from its own version: asked for (want)
       const theirs = offeredShas.get(sha) ?? []
       // Offering a copy is safe on any sync, including the first: it adds, it never rearranges.
       if (!theirs.length) { if (gone.has(sha)) continue; have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel) }); continue }
@@ -541,10 +542,17 @@ class Files {
    * The version this computer and the device last agreed on at [rel], or null. An upload of other bytes there, onto
    * exactly that version, is the device's edit even when a later sync's answer took the place of its pending update.
    */
-  agreed(deviceId, rel) {
+  async agreed(deviceId, rel) {
+    const here = await this.hash(rel)
     const at = id => this.db.prepare('SELECT sha256 FROM sync_manifest WHERE device_id = ? AND path = ?').get(id, rel)?.sha256
-    const theirs = at(deviceId)
-    return theirs && theirs === at(`self:${deviceId}`) ? theirs : null
+    return here && ((at(deviceId) === here && at(`self:${deviceId}`) === here) || this.sentHere(deviceId, rel, here)) ? here : null
+  }
+  /**
+   * These bytes at [rel] are the device's own, sent here at that path (a receipt): a newer version from it is its edit,
+   * whatever the memory says (25 Oct: memory left disagreeing kept every new version of Data's month as "(n)").
+   */
+  sentHere(deviceId, rel, sha) {
+    try { return !!this.db.prepare('SELECT 1 FROM sync_receipts WHERE device_id = ? AND path = ? AND sha256 = ?').get(deviceId, rel, sha) } catch { return false } // no receipts table: never synced
   }
   /** The bytes an upload of [sha] at [rel] from [deviceId] is an edit of (reconcile said so), or null: then it is a new file. */
   pendingUpdate(deviceId, rel, sha) { this.updatesTable(); return this.db.prepare('SELECT replaces FROM file_updates WHERE device_id = ? AND path = ? AND sha256 = ?').get(deviceId, rel, sha)?.replaces ?? null }
@@ -568,6 +576,16 @@ class Files {
   }
 
   /** SHA-256 of a file, cached against its size and mtime so each file is read once. */
+  /**
+   * What was just put at [rel] is [sha]: the cache says so now. Its date is the sender's, and a phone's storage keeps a
+   * rewritten file's first date, so a same-size new version looked like the old one by size and date (25 Oct).
+   */
+  async remember(rel, sha) {
+    this.db.exec('CREATE TABLE IF NOT EXISTS file_hashes (path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime INTEGER NOT NULL, sha256 TEXT NOT NULL)')
+    const st = await fsp.stat(path.join(this.root, rel))
+    this.db.prepare('INSERT OR REPLACE INTO file_hashes(path, size, mtime, sha256) VALUES(?,?,?,?)').run(rel, st.size, Math.trunc(st.mtimeMs), sha)
+  }
+
   async hash(rel) {
     this.db.exec('CREATE TABLE IF NOT EXISTS file_hashes (path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime INTEGER NOT NULL, sha256 TEXT NOT NULL)')
     let st

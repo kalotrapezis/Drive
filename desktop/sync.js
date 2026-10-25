@@ -1581,7 +1581,7 @@ class SyncServer {
       // else of the same name stays, and the newcomer lands beside it.
       // Or, a later sync's answer having taken that pending update's place (a part's sync and the whole one at once),
       // onto the version both last agreed on (25 Oct).
-      const replaces = this.files.pendingUpdate(device.id, rel, expected) ?? this.files.agreed(device.id, rel)
+      const replaces = this.files.pendingUpdate(device.id, rel, expected) ?? await this.files.agreed(device.id, rel)
       // Those very bytes are already at that path (two syncs asked at once): nothing to add. 330 of Personal's 334
       // "(2)" events were byte for byte their original (23 Oct).
       const same = fs.existsSync(target) && await this.files.hash(rel) === expected
@@ -1602,6 +1602,7 @@ class SyncServer {
       const modified = Number(params.get('modified'))
       if (!same && Number.isFinite(modified) && modified > 0) await fsp.utimes(kept, new Date(), new Date(modified))
       const relKept = this.files.rel(kept)
+      await this.files.remember(relKept, expected)
       this.files.received(device.id, relKept, expected, rel)
       history.record(this.db, { action: 'received', kind: 'file', name: relKept, sha256: expected, device: device.id })
       this.db.prepare(`INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at, kind) VALUES(?,?,?,?,?,'file')`)
