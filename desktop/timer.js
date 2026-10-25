@@ -11,6 +11,7 @@
  * equal ones stopped first, so clocks a few seconds apart decide nothing. Claude starts one by writing such a file.
  */
 const fs = require('node:fs')
+const i18n = require('./i18n')
 const path = require('node:path')
 const crypto = require('node:crypto')
 
@@ -94,9 +95,9 @@ class Timers {
   /** A new timer, in the file of one that is over if there is one (its id on, a higher rev): files = timers at once. */
   start(seconds, now = Date.now(), label = '') {
     seconds = Math.trunc(+seconds)
-    if (!(seconds > 0 && seconds < 100 * 3600)) throw new Error('A timer is from a second to 99 hours.')
+    if (!(seconds > 0 && seconds < 100 * 3600)) throw new Error(i18n.t('timer.tooLong'))
     const all = this.read()
-    if (all.filter(r => card(r, now)).length >= MAX) throw new Error('Nine timers at most: stop or delete one first.')
+    if (all.filter(r => card(r, now)).length >= MAX) throw new Error(i18n.t('timer.tooMany'))
     const free = all.filter(r => over(r, now) && !r.pinned).sort((a, b) => String(a.file).localeCompare(String(b.file)))[0]
     return this.write({ id: free?.id ?? crypto.randomBytes(3).toString('hex'), seconds, label, state: RUNNING, ends: now + seconds * 1000, left: 0,
       rev: (free?.rev ?? 0) + 1, by: this.by, file: null })
@@ -155,7 +156,7 @@ class Timers {
 /** "5 min", "1 h 30 min", "45 s": as the phone's durationText. */
 function durationText(seconds) {
   const h = Math.floor(seconds / 3600), m = Math.floor(seconds % 3600 / 60), s = seconds % 60
-  return [h && `${h} h`, m && `${m} min`, (s || !seconds) && `${s} s`].filter(Boolean).join(' ')
+  return [h && i18n.t('timer.h', { n: h }), m && i18n.t('timer.min', { n: m }), (s || !seconds) && i18n.t('timer.s', { n: s })].filter(Boolean).join(' ')
 }
 
 module.exports = { Timers, fileName, parse, winners, leftMs, over, ringing, durationText, UNANSWERED_MS, MAX }

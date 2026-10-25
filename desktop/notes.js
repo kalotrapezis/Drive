@@ -11,6 +11,7 @@
  * `updatedAt` wins, as it always has between the Notes apps. A deletion beats any edit.
  */
 const fs = require('node:fs')
+const i18n = require('./i18n')
 const path = require('node:path')
 const crypto = require('node:crypto')
 
@@ -69,7 +70,7 @@ class Notes {
   /** Only the fields a person edits; anything else a newer app wrote is kept. */
   save(id, changes) {
     const note = this.get(id)
-    if (!note) throw new Error('That note is gone.')
+    if (!note) throw new Error(i18n.t('notes.gone'))
     for (const k of ['title', 'content', 'checklistItems', 'labels', 'color', 'isPinned', 'archivedAt', 'trashedAt']) {
       if (!(k in changes)) continue
       if (changes[k] === null) delete note[k]; else note[k] = changes[k]

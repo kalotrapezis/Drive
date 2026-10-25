@@ -3,6 +3,7 @@
 // can change them: Files/Calendar/<calendar>/color (#RRGGBB) and <calendar>/<event>.ics, one iCalendar file per event.
 // Files sync carries them; this reads and writes them the way the phone's Calendar.kt does, line for line kept.
 const fs = require('node:fs')
+const i18n = require('./i18n')
 const path = require('node:path')
 const crypto = require('node:crypto')
 const zlib = require('node:zlib')
@@ -311,7 +312,7 @@ function unzip(buf) {
   const out = []
   let eocd = -1
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break }
-  if (eocd < 0) throw new Error('Not a zip file.')
+  if (eocd < 0) throw new Error(i18n.t('calendar.notZip'))
   let p = buf.readUInt32LE(eocd + 16)
   for (let n = buf.readUInt16LE(eocd + 10); n > 0; n--) {
     if (buf.readUInt32LE(p) !== 0x02014b50) break
@@ -431,7 +432,7 @@ class Calendar {
   rewrite(file, change) {
     const comps = parse(fs.readFileSync(file, 'utf8'))
     const cal = comps.find(c => c.name === 'VCALENDAR')
-    if (!cal) throw new Error(path.basename(file) + ' is not an iCalendar file.')
+    if (!cal) throw new Error(i18n.t('calendar.notIcs', { name: path.basename(file) }))
     change(cal)
     this.put(file, write(comps))
   }
@@ -643,7 +644,7 @@ class Calendar {
   newCalendar(name, color) {
     const clean = String(name).trim().replace(/[/\\:*?"<>|]/g, '-').replace(/^\.+/, '') || 'Calendar'
     const dir = path.join(this.root, clean)
-    if (fs.existsSync(dir)) throw new Error(`A calendar named ${clean} already exists.`)
+    if (fs.existsSync(dir)) throw new Error(i18n.t('calendar.nameTaken', { name: clean }))
     fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(path.join(dir, 'color'), (color || PALETTE[this.calendars().length % PALETTE.length]) + '\n')
     return clean
@@ -653,7 +654,7 @@ class Calendar {
     if (color) fs.writeFileSync(path.join(dir, 'color'), color.toUpperCase() + '\n')
     if (name && name !== id) {
       const to = this.dir(String(name).trim().replace(/[/\\:*?"<>|]/g, '-'))
-      if (fs.existsSync(to)) throw new Error(`A calendar named ${name} already exists.`)
+      if (fs.existsSync(to)) throw new Error(i18n.t('calendar.nameTaken', { name }))
       fs.renameSync(dir, to)
       return path.basename(to)
     }

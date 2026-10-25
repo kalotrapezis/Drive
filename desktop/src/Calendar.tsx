@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Modal, errorText } from './Dialogs'
 import { Icon } from './Icon'
+import { lang, t } from './i18n'
 
 // Tetra's Calendar on the computer (Drive-Android Plan.md § Calendar): Google Calendar on the web — a side panel with
 // Create, a small month and the calendars' coloured boxes; a day, week, month or agenda view. The events are the .ics
@@ -22,7 +23,10 @@ const call = <T,>(method: string, ...args: unknown[]) => window.drive.calendar<T
 const PINK = '#F41879'
 const PALETTE = ['#E91E63', '#D50000', '#E67C73', '#F4511E', '#F6BF26', '#33B679', '#0B8043', '#039BE5', '#3F51B5', '#7986CB', '#8E24AA', '#616161']
 const DAYS = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
-const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+// dates in the language's words; English keeps en-GB's, and every language a 24-hour clock
+const LOC = lang() === 'en' ? 'en-GB' : lang()
+const weekdays = (weekday: 'long' | 'short' | 'narrow') => [1, 2, 3, 4, 5, 6, 7].map(d => new Date(2024, 0, d).toLocaleDateString(LOC, { weekday })) // 1 Jan 2024 a Monday
+const DAY_NAMES = weekdays('long'), DAY_SHORT = weekdays('short'), DAY_LETTERS = weekdays('narrow')
 const stored = (k: string) => { try { return localStorage.getItem(k) } catch { return null } }
 const store = (k: string, v: string) => { try { localStorage.setItem(k, v) } catch {} }
 
@@ -36,10 +40,10 @@ const between = (a: string, b: string) => Math.round((parse(b).getTime() - parse
 const weekday = (k: string) => (parse(k).getDay() + 6) % 7 // Monday 0, as Greece's weeks
 const weekOf = (k: string) => { const s = addDays(k, -weekday(k)); return [0, 1, 2, 3, 4, 5, 6].map(i => addDays(s, i)) }
 const monthCells = (k: string) => { const first = k.slice(0, 8) + '01'; const s = addDays(first, -weekday(first)); return Array.from({ length: 42 }, (_, i) => addDays(s, i)) }
-const fmt = (k: string, o: Intl.DateTimeFormatOptions) => parse(k).toLocaleDateString('en-GB', o)
-const time = (ms: number) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+const fmt = (k: string, o: Intl.DateTimeFormatOptions) => parse(k).toLocaleDateString(LOC, o)
+const time = (ms: number) => new Date(ms).toLocaleTimeString(LOC, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 const hm = (ms: number) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}` }
-const length = (min: number) => min <= 0 ? '' : min % 1440 === 0 ? `${min / 1440}d` : min < 60 ? `${min}m` : min % 60 === 0 ? `${min / 60}h` : `${Math.floor(min / 60)}h ${min % 60}m`
+const length = (min: number) => min <= 0 ? '' : min % 1440 === 0 ? t('calendar.lenD', { n: min / 1440 }) : min < 60 ? t('calendar.lenM', { n: min }) : min % 60 === 0 ? t('calendar.lenH', { n: min / 60 }) : t('calendar.lenHM', { h: Math.floor(min / 60), m: min % 60 })
 
 /** The days an occurrence covers: an all-day trip each of its days, a late party the next morning too. */
 function daysOf(o: Occ): string[] {
@@ -51,50 +55,52 @@ function daysOf(o: Occ): string[] {
 }
 
 // ——— words for repeats and reminders (the phone's, the same) ———
-const ORD: Record<string, string> = { '1': 'first', '2': 'second', '3': 'third', '4': 'fourth', '5': 'fifth', '-1': 'last', '-2': 'second last' }
+const ORD: Record<string, string> = { '1': 'calendar.ord1', '2': 'calendar.ord2', '3': 'calendar.ord3', '4': 'calendar.ord4', '5': 'calendar.ord5', '-1': 'calendar.ordLast', '-2': 'calendar.ordSecondLast' }
+const ord = (n: string | number) => ORD[n] ? t(ORD[n]) : ''
+const HEAD: Record<string, string> = { day: 'calendar.daily', week: 'calendar.weekly', month: 'calendar.monthly', year: 'calendar.yearly' }
 const dayName = (code: string) => DAY_NAMES[DAYS.indexOf(code.slice(-2))] ?? code
 function repeatPresets(date: string): [string | null, string][] {
   const code = DAYS[weekday(date)], nth = Math.floor((+date.slice(8) - 1) / 7) + 1, name = DAY_NAMES[weekday(date)]
-  return [[null, 'Does not repeat'], ['FREQ=DAILY', 'Daily'], [`FREQ=WEEKLY;BYDAY=${code}`, `Weekly on ${name}`],
-    [`FREQ=MONTHLY;BYDAY=${nth}${code}`, `Monthly on the ${ORD[nth]} ${name}`], ['FREQ=MONTHLY', `Monthly on day ${+date.slice(8)}`],
-    ['FREQ=YEARLY', `Yearly on ${fmt(date, { day: 'numeric', month: 'long' })}`], ['FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', 'Every weekday (Monday to Friday)']]
+  return [[null, t('calendar.noRepeat')], ['FREQ=DAILY', t('calendar.daily')], [`FREQ=WEEKLY;BYDAY=${code}`, t('calendar.ruleOnDays', { head: t('calendar.weekly'), days: name })],
+    [`FREQ=MONTHLY;BYDAY=${nth}${code}`, t('calendar.ruleOnNth', { head: t('calendar.monthly'), nth: ord(nth), day: name })], ['FREQ=MONTHLY', t('calendar.ruleOnMonthDay', { head: t('calendar.monthly'), n: +date.slice(8) })],
+    ['FREQ=YEARLY', t('calendar.ruleOnDate', { head: t('calendar.yearly'), date: fmt(date, { day: 'numeric', month: 'long' }) })], ['FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', t('calendar.everyWeekdayFull')]]
 }
 function repeatText(rule: string | null, date: string): string | null {
   if (!rule) return null
   const p = Object.fromEntries(rule.split(';').filter(x => x.includes('=')).map(x => [x.split('=')[0].toUpperCase(), x.slice(x.indexOf('=') + 1)]))
   const n = +(p.INTERVAL || 1), unit = ({ DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year' } as Record<string, string>)[p.FREQ]
-  if (!unit) return 'Repeats'
+  if (!unit) return t('calendar.repeats')
   const byDay = (p.BYDAY || '').split(',').filter(Boolean)
   const weekdays = unit === 'week' && n === 1 && [...byDay].sort().join() === 'FR,MO,TH,TU,WE'
-  const head = weekdays ? 'Every weekday' : n === 1 ? ({ day: 'Daily', week: 'Weekly', month: 'Monthly', year: 'Yearly' } as Record<string, string>)[unit] : `Every ${n} ${unit}s`
-  const on = weekdays ? '' : unit === 'week' ? ' on ' + (byDay.length ? byDay.map(dayName).join(', ') : DAY_NAMES[weekday(date)])
-    : unit === 'month' && byDay.length ? ` on the ${ORD[byDay[0].slice(0, -2) || p.BYSETPOS] ? ORD[byDay[0].slice(0, -2) || p.BYSETPOS] + ' ' : ''}${dayName(byDay[0])}`
-    : unit === 'month' ? ` on day ${p.BYMONTHDAY || +date.slice(8)}` : unit === 'year' ? ` on ${fmt(date, { day: 'numeric', month: 'long' })}` : ''
-  const end = p.COUNT ? `, ${p.COUNT} times` : p.UNTIL ? `, until ${fmt(`${p.UNTIL.slice(0, 4)}-${p.UNTIL.slice(4, 6)}-${p.UNTIL.slice(6, 8)}`, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''
-  return head + on + end
+  const head = weekdays ? t('calendar.everyWeekday') : n === 1 ? t(HEAD[unit]) : t(`calendar.every_${unit}`, { count: n })
+  const nth = ord(byDay[0]?.slice(0, -2) || p.BYSETPOS)
+  const words = weekdays ? head : unit === 'week' ? t('calendar.ruleOnDays', { head, days: byDay.length ? byDay.map(dayName).join(', ') : DAY_NAMES[weekday(date)] })
+    : unit === 'month' && byDay.length ? (nth ? t('calendar.ruleOnNth', { head, nth, day: dayName(byDay[0]) }) : t('calendar.ruleOnTheDay', { head, day: dayName(byDay[0]) }))
+    : unit === 'month' ? t('calendar.ruleOnMonthDay', { head, n: p.BYMONTHDAY || +date.slice(8) }) : unit === 'year' ? t('calendar.ruleOnDate', { head, date: fmt(date, { day: 'numeric', month: 'long' }) }) : head
+  return p.COUNT ? t('calendar.ruleTimes', { rule: words, count: +p.COUNT }) : p.UNTIL ? t('calendar.ruleUntil', { rule: words, date: fmt(`${p.UNTIL.slice(0, 4)}-${p.UNTIL.slice(4, 6)}-${p.UNTIL.slice(6, 8)}`, { day: 'numeric', month: 'short', year: 'numeric' }) }) : words
 }
 function span(sec: number) {
   const s = Math.abs(sec)
-  if (s && s % 604800 === 0) return `${s / 604800} week${s > 604800 ? 's' : ''}`
+  if (s && s % 604800 === 0) return t('calendar.weeks', { count: s / 604800 })
   const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60)
-  return [d && `${d} day${d > 1 ? 's' : ''}`, h && `${h} hour${h > 1 ? 's' : ''}`, m && `${m} minute${m > 1 ? 's' : ''}`].filter(Boolean).join(' ')
+  return [d && t('calendar.days', { count: d }), h && t('calendar.hours', { count: h }), m && t('calendar.minutes', { count: m })].filter(Boolean).join(' ')
 }
 /** "30 minutes before", "The day before at 09:00", "3 days before at 09:00 · every day, 3 times" ([start]: 'HH:MM' of the event). */
 function alarmText(a: Alarm, allDay: boolean, start: string): string {
-  const t = a.days * 86400 + a.seconds
+  const sec = a.days * 86400 + a.seconds
   let base: string
-  if (a.at != null) base = 'At ' + new Date(a.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-  else if (a.fromEnd) base = t === 0 ? 'At the end' : `${span(t)} ${t < 0 ? 'before' : 'after'} the end`
-  else if (allDay || t <= -86400) { // all day starts at midnight, so "on the day at 09:00" is PT9H, after the start
+  if (a.at != null) base = t('calendar.alarmAt', { when: new Date(a.at).toLocaleString(LOC, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) })
+  else if (a.fromEnd) base = sec === 0 ? t('calendar.alarmAtEnd') : t(sec < 0 ? 'calendar.alarmBeforeEnd' : 'calendar.alarmAfterEnd', { span: span(sec) })
+  else if (allDay || sec <= -86400) { // all day starts at midnight, so "on the day at 09:00" is PT9H, after the start
     const [h, m] = (allDay ? '00:00' : start).split(':').map(Number)
     const fire = h * 3600 + m * 60 + a.seconds // seconds into the day, a.days days on
     const before = -a.days - Math.floor(fire / 86400)
     const clock = ((fire % 86400) + 86400) % 86400
     const c = `${pad(Math.floor(clock / 3600))}:${pad(Math.floor(clock % 3600 / 60))}`
-    base = before === 0 ? `On the day at ${c}` : before === 1 ? `The day before at ${c}` : before === 7 ? `A week before at ${c}` : before === -1 ? `The day after at ${c}`
-      : before > 0 ? `${before} days before at ${c}` : `${-before} days after at ${c}`
-  } else base = t === 0 ? 'At the time' : `${span(t)} ${t < 0 ? 'before' : 'after'}`
-  return a.repeat ? `${base} · every ${span(a.every || 0).replace(/^1 /, '')}, ${a.repeat + 1} times` : base
+    base = before === 0 ? t('calendar.alarmOnDay', { time: c }) : before === 1 ? t('calendar.alarmDayBefore', { time: c }) : before === 7 ? t('calendar.alarmWeekBefore', { time: c }) : before === -1 ? t('calendar.alarmDayAfter', { time: c })
+      : before > 0 ? t('calendar.alarmDaysBefore', { count: before, time: c }) : t('calendar.alarmDaysAfter', { count: -before, time: c })
+  } else base = sec === 0 ? t('calendar.alarmAtTime') : t(sec < 0 ? 'calendar.alarmBefore' : 'calendar.alarmAfter', { span: span(sec) })
+  return a.repeat ? t('calendar.alarmRepeat', { base, every: span(a.every || 0).replace(/^1 /, ''), count: a.repeat + 1 }) : base
 }
 const toSec = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return h * 3600 + m * 60 }
 /** N days before at a clock time, counted from the start as RFC 5545 has it; daily: and each day after until the event. */
@@ -133,7 +139,7 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
     setSyncing(true)
     const n = await window.drive.calendarRefresh().catch(() => 0)
     setSyncing(false)
-    setSaid(n ? `Syncing with ${n} device${n === 1 ? '' : 's'}` : 'No phone or tablet answered')
+    setSaid(n ? t('calendar.syncingWith', { count: n }) : t('calendar.noDeviceAnswered'))
     setTimeout(() => setSaid(''), 4000)
   }
   // the user, 18 Oct: a wide window keeps the small month and the calendars in sight and its island holds Day · Week ·
@@ -146,8 +152,8 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
     return () => ro.disconnect()
   }, [])
   const views: [View, string, string][] = wide
-    ? [['day', 'Day', 'tablet'], ['week', 'Week', 'grid'], ['month', 'Month', 'calendar'], ['year', 'Year', 'collections']]
-    : [['agenda', 'Agenda', 'list'], ['day', 'Day', 'tablet'], ['three', '3 days', 'grid'], ['month', 'Month', 'calendar']]
+    ? [['day', t('calendar.day'), 'tablet'], ['week', t('calendar.week'), 'grid'], ['month', t('calendar.month'), 'calendar'], ['year', t('calendar.year'), 'collections']]
+    : [['agenda', t('calendar.agenda'), 'list'], ['day', t('calendar.day'), 'tablet'], ['three', t('calendar.threeDays'), 'grid'], ['month', t('calendar.month'), 'calendar']]
   // each width keeps its own view (as the phone and tablet do)
   const viewKey = wide ? 'calendarViewWide' : 'calendarView'
   useEffect(() => { const v = stored(viewKey) as View; setView(views.some(([x]) => x === v) ? v : views[0][0]) }, [wide])
@@ -182,7 +188,7 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
     : view === 'year' ? selected.slice(0, 4) : fmt(selected, { month: 'long', year: 'numeric' })
 
   async function act(work: () => Promise<unknown>, said: string) {
-    try { await work(); say(said) } catch (e) { say('Not saved: ' + errorText(e)) }
+    try { await work(); say(said) } catch (e) { say(t('calendar.notSaved', { error: errorText(e) })) }
     setVersion(v => v + 1)
   }
   function create(date: string, hour?: number, kind: 'event' | 'reminder' = 'event') {
@@ -192,9 +198,9 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
     const visible = cals.filter(c => !hidden.has(c.id))
     const cal = visible.find(c => c.id === stored('calendarLast'))?.id ?? visible[0]?.id ?? cals[0]?.id ?? null
     const reminder = kind === 'reminder' // one event, its notifications a list (the user, 18 Oct)
-    setDialog(<EventEditor cals={cals} calendar={cal} isNew heading={reminder ? 'New reminder' : undefined}
+    setDialog(<EventEditor cals={cals} calendar={cal} isNew heading={reminder ? t('calendar.newReminder') : undefined}
       draft={{ title: '', place: '', notes: '', allDay: false, start: { date, time: start }, end: { date, time: reminder ? `${start.slice(0, 3)}15` : end }, rrule: null, alarms: reminder ? [{ days: 0, seconds: 0 }] : defaultAlarms(false, start) }}
-      onClose={close} onSave={(d, to) => { close(); store('calendarLast', to ?? ''); act(async () => { await call('save', null, to ?? await call<string>('newCalendar', 'Personal', PALETTE[0]), d) }, 'Event created') }} />)
+      onClose={close} onSave={(d, to) => { close(); store('calendarLast', to ?? ''); act(async () => { await call('save', null, to ?? await call<string>('newCalendar', 'Personal', PALETTE[0]), d) }, t('calendar.eventCreated')) }} />)
   }
   function edit(o: Occ) {
     const draft: Draft = { title: o.title, place: o.place, notes: o.notes, allDay: o.allDay, rrule: o.rrule, alarms: o.alarms,
@@ -209,7 +215,7 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
       // all: the change of this day moved onto the series' own start
       const startDate = addDays(o.masterDate ?? d.start.date, between(o.dayDate, d.start.date))
       await call('save', o.file, to, { ...d, start: { ...d.start, date: startDate }, end: { ...d.end, date: addDays(startDate, between(d.start.date, d.end.date)) } })
-    }, 'Saved')
+    }, t('calendar.saved'))
     setDialog(<EventEditor cals={cals} calendar={o.calendar} draft={draft} onClose={close} onSave={(d, to) => {
       if (o.repeating) setDialog(<ScopeDialog deleting={false} onClose={close} onPick={s => { close(); save(d, to, s) }} />)
       else { close(); save(d, to, null) }
@@ -219,22 +225,22 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
     const del = (scope: Scope | null) => act(async () => {
       if (!o.repeating || !scope || scope === 'all' || (scope === 'following' && (o.masterStart == null || o.day <= o.masterStart))) return call('trash', o.file)
       return scope === 'one' ? call('skipDay', o.file, o.day) : call('endBefore', o.file, o.day)
-    }, 'Deleted')
+    }, t('calendar.deleted'))
     if (o.repeating) setDialog(<ScopeDialog deleting onClose={close} onPick={s => { close(); del(s) }} />)
     else del(null)
   }
   function open(o: Occ) {
     setDialog(<EventCard o={o} cal={cals.find(c => c.id === o.calendar)} onClose={close} onEdit={() => edit(o)} onDelete={() => { close(); remove(o) }}
-      onKeep={() => { close(); act(() => call('keep', o.file), 'Kept this version; the other went to the Trash') }} />)
+      onKeep={() => { close(); act(() => call('keep', o.file), t('calendar.keptVersion')) }} />)
   }
   function editCalendar(c: Cal | null) {
     setDialog(<CalendarDialog cal={c} taken={cals.map(x => x.name)} onClose={close}
-      onSave={(name, col) => { close(); act(() => c ? call('setCalendar', c.id, name, col) : call('newCalendar', name, col), c ? 'Saved' : `Calendar ${name} created`) }}
-      onExport={() => { close(); window.drive.calendarExport(c!.id).then(p => p && say('Exported to ' + p)) }}
-      onDelete={() => setDialog(<Modal onClose={close}><h3>Delete {c!.name}?</h3>
-        <p>The calendar's folder and all its events go to Tetra's Trash, on every device after the next sync. They can be restored from the Trash.</p>
-        <div className="dialog-actions"><button className="text-button" onClick={close}>Cancel</button>
-          <button className="filled-button danger" onClick={() => { close(); act(() => call('deleteCalendar', c!.id), `${c!.name} moved to the Trash`) }}>Delete</button></div></Modal>)} />)
+      onSave={(name, col) => { close(); act(() => c ? call('setCalendar', c.id, name, col) : call('newCalendar', name, col), c ? t('calendar.saved') : t('calendar.calendarCreated', { name })) }}
+      onExport={() => { close(); window.drive.calendarExport(c!.id).then(p => p && say(t('calendar.exportedTo', { path: p }))) }}
+      onDelete={() => setDialog(<Modal onClose={close}><h3>{t('calendar.deleteTitle', { name: c!.name })}</h3>
+        <p>{t('calendar.deleteBody')}</p>
+        <div className="dialog-actions"><button className="text-button" onClick={close}>{t('common.cancel')}</button>
+          <button className="filled-button danger" onClick={() => { close(); act(() => call('deleteCalendar', c!.id), t('calendar.movedToTrash', { name: c!.name })) }}>{t('common.delete')}</button></div></Modal>)} />)
   }
   // + and its four kinds (the user, 18 Oct: "New : Shedule : burthday : reminder")
   function start(k: Kind) {
@@ -246,9 +252,9 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
       act(async () => {
         const birthdays = cals.find(c => c.name.toLowerCase() === 'birthdays')?.id ?? await call<string>('newCalendar', 'Birthdays', '#8E24AA')
         const day = yearKnown ? date : `${today.slice(0, 4)}${date.slice(4)}`
-        await call('save', null, birthdays, { title: `${name}'s birthday`, place: '', notes: '', allDay: true, start: { date: day }, end: { date: day }, rrule: 'FREQ=YEARLY',
+        await call('save', null, birthdays, { title: t('calendar.birthdayTitle', { name }), place: '', notes: '', allDay: true, start: { date: day }, end: { date: day }, rrule: 'FREQ=YEARLY',
           alarms: [daysBeforeAt('00:00', 0, '09:00', false)], extra: yearKnown ? { 'X-TETRA-BIRTH-YEAR': date.slice(0, 4) } : undefined })
-      }, `${name}'s birthday saved`)
+      }, t('calendar.birthdaySaved', { name }))
     }} />)
     const holidays = cals.find(c => c.name.toLowerCase() === 'holidays')
     setDialog(<ScheduleDialog cals={cals} calendar={cals.find(c => c.id === stored('calendarLast'))?.id ?? cals[0]?.id ?? null} holidays={!!holidays} today={today} onClose={close}
@@ -259,49 +265,49 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
           const off = skip && holidays ? (await call<Occ[]>('occurrences', parse(a.from).getTime(), parse(addDays(a.to, 1)).getTime())).filter(o => o.calendar === holidays.id && o.allDay).flatMap(daysOf) : []
           const ev = await call<Draft>('scheduleEvent', { ...a, skip: off })
           await call('save', null, to ?? await call<string>('newCalendar', 'Personal', PALETTE[0]), ev)
-        }, 'Schedule saved')
+        }, t('calendar.scheduleSaved'))
       }} />)
   }
   async function importFile() {
-    const found = await window.drive.calendarPickImport().catch(e => { say('Could not read it: ' + errorText(e)); return null })
+    const found = await window.drive.calendarPickImport().catch(e => { say(t('calendar.couldNotRead', { error: errorText(e) })); return null })
     if (!found) return
-    if (!found.length) return say('No events in that file.')
+    if (!found.length) return say(t('calendar.noEventsInFile'))
     setDialog(<ImportDialog found={found} cals={cals} onClose={close} onImport={choices => {
       close()
-      window.drive.calendarImport(choices).then(r => say(`Imported: ${r.added} new${r.updated ? `, ${r.updated} updated` : ''}`), e => say('Not imported: ' + errorText(e))).finally(() => setVersion(v => v + 1))
+      window.drive.calendarImport(choices).then(r => say(r.updated ? t('calendar.importedUpdated', { added: r.added, updated: r.updated }) : t('calendar.imported', { added: r.added })), e => say(t('calendar.notImported', { error: errorText(e) }))).finally(() => setVersion(v => v + 1))
     }} />)
   }
 
   const calendarList = <>
-    <h4><Icon name="calendar" size={18} />My calendars</h4>
-    {cals.length === 0 && <p className="muted">No calendars yet. Each folder in Files › Calendar is one.</p>}
+    <h4><Icon name="calendar" size={18} />{t('calendar.myCalendars')}</h4>
+    {cals.length === 0 && <p className="muted">{t('calendar.noCalendars')}</p>}
     {cals.map(c => (
       <div key={c.id} className="cal-row">
         <label><input type="checkbox" checked={!hidden.has(c.id)} onChange={() => toggle(c.id)} style={{ accentColor: c.color }} />{c.name}</label>
-        <button className="round small" title={`${c.name}: colour, name, export, delete`} onClick={() => { setDrawer(false); editCalendar(c) }}><Icon name="more" size={18} /></button>
+        <button className="round small" title={t('calendar.calendarMenu', { name: c.name })} onClick={() => { setDrawer(false); editCalendar(c) }}><Icon name="more" size={18} /></button>
       </div>
     ))}
     <div className="cal-two">
-      <button className="text-button cal-left" onClick={() => { setDrawer(false); editCalendar(null) }}><Icon name="add" size={18} />New calendar</button>
-      <button className="text-button" onClick={() => { setDrawer(false); importFile() }}>Import</button>
-      {cals.length > 0 && <button className="text-button" onClick={() => { setDrawer(false); window.drive.calendarExport(null).then(p => p && say('Exported to ' + p)) }}>Export all</button>}
+      <button className="text-button cal-left" onClick={() => { setDrawer(false); editCalendar(null) }}><Icon name="add" size={18} />{t('calendar.newCalendar')}</button>
+      <button className="text-button" onClick={() => { setDrawer(false); importFile() }}>{t('common.import')}</button>
+      {cals.length > 0 && <button className="text-button" onClick={() => { setDrawer(false); window.drive.calendarExport(null).then(p => p && say(t('calendar.exportedTo', { path: p }))) }}>{t('calendar.exportAll')}</button>}
     </div>
   </>
   const settingsList = settings && <>
-    <label className="cal-switch"><input type="checkbox" checked={settings.reminders} onChange={e => { const on = e.target.checked; setSettings({ ...settings, reminders: on }); window.drive.calendarSetReminders(on) }} />Reminders on this computer</label>
-    <label className="cal-switch"><input type="checkbox" checked={settings.autostart} onChange={e => { const on = e.target.checked; setSettings({ ...settings, autostart: on }); window.drive.calendarSetAutostart(on) }} />Start Tetra when I log in, in the tray, so reminders ring</label>
+    <label className="cal-switch"><input type="checkbox" checked={settings.reminders} onChange={e => { const on = e.target.checked; setSettings({ ...settings, reminders: on }); window.drive.calendarSetReminders(on) }} />{t('calendar.remindersHere')}</label>
+    <label className="cal-switch"><input type="checkbox" checked={settings.autostart} onChange={e => { const on = e.target.checked; setSettings({ ...settings, autostart: on }); window.drive.calendarSetAutostart(on) }} />{t('calendar.autostart')}</label>
     {/* Share with Claude (asked 18 Oct): the skill the app was built with */}
-    <h4 className="cal-share-head">Share with Claude</h4>
-    <p className="muted">Lets Claude read and change this calendar by editing its files.</p>
+    <h4 className="cal-share-head">{t('calendar.shareClaude')}</h4>
+    <p className="muted">{t('calendar.shareClaudeNote')}</p>
     <div className="cal-two">
-      <button className="text-button" onClick={() => window.drive.skillSave('tetra-calendar').then(p => p && say('Saved to ' + p), e => say('Not saved: ' + errorText(e)))}>Save as…</button>
-      <button className="text-button" onClick={() => window.drive.skillInstall('tetra-calendar').then(p => say('Installed for Claude Code in ' + p), e => say('Not installed: ' + errorText(e)))}>Copy to ~/.claude/skills</button>
+      <button className="text-button" onClick={() => window.drive.skillSave('tetra-calendar').then(p => p && say(t('calendar.savedTo', { path: p })), e => say(t('calendar.notSaved', { error: errorText(e) })))}>{t('calendar.saveAs')}</button>
+      <button className="text-button" onClick={() => window.drive.skillInstall('tetra-calendar').then(p => say(t('calendar.installedIn', { path: p })), e => say(t('calendar.notInstalled', { error: errorText(e) })))}>{t('calendar.copyToSkills')}</button>
     </div>
   </>
   const nav = <div className="island title-island cal-nav">
-    <button className="round flat" title="Previous" onClick={() => step(-1)}><Icon name="back" /></button>
-    <button className="text-button" onClick={() => setSelected(today)}>Today</button>
-    <button className="round flat" title="Next" onClick={() => step(1)}><Icon name="forward" /></button>
+    <button className="round flat" title={t('common.previous')} onClick={() => step(-1)}><Icon name="back" /></button>
+    <button className="text-button" onClick={() => setSelected(today)}>{t('common.today')}</button>
+    <button className="round flat" title={t('common.next')} onClick={() => step(1)}><Icon name="forward" /></button>
   </div>
   const main = <>
     {view === 'month' && <MonthGrid selected={selected} today={today} byDay={byDay} color={color} pick={d => setSelected(d)} create={create} open={open} />}
@@ -318,10 +324,10 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
         <div className="tools cal-tools">
           {said && <div className="island cal-said" role="status">{said}</div>}
           {/* the user, 18 Oct: the Trash beside sync, and Settings at the top like Gallery's */}
-          <button className="round" title="Trash" onClick={() => setDialog(<CalendarTrash cals={cals} onClose={close} restore={(name, to) => act(() => call('restore', name, to.id), `Restored to ${to.name}`)} />)}><Icon name="trash" /></button>
-          <button className="round cal-refresh" title="Sync now" aria-busy={syncing} onClick={refresh}><Icon name="refresh" /></button>
+          <button className="round" title={t('calendar.trash')} onClick={() => setDialog(<CalendarTrash cals={cals} onClose={close} restore={(name, to) => act(() => call('restore', name, to.id), t('calendar.restoredTo', { name: to.name }))} />)}><Icon name="trash" /></button>
+          <button className="round cal-refresh" title={t('calendar.syncNow')} aria-busy={syncing} onClick={refresh}><Icon name="refresh" /></button>
           <details className="menu">
-            <summary className="round" title="Calendar settings"><Icon name="tune" /></summary>
+            <summary className="round" title={t('calendar.settings')}><Icon name="tune" /></summary>
             <div className="island menu-body cal-settings">{settingsList}</div>
           </details>
         </div>
@@ -348,21 +354,21 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
           {nav}
           <div className="cal-plus">
             {kinds && <div className="island cal-kinds">
-              {KINDS.map(([k, label, icon]) => <button key={k} className="island-item" onClick={() => start(k)}><Icon name={icon as never} size={20} /><span>{label}</span></button>)}
+              {KINDS.map(([k, label, icon]) => <button key={k} className="island-item" onClick={() => start(k)}><Icon name={icon as never} size={20} /><span>{t(label)}</span></button>)}
             </div>}
-            <button className={`island cal-plus-button ${kinds ? 'on' : ''}`} title="New event, schedule, birthday or reminder" onClick={() => { setDrawer(false); setKinds(k => !k) }}><Icon name="add" /></button>
+            <button className={`island cal-plus-button ${kinds ? 'on' : ''}`} title={t('calendar.newKinds')} onClick={() => { setDrawer(false); setKinds(k => !k) }}><Icon name="add" /></button>
           </div>
         </div>
       </div> : <div className="notes-dock">
         {kinds && <div className="island cal-kinds">
-          {KINDS.map(([k, label, icon]) => <button key={k} className="island-item" onClick={() => start(k)}><Icon name={icon as never} size={20} /><span>{label}</span></button>)}
+          {KINDS.map(([k, label, icon]) => <button key={k} className="island-item" onClick={() => start(k)}><Icon name={icon as never} size={20} /><span>{t(label)}</span></button>)}
         </div>}
         <nav className="notes-island island">
           {views.map(([v, label, icon]) => <button key={v} className={`island-item ${view === v ? 'on' : ''}`} onClick={() => { go(v); setDrawer(false) }}><Icon name={icon as never} size={20} /><span>{label}</span></button>)}
           <span className="island-gap" />
-          <button className={`island-item ${kinds ? 'on' : ''}`} title="New event, schedule, birthday or reminder" onClick={() => { setDrawer(false); setKinds(k => !k) }}><Icon name="add" size={20} /><span>New</span></button>
+          <button className={`island-item ${kinds ? 'on' : ''}`} title={t('calendar.newKinds')} onClick={() => { setDrawer(false); setKinds(k => !k) }}><Icon name="add" size={20} /><span>{t('common.new')}</span></button>
           <button className={`island-item ${drawer ? 'on' : ''}`} aria-expanded={drawer} onClick={() => { setKinds(false); setDrawer(d => !d) }}>
-            <Icon name="calendar" size={20} /><span>Calendars</span></button>
+            <Icon name="calendar" size={20} /><span>{t('calendar.calendars')}</span></button>
         </nav>
       </div>}
     </div>
@@ -370,7 +376,7 @@ export function CalendarPage({ setDialog, say }: { setDialog: (d: ReactNode) => 
 }
 
 type Kind = 'new' | 'schedule' | 'birthday' | 'reminder'
-const KINDS: [Kind, string, string][] = [['new', 'Event', 'add'], ['schedule', 'Schedule', 'recent'], ['birthday', 'Birthday', 'person'], ['reminder', 'Reminder', 'bell']]
+const KINDS: [Kind, string, string][] = [['new', 'calendar.event', 'add'], ['schedule', 'calendar.schedule', 'recent'], ['birthday', 'calendar.birthday', 'person'], ['reminder', 'calendar.reminder', 'bell']]
 
 /** The Year view: the twelve months small; a day clicked opens it. */
 function YearGrid({ selected, today, busy, pick }: { selected: string; today: string; busy: Map<string, Occ[]>; pick: (d: string) => void }) {
@@ -383,7 +389,7 @@ function YearGrid({ selected, today, busy, pick }: { selected: string; today: st
           <div key={m} className="cal-mini">
             <div className={`cal-year-name ${today.slice(0, 7) === first.slice(0, 7) ? 'today' : ''}`}>{fmt(first, { month: 'long' })}</div>
             <div className="cal-mini-grid">
-              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i} className="muted">{d}</span>)}
+              {DAY_LETTERS.map((d, i) => <span key={i} className="muted">{d}</span>)}
               {monthCells(first).map(d => d.slice(5, 7) !== first.slice(5, 7) ? <span key={d} /> :
                 <button key={d} className={`${d === selected ? 'on' : ''} ${d === today ? 'today' : ''} ${busy.has(d) ? 'busy' : ''}`} onClick={() => pick(d)}>{+d.slice(8)}</button>)}
             </div>
@@ -407,12 +413,12 @@ function BottomStrip({ selected, today, busy, weeks, setWeeks, pick }: { selecte
     : Array.from({ length: weeks }, (_, i) => weekOf(addDays(selected, 7 * i)))
   return (
     <div className="cal-strip">
-      <button className="cal-strip-handle" title="Drag up for more weeks, down for fewer"
+      <button className="cal-strip-handle" title={t('calendar.stripHandle')}
         onPointerDown={e => { y0.current = e.clientY; (e.target as HTMLElement).setPointerCapture(e.pointerId) }}
         onPointerUp={e => { const dy = y0.current == null ? 0 : e.clientY - y0.current; y0.current = null; if (dy < -20) more(1); else if (dy > 20) more(-1); else setWeeks(sizes[(sizes.indexOf(weeks) + 1) % sizes.length]) }}><span /></button>
       {month && <div className="cal-strip-month">{fmt(selected, { month: 'long', year: 'numeric' })}</div>}
       <div className="cal-mini-grid">
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => <span key={d} className="muted">{d}</span>)}
+        {DAY_SHORT.map(d => <span key={d} className="muted">{d}</span>)}
         {rows.flat().map(d => <button key={d} className={`${d === selected ? 'on' : ''} ${d === today ? 'today' : ''} ${month && d.slice(5, 7) !== selected.slice(5, 7) ? 'out' : ''} ${busy.has(d) ? 'busy' : ''}`} onClick={() => pick(d)}>{+d.slice(8)}</button>)}
       </div>
     </div>
@@ -426,18 +432,18 @@ function BirthdayDialog({ onClose, onSave }: { onClose: () => void; onSave: (nam
   const [yearKnown, setYearKnown] = useState(false)
   return (
     <Modal onClose={onClose}>
-      <h3>Birthday</h3>
-      <input className="field" autoFocus placeholder="Whose birthday" value={name} onChange={e => setName(e.target.value)} />
-      <div className="cal-inline" style={{ marginTop: 10 }}>Date <DateField value={date} set={setDate} /></div>
-      <label className="cal-switch"><input type="checkbox" checked={yearKnown} onChange={e => setYearKnown(e.target.checked)} />I know the year (to show the age)</label>
-      <p className="muted">All day, every year, in the Birthdays calendar; reminded on the day at 9:00.</p>
-      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" disabled={!name.trim()} onClick={() => onSave(name.trim(), date, yearKnown)}>Save</button></div>
+      <h3>{t('calendar.birthday')}</h3>
+      <input className="field" autoFocus placeholder={t('calendar.whoseBirthday')} value={name} onChange={e => setName(e.target.value)} />
+      <div className="cal-inline" style={{ marginTop: 10 }}>{t('calendar.date')} <DateField value={date} set={setDate} /></div>
+      <label className="cal-switch"><input type="checkbox" checked={yearKnown} onChange={e => setYearKnown(e.target.checked)} />{t('calendar.knowYear')}</label>
+      <p className="muted">{t('calendar.birthdayNote')}</p>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.cancel')}</button><button className="filled-button" disabled={!name.trim()} onClick={() => onSave(name.trim(), date, yearKnown)}>{t('common.save')}</button></div>
     </Modal>
   )
 }
 
 /** A school year's dates (the user, 18 Oct); the high school's end is a guess until the user says. */
-const TEMPLATES: [string, string, string][] = [['Elementary school year', '09-01', '06-26'], ['High school year', '09-01', '06-15']]
+const TEMPLATES: [string, string, string][] = [['calendar.elementaryYear', '09-01', '06-26'], ['calendar.highSchoolYear', '09-01', '06-15']]
 type ScheduleArgs = { title: string; place: string; days: string[]; at: string; until: string; from: string; to: string }
 
 /** A schedule (a timetable, a weekly class): weekdays, a time, a start and an end — one repeating event. */
@@ -451,21 +457,21 @@ function ScheduleDialog({ cals, calendar, holidays, today, onClose, onSave }: { 
   return (
     <Modal onClose={onClose}>
       <div className="cal-editor">
-        <h3>Schedule</h3>
-        <input className="field" autoFocus placeholder="What (e.g. Lessons)" value={a.title} onChange={e => set({ title: e.target.value })} />
-        <div className="cal-chips">{TEMPLATES.map(([label, s, e], i) => <button key={label} className={template === i ? 'on' : ''} onClick={() => { setTemplate(i); set({ from: `${y}-${s}`, to: `${y + 1}-${e}` }) }}>{label}</button>)}</div>
-        <div className="cal-days">{DAYS.map((d, i) => <button key={d} className={a.days.includes(d) ? 'on' : ''} onClick={() => set({ days: a.days.includes(d) ? a.days.filter(x => x !== d) : [...a.days, d] })}>{DAY_NAMES[i][0]}</button>)}</div>
-        <div className="cal-inline">From <TimeField value={a.at} set={t => set({ at: t })} /> to <TimeField value={a.until} set={t => set({ until: t })} /></div>
-        <div className="cal-inline">Starts <DateField value={a.from} set={d => set({ from: d })} /> Ends <DateField value={a.to} set={d => set({ to: d })} /></div>
-        {template === 1 && <p className="error">The high school year's end is a guess (15 June): set the right date.</p>}
-        {holidays && <label className="cal-switch"><input type="checkbox" checked={skip} onChange={e => setSkip(e.target.checked)} />Skip the days in the Holidays calendar</label>}
-        <input className="field" placeholder="Place" value={a.place} onChange={e => set({ place: e.target.value })} />
+        <h3>{t('calendar.schedule')}</h3>
+        <input className="field" autoFocus placeholder={t('calendar.scheduleWhat')} value={a.title} onChange={e => set({ title: e.target.value })} />
+        <div className="cal-chips">{TEMPLATES.map(([label, s, e], i) => <button key={label} className={template === i ? 'on' : ''} onClick={() => { setTemplate(i); set({ from: `${y}-${s}`, to: `${y + 1}-${e}` }) }}>{t(label)}</button>)}</div>
+        <div className="cal-days">{DAYS.map((d, i) => <button key={d} className={a.days.includes(d) ? 'on' : ''} onClick={() => set({ days: a.days.includes(d) ? a.days.filter(x => x !== d) : [...a.days, d] })}>{DAY_LETTERS[i]}</button>)}</div>
+        <div className="cal-inline">{t('calendar.from')} <TimeField value={a.at} set={x => set({ at: x })} /> {t('calendar.to')} <TimeField value={a.until} set={x => set({ until: x })} /></div>
+        <div className="cal-inline">{t('calendar.starts')} <DateField value={a.from} set={d => set({ from: d })} /> {t('calendar.ends')} <DateField value={a.to} set={d => set({ to: d })} /></div>
+        {template === 1 && <p className="error">{t('calendar.highSchoolGuess')}</p>}
+        {holidays && <label className="cal-switch"><input type="checkbox" checked={skip} onChange={e => setSkip(e.target.checked)} />{t('calendar.skipHolidays')}</label>}
+        <input className="field" placeholder={t('calendar.place')} value={a.place} onChange={e => set({ place: e.target.value })} />
         <select className="field" value={cal ?? ''} onChange={e => setCal(e.target.value)}>
-          {cals.length === 0 && <option value="">Personal (new)</option>}
+          {cals.length === 0 && <option value="">{t('calendar.personalNew')}</option>}
           {cals.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button>
-          <button className="filled-button" disabled={!a.title.trim() || !a.days.length || a.to < a.from} onClick={() => onSave({ ...a, title: a.title.trim(), place: a.place.trim() }, cal || null, skip)}>Save</button></div>
+        <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="filled-button" disabled={!a.title.trim() || !a.days.length || a.to < a.from} onClick={() => onSave({ ...a, title: a.title.trim(), place: a.place.trim() }, cal || null, skip)}>{t('common.save')}</button></div>
       </div>
     </Modal>
   )
@@ -477,10 +483,10 @@ function MiniMonth({ selected, today, busy, pick }: { selected: string; today: s
   return (
     <div className="cal-mini">
       <div className="cal-mini-head"><span>{fmt(month, { month: 'long', year: 'numeric' })}</span>
-        <button className="round small" title="Previous month" onClick={() => setMonth(m => addMonths(m, -1))}><Icon name="back" size={18} /></button>
-        <button className="round small" title="Next month" onClick={() => setMonth(m => addMonths(m, 1))}><Icon name="forward" size={18} /></button></div>
+        <button className="round small" title={t('calendar.previousMonth')} onClick={() => setMonth(m => addMonths(m, -1))}><Icon name="back" size={18} /></button>
+        <button className="round small" title={t('calendar.nextMonth')} onClick={() => setMonth(m => addMonths(m, 1))}><Icon name="forward" size={18} /></button></div>
       <div className="cal-mini-grid">
-        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i} className="muted">{d}</span>)}
+        {DAY_LETTERS.map((d, i) => <span key={i} className="muted">{d}</span>)}
         {monthCells(month).map(d => (
           <button key={d} className={`${d === selected ? 'on' : ''} ${d === today ? 'today' : ''} ${d.slice(5, 7) !== month.slice(5, 7) ? 'out' : ''} ${busy.has(d) ? 'busy' : ''}`} onClick={() => pick(d)}>{+d.slice(8)}</button>
         ))}
@@ -491,8 +497,8 @@ function MiniMonth({ selected, today, busy, pick }: { selected: string; today: s
 
 function Chip({ o, day, color, open }: { o: Occ; day: string; color: (id: string) => string; open: (o: Occ) => void }) {
   const c = color(o.calendar)
-  if (o.allDay) return <button className="cal-chip all" style={{ background: c, color: onColor(c) }} onClick={e => { e.stopPropagation(); open(o) }}>{o.title || '(No title)'}</button>
-  return <button className="cal-chip" onClick={e => { e.stopPropagation(); open(o) }}><i style={{ background: c }} />{key(new Date(o.start)) === day ? time(o.start) + ' ' : ''}{o.title || '(No title)'}</button>
+  if (o.allDay) return <button className="cal-chip all" style={{ background: c, color: onColor(c) }} onClick={e => { e.stopPropagation(); open(o) }}>{o.title || t('common.noTitle')}</button>
+  return <button className="cal-chip" onClick={e => { e.stopPropagation(); open(o) }}><i style={{ background: c }} />{key(new Date(o.start)) === day ? time(o.start) + ' ' : ''}{o.title || t('common.noTitle')}</button>
 }
 
 // shortcut: an event of several days is a chip on each day, not one bar across them (Google's); a bar when asked.
@@ -506,7 +512,7 @@ function MonthGrid({ selected, today, byDay, color, pick, create, open }: { sele
   }, [])
   return (
     <div className="cal-month">
-      <div className="cal-weekdays">{['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(d => <span key={d}>{d}</span>)}</div>
+      <div className="cal-weekdays">{DAY_SHORT.map(d => <span key={d}>{d.toLocaleUpperCase(LOC)}</span>)}</div>
       <div className="cal-month-grid" ref={ref}>
         {monthCells(selected).map(d => {
           const list = byDay.get(d) ?? []
@@ -515,7 +521,7 @@ function MonthGrid({ selected, today, byDay, color, pick, create, open }: { sele
             <div key={d} className={`cal-cell ${d.slice(5, 7) !== selected.slice(5, 7) ? 'out' : ''}`} onClick={() => pick(d)} onDoubleClick={() => create(d)}>
               <span className={`cal-num ${d === today ? 'today' : ''} ${d === selected ? 'on' : ''}`}>{+d.slice(8) === 1 ? fmt(d, { day: 'numeric', month: 'short' }) : +d.slice(8)}</span>
               {list.slice(0, n).map(o => <Chip key={o.file + o.start} o={o} day={d} color={color} open={open} />)}
-              {list.length > n && <button className="cal-more" onClick={e => { e.stopPropagation(); pick(d) }}>{list.length - n} more</button>}
+              {list.length > n && <button className="cal-more" onClick={e => { e.stopPropagation(); pick(d) }}>{t('calendar.more', { n: list.length - n })}</button>}
             </div>
           )
         })}
@@ -561,7 +567,7 @@ function TimeGrid({ dates, today, byDay, color, open, create }: { dates: string[
     <div className="cal-time">
       <div className="cal-time-head">
         <span />
-        {dates.map(d => <div key={d} className={d === today ? 'today' : ''}><small>{fmt(d, { weekday: 'short' }).toUpperCase()}</small><b>{+d.slice(8)}</b></div>)}
+        {dates.map(d => <div key={d} className={d === today ? 'today' : ''}><small>{fmt(d, { weekday: 'short' }).toLocaleUpperCase(LOC)}</small><b>{+d.slice(8)}</b></div>)}
       </div>
       {allDay.some(l => l.length) && <div className="cal-time-all"><span />{allDay.map((l, i) => <div key={i}>{l.map(o => <Chip key={o.file + o.start} o={o} day={dates[i]} color={color} open={open} />)}</div>)}</div>}
       <div className="cal-time-scroll" ref={scroll}>
@@ -574,7 +580,7 @@ function TimeGrid({ dates, today, byDay, color, open, create }: { dates: string[
                 return (
                   <button key={b.o.file + b.o.start} className={`cal-block ${b.short ? 'short' : ''}`} onClick={e => { e.stopPropagation(); open(b.o) }} title={`${b.o.title} · ${time(b.o.start)} – ${time(b.o.end)}`}
                     style={{ top: b.from / 60 * HOUR, height: b.short ? 20 : (b.to - b.from) / 60 * HOUR - 2, left: `${b.left * 100}%`, width: `calc(${b.width * 100}% - 2px)`, background: c, color: onColor(c) }}>
-                    <b>{b.o.title || '(No title)'}{b.short ? `, ${time(b.o.start)}` : ''}</b>{!b.short && b.to - b.from >= 40 && <span>{time(b.o.start)} – {time(b.o.end)}</span>}
+                    <b>{b.o.title || t('common.noTitle')}{b.short ? `, ${time(b.o.start)}` : ''}</b>{!b.short && b.to - b.from >= 40 && <span>{time(b.o.start)} – {time(b.o.end)}</span>}
                   </button>
                 )
               })}
@@ -591,15 +597,15 @@ function Agenda({ from, today, byDay, color, open }: { from: string; today: stri
   const days = Array.from({ length: 60 }, (_, i) => addDays(from, i)).filter(d => byDay.has(d))
   return (
     <div className="cal-agenda page-scroll">
-      {days.length === 0 && <p className="muted">Nothing in the next two months.</p>}
+      {days.length === 0 && <p className="muted">{t('calendar.agendaEmpty')}</p>}
       {days.map(d => (
         <div key={d} className="cal-agenda-day">
-          <h4 className={d === today ? 'today' : ''}>{d === today ? 'Today · ' : d === addDays(today, 1) ? 'Tomorrow · ' : ''}{fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}</h4>
+          <h4 className={d === today ? 'today' : ''}>{d === today ? t('common.today') + ' · ' : d === addDays(today, 1) ? t('common.tomorrow') + ' · ' : ''}{fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}</h4>
           {byDay.get(d)!.map(o => (
             <button key={o.file + o.start} className="cal-agenda-row" onClick={() => open(o)}>
-              <span className="cal-agenda-time">{o.allDay ? 'All day' : key(new Date(o.start)) === d ? <>{time(o.start)}<small>{length(Math.round((o.end - o.start) / 60000))}</small></> : '…'}</span>
+              <span className="cal-agenda-time">{o.allDay ? t('calendar.allDay') : key(new Date(o.start)) === d ? <>{time(o.start)}<small>{length(Math.round((o.end - o.start) / 60000))}</small></> : '…'}</span>
               <i style={{ background: color(o.calendar) }} />
-              <span className="cal-agenda-what"><b>{o.title || '(No title)'}</b>{o.place && <small>{o.place}</small>}</span>
+              <span className="cal-agenda-what"><b>{o.title || t('common.noTitle')}</b>{o.place && <small>{o.place}</small>}</span>
             </button>
           ))}
         </div>
@@ -615,20 +621,20 @@ function EventCard({ o, cal, onClose, onEdit, onDelete, onKeep }: { o: Occ; cal?
   return (
     <Modal onClose={onClose}>
       <div className="cal-card-head">
-        <i style={{ background: cal?.color }} /><h3>{o.title || '(No title)'}</h3>
-        <button className="round small" title="Edit" onClick={onEdit}><Icon name="edit" size={18} /></button>
-        <button className="round small" title="Delete" onClick={onDelete}><Icon name="trash" size={18} /></button>
-        <button className="round small" title="Close" onClick={onClose}><Icon name="close" size={18} /></button>
+        <i style={{ background: cal?.color }} /><h3>{o.title || t('common.noTitle')}</h3>
+        <button className="round small" title={t('common.edit')} onClick={onEdit}><Icon name="edit" size={18} /></button>
+        <button className="round small" title={t('common.delete')} onClick={onDelete}><Icon name="trash" size={18} /></button>
+        <button className="round small" title={t('common.close')} onClick={onClose}><Icon name="close" size={18} /></button>
       </div>
       <p className="cal-card-when">{when}</p>
       {o.rrule && <p>{repeatText(o.rrule, o.masterDate ?? o.dayDate)}</p>}
       {o.place && <p>{o.place}</p>}
-      {o.birthYear && o.startDate && +o.startDate.slice(0, 4) > o.birthYear && <p>Turns {+o.startDate.slice(0, 4) - o.birthYear}</p>}
+      {o.birthYear && o.startDate && +o.startDate.slice(0, 4) > o.birthYear && <p>{t('calendar.turns', { n: +o.startDate.slice(0, 4) - o.birthYear })}</p>}
       <p>{cal?.name ?? o.calendar}</p>
       {o.alarms.map((a, i) => <p key={i}>🔔 {alarmText(a, o.allDay, o.allDay ? '00:00' : hm(o.start))}</p>)}
       {o.notes && <p className="cal-notes">{o.notes}</p>}
-      {o.versions > 1 && <><p className="error">{o.versions} versions of this event came from a sync (changed on two devices); the newest is shown.</p>
-        <button className="text-button" onClick={onKeep}>Keep this one</button></>}
+      {o.versions > 1 && <><p className="error">{t('calendar.versions', { n: o.versions })}</p>
+        <button className="text-button" onClick={onKeep}>{t('calendar.keepThis')}</button></>}
       <p className="cal-file">{o.file}</p>
     </Modal>
   )
@@ -638,10 +644,10 @@ function ScopeDialog({ deleting, onClose, onPick }: { deleting: boolean; onClose
   const [s, setS] = useState<Scope>('one')
   return (
     <Modal onClose={onClose}>
-      <h3>{deleting ? 'Delete a repeating event' : 'Change a repeating event'}</h3>
-      {([['one', 'This event'], ['following', 'This and following events'], ['all', 'All events']] as [Scope, string][]).map(([v, l]) =>
-        <label key={v} className="cal-radio"><input type="radio" checked={s === v} onChange={() => setS(v)} />{l}</label>)}
-      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" autoFocus onClick={() => onPick(s)}>OK</button></div>
+      <h3>{deleting ? t('calendar.deleteRepeating') : t('calendar.changeRepeating')}</h3>
+      {([['one', 'calendar.scopeOne'], ['following', 'calendar.scopeFollowing'], ['all', 'calendar.scopeAll']] as [Scope, string][]).map(([v, l]) =>
+        <label key={v} className="cal-radio"><input type="radio" checked={s === v} onChange={() => setS(v)} />{t(l)}</label>)}
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.cancel')}</button><button className="filled-button" autoFocus onClick={() => onPick(s)}>{t('common.ok')}</button></div>
     </Modal>
   )
 }
@@ -669,40 +675,40 @@ function EventEditor({ draft, cals, calendar, isNew, heading, onClose, onSave }:
   return (
     <Modal onClose={onClose}>
       <div className="cal-editor">
-        <div className="cal-editor-head"><h3>{heading ?? (isNew ? 'New event' : 'Edit event')}</h3><button className="filled-button" onClick={save}>Save</button></div>
-        <input className="field cal-title" autoFocus placeholder="Title" value={d.title} onChange={e => set({ title: e.target.value })} onKeyDown={e => e.key === 'Enter' && save()} />
+        <div className="cal-editor-head"><h3>{heading ?? (isNew ? t('calendar.newEvent') : t('calendar.editEvent'))}</h3><button className="filled-button" onClick={save}>{t('common.save')}</button></div>
+        <input className="field cal-title" autoFocus placeholder={t('calendar.title')} value={d.title} onChange={e => set({ title: e.target.value })} onKeyDown={e => e.key === 'Enter' && save()} />
         <label className="cal-line"><i style={{ background: cals.find(c => c.id === cal)?.color ?? PALETTE[0] }} />
           <select className="field" value={cal ?? ''} onChange={e => setCal(e.target.value)}>
-            {cals.length === 0 && <option value="">Personal (new)</option>}
+            {cals.length === 0 && <option value="">{t('calendar.personalNew')}</option>}
             {cals.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select></label>
-        <label className="cal-switch"><input type="checkbox" checked={d.allDay} onChange={e => set({ allDay: e.target.checked, alarms: defaultAlarms(e.target.checked, startTime), start: { date: d.start.date, time: d.start.time ?? '09:00' }, end: { date: d.end.date, time: d.end.time ?? '10:00' } })} />All day</label>
+        <label className="cal-switch"><input type="checkbox" checked={d.allDay} onChange={e => set({ allDay: e.target.checked, alarms: defaultAlarms(e.target.checked, startTime), start: { date: d.start.date, time: d.start.time ?? '09:00' }, end: { date: d.end.date, time: d.end.time ?? '10:00' } })} />{t('calendar.allDay')}</label>
         <div className="cal-when">
-          <span>Starts</span><DateField value={d.start.date} set={x => setStart({ ...d.start, date: x })} />
+          <span>{t('calendar.starts')}</span><DateField value={d.start.date} set={x => setStart({ ...d.start, date: x })} />
           {!d.allDay && <TimeField value={d.start.time!} set={t => setStart({ ...d.start, time: t })} />}
-          <span>Ends</span><DateField value={d.end.date} set={x => set({ end: { ...d.end, date: x } })} />
+          <span>{t('calendar.ends')}</span><DateField value={d.end.date} set={x => set({ end: { ...d.end, date: x } })} />
           {!d.allDay && <TimeField value={d.end.time!} set={t => set({ end: { ...d.end, time: t } })} />}
         </div>
-        {late && <p className="error">The end is before the start; it will be an hour long.</p>}
+        {late && <p className="error">{t('calendar.endBeforeStart')}</p>}
         <select className="field" value={presets.some(p => p[0] === d.rrule) ? d.rrule ?? '' : 'custom'} onChange={e => e.target.value === 'custom!' ? setCustom('repeat') : set({ rrule: e.target.value || null })}>
           {presets.map(([r, words]) => <option key={words} value={r ?? ''}>{words}</option>)}
           {!presets.some(p => p[0] === d.rrule) && <option value="custom">{repeatText(d.rrule, d.start.date)}</option>}
-          <option value="custom!">Custom…</option>
+          <option value="custom!">{t('calendar.custom')}</option>
         </select>
         {custom === 'repeat' && <CustomRepeat rule={d.rrule} date={d.start.date} onCancel={() => setCustom(null)} onSet={r => { set({ rrule: r }); setCustom(null) }} />}
         <div className="cal-alarms">
           {d.alarms.map((a, i) => <div key={i} className="cal-alarm"><Icon name="bell" size={18} /><span>{alarmText(a, d.allDay, startTime)}</span>
-            <button className="round small" title="Remove this reminder" onClick={() => set({ alarms: d.alarms.filter((_, j) => j !== i) })}><Icon name="close" size={16} /></button></div>)}
+            <button className="round small" title={t('calendar.removeReminder')} onClick={() => set({ alarms: d.alarms.filter((_, j) => j !== i) })}><Icon name="close" size={16} /></button></div>)}
           <select className="field" value="" onChange={e => { const v = e.target.value; if (v === 'custom') setCustom('alarm'); else if (v) { const a = presetAlarms(d.allDay, startTime)[+v]; if (!d.alarms.some(x => x.days === a.days && x.seconds === a.seconds)) set({ alarms: [...d.alarms, a] }) } }}>
-            <option value="">Add a reminder…</option>
+            <option value="">{t('calendar.addReminder')}</option>
             {presetAlarms(d.allDay, startTime).map((a, i) => <option key={i} value={i}>{alarmText(a, d.allDay, startTime)}</option>)}
-            <option value="custom">Custom…</option>
+            <option value="custom">{t('calendar.custom')}</option>
           </select>
           {custom === 'alarm' && <CustomAlarm allDay={d.allDay} start={startTime} onCancel={() => setCustom(null)} onAdd={a => { set({ alarms: [...d.alarms, a] }); setCustom(null) }} />}
         </div>
-        <input className="field" placeholder="Place" value={d.place} onChange={e => set({ place: e.target.value })} />
-        <textarea className="field" rows={4} placeholder="Notes" value={d.notes} onChange={e => set({ notes: e.target.value })} />
-        <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" onClick={save}>Save</button></div>
+        <input className="field" placeholder={t('calendar.place')} value={d.place} onChange={e => set({ place: e.target.value })} />
+        <textarea className="field" rows={4} placeholder={t('calendar.notes')} value={d.notes} onChange={e => set({ notes: e.target.value })} />
+        <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.cancel')}</button><button className="filled-button" onClick={save}>{t('common.save')}</button></div>
       </div>
     </Modal>
   )
@@ -728,13 +734,13 @@ function CustomRepeat({ rule, date, onCancel, onSet }: { rule: string | null; da
   }
   return (
     <div className="cal-custom">
-      <div className="cal-inline">Every <input className="field num" type="number" min={1} value={every} onChange={e => setEvery(e.target.value)} />
-        <select className="field" value={unit} onChange={e => setUnit(e.target.value)}>{[['DAILY', 'days'], ['WEEKLY', 'weeks'], ['MONTHLY', 'months'], ['YEARLY', 'years']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
-      {unit === 'WEEKLY' && <div className="cal-days">{DAYS.map((x, i) => <button key={x} className={days.has(x) ? 'on' : ''} onClick={() => setDays(s => { const n = new Set(s); n.has(x) ? n.delete(x) : n.add(x); return n })}>{DAY_NAMES[i][0]}</button>)}</div>}
-      <label className="cal-radio"><input type="radio" checked={ends === 'never'} onChange={() => setEnds('never')} />Never ends</label>
-      <label className="cal-radio"><input type="radio" checked={ends === 'until'} onChange={() => setEnds('until')} />Ends on <DateField value={until} set={x => { setUntil(x); setEnds('until') }} /></label>
-      <label className="cal-radio"><input type="radio" checked={ends === 'count'} onChange={() => setEnds('count')} />After <input className="field num" type="number" min={1} value={count} onChange={e => { setCount(e.target.value); setEnds('count') }} /> times</label>
-      <div className="dialog-actions"><button className="text-button" onClick={onCancel}>Cancel</button><button className="filled-button" onClick={ok}>OK</button></div>
+      <div className="cal-inline">{t('calendar.every')} <input className="field num" type="number" min={1} value={every} onChange={e => setEvery(e.target.value)} />
+        <select className="field" value={unit} onChange={e => setUnit(e.target.value)}>{[['DAILY', 'calendar.unit_days'], ['WEEKLY', 'calendar.unit_weeks'], ['MONTHLY', 'calendar.unit_months'], ['YEARLY', 'calendar.unit_years']].map(([v, l]) => <option key={v} value={v}>{t(l)}</option>)}</select></div>
+      {unit === 'WEEKLY' && <div className="cal-days">{DAYS.map((x, i) => <button key={x} className={days.has(x) ? 'on' : ''} onClick={() => setDays(s => { const n = new Set(s); n.has(x) ? n.delete(x) : n.add(x); return n })}>{DAY_LETTERS[i]}</button>)}</div>}
+      <label className="cal-radio"><input type="radio" checked={ends === 'never'} onChange={() => setEnds('never')} />{t('calendar.neverEnds')}</label>
+      <label className="cal-radio"><input type="radio" checked={ends === 'until'} onChange={() => setEnds('until')} />{t('calendar.endsOn')} <DateField value={until} set={x => { setUntil(x); setEnds('until') }} /></label>
+      <label className="cal-radio"><input type="radio" checked={ends === 'count'} onChange={() => setEnds('count')} />{t('calendar.after')} <input className="field num" type="number" min={1} value={count} onChange={e => { setCount(e.target.value); setEnds('count') }} /> {t('calendar.times')}</label>
+      <div className="dialog-actions"><button className="text-button" onClick={onCancel}>{t('common.cancel')}</button><button className="filled-button" onClick={ok}>{t('common.ok')}</button></div>
     </div>
   )
 }
@@ -749,10 +755,10 @@ function CustomAlarm({ allDay, start, onCancel, onAdd }: { allDay: boolean; star
   return (
     <div className="cal-custom">
       <div className="cal-inline"><input className="field num" type="number" min={0} value={n} onChange={e => setN(e.target.value)} />
-        <select className="field" value={unit} onChange={e => setUnit(e.target.value)}>{(allDay ? ['days', 'weeks'] : ['minutes', 'hours', 'days', 'weeks']).map(u => <option key={u}>{u}</option>)}</select> before
-        {(unit === 'days' || unit === 'weeks') && <> at <TimeField value={at} set={setAt} /></>}</div>
-      {(unit === 'days' || unit === 'weeks') && <label className="cal-switch"><input type="checkbox" checked={daily} onChange={e => setDaily(e.target.checked)} />And every day after it, until the event</label>}
-      <div className="dialog-actions"><button className="text-button" onClick={onCancel}>Cancel</button><button className="filled-button" onClick={add}>Add</button></div>
+        <select className="field" value={unit} onChange={e => setUnit(e.target.value)}>{(allDay ? ['days', 'weeks'] : ['minutes', 'hours', 'days', 'weeks']).map(u => <option key={u} value={u}>{t(`calendar.unit_${u}`)}</option>)}</select> {t('calendar.before')}
+        {(unit === 'days' || unit === 'weeks') && <> {t('calendar.at')} <TimeField value={at} set={setAt} /></>}</div>
+      {(unit === 'days' || unit === 'weeks') && <label className="cal-switch"><input type="checkbox" checked={daily} onChange={e => setDaily(e.target.checked)} />{t('calendar.everyDayUntil')}</label>}
+      <div className="dialog-actions"><button className="text-button" onClick={onCancel}>{t('common.cancel')}</button><button className="filled-button" onClick={add}>{t('common.add')}</button></div>
     </div>
   )
 }
@@ -764,40 +770,40 @@ function CalendarTrash({ cals, onClose, restore }: { cals: Cal[]; onClose: () =>
   const [to, setTo] = useState(cals[0]?.id ?? '')
   const load = () => call<Item[]>('trashed').then(setItems, () => setItems([]))
   useEffect(() => { load() }, [])
-  const when = (i: Item) => i.start == null ? '' : new Date(i.start).toLocaleString('en-GB', i.allDay
-    ? { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } : { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-  const left = (i: Item) => { const n = Math.max(0, 30 - Math.floor((Date.now() - i.at) / 86_400_000)); return n === 1 ? '1 day left' : `${n} days left` }
+  const when = (i: Item) => i.start == null ? '' : new Date(i.start).toLocaleString(LOC, i.allDay
+    ? { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } : { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  const left = (i: Item) => { const n = Math.max(0, 30 - Math.floor((Date.now() - i.at) / 86_400_000)); return t('calendar.daysLeft', { count: n }) }
   return <Modal onClose={onClose}>
-    <h3>Trash</h3>
-    <p className="muted">Deleted events stay here 30 days, then they are deleted for good.</p>
-    {cals.length > 1 && <label className="cal-trash-to">Restore into <select className="field" value={to} onChange={e => setTo(e.target.value)}>{cals.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
+    <h3>{t('calendar.trash')}</h3>
+    <p className="muted">{t('calendar.trashNote')}</p>
+    {cals.length > 1 && <label className="cal-trash-to">{t('calendar.restoreInto')} <select className="field" value={to} onChange={e => setTo(e.target.value)}>{cals.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
     <div className="cal-trash">
-      {items?.length === 0 && <p>The Trash has no events.</p>}
+      {items?.length === 0 && <p>{t('calendar.trashEmpty')}</p>}
       {items?.map(i => <div key={i.name} className="cal-trash-row">
-        <div><strong>{i.title || '(No title)'}</strong><small className="muted">{[when(i), left(i)].filter(Boolean).join(' · ')}</small></div>
-        <button className="text-button" disabled={!to} onClick={() => restore(i.name, cals.find(c => c.id === to)!).then(load)}>Restore</button>
+        <div><strong>{i.title || t('common.noTitle')}</strong><small className="muted">{[when(i), left(i)].filter(Boolean).join(' · ')}</small></div>
+        <button className="text-button" disabled={!to} onClick={() => restore(i.name, cals.find(c => c.id === to)!).then(load)}>{t('common.restore')}</button>
       </div>)}
     </div>
-    <div className="dialog-actions"><button className="filled-button" onClick={onClose}>Close</button></div>
+    <div className="dialog-actions"><button className="filled-button" onClick={onClose}>{t('common.close')}</button></div>
   </Modal>
 }
 
 function CalendarDialog({ cal, taken, onClose, onSave, onExport, onDelete }: { cal: Cal | null; taken: string[]; onClose: () => void; onSave: (name: string, color: string) => void; onExport: () => void; onDelete: () => void }) {
   const [name, setName] = useState(cal?.name ?? '')
   const [color, setColor] = useState(cal?.color ?? PALETTE[taken.length % PALETTE.length])
-  const clash = name.trim() !== cal?.name && taken.some(t => t.toLowerCase() === name.trim().toLowerCase())
+  const clash = name.trim() !== cal?.name && taken.some(x => x.toLowerCase() === name.trim().toLowerCase())
   return (
     <Modal onClose={onClose}>
-      <h3>{cal ? 'Calendar' : 'New calendar'}</h3>
-      <input className="field" autoFocus placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
-      {clash && <p className="error">A calendar has this name.</p>}
+      <h3>{cal ? t('calendar.calendar') : t('calendar.newCalendar')}</h3>
+      <input className="field" autoFocus placeholder={t('common.name')} value={name} onChange={e => setName(e.target.value)} />
+      {clash && <p className="error">{t('calendar.nameClash')}</p>}
       <div className="cal-palette">{PALETTE.map(c => <button key={c} title={c} className={c === color ? 'on' : ''} style={{ background: c }} onClick={() => setColor(c)} />)}</div>
       <div className="dialog-actions">
-        {cal && <button className="text-button danger-text" onClick={onDelete}>Delete</button>}
-        {cal && <button className="text-button" onClick={onExport}>Export</button>}
+        {cal && <button className="text-button danger-text" onClick={onDelete}>{t('common.delete')}</button>}
+        {cal && <button className="text-button" onClick={onExport}>{t('common.export')}</button>}
         <span style={{ flex: 1 }} />
-        <button className="text-button" onClick={onClose}>Cancel</button>
-        <button className="filled-button" disabled={!name.trim() || clash} onClick={() => onSave(name.trim(), color)}>{cal ? 'Save' : 'Create'}</button>
+        <button className="text-button" onClick={onClose}>{t('common.cancel')}</button>
+        <button className="filled-button" disabled={!name.trim() || clash} onClick={() => onSave(name.trim(), color)}>{cal ? t('common.save') : t('calendar.create')}</button>
       </div>
     </Modal>
   )
@@ -809,20 +815,20 @@ function ImportDialog({ found, cals, onClose, onImport }: { found: { index: numb
   const byName = (n: string) => cals.find(c => c.name.toLowerCase() === n.toLowerCase())?.id ?? n.replace(/[/\\:*?"<>|]/g, '-')
   return (
     <Modal onClose={onClose}>
-      <h3>Import</h3>
+      <h3>{t('common.import')}</h3>
       {single ? <>
-        <p>{single.count} events from “{single.name}”, into:</p>
+        <p>{t('calendar.importFrom', { count: single.count, name: single.name })}</p>
         <select className="field" value={into} onChange={e => setInto(e.target.value)}>
-          <option value="">A new calendar “{single.name}”</option>
+          <option value="">{t('calendar.importNewCalendar', { name: single.name })}</option>
           {cals.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <p className="muted">An event already there (the same one, imported before) is updated, not doubled.</p>
+        <p className="muted">{t('calendar.importUpdates')}</p>
       </> : <>
-        <p>{found.length} calendars, each into the calendar of its name (made if there is none):</p>
-        {found.map(f => <p key={f.index}>• {f.name} — {f.count} events</p>)}
+        <p>{t('calendar.importMany', { count: found.length })}</p>
+        {found.map(f => <p key={f.index}>• {f.name} — {t('calendar.eventsCount', { count: f.count })}</p>)}
       </>}
-      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button>
-        <button className="filled-button" onClick={() => onImport(single ? [{ index: single.index, into: into || byName(single.name) }] : found.map(f => ({ index: f.index, into: byName(f.name) })))}>Import</button></div>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.cancel')}</button>
+        <button className="filled-button" onClick={() => onImport(single ? [{ index: single.index, into: into || byName(single.name) }] : found.map(f => ({ index: f.index, into: byName(f.name) })))}>{t('common.import')}</button></div>
     </Modal>
   )
 }
@@ -842,9 +848,9 @@ function TimeField({ value, set }: { value: string; set: (t: string) => void }) 
   const commit = () => { const t = typedTime(text); if (t && t !== value) set(t); else setText(value) }
   return (
     <span className="cal-pick">
-      <input className="field" aria-label="Time" inputMode="numeric" value={text} onChange={e => setText(e.target.value)} onBlur={commit}
+      <input className="field" aria-label={t('calendar.time')} inputMode="numeric" value={text} onChange={e => setText(e.target.value)} onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); commit() } }} />
-      <button className="round small flat" title="Pick on the clock" onClick={() => setClock(true)}><Icon name="recent" size={20} /></button>
+      <button className="round small flat" title={t('calendar.pickOnClock')} onClick={() => setClock(true)}><Icon name="recent" size={20} /></button>
       {clock && <ClockDialog value={value} onClose={() => setClock(false)} onSet={t => { setClock(false); set(t) }} />}
     </span>
   )
@@ -857,9 +863,9 @@ function ClockDialog({ value, onClose, onSet }: { value: string; onClose: () => 
   return (
     <Modal onClose={onClose}>
       <div className="cal-clock">
-        <h3>Time</h3>
+        <h3>{t('calendar.time')}</h3>
         <ClockFace h={h} m={m} setH={setH} setM={setM} />
-        <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" onClick={() => onSet(`${pad(h)}:${pad(m)}`)}>OK</button></div>
+        <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.cancel')}</button><button className="filled-button" onClick={() => onSet(`${pad(h)}:${pad(m)}`)}>{t('common.ok')}</button></div>
       </div>
     </Modal>
   )
@@ -921,7 +927,7 @@ function DateDialog({ value, onClose, onSet }: { value: string; onClose: () => v
   return (
     <Modal onClose={onClose}>
       <div className="cal-datepick">
-        <p className="muted">Date</p>
+        <p className="muted">{t('calendar.date')}</p>
         <h3>{fmt(day, { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}</h3>
         <div className="cal-mini">
           <div className="cal-mini-head">
@@ -929,19 +935,19 @@ function DateDialog({ value, onClose, onSet }: { value: string; onClose: () => v
             {page === 'months' && head(String(year), 'years')}
             {page === 'years' && <b className="cal-decade">{decade}–{decade + 9}</b>}
             <span />
-            <button className="round small" title="Back" onClick={() => setMonth(x => addMonths(x, -step))}><Icon name="back" size={18} /></button>
-            <button className="round small" title="Forward" onClick={() => setMonth(x => addMonths(x, step))}><Icon name="forward" size={18} /></button></div>
+            <button className="round small" title={t('common.back')} onClick={() => setMonth(x => addMonths(x, -step))}><Icon name="back" size={18} /></button>
+            <button className="round small" title={t('calendar.forward')} onClick={() => setMonth(x => addMonths(x, step))}><Icon name="forward" size={18} /></button></div>
           {page === 'years' && <div className="cal-years">{Array.from({ length: 10 }, (_, i) => decade + i).map(y =>
             <button key={y} title={String(y)} className={`${y === +day.slice(0, 4) ? 'on' : ''} ${y === +today.slice(0, 4) ? 'today' : ''}`} onClick={() => { jump(y, +month.slice(5, 7)); setPage('months') }}>{pad(y % 100)}</button>)}</div>}
           {page === 'months' && <div className="cal-years cal-months">{Array.from({ length: 12 }, (_, i) => i + 1).map(mo =>
             <button key={mo} className={`${day.slice(0, 7) === `${year}-${pad(mo)}` ? 'on' : ''} ${today.slice(0, 7) === `${year}-${pad(mo)}` ? 'today' : ''}`} onClick={() => { jump(year, mo); setPage('days') }}>{fmt(`${year}-${pad(mo)}-01`, { month: 'short' })}</button>)}</div>}
           {page === 'days' && <div className="cal-mini-grid">
-            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => <span key={i} className="muted">{d}</span>)}
+            {DAY_LETTERS.map((d, i) => <span key={i} className="muted">{d}</span>)}
             {monthCells(month).map(d => <button key={d} className={`${d === day ? 'on' : ''} ${d === today ? 'today' : ''} ${d.slice(5, 7) !== month.slice(5, 7) ? 'out' : ''}`} onClick={() => { setDay(d); setMonth(d) }} onDoubleClick={() => onSet(d)}>{+d.slice(8)}</button>)}
           </div>}
         </div>
-        <div className="dialog-actions"><button className="text-button" onClick={() => { setDay(today); setMonth(today); setPage('days') }}>Today</button><span style={{ flex: 1 }} />
-          <button className="text-button" onClick={onClose}>Cancel</button><button className="filled-button" onClick={() => onSet(day)}>OK</button></div>
+        <div className="dialog-actions"><button className="text-button" onClick={() => { setDay(today); setMonth(today); setPage('days') }}>{t('common.today')}</button><span style={{ flex: 1 }} />
+          <button className="text-button" onClick={onClose}>{t('common.cancel')}</button><button className="filled-button" onClick={() => onSet(day)}>{t('common.ok')}</button></div>
       </div>
     </Modal>
   )

@@ -3,6 +3,7 @@ import type { TimerAction, TimerItem } from './drive'
 import { ClockFace } from './Calendar'
 import { errorText } from './Dialogs'
 import { Icon } from './Icon'
+import { t as tr } from './i18n'
 
 // The phone's Timer (Drive-Android TimerScreen.kt): the Calendar's clock picks hours and minutes, the recently used and
 // pinned times under it, the running ones on top. Each device counts by itself from the timer's file (timer.js).
@@ -10,7 +11,7 @@ import { Icon } from './Icon'
 /** "5 min", "1 h 30 min", "45 s" (timer.js durationText). */
 export function durationText(seconds: number) {
   const h = Math.floor(seconds / 3600), m = Math.floor(seconds % 3600 / 60), s = seconds % 60
-  return [h && `${h} h`, m && `${m} min`, (s || !seconds) && `${s} s`].filter(Boolean).join(' ')
+  return [h && tr('timer.h', { n: h }), m && tr('timer.min', { n: m }), (s || !seconds) && tr('timer.s', { n: s })].filter(Boolean).join(' ')
 }
 /** "4:05", "1:02:00", rounded up so 0:00 is the end. */
 export function clockText(ms: number) {
@@ -36,17 +37,17 @@ export function useTimers() {
 function TimerCard({ t, act }: { t: TimerItem; act: (id: string, a: TimerAction) => void }) {
   return (
     <div className={`timer-card island ${t.ringing ? 'ringing' : ''}`}>
-      <button className={`round flat timer-pin ${t.pinned ? 'on' : ''}`} title={t.pinned ? 'Unpin' : 'Pin: keep this timer'} onClick={() => act(t.id, t.pinned ? 'unpin' : 'pin')}><Icon name="pin" size={18} /></button>
-      <button className="round flat timer-trash" title="Delete" onClick={() => act(t.id, 'trash')}><Icon name="trash" size={18} /></button>
-      <div className="timer-left">{t.ringing ? "Time's up" : clockText(t.ready ? t.seconds * 1000 : t.leftMs)}</div>
-      <div className="timer-name">{t.label || durationText(t.seconds)}{t.state === 'paused' ? ' · paused' : ''}</div>
+      <button className={`round flat timer-pin ${t.pinned ? 'on' : ''}`} title={t.pinned ? tr('timer.unpin') : tr('timer.pinKeep')} onClick={() => act(t.id, t.pinned ? 'unpin' : 'pin')}><Icon name="pin" size={18} /></button>
+      <button className="round flat timer-trash" title={tr('common.delete')} onClick={() => act(t.id, 'trash')}><Icon name="trash" size={18} /></button>
+      <div className="timer-left">{t.ringing ? tr('timer.timesUp') : clockText(t.ready ? t.seconds * 1000 : t.leftMs)}</div>
+      <div className="timer-name">{t.label || durationText(t.seconds)}{t.state === 'paused' ? tr('timer.pausedSuffix') : ''}</div>
       <div className="timer-buttons">
-        {t.ringing ? <button className="filled-button" onClick={() => act(t.id, 'ok')}>OK</button>
-          : t.ready ? <button className="filled-button" onClick={() => act(t.id, 'restart')}><Icon name="play" size={18} /> Start</button> : <>
+        {t.ringing ? <button className="filled-button" onClick={() => act(t.id, 'ok')}>{tr('common.ok')}</button>
+          : t.ready ? <button className="filled-button" onClick={() => act(t.id, 'restart')}><Icon name="play" size={18} /> {tr('common.start')}</button> : <>
           {t.state === 'paused'
-            ? <button className="filled-button" onClick={() => act(t.id, 'resume')}><Icon name="play" size={18} /> Resume</button>
-            : <button className="filled-button" onClick={() => act(t.id, 'pause')}><Icon name="pause" size={18} /> Pause</button>}
-          <button className="outline-button" onClick={() => act(t.id, 'stop')}><Icon name="close" size={18} /> Stop</button>
+            ? <button className="filled-button" onClick={() => act(t.id, 'resume')}><Icon name="play" size={18} /> {tr('common.resume')}</button>
+            : <button className="filled-button" onClick={() => act(t.id, 'pause')}><Icon name="pause" size={18} /> {tr('common.pause')}</button>}
+          <button className="outline-button" onClick={() => act(t.id, 'stop')}><Icon name="close" size={18} /> {tr('common.stop')}</button>
         </>}
       </div>
     </div>
@@ -61,7 +62,7 @@ export function TimerPage({ say }: { say: (text: string) => void }) {
   // the clock opens on the length last started here
   useEffect(() => { window.drive.timer.last().then(s => { if (s) { setH(Math.min(23, Math.floor(s / 3600))); setM(Math.floor(s % 3600 / 60)) } }) }, [])
   // the user, 18 Oct: "play is not needed as soon as I set a timer starts" — the minute let go (or Enter) starts it
-  const start = (hh: number, mm: number) => { const s = hh * 3600 + mm * 60; if (s > 0) window.drive.timer.start(s).then(setLastId, e => say('Not started: ' + errorText(e))) }
+  const start = (hh: number, mm: number) => { const s = hh * 3600 + mm * 60; if (s > 0) window.drive.timer.start(s).then(setLastId, e => say(tr('timer.notStarted', { error: errorText(e) }))) }
   const act = (id: string, a: TimerAction) => window.drive.timer.change(id, a).catch(e => say(errorText(e)))
   // Pause and Stop under the clock: the timer last started here, else the one ending first
   const live = timers.filter(t => !t.ready && !t.ringing)
@@ -70,17 +71,17 @@ export function TimerPage({ say }: { say: (text: string) => void }) {
   return (
     <div className="timer">
       <header className="topbar">
-        <div className="island title-island"><Icon name="timer" /><h1>Timer</h1></div>
+        <div className="island title-island"><Icon name="timer" /><h1>{tr('app.timer')}</h1></div>
         {/* the user, 19 Oct: its own settings at the top right, as the Calendar's */}
         <div className="tools">
           <details className="menu">
-            <summary className="round" title="Timer settings"><Icon name="tune" /></summary>
+            <summary className="round" title={tr('timer.settings')}><Icon name="tune" /></summary>
             <div className="island menu-body cal-settings">
-              <h4 className="cal-share-head">Share with Claude</h4>
-              <p className="muted">Lets Claude start, pause and stop your timers by editing their files.</p>
+              <h4 className="cal-share-head">{tr('calendar.shareClaude')}</h4>
+              <p className="muted">{tr('timer.shareClaudeNote')}</p>
               <div className="cal-two">
-                <button className="text-button" onClick={() => window.drive.skillSave('tetra-timer').then(p => p && say('Saved to ' + p), e => say('Not saved: ' + errorText(e)))}>Save as…</button>
-                <button className="text-button" onClick={() => window.drive.skillInstall('tetra-timer').then(p => say('Installed for Claude Code in ' + p), e => say('Not installed: ' + errorText(e)))}>Copy to ~/.claude/skills</button>
+                <button className="text-button" onClick={() => window.drive.skillSave('tetra-timer').then(p => p && say(tr('calendar.savedTo', { path: p })), e => say(tr('calendar.notSaved', { error: errorText(e) })))}>{tr('calendar.saveAs')}</button>
+                <button className="text-button" onClick={() => window.drive.skillInstall('tetra-timer').then(p => say(tr('calendar.installedIn', { path: p })), e => say(tr('calendar.notInstalled', { error: errorText(e) })))}>{tr('calendar.copyToSkills')}</button>
               </div>
             </div>
           </details>
@@ -92,15 +93,15 @@ export function TimerPage({ say }: { say: (text: string) => void }) {
             <ClockFace h={h} m={m} setH={setH} setM={setM} below onDone={start} />
             <div className="timer-controls">
               {current?.state === 'paused'
-                ? <button className="filled-button" onClick={() => act(current.id, 'resume')}><Icon name="play" size={18} /> Resume</button>
-                : <button className="filled-button" disabled={!current} onClick={() => current && act(current.id, 'pause')}><Icon name="pause" size={18} /> Pause</button>}
-              <button className="outline-button" disabled={!current} onClick={() => current && act(current.id, 'stop')}><Icon name="close" size={18} /> Stop</button>
+                ? <button className="filled-button" onClick={() => act(current.id, 'resume')}><Icon name="play" size={18} /> {tr('common.resume')}</button>
+                : <button className="filled-button" disabled={!current} onClick={() => current && act(current.id, 'pause')}><Icon name="pause" size={18} /> {tr('common.pause')}</button>}
+              <button className="outline-button" disabled={!current} onClick={() => current && act(current.id, 'stop')}><Icon name="close" size={18} /> {tr('common.stop')}</button>
             </div>
           </div>
         </section>
         <section className="timer-cards">
           {timers.map(t => <TimerCard key={t.id} t={t} act={act} />)}
-          {!timers.length && <p className="muted">Set hours and minutes on the clock: the timer starts when the minute hand is let go. Pin a timer to keep it here, ready to start again.</p>}
+          {!timers.length && <p className="muted">{tr('timer.empty')}</p>}
         </section>
       </div>
     </div>
@@ -130,8 +131,8 @@ export function TimerBell() {
   if (!ringing.length) return null
   return (
     <div className="timer-bell island" role="alert">
-      <Icon name="timer" /><b>Time's up</b><span>{ringing.map(t => t.label || durationText(t.seconds)).join(', ')}</span>
-      <button className="filled-button" onClick={() => ringing.forEach(t => window.drive.timer.change(t.id, 'ok'))}>OK</button>
+      <Icon name="timer" /><b>{tr('timer.timesUp')}</b><span>{ringing.map(t => t.label || durationText(t.seconds)).join(', ')}</span>
+      <button className="filled-button" onClick={() => ringing.forEach(t => window.drive.timer.change(t.id, 'ok'))}>{tr('common.ok')}</button>
     </div>
   )
 }

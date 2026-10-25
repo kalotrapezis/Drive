@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Icon, type IconName } from './Icon'
+import { locale, t } from './i18n'
 import { Confirm, Modal, TagsDialog, errorText } from './Dialogs'
 import { Undo, blocks, endsWord, indent, prefix, preview, sortItems, toggleLine, wrap, type Edit, type Inline, type Item } from './notesEdit'
 
@@ -15,7 +16,7 @@ type View = 'home' | 'archived' | 'trash'
 
 const call = <T,>(method: string, ...args: unknown[]) => window.drive.notes<T>(method, ...args)
 const VIEWS: { id: View; name: string; icon: IconName }[] = [
-  { id: 'home', name: 'Notes', icon: 'home' }, { id: 'archived', name: 'Archived', icon: 'archive' }, { id: 'trash', name: 'Trash', icon: 'trash' },
+  { id: 'home', name: 'app.notes', icon: 'home' }, { id: 'archived', name: 'notes.archived', icon: 'archive' }, { id: 'trash', name: 'notes.trash', icon: 'trash' },
 ]
 // Keep's palette, which the imported notes already use.
 const COLORS = ['#F28B82', '#FBBC04', '#FFF475', '#CCFF90', '#A7FFEB', '#CBF0F8', '#AECBFA', '#D7AEFB', '#FDCFE8', '#E6C9A8', '#E8EAED']
@@ -75,9 +76,9 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
     if (message) say(message, undo && (() => { undo().then(reload) }))
     else if (n && !n.title.trim() && !n.content.trim() && !(n.checklistItems ?? []).some(i => i.text.trim())) call('remove', n.id).then(reload) // nothing written: no note
   }
-  const emptyTrash = () => setDialog(<Confirm title="Empty the notes Trash?" action="Delete for good" danger onClose={close}
-    body="Every note in the Trash is deleted. Their saved versions stay in the notes' history folder."
-    onConfirm={async () => { for (const n of shown) await call('remove', n.id); reload(); say('Notes Trash emptied') }} />)
+  const emptyTrash = () => setDialog(<Confirm title={t('notes.emptyTrashTitle')} action={t('notes.deleteForGood')} danger onClose={close}
+    body={t('notes.emptyTrashBody')}
+    onConfirm={async () => { for (const n of shown) await call('remove', n.id); reload(); say(t('notes.trashEmptied')) }} />)
 
   // Ctrl+N a note, Ctrl+Shift+N a checklist, from anywhere on the page but the editor.
   useEffect(() => {
@@ -94,55 +95,55 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
   return (
     <div className="notes">
       <header className="notes-top">
-        <h1>{label ?? (everywhere ? 'All notes' : VIEWS.find(v => v.id === view)!.name)}</h1>
-        {label && <button className="chip on" title="Show every label" onClick={() => setLabel(null)}>{label} ✕</button>}
+        <h1>{label ?? (everywhere ? t('notes.allNotes') : t(VIEWS.find(v => v.id === view)!.name))}</h1>
+        {label && <button className="chip on" title={t('notes.showEveryLabel')} onClick={() => setLabel(null)}>{label} ✕</button>}
         <label className="notes-search island"><Icon name="search" size={20} />
-          <input placeholder="Search notes" value={query} onChange={e => setQuery(e.target.value)} /></label>
-        {trash && shown.length > 0 && <button className="text-button" onClick={emptyTrash}>Empty Trash</button>}
+          <input placeholder={t('notes.search')} value={query} onChange={e => setQuery(e.target.value)} /></label>
+        {trash && shown.length > 0 && <button className="text-button" onClick={emptyTrash}>{t('notes.emptyTrash')}</button>}
       </header>
-      {!notes ? <div className="empty">Loading…</div> : shown.length === 0 ? (
-        <div className="empty"><p>{query ? 'No note matches.' : trash ? 'The Trash is empty. Notes stay here 30 days.' : view === 'archived' ? 'Nothing archived.' : 'No notes yet. Start one below.'}</p></div>
+      {!notes ? <div className="empty">{t('common.loading')}</div> : shown.length === 0 ? (
+        <div className="empty"><p>{query ? t('notes.noMatch') : trash ? t('notes.trashEmpty') : view === 'archived' ? t('notes.nothingArchived') : t('notes.noNotes')}</p></div>
       ) : (
         <div className={`notes-scroll ${selected.size ? 'selecting' : ''}`}>
-          {pinned.length > 0 && <><h4 className="notes-section">Pinned</h4><div className="notes-grid">{cards(pinned)}</div>{others.length > 0 && <h4 className="notes-section">Others</h4>}</>}
+          {pinned.length > 0 && <><h4 className="notes-section">{t('notes.pinned')}</h4><div className="notes-grid">{cards(pinned)}</div>{others.length > 0 && <h4 className="notes-section">{t('notes.others')}</h4>}</>}
           <div className="notes-grid">{cards(others)}</div>
         </div>
       )}
 
       <div className={`notes-drawer island ${drawer ? 'open' : ''}`} aria-hidden={!drawer}>
-        <h4><Icon name="label" size={18} />Labels</h4>
+        <h4><Icon name="label" size={18} />{t('notes.labels')}</h4>
         <div className="chips wrap">
-          <button className={`chip ${label ? '' : 'on'}`} onClick={() => { setLabel(null); setDrawer(false) }}>All</button>
+          <button className={`chip ${label ? '' : 'on'}`} onClick={() => { setLabel(null); setDrawer(false) }}>{t('common.all')}</button>
           {labels.map(([l, n]) => <button key={l} className={`chip ${label === l ? 'on' : ''}`} onClick={() => { setLabel(l); setDrawer(false) }}>{l} <small>{n}</small></button>)}
         </div>
       </div>
       <div className="notes-dock">
         {selected.size > 0 ? (
           <nav className="notes-island island">
-            <button className="round flat" title="Clear selection (Esc)" onClick={() => setSelected(new Set())}><Icon name="close" /></button>
+            <button className="round flat" title={t('notes.clearSelection')} onClick={() => setSelected(new Set())}><Icon name="close" /></button>
             <strong className="island-count">{selected.size}</strong>
             {trash ? <>
-              <button className="island-item" onClick={() => act('Restored', { trashedAt: null })}><Icon name="undo" size={20} /><span>Restore</span></button>
-              <button className="island-item" onClick={() => setDialog(<Confirm title={`Delete ${picked.length} for good?`} action="Delete" danger onClose={close}
-                body="Their saved versions stay in the history folder." onConfirm={async () => { for (const n of picked) await call('remove', n.id); setSelected(new Set()); reload(); say('Deleted') }} />)}><Icon name="deleteForever" size={20} /><span>Delete</span></button>
+              <button className="island-item" onClick={() => act(t('notes.restored'), { trashedAt: null })}><Icon name="undo" size={20} /><span>{t('common.restore')}</span></button>
+              <button className="island-item" onClick={() => setDialog(<Confirm title={t('notes.deleteForGoodTitle', { count: picked.length })} action={t('common.delete')} danger onClose={close}
+                body={t('notes.deleteManyBody')} onConfirm={async () => { for (const n of picked) await call('remove', n.id); setSelected(new Set()); reload(); say(t('notes.deleted')) }} />)}><Icon name="deleteForever" size={20} /><span>{t('common.delete')}</span></button>
             </> : <>
-              <button className="island-item" onClick={() => { const all = picked.every(n => n.isPinned); act(all ? 'Unpinned' : 'Pinned', { isPinned: !all }) }}><Icon name="pin" size={20} /><span>{picked.every(n => n.isPinned) ? 'Unpin' : 'Pin'}</span></button>
-              {picked.every(n => n.archivedAt) ? <button className="island-item" onClick={() => act('Unarchived', { archivedAt: null })}><Icon name="unarchive" size={20} /><span>Unarchive</span></button>
-                : <button className="island-item" onClick={() => act('Archived', { archivedAt: Date.now() })}><Icon name="archive" size={20} /><span>Archive</span></button>}
-              <button className="island-item" onClick={() => act('Moved to Trash', { trashedAt: Date.now() })}><Icon name="trash" size={20} /><span>Trash</span></button>
+              <button className="island-item" onClick={() => { const all = picked.every(n => n.isPinned); act(all ? t('notes.unpinned') : t('notes.pinnedDone'), { isPinned: !all }) }}><Icon name="pin" size={20} /><span>{picked.every(n => n.isPinned) ? t('notes.unpin') : t('notes.pin')}</span></button>
+              {picked.every(n => n.archivedAt) ? <button className="island-item" onClick={() => act(t('notes.unarchived'), { archivedAt: null })}><Icon name="unarchive" size={20} /><span>{t('notes.unarchive')}</span></button>
+                : <button className="island-item" onClick={() => act(t('notes.archivedDone'), { archivedAt: Date.now() })}><Icon name="archive" size={20} /><span>{t('notes.archive')}</span></button>}
+              <button className="island-item" onClick={() => act(t('notes.movedToTrash'), { trashedAt: Date.now() })}><Icon name="trash" size={20} /><span>{t('notes.trash')}</span></button>
             </>}
           </nav>
         ) : (
           <nav className="notes-island island">
             {/* Home, the two ways to start, then Archived and Trash; pulled up, the labels. */}
-            <button className={`island-item ${view === 'home' ? 'on' : ''}`} onClick={() => go('home')}><Icon name="home" size={20} /><span>Home</span></button>
-            <button className="island-item" title="New note (Ctrl+N)" onClick={() => create('TEXT')}><Icon name="noteAdd" size={20} /><span>Note</span></button>
-            <button className="island-item" title="New checklist (Ctrl+Shift+N)" onClick={() => create('CHECKLIST')}><Icon name="checklist" size={20} /><span>Checklist</span></button>
+            <button className={`island-item ${view === 'home' ? 'on' : ''}`} onClick={() => go('home')}><Icon name="home" size={20} /><span>{t('notes.home')}</span></button>
+            <button className="island-item" title={t('notes.newNote')} onClick={() => create('TEXT')}><Icon name="noteAdd" size={20} /><span>{t('notes.note')}</span></button>
+            <button className="island-item" title={t('notes.newChecklist')} onClick={() => create('CHECKLIST')}><Icon name="checklist" size={20} /><span>{t('notes.checklist')}</span></button>
             <span className="island-gap" />
             {VIEWS.filter(v => v.id !== 'home').map(v => <button key={v.id} className={`island-item ${view === v.id ? 'on' : ''}`} onClick={() => go(v.id)}>
-              <Icon name={v.icon} size={20} /><span>{v.name}</span></button>)}
+              <Icon name={v.icon} size={20} /><span>{t(v.name)}</span></button>)}
             {/* The labels open from a button of their own (asked 2026-09-26: a grip to drag is not how a computer works). */}
-            <button className={`island-item ${drawer ? 'on' : ''}`} aria-expanded={drawer} onClick={() => setDrawer(d => !d)}><Icon name="label" size={20} /><span>{label ?? 'Labels'}</span></button>
+            <button className={`island-item ${drawer ? 'on' : ''}`} aria-expanded={drawer} onClick={() => setDrawer(d => !d)}><Icon name="label" size={20} /><span>{label ?? t('notes.labels')}</span></button>
           </nav>
         )}
       </div>
@@ -160,7 +161,7 @@ function NoteCard({ note, small, selected, onSelect, onOpen }: { note: Note; sma
       onPointerUp={() => clearTimeout(hold.current)} onPointerLeave={() => clearTimeout(hold.current)}
       onClick={e => { if (held.current) return; if ((e.ctrlKey || e.metaKey) && onSelect) onSelect(); else onOpen() }}>
       {/* A check to select by, as on photos: shown on hover, and on every card while choosing. */}
-      {onSelect && <span className="check" title="Select" onClick={e => { e.stopPropagation(); onSelect() }}><Icon name={selected ? 'checked' : 'unchecked'} size={24} /></span>}
+      {onSelect && <span className="check" title={t('notes.select')} onClick={e => { e.stopPropagation(); onSelect() }}><Icon name={selected ? 'checked' : 'unchecked'} size={24} /></span>}
       {note.isPinned && !small && <span className="note-pin"><Icon name="pin" size={16} /></span>}
       {note.title && <strong>{note.title}</strong>}
       {preview(note, small ? 3 : 8).map((l, i) => <span key={i} className="note-line">{l}</span>)}
@@ -256,7 +257,7 @@ function NoteEditor({ initial, setDialog, onClose }: {
     requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(next.start, next.end) })
   }
   const link = () => format(e => {
-    const text = e.text.slice(e.start, e.end) || 'link'
+    const text = e.text.slice(e.start, e.end) || t('notes.linkText')
     const md = `[${text}](https://)`
     return { text: e.text.slice(0, e.start) + md + e.text.slice(e.end), start: e.start + text.length + 3, end: e.start + md.length - 1 }
   })
@@ -273,12 +274,12 @@ function NoteEditor({ initial, setDialog, onClose }: {
   const history = () => setDialog(<HistoryDialog id={initial.id} onClose={close} onRestore={n => edit({ title: n.title, content: n.content ?? '', items: n.checklistItems ?? [] }, true)} />)
   // Labels, chosen or created in the same dialog as Files' tags (asked 2026-09-26); only those a note outside the Trash
   // carries are offered, so one taken off its last note is gone (asked 2026-09-28).
-  const tags = () => call<Note[]>('list').then(all => setDialog(<TagsDialog noun="label" title={`Labels for \u201c${title || 'Untitled'}\u201d`} initial={meta.labels}
+  const tags = () => call<Note[]>('list').then(all => setDialog(<TagsDialog noun="label" title={t('notes.labelsFor', { title: title || t('notes.untitled') })} initial={meta.labels}
     known={all.filter(n => !n.trashedAt && n.id !== initial.id).flatMap(n => n.labels ?? [])} onClose={close} onSave={async labels => { await setMetaNow({ labels }) }} />))
-  const toTrash = () => { changed.current = true; flush.current().then(() => call('save', initial.id, { trashedAt: Date.now() })).then(() => leave('Note moved to Trash', () => call('save', initial.id, { trashedAt: null }))) }
+  const toTrash = () => { changed.current = true; flush.current().then(() => call('save', initial.id, { trashedAt: Date.now() })).then(() => leave(t('notes.noteToTrash'), () => call('save', initial.id, { trashedAt: null }))) }
   const archive = () => {
     const on = !meta.archivedAt
-    setMetaNow({ archivedAt: on ? Date.now() : undefined }).then(() => on ? leave('Note archived', () => call('save', initial.id, { archivedAt: null })) : undefined)
+    setMetaNow({ archivedAt: on ? Date.now() : undefined }).then(() => on ? leave(t('notes.noteArchived'), () => call('save', initial.id, { archivedAt: null })) : undefined)
   }
   const tool = (icon: IconName, label: string, run: () => void, on = false) => (
     <button className={`round flat ${on ? 'on' : ''}`} title={label} aria-label={label} onClick={run} disabled={trashed}><Icon name={icon} size={20} /></button>
@@ -289,59 +290,59 @@ function NoteEditor({ initial, setDialog, onClose }: {
       {/* Two lines (asked 2026-09-26): the note's own buttons with what became of it — saved, synced — on top, the
           writing tools under them; on a narrow window either wraps rather than hides. */}
       <header className="editor-bar island">
-        <button className="round flat" title="Back (Esc)" onClick={() => leave()}><Icon name="back" /></button>
-        {tool('undo', 'Undo (Ctrl+Z)', () => apply(undo.current.undo()))}
-        {tool('redo', 'Redo (Ctrl+Y)', () => apply(undo.current.redo()))}
+        <button className="round flat" title={t('notes.backEsc')} onClick={() => leave()}><Icon name="back" /></button>
+        {tool('undo', t('notes.undo'), () => apply(undo.current.undo()))}
+        {tool('redo', t('notes.redo'), () => apply(undo.current.redo()))}
         <span className="bar-gap" />
         {trashed ? <>
           <span className="bar-fill" />
-          <button className="text-button" onClick={() => call('save', initial.id, { trashedAt: null }).then(() => leave('Note restored'))}>Restore</button>
-          <button className="text-button danger" onClick={() => setDialog(<Confirm title="Delete this note for good?" action="Delete" danger onClose={close}
-            body="Its saved versions stay in the history folder." onConfirm={() => { left.current = true; return call('remove', initial.id).then(() => onClose(null, 'Note deleted')) }} />)}>Delete for good</button>
+          <button className="text-button" onClick={() => call('save', initial.id, { trashedAt: null }).then(() => leave(t('notes.noteRestored')))}>{t('common.restore')}</button>
+          <button className="text-button danger" onClick={() => setDialog(<Confirm title={t('notes.deleteOneTitle')} action={t('common.delete')} danger onClose={close}
+            body={t('notes.deleteOneBody')} onConfirm={() => { left.current = true; return call('remove', initial.id).then(() => onClose(null, t('notes.noteDeleted'))) }} />)}>{t('notes.deleteForGood')}</button>
         </> : <>
-          {tool('label', 'Labels', tags, meta.labels.length > 0)}
+          {tool('label', t('notes.labels'), tags, meta.labels.length > 0)}
           <span className="palette-anchor">
-            {tool('palette', 'Colour', () => setTools(t => !t), tools)}
+            {tool('palette', t('notes.colour'), () => setTools(t => !t), tools)}
             {tools && <div className="palette-pop island">
-              <button className={`swatch none ${meta.color ? '' : 'on'}`} title="No colour" onClick={() => { setMetaNow({ color: undefined }); setTools(false) }} />
+              <button className={`swatch none ${meta.color ? '' : 'on'}`} title={t('notes.noColour')} onClick={() => { setMetaNow({ color: undefined }); setTools(false) }} />
               {COLORS.map(c => <button key={c} className={`swatch ${meta.color === c ? 'on' : ''}`} style={{ background: c }} title={c} onClick={() => { setMetaNow({ color: c }); setTools(false) }} />)}
             </div>}
           </span>
-          {tool('history', 'History', history)}
-          {!checklist && tool(reading ? 'editNote' : 'visibility', reading ? 'Edit' : 'Read', () => setReading(r => !r), reading)}
-          {tool('pin', meta.isPinned ? 'Unpin' : 'Pin', () => setMetaNow({ isPinned: !meta.isPinned }), meta.isPinned)}
-          {tool(meta.archivedAt ? 'unarchive' : 'archive', meta.archivedAt ? 'Unarchive' : 'Archive', archive)}
-          {tool('trash', 'Move to Trash', toTrash)}
+          {tool('history', t('notes.history'), history)}
+          {!checklist && tool(reading ? 'editNote' : 'visibility', reading ? t('common.edit') : t('notes.read'), () => setReading(r => !r), reading)}
+          {tool('pin', meta.isPinned ? t('notes.unpin') : t('notes.pin'), () => setMetaNow({ isPinned: !meta.isPinned }), meta.isPinned)}
+          {tool(meta.archivedAt ? 'unarchive' : 'archive', meta.archivedAt ? t('notes.unarchive') : t('notes.archive'), archive)}
+          {tool('trash', t('notes.moveToTrash'), toTrash)}
           <span className="bar-fill" />
-          <span className="note-status" title="Saved on this computer">{saveState === 'saving' ? 'Saving…' : 'Saved'}</span>
-          <span className="note-status" title="The last time a device took the notes">{synced && synced.at >= savedAt ? `Synced with ${synced.device} · ${new Date(synced.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Not synced yet'}</span>
+          <span className="note-status" title={t('notes.savedHereTip')}>{saveState === 'saving' ? t('notes.saving') : t('notes.saved')}</span>
+          <span className="note-status" title={t('notes.syncedTip')}>{synced && synced.at >= savedAt ? t('notes.syncedWith', { device: synced.device, time: new Date(synced.at).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }) }) : t('notes.notSynced')}</span>
         </>}
         {!trashed && !checklist && !reading && <div className="editor-tools-row">
-          {tool('heading', 'Heading', () => format(x => prefix(x, '# ')))}
-          {tool('bold', 'Bold (Ctrl+B)', () => format(x => wrap(x, '**')))}
-          {tool('italic', 'Italic (Ctrl+I)', () => format(x => wrap(x, '*')))}
-          {tool('strike', 'Strikethrough', () => format(x => wrap(x, '~~')))}
-          {tool('code', 'Code', () => format(x => wrap(x, '`')))}
+          {tool('heading', t('notes.heading'), () => format(x => prefix(x, '# ')))}
+          {tool('bold', t('notes.bold'), () => format(x => wrap(x, '**')))}
+          {tool('italic', t('notes.italic'), () => format(x => wrap(x, '*')))}
+          {tool('strike', t('notes.strike'), () => format(x => wrap(x, '~~')))}
+          {tool('code', t('notes.code'), () => format(x => wrap(x, '`')))}
           <span className="bar-gap" />
-          {tool('bullets', 'Bulleted list', () => format(x => prefix(x, '- ')))}
-          {tool('numbered', 'Numbered list', () => format(x => prefix(x, '1. ')))}
-          {tool('checkBox', 'Checkbox list', () => format(x => prefix(x, '- [ ] ')))}
-          {tool('quote', 'Quote', () => format(x => prefix(x, '> ')))}
-          {tool('link', 'Link', link)}
-          {tool('rule', 'Divider', () => format(x => ({ text: x.text.slice(0, x.end) + '\n\n---\n' + x.text.slice(x.end), start: x.end + 6, end: x.end + 6 })))}
+          {tool('bullets', t('notes.bullets'), () => format(x => prefix(x, '- ')))}
+          {tool('numbered', t('notes.numbered'), () => format(x => prefix(x, '1. ')))}
+          {tool('checkBox', t('notes.checkboxes'), () => format(x => prefix(x, '- [ ] ')))}
+          {tool('quote', t('notes.quote'), () => format(x => prefix(x, '> ')))}
+          {tool('link', t('notes.link'), link)}
+          {tool('rule', t('notes.divider'), () => format(x => ({ text: x.text.slice(0, x.end) + '\n\n---\n' + x.text.slice(x.end), start: x.end + 6, end: x.end + 6 })))}
           <span className="bar-gap" />
-          {tool('indent', 'Indent', () => format(x => indent(x, false)))}
-          {tool('outdent', 'Outdent', () => format(x => indent(x, true)))}
+          {tool('indent', t('notes.indent'), () => format(x => indent(x, false)))}
+          {tool('outdent', t('notes.outdent'), () => format(x => indent(x, true)))}
         </div>}
       </header>
 
       <div className={`editor-page ${meta.color ? 'tinted' : ''}`}>
         {/* Enter in the title goes on to the body (asked 2026-09-26): the text, or a checklist's first item. */}
-        <input className="editor-title" placeholder="Title" value={title} readOnly={trashed}
+        <input className="editor-title" placeholder={t('notes.title')} value={title} readOnly={trashed}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); checklist ? setToBody(n => n + 1) : area.current?.focus() } }} onChange={e => edit({ title: e.target.value }, false, endsWord(title, e.target.value, e.target.selectionStart ?? 0))} />
         {checklist ? <Checklist items={items} readOnly={trashed} focusFirst={toBody} onChange={(next, step) => edit({ items: next }, step)} />
           : reading ? <Rendered md={content} onToggle={line => edit({ content: toggleLine(content, line) }, true)} />
-          : <textarea ref={area} className="editor-body" placeholder="Write here. **bold**, *italic*, - [ ] a checkbox…" value={content} readOnly={trashed}
+          : <textarea ref={area} className="editor-body" placeholder={t('notes.writeHere')} value={content} readOnly={trashed}
               autoFocus={!initial.content && !!initial.title} onChange={e => edit({ content: e.target.value }, false, endsWord(content, e.target.value, e.target.selectionStart ?? 0))} />}
         {!!meta.labels.length && <div className="note-labels">{meta.labels.map(l => <small key={l}>{l}</small>)}</div>}
       </div>
@@ -372,22 +373,22 @@ function Checklist({ items, readOnly, focusFirst, onChange }: { items: Item[]; r
   }
   const row = (i: Item) => (
     <div key={i.id} className={`check-item ${i.isChecked ? 'done' : ''}`}>
-      <button className="round flat" title={i.isChecked ? 'Not done' : 'Done'} disabled={readOnly}
+      <button className="round flat" title={i.isChecked ? t('notes.notDone') : t('common.done')} disabled={readOnly}
         onClick={() => set(i.id, { isChecked: !i.isChecked, ...(i.isChecked ? { order: open.length } : {}) }, true)}><Icon name={i.isChecked ? 'checkBox' : 'checkBoxBlank'} size={20} /></button>
-      <input ref={el => { if (el) inputs.current.set(i.id, el); else inputs.current.delete(i.id) }} value={i.text} readOnly={readOnly} placeholder="Item"
+      <input ref={el => { if (el) inputs.current.set(i.id, el); else inputs.current.delete(i.id) }} value={i.text} readOnly={readOnly} placeholder={t('notes.item')}
         onChange={e => set(i.id, { text: e.target.value })}
         onKeyDown={e => {
           if (e.key === 'Enter') { e.preventDefault(); insertAfter(i.id) }
           else if (e.key === 'Backspace' && !i.text) { e.preventDefault(); remove(i.id) }
         }} />
-      {!readOnly && <button className="round flat item-x" title="Remove item" onClick={() => remove(i.id)}><Icon name="close" size={18} /></button>}
+      {!readOnly && <button className="round flat item-x" title={t('notes.removeItem')} onClick={() => remove(i.id)}><Icon name="close" size={18} /></button>}
     </div>
   )
   return (
     <div className="checklist">
       {open.map(row)}
-      {!readOnly && <button className="text-button add-item" onClick={() => insertAfter(null)}><Icon name="add" size={18} /> Add item</button>}
-      {done.length > 0 && <><div className="check-divider">{done.length} done</div>{done.map(row)}</>}
+      {!readOnly && <button className="text-button add-item" onClick={() => insertAfter(null)}><Icon name="add" size={18} /> {t('notes.addItem')}</button>}
+      {done.length > 0 && <><div className="check-divider">{t('notes.doneCount', { count: done.length })}</div>{done.map(row)}</>}
     </div>
   )
 }
@@ -417,19 +418,19 @@ function HistoryDialog({ id, onClose, onRestore }: { id: string; onClose: () => 
   useEffect(() => { call<Version[]>('history', id).then(setVersions, e => setError(errorText(e))) }, [id])
   return (
     <Modal onClose={onClose}>
-      <h3>History</h3>
-      <p>The note as it was before you last changed it, and as you left it — the newest three. Restoring keeps the current one too.</p>
+      <h3>{t('notes.history')}</h3>
+      <p>{t('notes.historyNote')}</p>
       {error && <p className="error">{error}</p>}
       <div className="versions">
-        {versions?.length === 0 && <p>No versions yet.</p>}
+        {versions?.length === 0 && <p>{t('notes.noVersions')}</p>}
         {versions?.map(v => (
           <div key={v.name} className="version">
-            <div><strong>{new Date(v.at).toLocaleString()}</strong><small>{v.title || 'Untitled'} · {preview({ content: v.content, checklistItems: v.checklistItems, noteType: v.checklistItems ? 'CHECKLIST' : 'TEXT' }, 2).join(' · ')}</small></div>
-            <button className="text-button" onClick={() => call<Note>('restoreVersion', id, v.name).then(n => { onRestore(n); onClose() }, e => setError(errorText(e)))}>Restore</button>
+            <div><strong>{new Date(v.at).toLocaleString(locale())}</strong><small>{v.title || t('notes.untitled')} · {preview({ content: v.content, checklistItems: v.checklistItems, noteType: v.checklistItems ? 'CHECKLIST' : 'TEXT' }, 2).join(' · ')}</small></div>
+            <button className="text-button" onClick={() => call<Note>('restoreVersion', id, v.name).then(n => { onRestore(n); onClose() }, e => setError(errorText(e)))}>{t('common.restore')}</button>
           </div>
         ))}
       </div>
-      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Close</button></div>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.close')}</button></div>
     </Modal>
   )
 }
