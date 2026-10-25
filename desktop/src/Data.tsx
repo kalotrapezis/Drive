@@ -96,7 +96,7 @@ export function DataPage() {
     const phone = devices.slice().sort((a, b) => mobileOf(b) - mobileOf(a))[0]
     return { devices, phone }
   }, [all])
-  if (!all || !view) return <main className="page"><p className="muted">Reading…</p></main>
+  if (!all || !view) return <main className="page-scroll"><p className="muted">Reading…</p></main>
   const { devices, phone } = view
 
   // the plan's status, as the phone's DataRules.status
@@ -179,7 +179,7 @@ export function DataPage() {
   const W = 640, H = 200, slot = W / bars.length
 
   return (
-    <main className="page" style={{ overflow: 'auto', padding: '24px 32px', display: 'grid', gap: 18, alignContent: 'start', maxWidth: 1100 }}>
+    <main className="page-scroll" style={{ padding: '24px 32px 48px', display: 'grid', gap: 18, alignContent: 'start' }}>
       <section style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
         <svg width={120} height={120} viewBox="0 0 120 120">
           <circle cx={60} cy={60} r={50} fill="none" stroke="var(--thumb-bg)" strokeWidth={12} />
@@ -198,6 +198,9 @@ export function DataPage() {
         </div>
       </section>
 
+      {/* two columns side by side when the window is wide, one under the other when not; the page scrolls */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(560px, 100%), 1fr))', gap: 18, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gap: 18, alignContent: 'start' }}>
       <section style={card}>
         <div style={h3}>
           <span><b>{fmt(start)} – {fmt(addDays(end, -1))}</b>{' '}
@@ -247,6 +250,8 @@ export function DataPage() {
           {tips.map(([t, x]) => <p key={t} style={{ margin: '10px 0 0' }}><b>{t}</b><br />{x}</p>)}
         </div>}
       </section>
+      </div>
+      <div style={{ display: 'grid', gap: 18, alignContent: 'start' }}>
 
       <section style={card}>
         <div style={h3}><b>Apps{picked ? ` · ${fmt(parseDay(picked))}` : ''}</b>{picked && <button className="chip" onClick={() => setPicked(null)}>All the cycle</button>}</div>
@@ -287,6 +292,7 @@ export function DataPage() {
           {drops.map((e, i) => <p key={i} style={{ margin: '4px 0' }}>{new Date(e.at!).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {e.device} · {DROPS[e.event!]} {e.secs ? `${e.secs >= 60 ? `${Math.floor(e.secs / 60)} min ` : ''}${e.secs % 60} s` : ''}{e.note ? ` (${e.note})` : ''}</p>)}
         </div>
       </section>
+      </div></div>
     </main>
   )
 }
