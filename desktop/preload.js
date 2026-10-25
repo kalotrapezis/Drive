@@ -70,7 +70,7 @@ contextBridge.exposeInMainWorld('drive', {
   mapsNear: (lat, lng, name) => ipcRenderer.invoke('maps:near', lat, lng, name),
   mapsGoogle: q => ipcRenderer.invoke('maps:google', q),
   mapsWeb: url => ipcRenderer.invoke('maps:web', url),
-  mapsRoute: (points, mode) => ipcRenderer.invoke('maps:route', points, mode),
+  mapsRoute: (points, mode, main) => ipcRenderer.invoke('maps:route', points, mode, main),
   mapsPhoneLocation: () => ipcRenderer.invoke('maps:phoneLocation'),
   onMapsChanged: cb => { const f = () => cb(); ipcRenderer.on('maps-changed', f); return () => ipcRenderer.removeListener('maps-changed', f) },
   onTimerChanged: cb => { const f = () => cb(); ipcRenderer.on('timer-changed', f); return () => ipcRenderer.removeListener('timer-changed', f) },

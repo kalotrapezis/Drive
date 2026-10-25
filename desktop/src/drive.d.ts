@@ -215,7 +215,7 @@ declare global {
       mapsGoogle(query: string): Promise<void>
       mapsWeb(url: string): Promise<void>
       /** Directions on this computer (router.js): the line, metres, seconds and turns from the first point through the others. */
-      mapsRoute(points: { lat: number; lng: number }[], mode: 'car' | 'foot' | 'bike' | 'wheelchair'): Promise<{ metres: number; seconds: number; line: [number, number][]; steps: { text: string; metres: number; seconds: number; sign: number }[] }>
+      mapsRoute(points: { lat: number; lng: number }[], mode: 'car' | 'foot' | 'bike' | 'wheelchair', main?: boolean): Promise<{ metres: number; seconds: number; line: [number, number][]; steps: { text: string; metres: number; seconds: number; sign: number }[] }>
       mapsPhoneLocation(): Promise<{ lat: number; lng: number; accuracy: number; at: number; provider: string; device: string; error?: undefined } | { error: string }>
       onMapsChanged(cb: () => void): () => void
       onNotesChanged(cb: () => void): () => void
