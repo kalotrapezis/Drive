@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Icon, type IconName } from './Icon'
 import { Modal } from './Dialogs'
+import { CallBadge, DIR, key, length, when } from './Phone'
 
 // Contacts on the computer (Drive-Android Plan.md § Contacts): the same files as the phone's, read on every look and
 // watched; laid out as the tablet's — the list at the left, the open contact at the right, Notes' island and drawer.
@@ -52,7 +53,7 @@ const letter = (c: Contact) => { const ch = (c.key || '')[0]; return ch && /\p{L
 /** A contact's round face: the photo, or the initial on the soft brown. */
 function Face({ c, size }: { c: Pick<Contact, 'photo' | 'name'>; size: number }) {
   const first = c.name.trim()[0]
-  return c.photo ? <img className="ct-face" src={`data:image/jpeg;base64,${c.photo}`} style={{ width: size, height: size }} alt="" />
+  return c.photo ? <img className="ct-face" src={`data:image/jpeg;base64,${c.photo}`} style={{ width: size, height: size }} alt="" loading="lazy" decoding="async" />
     : <span className="ct-face ct-initial" style={{ width: size, height: size, fontSize: size * 0.42 }}>{first && /[\p{L}\p{N}]/u.test(first) ? first.toUpperCase() : <Icon name="person" size={size * 0.55} />}</span>
 }
 
@@ -100,6 +101,18 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
     return hit && (tab === 'favourites' ? c.favourite : tab === 'labels' && label ? c.labels.some(l => l.toLowerCase() === label.toLowerCase()) : true)
   }), [list, query, tab, label])
   const contact = list.find(c => c.uid === open) || null
+  // the favourites: a grid of two rows, not a row to scroll (the user, 25 Oct); more than fit: the last cell opens Favourites
+  const favs = useMemo(() => list.filter(c => c.favourite), [list])
+  const favsBox = useRef<HTMLDivElement>(null)
+  const [favCols, setFavCols] = useState(4)
+  useEffect(() => {
+    const el = favsBox.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setFavCols(Math.max(1, Math.floor((el.clientWidth - 24 + 14) / (64 + 14)))))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [favs.length > 0, tab, query, label])
+  const favRoom = favCols * 2
   const allLabels = useMemo(() => [...new Set(list.flatMap(c => c.labels))].sort((a, b) => a.localeCompare(b)), [list])
   const save = (was: Contact | null, c: Contact) => act(async () => { const uid = await call<string>('save', was?.uid ?? null, c); setOpen(uid); setEditing(null) }, was ? 'Saved' : 'Contact created')
   const toggle = (uid: string) => setPicked(p => { const n = new Set(p); if (n.has(uid)) n.delete(uid); else n.add(uid); return n })
@@ -111,8 +124,9 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
         {allLabels.map(l => <button key={l} className="ct-row" onClick={() => setLabel(l)}><Icon name="tag" /><span className="ct-name">{l}</span><small>{list.filter(c => c.labels.includes(l)).length}</small></button>)}
       </> : <>
         {label && <div className="chips"><button className="chip on" onClick={() => setLabel(null)}>{label} ✕</button></div>}
-        {tab === 'all' && !query && !label && list.some(c => c.favourite) && <div className="ct-favs">
-          {list.filter(c => c.favourite).map(c => <button key={c.uid} className="ct-fav" onClick={() => { setOpen(c.uid); autoOpened.current = false }} title={c.name}><Face c={c} size={52} /><small>{c.given || c.name}</small></button>)}
+        {tab === 'all' && !query && !label && favs.length > 0 && <div className="ct-favs" ref={favsBox}>
+          {(favs.length > favRoom ? favs.slice(0, favRoom - 1) : favs).map(c => <button key={c.uid} className="ct-fav" onClick={() => { setOpen(c.uid); autoOpened.current = false }} title={c.name}><Face c={c} size={52} /><small>{c.given || c.name}</small></button>)}
+          {favs.length > favRoom && <button className="ct-fav" onClick={() => setTab('favourites')} title="All favourites"><span className="ct-face ct-more" style={{ width: 52, height: 52 }}>+{favs.length - favRoom + 1}</span><small>All</small></button>}
         </div>}
         {loaded === null && <div className="ct-loading"><span className="spinner" />Reading your contacts…</div>}
         {loaded !== null && shown.length === 0 && <p className="hint ct-hint">{list.length === 0 ? 'No contacts yet. The phone\'s come with sync; Import in the drawer takes a .vcf, Google\'s CSV or Takeout\'s zip.' : query ? `No one matches "${query}".` : tab === 'favourites' ? 'No favourites yet: the star on a contact adds one.' : 'No one here.'}</p>}
@@ -220,6 +234,23 @@ function Page({ c, all, edit, openUid, openPerson, setDialog, setDefault, star, 
   const choose = (title: string, ways: [string, () => void][]) => ways.length === 1 ? ways[0][1]() : setDialog(<Modal onClose={() => setDialog(null)}><h3>{title}</h3>
     <div className="ct-ways">{ways.map(([label, go]) => <button key={label} className="ct-way" onClick={() => { setDialog(null); go() }}>{label}</button>)}</div>
     <div className="dialog-actions"><button className="text-button" onClick={() => setDialog(null)}>Cancel</button></div></Modal>)
+  // at the end, the calls with them and their recordings (the user, 25 Oct): the phone's call history (Phone/calls-*.jsonl)
+  // by contact or number, the last 50; recordings named "2026-10-25 12.04 <name or number>.ogg" (calls.js)
+  const [calls, setCalls] = useState<Awaited<ReturnType<typeof window.drive.phoneHistory>>>([])
+  const [recordings, setRecordings] = useState<Awaited<ReturnType<typeof window.drive.phoneRecordings>>>([])
+  useEffect(() => {
+    const keys = new Set(c.phones.map(p => key(p.value)).filter(k => k.length >= 5))
+    const named = (title: string) => plain(title) === plain(c.name.replace(/[/\\:*?"<>|]/g, '-').slice(0, 60)) || keys.has(key(title))
+    window.drive.phoneHistory().then(h => setCalls(h.filter(l => l.contact === c.uid || keys.has(key(l.number))).slice(0, 50)), () => setCalls([]))
+    window.drive.phoneRecordings().then(r => setRecordings(r.filter(x => named(x.name.replace(/\.[^.]+$/, '').replace(/^\d{4}-\d{2}-\d{2} \d{2}\.\d{2} /, '')))), () => setRecordings([]))
+  }, [c.uid, c.name, c.phones.map(p => p.value).join()])
+  const callRow = (l: (typeof calls)[number], k: number) => <div key={k} className="ct-detail"><CallBadge dir={l.dir} size={28} />
+    <div><small>{`${DIR[l.dir]?.[1] ?? l.dir}${l.secs > 0 ? ' · ' + length(l.secs) : ''}${c.phones.length > 1 ? ' · ' + l.number : ''}`}</small><span style={l.dir === 'missed' ? { color: '#D93A3A' } : undefined}>{when(l.at)}</span></div></div>
+  const recordingRow = (r: (typeof recordings)[number]) => <div key={r.name} className="ct-detail"><Icon name="mic" size={20} />
+    <div><small>{Math.round(r.size / 1024)} KB</small><button className="ct-link" onClick={() => window.drive.phoneOpenRecording(r.name).catch(e => say(errorText(e)))}>{r.name.slice(0, 16).replace('.', ':')}</button></div></div>
+  const seeAll = (what: 'History' | 'Recordings') => setDialog(<Modal onClose={() => setDialog(null)}><h3>{what} · {c.name}</h3>
+    <div className="ct-card ct-all">{what === 'History' ? calls.map(callRow) : recordings.map(recordingRow)}</div>
+    <div className="dialog-actions"><button className="text-button" onClick={() => setDialog(null)}>Close</button></div></Modal>)
   const [person, setPerson] = useState<{ name: string; count: number } | null>(null)
   useEffect(() => { setPerson(null); if (c.person) window.drive.people.list().then(ps => { const p = ps.find(x => x.id === c.person); setPerson(p ? { name: p.name, count: p.count } : null) }).catch(() => {}) }, [c.uid, c.person])
   const Row = ({ icon, label, value, onClick, action }: { icon: IconName; label: string; value: string; onClick?: () => void; action?: ReactNode }) =>
@@ -268,6 +299,11 @@ function Page({ c, all, edit, openUid, openPerson, setDialog, setDefault, star, 
         {c.labels.length > 0 && <Row icon="tag" label="Labels" value={c.labels.join(' · ')} />}
         {c.note && <Row icon="notes" label="Notes" value={c.note} />}
       </div>}
+      {/* the latest three of each, See all on its own page; "No recordings so far" (the user, 25 Oct) */}
+      {c.phones.length > 0 && <div className="ct-section"><h3>History</h3>{calls.length > 3 && <button className="text-button" onClick={() => seeAll('History')}>See all {calls.length}</button>}</div>}
+      {c.phones.length > 0 && <div className="ct-card">{calls.length ? calls.slice(0, 3).map(callRow) : <p className="hint ct-none">No calls so far</p>}</div>}
+      <div className="ct-section"><h3>Recordings</h3>{recordings.length > 3 && <button className="text-button" onClick={() => seeAll('Recordings')}>See all {recordings.length}</button>}</div>
+      <div className="ct-card">{recordings.length ? recordings.slice(0, 3).map(recordingRow) : <p className="hint ct-none">No recordings so far</p>}</div>
     </div>
   )
 }
