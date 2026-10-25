@@ -1,7 +1,8 @@
 'use strict'
 // Data on the computer (Drive-Android Plan.md § Data): this computer's own counts from Linux's network counters, written
 // as its month files in Files/Data/usage (the phone's and the tablet's come there with sync), its Wi-Fi signal for the
-// phone's "Phone as hotspot", and a speed test the phone runs against it. Per program counts need root on Linux: not done.
+// phone's "Phone as hotspot", and a speed test the phone runs against it. Per program: each TCP connection's bytes as `ss` shows
+// them for this user's programs (no root); what TCP does not carry (calls, video over UDP, QUIC) is "Other".
 const fs = require('fs')
 const path = require('path')
 const { execFile } = require('child_process')
@@ -18,20 +19,44 @@ function parseIw(text) {
   return { rssi: n(/signal:\s*(-?\d+)/), speed: Math.round(n(/tx bitrate:\s*([\d.]+)/)), mhz: Math.round(n(/freq:\s*([\d.]+)/)), ssid: (/SSID:\s*(.+)/.exec(text) || [])[1]?.trim() || '' }
 }
 
+/** A program's name as people know it (ss gives the process's). */
+const PROGRAMS = { chrome: 'Chrome', chromium: 'Chromium', 'firefox-bin': 'Firefox', firefox: 'Firefox', claude: 'Claude', 'claude-desktop': 'Claude', 'thunderbird-bin': 'Thunderbird',
+  thunderbird: 'Thunderbird', Viber: 'Viber', megasync: 'MEGA', teams: 'Teams', 'teams-for-linux': 'Teams', zoom: 'Zoom', spotify: 'Spotify', 'local-drive-des': 'Tetra', code: 'VS Code' }
+const programName = raw => PROGRAMS[raw] || raw.replace(/-bin$/, '').replace(/^./, c => c.toUpperCase())
+
+/** `ss -tinpH`: each connection (its two ends and its process) with the bytes it carried, both ways, so far. */
+function parseSs(text) {
+  const out = new Map()
+  let head = null
+  for (const line of String(text).split('\n')) {
+    if (!line.startsWith('\t') && !line.startsWith(' ') && line.trim()) {
+      const m = /^\S+\s+\S+\s+(\S+)\s+(\S+)\s+users:\(\("([^"]+)",pid=(\d+)/.exec(line.trim())
+      head = m ? { key: `${m[1]}|${m[2]}|${m[4]}`, name: m[3] } : null
+    } else if (head) {
+      const acked = /bytes_acked:(\d+)/.exec(line), received = /bytes_received:(\d+)/.exec(line)
+      out.set(head.key, { name: head.name, bytes: (acked ? Number(acked[1]) : 0) + (received ? Number(received[1]) : 0) })
+      head = null
+    }
+  }
+  return out
+}
+
 /** A month file's lines, as the phone's DataFiles writes them. */
 function monthText(m, name = '') {
   const days = [...m.days.values()].sort((a, b) => a.d.localeCompare(b.d)).map(d => JSON.stringify({ d: d.d, mobile: 0, wifi: d.wifi, roam: 0, hotspot: 0, via: d.via, ...(d.eth ? { eth: d.eth } : {}) }))
   const hours = [...m.hours.entries()].sort().map(([k, b]) => { const [h, net] = k.split('|'); return JSON.stringify({ h, net, bytes: b }) })
   const events = m.events.slice().sort((a, b) => a.at.localeCompare(b.at)).map(e => JSON.stringify({ at: e.at, event: e.event, secs: e.secs, ...(e.note ? { note: e.note } : {}) }))
-  return [...(name ? [JSON.stringify({ deviceName: name })] : []), ...days, ...hours, ...events].map(l => l + '\n').join('')
+  const apps = [...(m.apps || new Map()).entries()].sort().map(([k, b]) => { const [d, app, net] = k.split('|'); return JSON.stringify({ d, app, name: app === 'other' ? 'Other (calls, video, UDP)' : app, net, fg: b, bg: 0, roam: 0 }) })
+  return [...(name ? [JSON.stringify({ deviceName: name })] : []), ...days, ...hours, ...apps, ...events].map(l => l + '\n').join('')
 }
 
 function parseMonth(text) {
-  const m = { days: new Map(), hours: new Map(), events: [] }
+  const m = { days: new Map(), hours: new Map(), events: [], apps: new Map() }
   for (const l of String(text).split('\n')) {
     let o; try { o = JSON.parse(l) } catch { continue }
     if (o.event) m.events.push({ at: o.at, event: o.event, secs: o.secs || 0, note: o.note || '' })
     else if (o.deviceName) continue
+    else if (o.app) m.apps.set(`${o.d}|${o.app}|${o.net}`, (Number(o.fg) || 0) + (Number(o.bg) || 0))
     else if (o.h) m.hours.set(`${o.h}|${o.net}`, Number(o.bytes) || 0)
     else if (o.d && !o.app) m.days.set(o.d, { d: o.d, wifi: Number(o.wifi) || 0, via: Number(o.via) || 0, ...(o.eth ? { eth: Number(o.eth) } : {}) })
   }
@@ -48,6 +73,19 @@ class DataCounter {
     this.link = null // { iface, metered, ssid, since }
     this.lostAt = 0
     this.ownBytes = 0 // Tetra's own sync with the phone over its hotspot: on the LAN, never on the mobile network
+    this.sockets = new Map() // each TCP connection's bytes at the last look
+    this.appBytes = new Map() // program → bytes since the last minute
+  }
+
+  /** A look at the connections (every 15 s: a short one is caught before it closes): what each program carried since. */
+  async sampleApps(text) {
+    const now = parseSs(text ?? await run('ss', ['-tinpH', 'state', 'established']))
+    for (const [key, s] of now) {
+      const before = this.sockets.get(key)?.bytes ?? 0
+      const delta = s.bytes >= before ? s.bytes - before : s.bytes
+      if (delta > 0) this.appBytes.set(programName(s.name), (this.appBytes.get(programName(s.name)) || 0) + delta)
+    }
+    this.sockets = now
   }
 
   /** A sync connection closed: its bytes are Tetra's own, left out of what this computer used over the phone's hotspot. */
@@ -129,6 +167,18 @@ class DataCounter {
       for (const d of deltas) if (d.via) { const own = Math.min(this.ownBytes, d.bytes); d.viaBytes = d.bytes - own; this.ownBytes -= own }
       this.ownBytes = 0
       this.add(now, deltas)
+      // the programs' share of this minute, on the link it went over; what TCP did not show is "other"
+      const kind = metered ? 'hotspot' : link ? 'wifi' : this.ethernet() ? 'wired' : 'wifi'
+      const total = deltas.reduce((s, d) => s + d.bytes, 0)
+      let named = 0
+      const m = this.month(hourKey(now).slice(0, 7)); m.apps ||= new Map()
+      const day = hourKey(now).slice(0, 10)
+      for (const [app, b] of this.appBytes) {
+        const net = app === 'Tetra' ? 'wifi' : kind // Tetra's own sync is with the phone, on the LAN
+        m.apps.set(`${day}|${app}|${net}`, (m.apps.get(`${day}|${app}|${net}`) || 0) + b); named += b
+      }
+      if (total > named) m.apps.set(`${day}|other|${kind}`, (m.apps.get(`${day}|other|${kind}`) || 0) + total - named)
+      this.appBytes.clear()
     }
     // a drop: the Wi-Fi gone and back within ten minutes (longer is leaving)
     if (!link && this.link) this.lostAt = now.getTime()
@@ -166,8 +216,11 @@ class DataCounter {
     for (const k of [...this.pending.keys()]) if (k !== keep) this.pending.delete(k)
   }
 
-  start() { this.tick().catch(() => {}); this.timer = setInterval(() => this.tick().catch(() => {}), 60_000) }
-  stop() { clearInterval(this.timer); try { this.flush() } catch {} }
+  start() {
+    this.tick().catch(() => {}); this.timer = setInterval(() => this.tick().catch(() => {}), 60_000)
+    this.sampleApps().catch(() => {}); this.appTimer = setInterval(() => this.sampleApps().catch(() => {}), 15_000)
+  }
+  stop() { clearInterval(this.timer); clearInterval(this.appTimer); try { this.flush() } catch {} }
 
   /** What this computer's Wi-Fi is now, for the phone's "Phone as hotspot". */
   async wifi() {
@@ -197,4 +250,4 @@ class DataCounter {
   }
 }
 
-module.exports = { DataCounter, parseIw, parseMonth, monthText, hourKey }
+module.exports = { DataCounter, parseIw, parseMonth, monthText, hourKey, parseSs, programName }

@@ -58,6 +58,22 @@ test('no Data folder until Data is set up', async () => {
 })
 
 test('a month reads back as written', () => {
-  const m = { days: new Map([['2026-10-25', { d: '2026-10-25', wifi: 7, via: 3 }]]), hours: new Map([['2026-10-25T10|wifi', 7]]), events: [{ at: '2026-10-25T10:00:00+03:00', event: 'drop-wifi', secs: 40, note: 'Home' }] }
+  const m = { days: new Map([['2026-10-25', { d: '2026-10-25', wifi: 7, via: 3 }]]), hours: new Map([['2026-10-25T10|wifi', 7]]), events: [{ at: '2026-10-25T10:00:00+03:00', event: 'drop-wifi', secs: 40, note: 'Home' }], apps: new Map([['2026-10-25|Chrome|wifi', 5]]) }
   assert.deepEqual(parseMonth(monthText(m)), m)
+})
+
+test('each program\'s bytes from ss, and what TCP did not show as Other', async () => {
+  const { c, root, set } = counter()
+  c.onHotspot = true
+  const ss = (a, b) => `0 0 10.0.0.2:5000 1.2.3.4:443 users:(("chrome",pid=10,fd=3))\n\t cubic bytes_acked:${a} bytes_received:${b} segs_out:1\n` +
+    `0 0 10.0.0.2:5001 5.6.7.8:443 users:(("Viber",pid=11,fd=4))\n\t cubic bytes_acked:100 bytes_received:900\n`
+  const t = new Date(2026, 9, 25, 12, 0, 0)
+  set({ wlan0: { rx: 0, tx: 0, wireless: true } }); await c.sampleApps(ss(0, 0)); await c.tick(t)
+  await c.sampleApps(ss(1000, 4000)) // Chrome: 5000 since; Viber: the 1000 its first look found
+  set({ wlan0: { rx: 9000, tx: 1000, wireless: true } }); await c.tick(t)
+  c.flush(t)
+  const text = fs.readFileSync(path.join(root, 'usage', '2026-10.my-pc.jsonl'), 'utf8')
+  const apps = text.split('\n').filter(l => l.includes('"app"')).map(l => JSON.parse(l))
+  assert.deepEqual(apps.map(a => [a.app, a.net, a.fg]).sort(), [['Chrome', 'hotspot', 5000], ['Viber', 'hotspot', 1000], ['other', 'hotspot', 4000]])
+  assert.equal(apps.find(a => a.app === 'other').name, 'Other (calls, video, UDP)')
 })
