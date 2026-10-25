@@ -52,7 +52,7 @@ const letter = (c: Contact) => { const ch = (c.key || '')[0]; return ch && /\p{L
 /** A contact's round face: the photo, or the initial on the soft brown. */
 function Face({ c, size }: { c: Pick<Contact, 'photo' | 'name'>; size: number }) {
   const first = c.name.trim()[0]
-  return c.photo ? <img className="ct-face" src={`data:image/jpeg;base64,${c.photo}`} style={{ width: size, height: size }} alt="" />
+  return c.photo ? <img className="ct-face" src={`data:image/jpeg;base64,${c.photo}`} style={{ width: size, height: size }} alt="" loading="lazy" decoding="async" />
     : <span className="ct-face ct-initial" style={{ width: size, height: size, fontSize: size * 0.42 }}>{first && /[\p{L}\p{N}]/u.test(first) ? first.toUpperCase() : <Icon name="person" size={size * 0.55} />}</span>
 }
 
@@ -100,6 +100,18 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
     return hit && (tab === 'favourites' ? c.favourite : tab === 'labels' && label ? c.labels.some(l => l.toLowerCase() === label.toLowerCase()) : true)
   }), [list, query, tab, label])
   const contact = list.find(c => c.uid === open) || null
+  // the favourites: a grid of two rows, not a row to scroll (the user, 25 Oct); more than fit: the last cell opens Favourites
+  const favs = useMemo(() => list.filter(c => c.favourite), [list])
+  const favsBox = useRef<HTMLDivElement>(null)
+  const [favCols, setFavCols] = useState(4)
+  useEffect(() => {
+    const el = favsBox.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setFavCols(Math.max(1, Math.floor((el.clientWidth - 24 + 14) / (64 + 14)))))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [favs.length > 0, tab, query, label])
+  const favRoom = favCols * 2
   const allLabels = useMemo(() => [...new Set(list.flatMap(c => c.labels))].sort((a, b) => a.localeCompare(b)), [list])
   const save = (was: Contact | null, c: Contact) => act(async () => { const uid = await call<string>('save', was?.uid ?? null, c); setOpen(uid); setEditing(null) }, was ? 'Saved' : 'Contact created')
   const toggle = (uid: string) => setPicked(p => { const n = new Set(p); if (n.has(uid)) n.delete(uid); else n.add(uid); return n })
@@ -111,8 +123,9 @@ export function ContactsPage({ setDialog, say, openPerson }: { setDialog: (d: Re
         {allLabels.map(l => <button key={l} className="ct-row" onClick={() => setLabel(l)}><Icon name="tag" /><span className="ct-name">{l}</span><small>{list.filter(c => c.labels.includes(l)).length}</small></button>)}
       </> : <>
         {label && <div className="chips"><button className="chip on" onClick={() => setLabel(null)}>{label} ✕</button></div>}
-        {tab === 'all' && !query && !label && list.some(c => c.favourite) && <div className="ct-favs">
-          {list.filter(c => c.favourite).map(c => <button key={c.uid} className="ct-fav" onClick={() => { setOpen(c.uid); autoOpened.current = false }} title={c.name}><Face c={c} size={52} /><small>{c.given || c.name}</small></button>)}
+        {tab === 'all' && !query && !label && favs.length > 0 && <div className="ct-favs" ref={favsBox}>
+          {(favs.length > favRoom ? favs.slice(0, favRoom - 1) : favs).map(c => <button key={c.uid} className="ct-fav" onClick={() => { setOpen(c.uid); autoOpened.current = false }} title={c.name}><Face c={c} size={52} /><small>{c.given || c.name}</small></button>)}
+          {favs.length > favRoom && <button className="ct-fav" onClick={() => setTab('favourites')} title="All favourites"><span className="ct-face ct-more" style={{ width: 52, height: 52 }}>+{favs.length - favRoom + 1}</span><small>All</small></button>}
         </div>}
         {loaded === null && <div className="ct-loading"><span className="spinner" />Reading your contacts…</div>}
         {loaded !== null && shown.length === 0 && <p className="hint ct-hint">{list.length === 0 ? 'No contacts yet. The phone\'s come with sync; Import in the drawer takes a .vcf, Google\'s CSV or Takeout\'s zip.' : query ? `No one matches "${query}".` : tab === 'favourites' ? 'No favourites yet: the star on a contact adds one.' : 'No one here.'}</p>}
