@@ -121,11 +121,12 @@ export function Timeline({ items, title, tools, empty, level, setLevel, selected
       </header>
       {banner}
       {items.length === 0 && <div className="empty">{empty}</div>}
-      {groups.map(g => (
+      {groups.map((g, gi) => (
         // content-visibility skips layout/paint of off-screen periods, so large libraries stay smooth.
         <section key={g.key} className="period" data-label={g.label}
           style={{ containIntrinsicSize: `auto ${48 + Math.ceil(g.items.length / columns) * (cell + GAP)}px` }}>
           <h2>{g.label}<span>{g.items.length}</span></h2>
+          <Near root={scroller} first={gi < 4} height={Math.ceil(g.items.length / columns) * (cell + GAP) - GAP}>{() =>
           <div className="grid" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: GAP }}>
             {g.items.map(m => (
               <button key={m.id} className={`thumb ${selected.has(m.id) ? 'selected' : ''}`} style={{ height: cell }} title={m.path}
@@ -137,9 +138,25 @@ export function Timeline({ items, title, tools, empty, level, setLevel, selected
                 <span className="check" title="Select"><Icon name={selected.has(m.id) ? 'checked' : 'unchecked'} size={24} /></span>
               </button>
             ))}
-          </div>
+          </div>}</Near>
         </section>
       ))}
     </div>
   )
 }
+
+/**
+ * A period's photos made only when it is within two screens of the view, and let go farther away: the whole library made
+ * at once (16 619 photos) kept the window busy 0.6 s each time Photos opened (25 Oct). Until then, the room they take.
+ */
+function Near({ root, first, height, children }: { root: React.RefObject<HTMLDivElement | null>; first: boolean; height: number; children: () => ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [near, setNear] = useState(first)
+  useEffect(() => {
+    const io = new IntersectionObserver(([e]) => setNear(e.isIntersecting), { root: root.current, rootMargin: '200% 0px' })
+    io.observe(ref.current!)
+    return () => io.disconnect()
+  }, [root])
+  return <div ref={ref} style={near ? undefined : { height }}>{near ? children() : null}</div>
+}
+
