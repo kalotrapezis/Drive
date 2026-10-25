@@ -11,18 +11,23 @@ type Logged = { at: string; number: string; dir: 'in' | 'out' | 'missed' | 'decl
 type Recording = { name: string; size: number; at: number }
 type Tab = 'recents' | 'favourites' | 'contacts' | 'recordings'
 const PHONE = '#168C93'
-const key = (n: string) => n.replace(/\D/g, '').slice(-9)
+export const key = (n: string) => n.replace(/\D/g, '').slice(-9)
 const errorText = (e: unknown) => (e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e))
 const KEYS: [string, string][] = [['1', ''], ['2', 'ABC ΑΒΓ'], ['3', 'DEF ΔΕΖ'], ['4', 'GHI ΗΘΙ'], ['5', 'JKL ΚΛΜ'], ['6', 'MNO ΝΞΟ'], ['7', 'PQRS ΠΡΣ'], ['8', 'TUV ΤΥΦ'], ['9', 'WXYZ ΧΨΩ'], ['*', ''], ['0', '+'], ['#', '']]
-const DIR = { in: ['callReceived', 'Incoming'], out: ['callMade', 'Outgoing'], missed: ['callMissed', 'Missed'], declined: ['callEnd', 'Declined'], blocked: ['block', 'Blocked'], voicemail: ['callReceived', 'Voicemail'] } as const
-const when = (iso: string) => {
+export const DIR = { in: ['callReceived', 'Incoming'], out: ['callMade', 'Outgoing'], missed: ['callMissed', 'Missed'], declined: ['callEnd', 'Declined'], blocked: ['block', 'Blocked'], voicemail: ['callReceived', 'Voicemail'] } as const
+// a white arrow on a coloured round (the user, 25 Oct: "barely noticeable what is what"): in green, out blue, missed and declined red
+const DIR_COLOR = { in: '#2E9E5B', out: '#2F7DD9', missed: '#D93A3A', declined: '#D93A3A', blocked: '#7A7F84', voicemail: '#2E9E5B' } as const
+export function CallBadge({ dir, size }: { dir: Logged['dir']; size: number }) {
+  return <span className="call-badge" style={{ width: size, height: size, background: DIR_COLOR[dir] ?? DIR_COLOR.in }} title={(DIR[dir] || DIR.in)[1]}><Icon name={(DIR[dir] || DIR.in)[0]} size={Math.round(size * 0.68)} /></span>
+}
+export const when = (iso: string) => {
   const d = new Date(iso), now = new Date(), day = 86_400_000
   const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
   const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   const ago = (startOf(now) - startOf(d)) / day
   return ago === 0 ? time : ago === 1 ? `Yesterday ${time}` : ago < 7 ? `${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${time}` : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' })
 }
-const length = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`)
+export const length = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`)
 
 function Face({ c, size }: { c?: Pick<Contact, 'photo' | 'name'>; size: number }) {
   const first = c?.name.trim()[0]
@@ -96,11 +101,11 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
             </> : <>
             {calls && !calls.length && <p className="hint ct-hint">The phone's calls show here once Tetra is the phone's phone app (Settings › Phone on the phone).</p>}
             {shownCalls.map((l, i) => {
-              const c = who(l.number), [icon, what] = DIR[l.dir] || DIR.in
+              const c = who(l.number), [, what] = DIR[l.dir] || DIR.in
               return <div key={l.at + i} className="ct-row" title={l.note || undefined}>
                 <Face c={c} size={40} />
                 <span className="ct-name"><span style={l.dir === 'missed' ? { color: '#d93a3a' } : undefined}>{c?.name || l.name || l.number || 'Hidden number'}</span>
-                  <small>{l.number && isSpam(l.number) && <b style={{ color: '#d93a3a' }}>Spam · </b>}<span style={{ verticalAlign: 'middle', color: l.dir === 'missed' ? '#d93a3a' : 'var(--ct)' }}><Icon name={icon} size={14} /></span> {what} · {when(l.at)}{l.secs > 0 ? ` · ${length(l.secs)}` : ''}{l.note ? ` · ${l.note}` : ''}</small></span>
+                  <small>{l.number && isSpam(l.number) && <b style={{ color: '#d93a3a' }}>Spam · </b>}<CallBadge dir={l.dir} size={18} /> {what} · {when(l.at)}{l.secs > 0 ? ` · ${length(l.secs)}` : ''}{l.note ? ` · ${l.note}` : ''}</small></span>
                 {l.number && !c && lookUp(l.number) && <button className="round flat" title="Look it up on CallInsider (opens the browser)" onClick={() => window.drive.contactsOpen('web', lookUp(l.number)!)}><Icon name="search" /></button>}
                 {l.number && !c && !inRange(l.number) && <button className="round flat" title={isSpam(l.number) ? 'Not spam' : 'Spam: never ring again'} onClick={() => markSpam(l.number, !isSpam(l.number))}><span style={{ color: isSpam(l.number) ? 'var(--muted)' : '#d93a3a', display: 'grid' }}><Icon name="block" /></span></button>}
                 {l.number && <button className="round flat" title="Call" onClick={() => callNow(l.number, c?.name)}><Icon name="call" /></button>}
