@@ -83,3 +83,14 @@ test('this computer, the local network, the internet', () => {
   assert.equal(reach('10.71.129.171:43180'), 'lan'); assert.equal(reach('192.168.1.19:443'), 'lan'); assert.equal(reach('[fe80::1%wlan0]:80'), 'lan')
   assert.equal(reach('172.217.168.129:443'), 'internet'); assert.equal(reach('[2a00:1450::1]:443'), 'internet')
 })
+
+test('the cleanup: sync copies, half-written files, and the detail of old months go', () => {
+  const { c, root } = counter()
+  const dir = path.join(root, 'usage'); fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, '2026-10.phone (2).jsonl'), 'x'); fs.writeFileSync(path.join(dir, '.2026-10.my-pc.jsonl.tmp'), 'x')
+  fs.writeFileSync(path.join(dir, '2024-01.my-pc.jsonl'), '{"d":"2024-01-02","mobile":0,"wifi":5,"roam":0,"hotspot":0,"via":0}\n{"h":"2024-01-02T10","net":"wifi","bytes":5}\n{"d":"2024-01-02","app":"Chrome","name":"Chrome","net":"wifi","fg":5,"bg":0,"roam":0}\n')
+  fs.writeFileSync(path.join(dir, '2026-10.phone.jsonl'), 'kept')
+  c.clean(new Date(2026, 9, 25))
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['2024-01.my-pc.jsonl', '2026-10.phone.jsonl'])
+  assert.equal(fs.readFileSync(path.join(dir, '2024-01.my-pc.jsonl'), 'utf8'), '{"deviceName":"my-pc"}\n{"d":"2024-01-02","mobile":0,"wifi":5,"roam":0,"hotspot":0,"via":0}\n')
+})

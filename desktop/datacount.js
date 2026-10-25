@@ -223,7 +223,9 @@ class DataCounter {
         const text = monthText(m, this.name)
         let old = ''
         try { old = fs.readFileSync(f, 'utf8') } catch {}
-        if (old !== text) { fs.writeFileSync(f + '.tmp', text); fs.renameSync(f + '.tmp', f); this.changed?.() }
+        // beside it under a dot name (sync passes those by), then renamed over
+        const tmp = path.join(path.dirname(f), `.${path.basename(f)}.tmp`)
+        if (old !== text) { fs.writeFileSync(tmp, text); fs.renameSync(tmp, f); this.changed?.() }
       } catch (e) { console.log('[data] not written:', e.message) }
     }
     // only this month stays in memory
@@ -231,7 +233,29 @@ class DataCounter {
     for (const k of [...this.pending.keys()]) if (k !== keep) this.pending.delete(k)
   }
 
+  /**
+   * Nothing left behind (the user, 25 Oct): sync's copies of the months, half-written files of an interrupted write, and — after
+   * 13 months — this computer's per-program and hourly detail of a month (its days stay).
+   */
+  clean(now = new Date()) {
+    const dir = path.join(this.root, 'usage')
+    let names = []
+    try { names = fs.readdirSync(dir) } catch { return }
+    const old = hourKey(new Date(now.getFullYear(), now.getMonth() - 13, 1)).slice(0, 7)
+    for (const n of names) {
+      const f = path.join(dir, n)
+      try {
+        if (/\.tmp$/.test(n) || /^\d{4}-\d{2}\.[^ ()]+ \(\d+\)\.jsonl$/.test(n)) fs.unlinkSync(f)
+        else if (n.endsWith(`.${this.device}.jsonl`) && n.slice(0, 7) < old) {
+          const m = parseMonth(fs.readFileSync(f, 'utf8'))
+          if (m.apps.size || m.hours.size) { m.apps.clear(); m.hours.clear(); fs.writeFileSync(f, monthText(m, this.name)) }
+        }
+      } catch {}
+    }
+  }
+
   start() {
+    this.clean()
     this.tick().catch(() => {}); this.timer = setInterval(() => this.tick().catch(() => {}), 60_000)
     this.sampleApps().catch(() => {}); this.appTimer = setInterval(() => this.sampleApps().catch(() => {}), 15_000)
   }
@@ -254,7 +278,9 @@ class DataCounter {
     let names = []
     try { names = fs.readdirSync(path.join(this.root, 'usage')) } catch {}
     for (const n of names) {
-      const m = /^(\d{4}-\d{2})\.(.+)\.jsonl$/.exec(n)
+      // a device's month; sync's copies of one changed on both sides at once ("… (2).jsonl") are not it, and go
+      if (/^\d{4}-\d{2}\.[^ ()]+ \(\d+\)\.jsonl$/.test(n)) { try { fs.unlinkSync(path.join(this.root, 'usage', n)) } catch {} ; continue }
+      const m = /^(\d{4}-\d{2})\.([^ ()]+)\.jsonl$/.exec(n)
       if (!m) continue
       let text = ''
       try { text = fs.readFileSync(path.join(this.root, 'usage', n), 'utf8') } catch { continue }
