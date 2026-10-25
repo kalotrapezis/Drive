@@ -144,7 +144,7 @@ const NOTE_PATHS = {
 }
 Object.assign(PATHS, NOTE_PATHS)
 
-export type IconName = keyof typeof PATHS | keyof typeof NOTE_PATHS | keyof typeof FOLDER_EMBLEMS
+export type IconName = keyof typeof PATHS | keyof typeof NOTE_PATHS | keyof typeof FOLDER_EMBLEMS | keyof typeof SMALL
 
 // Motion off (asked 2026-09-27, "like the real thing"): the Motion icon with a gap cut along a slash, then the slash.
 const MOTION_GAP = 'M64-960H960V-64ZM0-896V0H896Z', MOTION_SLASH = 'M161-841L841-161L799-119L119-799Z'
@@ -160,6 +160,8 @@ const EVEN_ODD = new Set<string>(['folderScans', ...Object.values(SYSTEM_FOLDER_
 
 // The phone's own drawables on a 24 grid (Material Icons), for the Hide tools shared with it.
 const SMALL = {
+  dataUsage: 'M13,2.05v3.03c3.39,0.49 6,3.39 6,6.92 0,0.9 -0.18,1.75 -0.48,2.54l2.6,1.53c0.56,-1.24 0.88,-2.62 0.88,-4.07 0,-5.18 -3.95,-9.45 -9,-9.95zM12,19c-3.87,0 -7,-3.13 -7,-7 0,-3.53 2.61,-6.43 6,-6.92V2.05c-5.06,0.5 -9,4.76 -9,9.95 0,5.52 4.47,10 9.99,10 3.31,0 6.24,-1.61 8.06,-4.09l-2.6,-1.53C16.17,17.98 14.21,19 12,19z',
+  wifi: 'M1,9l2,2c4.97,-4.97 13.03,-4.97 18,0l2,-2C16.93,2.93 7.08,2.93 1,9zM9,17l3,3 3,-3c-1.65,-1.66 -4.34,-1.66 -6,0zM5,13l2,2c2.76,-2.76 7.24,-2.76 10,0l2,-2C15.14,9.14 8.87,9.14 5,13z',
   textFields: 'M2.5,4v3h5v12h3V7h5V4H2.5zM21.5,9h-9v3h3v7h3v-7h3V9z',
   star: 'M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z',
   square: 'M18,4H6C4.9,4 4,4.9 4,6v12c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V6C20,4.9 19.1,4 18,4zM18,18H6V6h12V18z',

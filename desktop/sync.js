@@ -90,8 +90,8 @@ async function copyVerified(src, dest, expected) {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan); onSent({ device, paths }) after a burst of Send to computer. */
-  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, onCall = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null }) {
-    Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, onSent, onCall, port, beaconPort, trashItem, purgatory })
+  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, onCall = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null, data = null }) {
+    Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, onSent, onCall, port, beaconPort, trashItem, purgatory, data })
     this.sentQuiet = 2000 // a share's files arrive one after another: one notification once they stop
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
@@ -167,6 +167,8 @@ class SyncServer {
       if (!e.expose) console.error(`[sync] ${req.method} ${req.url} failed:`, e)
       this.send(res, e.status ?? 500, { error: e.expose ? e.message : 'Server error' })
     }))
+    // Data: a connection's bytes are Tetra's own sync, which Data leaves out of this computer's use of the phone's hotspot
+    this.server.on('connection', s => s.once('close', () => this.data?.own(s.bytesRead + s.bytesWritten)))
     await new Promise((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.port, '0.0.0.0', resolve) })
     this.port = this.server.address().port
     await this.listenForProbes(this.beaconPort)
@@ -1403,6 +1405,20 @@ class SyncServer {
       if (s.state === 'ended') this.tabletCall = null
       this.toTablets(s)
       return this.send(res, 200, { ok: true })
+    }
+    // Data (Drive-Android Plan.md § Data): this computer's Wi-Fi for the phone's "Phone as hotspot", and the phone's speed test to it
+    if (req.method === 'POST' && url.pathname === '/data/wifi') return this.send(res, 200, this.data ? await this.data.wifi() : { error: 'No Data here.' })
+    if (req.method === 'GET' && url.pathname === '/data/speed') {
+      let left = Math.min(Math.max(Number(url.searchParams.get('n')) || 0, 0), 100_000_000)
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': left })
+      const chunk = Buffer.alloc(65536)
+      const more = () => { while (left > 0) { const n = Math.min(left, chunk.length); left -= n; if (!res.write(n === chunk.length ? chunk : chunk.subarray(0, n))) return res.once('drain', more) } res.end() }
+      return more()
+    }
+    if (req.method === 'POST' && url.pathname === '/data/speed') {
+      let bytes = 0
+      for await (const c of req) { bytes += c.length; if (bytes > 200_000_000) break }
+      return this.send(res, 200, { bytes })
     }
     // a tablet's Phone: the call placed by the phone, and the tablet's call notification's buttons done by the phone
     if (req.method === 'POST' && url.pathname === '/call/place') {
