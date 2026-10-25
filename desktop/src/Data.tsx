@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 // Files/Data/usage say, the phone's hotspot split, the drops, and this computer's own Wi-Fi now. Read only: the plan is
 // set up on the phone (Setup there); this computer adds its own counts (datacount.js).
 
-type Line = { d?: string; h?: string; app?: string; net?: string; mobile?: number; wifi?: number; roam?: number; hotspot?: number; via?: number; bytes?: number; at?: string; event?: string; secs?: number; note?: string }
+type Line = { deviceName?: string; d?: string; h?: string; app?: string; net?: string; mobile?: number; wifi?: number; roam?: number; hotspot?: number; via?: number; bytes?: number; at?: string; event?: string; secs?: number; note?: string }
 type Plan = { kind: string; size: number; every: string; day: number; days: number; from: string; warn: number[] }
 type All = { plan: Plan | null; devices: Record<string, Line[]>; me: string }
 type Wifi = { rssi?: number; speed?: number; mhz?: number; ssid?: string; error?: string }
@@ -56,7 +56,7 @@ export function DataPage() {
     const devices = Object.entries(all.devices).map(([name, lines]) => {
       const m = days(lines)
       const cyc = [...m.values()].filter(l => inCycle(l.d!))
-      return { name, days: m, mobile: cyc.reduce((s, l) => s + (l.mobile || 0), 0), wifi: cyc.reduce((s, l) => s + (l.wifi || 0), 0),
+      return { name: lines.find(l => l.deviceName)?.deviceName || name, id: name, days: m, mobile: cyc.reduce((s, l) => s + (l.mobile || 0), 0), wifi: cyc.reduce((s, l) => s + (l.wifi || 0), 0),
         hotspot: cyc.reduce((s, l) => s + (l.hotspot || 0), 0), via: cyc.reduce((s, l) => s + (l.via || 0), 0),
         drops: lines.filter(l => l.event && DROPS[l.event]).map(l => ({ ...l, device: name })) }
     }).filter(d => d.mobile + d.wifi > 0 || d.drops.length)
@@ -99,7 +99,7 @@ export function DataPage() {
       <section>
         <h3>This cycle, by device</h3>
         {devices.length === 0 && <p className="muted">Nothing counted yet.</p>}
-        {devices.map(d => <p key={d.name} style={{ margin: '4px 0' }}><b>{d.name}{d.name === all.me ? ' (this computer)' : ''}</b>: {[d.mobile ? `mobile ${bytes(d.mobile)}` : '', `Wi-Fi ${bytes(d.wifi)}`, d.via ? `over the phone's hotspot ${bytes(d.via)}` : ''].filter(Boolean).join(' · ')}</p>)}
+        {devices.map(d => <p key={d.name} style={{ margin: '4px 0' }}><b>{d.name}{d.id === all.me ? ' (this computer)' : ''}</b>: {[d.mobile ? `mobile ${bytes(d.mobile)}` : '', `Wi-Fi ${bytes(d.wifi)}`, d.via ? `over the phone's hotspot ${bytes(d.via)}` : ''].filter(Boolean).join(' · ')}</p>)}
       </section>
 
       {(hotspot > 0 || clients.length > 0) && <section>

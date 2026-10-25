@@ -19,11 +19,11 @@ function parseIw(text) {
 }
 
 /** A month file's lines, as the phone's DataFiles writes them. */
-function monthText(m) {
+function monthText(m, name = '') {
   const days = [...m.days.values()].sort((a, b) => a.d.localeCompare(b.d)).map(d => JSON.stringify({ d: d.d, mobile: 0, wifi: d.wifi, roam: 0, hotspot: 0, via: d.via }))
   const hours = [...m.hours.entries()].sort().map(([k, b]) => { const [h, net] = k.split('|'); return JSON.stringify({ h, net, bytes: b }) })
   const events = m.events.slice().sort((a, b) => a.at.localeCompare(b.at)).map(e => JSON.stringify({ at: e.at, event: e.event, secs: e.secs, ...(e.note ? { note: e.note } : {}) }))
-  return [...days, ...hours, ...events].map(l => l + '\n').join('')
+  return [...(name ? [JSON.stringify({ deviceName: name })] : []), ...days, ...hours, ...events].map(l => l + '\n').join('')
 }
 
 function parseMonth(text) {
@@ -31,6 +31,7 @@ function parseMonth(text) {
   for (const l of String(text).split('\n')) {
     let o; try { o = JSON.parse(l) } catch { continue }
     if (o.event) m.events.push({ at: o.at, event: o.event, secs: o.secs || 0, note: o.note || '' })
+    else if (o.deviceName) continue
     else if (o.h) m.hours.set(`${o.h}|${o.net}`, Number(o.bytes) || 0)
     else if (o.d && !o.app) m.days.set(o.d, { d: o.d, wifi: Number(o.wifi) || 0, via: Number(o.via) || 0 })
   }
@@ -40,12 +41,17 @@ function parseMonth(text) {
 class DataCounter {
   constructor(root, device) {
     this.root = root
-    this.device = String(device || 'Computer').replace(/[^\p{L}\p{N}_-]/gu, '') || 'Computer'
+    this.name = String(device || 'Computer')
+    this.device = this.name.replace(/[^\p{L}\p{N}_-]/gu, '') || 'Computer'
     this.last = null // { at, ifaces: { name: { rx, tx, wireless } } }
     this.pending = new Map() // month → parsed month, written every ten minutes
     this.link = null // { iface, metered, ssid, since }
     this.lostAt = 0
+    this.ownBytes = 0 // Tetra's own sync with the phone over its hotspot: on the LAN, never on the mobile network
   }
+
+  /** A sync connection closed: its bytes are Tetra's own, left out of what this computer used over the phone's hotspot. */
+  own(n) { this.ownBytes += n }
 
   /** Every interface but loopback and virtual ones: its bytes and whether it is Wi-Fi. */
   readCounters() {
@@ -82,10 +88,10 @@ class DataCounter {
     const m = this.month(hourKey(now).slice(0, 7))
     const day = hourKey(now).slice(0, 10)
     const d = m.days.get(day) || { d: day, wifi: 0, via: 0 }
-    for (const { bytes, net, via } of deltas) {
+    for (const { bytes, net, via, viaBytes } of deltas) {
       if (!bytes) continue
       m.hours.set(`${hourKey(now)}|${net}`, (m.hours.get(`${hourKey(now)}|${net}`) || 0) + bytes)
-      if (net === 'wifi') { d.wifi += bytes; if (via) d.via += bytes }
+      if (net === 'wifi') { d.wifi += bytes; if (via) d.via += viaBytes ?? bytes }
     }
     m.days.set(day, d)
   }
@@ -104,6 +110,9 @@ class DataCounter {
         const total = c.rx + c.tx, before = p ? p.rx + p.tx : total
         return { bytes: total >= before ? total - before : total, net: c.wireless ? 'wifi' : 'wired', via: c.wireless && metered }
       })
+      // over the hotspot, Tetra's own sync (to the phone itself) is taken off what went through it
+      for (const d of deltas) if (d.via) { const own = Math.min(this.ownBytes, d.bytes); d.viaBytes = d.bytes - own; this.ownBytes -= own }
+      this.ownBytes = 0
       this.add(now, deltas)
     }
     // a drop: the Wi-Fi gone and back within ten minutes (longer is leaving)
@@ -127,7 +136,7 @@ class DataCounter {
       const f = this.file(key)
       try {
         fs.mkdirSync(path.dirname(f), { recursive: true })
-        const text = monthText(m)
+        const text = monthText(m, this.name)
         let old = ''
         try { old = fs.readFileSync(f, 'utf8') } catch {}
         if (old !== text) { fs.writeFileSync(f + '.tmp', text); fs.renameSync(f + '.tmp', f); this.changed?.() }

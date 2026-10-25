@@ -174,7 +174,7 @@ declare global {
       contactsCall(number: string, name: string): Promise<{ how?: 'calling' | 'notification'; device?: string; error?: string }>
       phoneHistory(): Promise<{ at: string; number: string; dir: 'in' | 'out' | 'missed' | 'declined' | 'blocked' | 'voicemail'; secs: number; contact?: string; name?: string; note?: string }[]>
       phoneRecordings(): Promise<{ name: string; size: number; at: number }[]>
-      dataAll(): Promise<{ plan: { kind: string; size: number; every: string; day: number; days: number; from: string; warn: number[] } | null; devices: Record<string, { d?: string; h?: string; app?: string; net?: string; mobile?: number; wifi?: number; roam?: number; hotspot?: number; via?: number; bytes?: number; at?: string; event?: string; secs?: number; note?: string }[]>; me: string }>
+      dataAll(): Promise<{ plan: { kind: string; size: number; every: string; day: number; days: number; from: string; warn: number[] } | null; devices: Record<string, { deviceName?: string; d?: string; h?: string; app?: string; net?: string; mobile?: number; wifi?: number; roam?: number; hotspot?: number; via?: number; bytes?: number; at?: string; event?: string; secs?: number; note?: string }[]>; me: string }>
       dataWifi(): Promise<{ rssi?: number; speed?: number; mhz?: number; ssid?: string; error?: string }>
       phoneSpam(): Promise<{ number: string; note: string }[]>
       phoneSetSpam(number: string, on: boolean): Promise<{ number: string; note: string }[]>

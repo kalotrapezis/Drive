@@ -167,6 +167,8 @@ class SyncServer {
       if (!e.expose) console.error(`[sync] ${req.method} ${req.url} failed:`, e)
       this.send(res, e.status ?? 500, { error: e.expose ? e.message : 'Server error' })
     }))
+    // Data: a connection's bytes are Tetra's own sync, which Data leaves out of this computer's use of the phone's hotspot
+    this.server.on('connection', s => s.once('close', () => this.data?.own(s.bytesRead + s.bytesWritten)))
     await new Promise((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.port, '0.0.0.0', resolve) })
     this.port = this.server.address().port
     await this.listenForProbes(this.beaconPort)

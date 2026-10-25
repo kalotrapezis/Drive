@@ -38,6 +38,19 @@ test('each minute adds what the counters moved; a counter that went back counts 
   assert.equal(m.hours.get('2026-10-25T10|wired'), 40)
 })
 
+test("Tetra's own sync over the hotspot is not counted as using it", async () => {
+  const { c, root, set } = counter()
+  c.onHotspot = true
+  const t = new Date(2026, 9, 25, 12, 0, 0)
+  set({ wlan0: { rx: 0, tx: 0, wireless: true } }); await c.tick(t)
+  c.own(4000) // a sync with the phone closed
+  set({ wlan0: { rx: 9000, tx: 1000, wireless: true } }); await c.tick(t)
+  c.flush(t)
+  const m = parseMonth(fs.readFileSync(path.join(root, 'usage', '2026-10.my-pc.jsonl'), 'utf8'))
+  assert.deepEqual(m.days.get('2026-10-25'), { d: '2026-10-25', wifi: 10000, via: 6000 })
+  assert.match(fs.readFileSync(path.join(root, 'usage', '2026-10.my-pc.jsonl'), 'utf8'), /^\{"deviceName":"my-pc"\}/)
+})
+
 test('no Data folder until Data is set up', async () => {
   const { c, root, set } = counter(false)
   set({ wlan0: { rx: 1, tx: 0, wireless: true } }); await c.tick(); await c.tick(); c.flush()
