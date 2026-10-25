@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import type { Contact } from './Contacts'
+import { lang, t } from './i18n'
 
 // The Phone on the computer (Drive-Android Plan.md § Phone): the phone's call history as it sends it (Phone/calls-*.jsonl,
 // written while Tetra is the phone's phone app), the contacts with a number, the recordings, and a keypad — a call is
@@ -14,7 +15,9 @@ const PHONE = '#168C93'
 export const key = (n: string) => n.replace(/\D/g, '').slice(-9)
 const errorText = (e: unknown) => (e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(e))
 const KEYS: [string, string][] = [['1', ''], ['2', 'ABC ΑΒΓ'], ['3', 'DEF ΔΕΖ'], ['4', 'GHI ΗΘΙ'], ['5', 'JKL ΚΛΜ'], ['6', 'MNO ΝΞΟ'], ['7', 'PQRS ΠΡΣ'], ['8', 'TUV ΤΥΦ'], ['9', 'WXYZ ΧΨΩ'], ['*', ''], ['0', '+'], ['#', '']]
-export const DIR = { in: ['callReceived', 'Incoming'], out: ['callMade', 'Outgoing'], missed: ['callMissed', 'Missed'], declined: ['callEnd', 'Declined'], blocked: ['block', 'Blocked'], voicemail: ['callReceived', 'Voicemail'] } as const
+// the words are read once, as the module loads: a change of language reloads the page
+export const DIR = { in: ['callReceived', t('phone.dirIn')], out: ['callMade', t('phone.dirOut')], missed: ['callMissed', t('phone.dirMissed')], declined: ['callEnd', t('phone.dirDeclined')], blocked: ['block', t('phone.dirBlocked')], voicemail: ['callReceived', t('phone.dirVoicemail')] } as const
+const LOCALE = lang() === 'en' ? 'en-GB' : lang()
 // a white arrow on a coloured round (the user, 25 Oct: "barely noticeable what is what"): in green, out blue, missed and declined red
 const DIR_COLOR = { in: '#2E9E5B', out: '#2F7DD9', missed: '#D93A3A', declined: '#D93A3A', blocked: '#7A7F84', voicemail: '#2E9E5B' } as const
 export function CallBadge({ dir, size }: { dir: Logged['dir']; size: number }) {
@@ -23,9 +26,9 @@ export function CallBadge({ dir, size }: { dir: Logged['dir']; size: number }) {
 export const when = (iso: string) => {
   const d = new Date(iso), now = new Date(), day = 86_400_000
   const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
-  const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  const time = d.toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' })
   const ago = (startOf(now) - startOf(d)) / day
-  return ago === 0 ? time : ago === 1 ? `Yesterday ${time}` : ago < 7 ? `${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${time}` : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' })
+  return ago === 0 ? time : ago === 1 ? `${t('common.yesterday')} ${time}` : ago < 7 ? `${d.toLocaleDateString(LOCALE, { weekday: 'short' })} ${time}` : d.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' })
 }
 export const length = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`)
 
@@ -78,7 +81,7 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
   const matches = (name: string | undefined, numbers: string[]) => !q || (name || '').toLowerCase().includes(q) || (qd.length > 0 && numbers.some(n => n.replace(/\D/g, '').includes(qd)))
   const callNow = (n: string, name?: string) => {
     if (!n.trim()) return
-    window.drive.contactsCall(n, name || who(n)?.name || '').then(r => say(r.error ? r.error : r.how === 'notification' ? 'The phone shows it: tap to call' : `Calling on ${r.device || 'the phone'}`), e => say(errorText(e)))
+    window.drive.contactsCall(n, name || who(n)?.name || '').then(r => say(r.error ? r.error : r.how === 'notification' ? t('phone.tapToCall') : t('phone.callingOn', { device: r.device || t('phone.thePhone') })), e => say(errorText(e)))
   }
   const shownCalls = (calls || []).filter(l => (filter !== 'missed' || l.dir === 'missed') && matches(who(l.number)?.name || l.name, [l.number]))
   const [firstCalls, moreCalls] = useFirst(shownCalls)
@@ -87,7 +90,7 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
   const isSpam = (n: string) => spam.some(e => e.number.endsWith('*') ? national(n).startsWith(national(e.number.slice(0, -1))) && e.number.replace(/\D/g, '').length >= 2 : key(e.number).length >= 5 && key(e.number) === key(n))
   // a number caught by a range (69800*): the range's line is changed in the Spam list, not from the number
   const inRange = (n: string) => spam.some(e => e.number.endsWith('*') && national(n).startsWith(national(e.number.slice(0, -1))) && e.number.replace(/\D/g, '').length >= 2)
-  const markSpam = (n: string, on: boolean) => window.drive.phoneSetSpam(n, on).then(l => { setSpam(l); say(on ? 'On the spam list: it will not ring' : 'Taken off the spam list') }, e => say(errorText(e)))
+  const markSpam = (n: string, on: boolean) => window.drive.phoneSetSpam(n, on).then(l => { setSpam(l); say(on ? t('phone.spamOn') : t('phone.spamOff')) }, e => say(errorText(e)))
   const lookUp = (n: string) => { const d = national(n); return d.length === 10 && !d.startsWith('+') ? `https://www.callinsider.gr/gr/${d}` : null }
   const people = contacts.filter(c => c.phones.length && (tab !== 'favourites' || c.favourite) && matches(c.name, c.phones.map(p => p.value)))
   const typed = number.replace(/[^\d+*#]/g, '')
@@ -98,49 +101,49 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
       <header className="topbar ct-topbar">
         <div className="island title-island ct-search">
           <Icon name="search" />
-          <input placeholder={`Search ${tab}`} value={query} onChange={e => setQuery(e.target.value)} />
-          {query && <button className="round flat" title="Clear" onClick={() => setQuery('')}><Icon name="close" /></button>}
+          <input placeholder={t(`phone.search_${tab}`)} value={query} onChange={e => setQuery(e.target.value)} />
+          {query && <button className="round flat" title={t('common.clear')} onClick={() => setQuery('')}><Icon name="close" /></button>}
         </div>
       </header>
       <div className="ct-body">
         <section className="ct-list">
           {tab === 'recents' && <>
-            <div className="chips">{(['all', 'missed', 'spam'] as const).map(f => <button key={f} className={`chip ${filter === f ? 'on' : ''}`} onClick={() => setFilter(f)}>{f === 'all' ? 'All' : f === 'missed' ? 'Missed' : `Spam (${spam.length})`}</button>)}</div>
+            <div className="chips">{(['all', 'missed', 'spam'] as const).map(f => <button key={f} className={`chip ${filter === f ? 'on' : ''}`} onClick={() => setFilter(f)}>{f === 'all' ? t('common.all') : f === 'missed' ? t('phone.missed') : t('phone.spamN', { n: spam.length })}</button>)}</div>
             {filter === 'spam' ? <>
-              <p className="hint ct-hint">Calls from these are declined on the phone before they ring. A * at the end takes a whole range (69800*).</p>
+              <p className="hint ct-hint">{t('phone.spamHint')}</p>
               {spam.map(e => <div key={e.number} className="ct-row">
                 <span className="ct-face ct-initial" style={{ width: 40, height: 40, background: '#d93a3a' }}><Icon name="block" size={22} /></span>
                 <span className="ct-name">{e.number}{e.note && <small>{e.note}</small>}</span>
-                <button className="text-button" onClick={() => markSpam(e.number, false)}>Remove</button>
+                <button className="text-button" onClick={() => markSpam(e.number, false)}>{t('common.remove')}</button>
               </div>)}
-              <div className="ct-row"><input className="ph-number" style={{ fontSize: 16, textAlign: 'left' }} placeholder="A number, or 69800*" value={adding} onChange={e => setAdding(e.target.value.replace(/[^\d+* ]/g, ''))} />
-                <button className="text-button" disabled={!/\d/.test(adding)} onClick={() => { markSpam(adding.replace(/ /g, ''), true); setAdding('') }}>Add</button></div>
+              <div className="ct-row"><input className="ph-number" style={{ fontSize: 16, textAlign: 'left' }} placeholder={t('phone.spamPlaceholder')} value={adding} onChange={e => setAdding(e.target.value.replace(/[^\d+* ]/g, ''))} />
+                <button className="text-button" disabled={!/\d/.test(adding)} onClick={() => { markSpam(adding.replace(/ /g, ''), true); setAdding('') }}>{t('common.add')}</button></div>
             </> : <>
-            {calls && !calls.length && <p className="hint ct-hint">The phone's calls show here once Tetra is the phone's phone app (Settings › Phone on the phone).</p>}
+            {calls && !calls.length && <p className="hint ct-hint">{t('phone.noCalls')}</p>}
             {firstCalls.map((l, i) => {
               const c = who(l.number), [, what] = DIR[l.dir] || DIR.in
               return <div key={l.at + i} className="ct-row" title={l.note || undefined}>
                 <Face c={c} size={40} />
-                <span className="ct-name"><span style={l.dir === 'missed' ? { color: '#d93a3a' } : undefined}>{c?.name || l.name || l.number || 'Hidden number'}</span>
-                  <small>{l.number && isSpam(l.number) && <b style={{ color: '#d93a3a' }}>Spam · </b>}<CallBadge dir={l.dir} size={18} /> {what} · {when(l.at)}{l.secs > 0 ? ` · ${length(l.secs)}` : ''}{l.note ? ` · ${l.note}` : ''}</small></span>
-                {l.number && !c && lookUp(l.number) && <button className="round flat" title="Look it up on CallInsider (opens the browser)" onClick={() => window.drive.contactsOpen('web', lookUp(l.number)!)}><Icon name="search" /></button>}
-                {l.number && !c && !inRange(l.number) && <button className="round flat" title={isSpam(l.number) ? 'Not spam' : 'Spam: never ring again'} onClick={() => markSpam(l.number, !isSpam(l.number))}><span style={{ color: isSpam(l.number) ? 'var(--muted)' : '#d93a3a', display: 'grid' }}><Icon name="block" /></span></button>}
-                {l.number && <button className="round flat" title="Call" onClick={() => callNow(l.number, c?.name)}><Icon name="call" /></button>}
+                <span className="ct-name"><span style={l.dir === 'missed' ? { color: '#d93a3a' } : undefined}>{c?.name || l.name || l.number || t('phone.hiddenNumber')}</span>
+                  <small>{l.number && isSpam(l.number) && <b style={{ color: '#d93a3a' }}>{t('phone.spam')} · </b>}<CallBadge dir={l.dir} size={18} /> {what} · {when(l.at)}{l.secs > 0 ? ` · ${length(l.secs)}` : ''}{l.note ? ` · ${l.note}` : ''}</small></span>
+                {l.number && !c && lookUp(l.number) && <button className="round flat" title={t('phone.lookUp')} onClick={() => window.drive.contactsOpen('web', lookUp(l.number)!)}><Icon name="search" /></button>}
+                {l.number && !c && !inRange(l.number) && <button className="round flat" title={isSpam(l.number) ? t('phone.notSpam') : t('phone.markSpam')} onClick={() => markSpam(l.number, !isSpam(l.number))}><span style={{ color: isSpam(l.number) ? 'var(--muted)' : '#d93a3a', display: 'grid' }}><Icon name="block" /></span></button>}
+                {l.number && <button className="round flat" title={t('phone.call')} onClick={() => callNow(l.number, c?.name)}><Icon name="call" /></button>}
               </div>
             })}
             {firstCalls.length < shownCalls.length && <div ref={moreCalls} />}
             </>}
           </>}
           {(tab === 'favourites' || tab === 'contacts') && <>
-            {!people.length && <p className="hint ct-hint">{tab === 'favourites' ? 'Star people in Contacts and they show here.' : 'No contacts with a number.'}</p>}
+            {!people.length && <p className="hint ct-hint">{tab === 'favourites' ? t('phone.noFavourites') : t('phone.noContacts')}</p>}
             {people.map(c => <div key={c.uid} className="ct-row">
               <Face c={c} size={40} />
               <span className="ct-name">{c.name}<small>{c.defaultPhone || c.phones[0].value}</small></span>
-              <button className="round flat" title="Call" onClick={() => callNow(c.defaultPhone || c.phones[0].value, c.name)}><Icon name="call" /></button>
+              <button className="round flat" title={t('phone.call')} onClick={() => callNow(c.defaultPhone || c.phones[0].value, c.name)}><Icon name="call" /></button>
             </div>)}
           </>}
           {tab === 'recordings' && <>
-            {!recordings.length && <p className="hint ct-hint">Calls recorded on this computer show here.</p>}
+            {!recordings.length && <p className="hint ct-hint">{t('phone.noRecordings')}</p>}
             {recordings.filter(r => matches(r.name, [])).map(r => <button key={r.name} className="ct-row" onClick={() => window.drive.phoneOpenRecording(r.name).catch(e => say(errorText(e)))}>
               <span className="ct-face ct-initial" style={{ width: 40, height: 40 }}><Icon name="mic" size={22} /></span>
               <span className="ct-name">{r.name.replace(/\.[^.]+$/, '')}<small>{Math.round(r.size / 1024)} KB</small></span>
@@ -149,22 +152,22 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
         </section>
         <section className="ct-page">
           <div className="ph-pad">
-            <input className="ph-number" value={number} placeholder="Number" onChange={e => setNumber(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') callNow(typed) }} />
+            <input className="ph-number" value={number} placeholder={t('phone.number')} onChange={e => setNumber(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') callNow(typed) }} />
             <div className="ph-found">{found.map(c => <button key={c.uid} className="chip" onClick={() => setNumber(c.phones.find(p => p.value.replace(/\D/g, '').includes(typed.replace(/\D/g, '')))?.value || '')}>{c.name}</button>)}</div>
             <div className="ph-keys">{KEYS.map(([d, l]) => <button key={d} onClick={() => setNumber(n => n + d)}><b>{d}</b><small>{l}</small></button>)}</div>
             <div className="ph-call">
               <span />
-              <button className="ph-dial" title="Call on the phone" disabled={!typed} onClick={() => callNow(typed)}><Icon name="call" size={28} /></button>
-              <button className="round flat" title="Delete" onClick={() => setNumber(n => n.slice(0, -1))}><Icon name="back" /></button>
+              <button className="ph-dial" title={t('phone.callOnPhone')} disabled={!typed} onClick={() => callNow(typed)}><Icon name="call" size={28} /></button>
+              <button className="round flat" title={t('common.delete')} onClick={() => setNumber(n => n.slice(0, -1))}><Icon name="back" /></button>
             </div>
-            <p className="hint">The phone places the call; its sound is on this computer when the phone is connected by Bluetooth (Settings › Calls).</p>
+            <p className="hint">{t('phone.padHint')}</p>
           </div>
         </section>
       </div>
       <div className="ct-dock ph-dock">
         <nav className="notes-island island">
-          {([['recents', 'Recents', 'history'], ['favourites', 'Favourites', 'heart'], ['contacts', 'Contacts', 'person'], ['recordings', 'Recordings', 'mic']] as const).map(([t, l, icon]) =>
-            <button key={t} className={`island-item ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}><Icon name={icon} size={20} /><span>{l}</span></button>)}
+          {([['recents', 'phone.recents', 'history'], ['favourites', 'phone.favourites', 'heart'], ['contacts', 'app.contacts', 'person'], ['recordings', 'phone.recordings', 'mic']] as const).map(([id, l, icon]) =>
+            <button key={id} className={`island-item ${tab === id ? 'on' : ''}`} onClick={() => setTab(id)}><Icon name={icon} size={20} /><span>{t(l)}</span></button>)}
         </nav>
       </div>
     </div>

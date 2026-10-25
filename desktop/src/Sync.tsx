@@ -5,8 +5,10 @@ import { formatBytes } from './timeline'
 import { copiesColor } from './colors'
 import { Icon } from './Icon'
 import { Confirm, Modal } from './Dialogs'
+import { lang, t, tr } from './i18n'
 
-const when = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+const LOCALE = lang() === 'en' ? 'en-GB' : lang()
+const when = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
 /** Pairing QR: the phone scans it in Tetra › Sync. It carries the address, the certificate fingerprint and a one-time code. */
 function PairingCode() {
@@ -17,14 +19,14 @@ function PairingCode() {
   useEffect(() => { const t = setInterval(() => setLeft(s => Math.max(0, s - 1)), 1000); return () => clearInterval(t) }, [])
   return (
     <div className="pairing">
-      <div className="qr">{pair && left ? <img src={pair.qr} alt="Pairing QR code" /> : left ? <span className="spinner" /> : <button className="filled-button" onClick={renew}>Show a new code</button>}</div>
+      <div className="qr">{pair && left ? <img src={pair.qr} alt={t('sync.pairQrAlt')} /> : left ? <span className="spinner" /> : <button className="filled-button" onClick={renew}>{t('sync.newCode')}</button>}</div>
       <ol>
-        <li>On the phone open <b>Tetra</b> and tap <b>Local Sync</b>.</li>
-        <li>Tap <b>Pair with computer</b> and point the camera at this code.</li>
-        <li>The phone appears in the list, ready to back up.</li>
+        <li>{tr('sync.pairStep1', { tetra: <b>Tetra</b>, sync: <b>{t('sync.localSync')}</b> })}</li>
+        <li>{tr('sync.pairStep2', { pair: <b>{t('sync.pairWithComputer')}</b> })}</li>
+        <li>{t('sync.pairStep3')}</li>
       </ol>
-      <p className="hint">{left ? `This code works once, for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}.` : 'The code expired.'}
-        {pair && ` Computer: ${pair.payload.hosts.join(', ') || 'no network'} · port ${pair.payload.port}`}</p>
+      <p className="hint">{left ? t('sync.codeWorks', { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` }) : t('sync.codeExpired')}
+        {pair && ' ' + t('sync.codeAddress', { hosts: pair.payload.hosts.join(', ') || t('sync.noNetwork'), port: pair.payload.port })}</p>
     </div>
   )
 }
@@ -41,8 +43,8 @@ function PairingCode() {
  * nothing keeps.
  */
 function Rules({ device, connection, here, onChange, setDialog }: { device: SyncDevice; connection: SyncConnection; here: string; onChange: () => void; setDialog: (d: ReactNode) => void }) {
-  const what = connection.content === 'files' ? 'Files' : 'Photos'
-  const it = connection.content === 'files' ? 'files' : 'photos'
+  const what = connection.content === 'files' ? t('app.files') : t('app.photos')
+  const It = connection.content === 'files' ? 'Files' : 'Photos' // the keys' ending
   const set = async (direction: string) => {
     await window.drive.sync.setConnection(device.id, connection.content, { direction, keep: 'everything' })
     onChange()
@@ -53,10 +55,10 @@ function Rules({ device, connection, here, onChange, setDialog }: { device: Sync
   const chooseMove = () => setDialog(<MoveDialog device={device} connection={connection} here={here}
     onClose={() => setDialog(null)} onDone={() => { setDialog(null); onChange() }} />)
   const directions = [
-    { value: 'off', icon: 'block', flip: false, label: 'Off', hint: `No ${it} cross, in either direction.` },
-    { value: 'send', icon: 'arrowRight', flip: false, label: `${device.name} → ${here}`, hint: `${what} move from ${device.name} to ${here}.` },
-    { value: 'receive', icon: 'arrowRight', flip: true, label: `${here} → ${device.name}`, hint: `${what} on ${here} are copied to ${device.name}.` },
-    { value: 'both', icon: 'swap', flip: false, label: 'Both ways', hint: `Each side sends the ${it} the other is missing. Always a copy.` },
+    { value: 'off', icon: 'block', flip: false, label: t('common.off'), hint: t(`sync.ruleOff${It}`) },
+    { value: 'send', icon: 'arrowRight', flip: false, label: `${device.name} → ${here}`, hint: t(`sync.ruleSend${It}`, { device: device.name, here }) },
+    { value: 'receive', icon: 'arrowRight', flip: true, label: `${here} → ${device.name}`, hint: t(`sync.ruleReceive${It}`, { device: device.name, here }) },
+    { value: 'both', icon: 'swap', flip: false, label: t('sync.bothWays'), hint: t(`sync.ruleBoth${It}`) },
   ] as const
   const chosen = directions.find(d => d.value === connection.direction)
   return (
@@ -67,17 +69,14 @@ function Rules({ device, connection, here, onChange, setDialog }: { device: Sync
           <button key={d.value} className={connection.direction === d.value ? 'on' : ''} onClick={() => d.value === 'send' ? chooseMove() : set(d.value)}>
             <span className={d.flip ? 'glyph flip' : 'glyph'}><Icon name={d.icon} size={18} /></span>
             <span className="rule-label">{d.label}</span>
-            {d.value === 'send' && <span className="rule-note">Move</span>}
+            {d.value === 'send' && <span className="rule-note">{t('common.move')}</span>}
           </button>
         ))}
       </div>
       <p className="rule-hint">
         {chosen?.hint}
-        {isMove && <> {device.name} keeps the last <b>{spanOf(connection.keepDays ?? 30)}</b>
-          {connection.keepFavorites !== false && ' and its favorites'}; {connection.content === 'files'
-            ? `older files that ${here} holds go to its Trash at each sync.`
-            : `older photos that ${here} holds are offered to move off it, into its Trash.`} <button className="link" onClick={chooseMove}>Change</button></>}
-        {connection.direction === 'send' && !isMove && <> This was set as a copy before Moves had a window. <button className="link" onClick={chooseMove}>Choose what stays</button></>}
+        {isMove && <> {tr(`sync.moveWindow${It}${connection.keepFavorites !== false ? 'Fav' : ''}`, { device: device.name, span: <b>{spanOf(connection.keepDays ?? 30)}</b>, here })} <button className="link" onClick={chooseMove}>{t('sync.change')}</button></>}
+        {connection.direction === 'send' && !isMove && <> {t('sync.oldCopy')} <button className="link" onClick={chooseMove}>{t('sync.chooseWhatStays')}</button></>}
       </p>
     </section>
   )
@@ -95,11 +94,11 @@ function Rules({ device, connection, here, onChange, setDialog }: { device: Sync
  */
 /** The pictures a device may be drawn with, and what each is for. */
 const DEVICE_KINDS: { kind: IconName; label: string }[] = [
-  { kind: 'device', label: 'Phone' },
-  { kind: 'tablet', label: 'Tablet' },
-  { kind: 'computer', label: 'Computer' },
-  { kind: 'server', label: 'Server' },
-  { kind: 'database', label: 'Storage' },
+  { kind: 'device', label: 'sync.kindPhone' },
+  { kind: 'tablet', label: 'sync.kindTablet' },
+  { kind: 'computer', label: 'sync.kindComputer' },
+  { kind: 'server', label: 'sync.kindServer' },
+  { kind: 'database', label: 'sync.kindStorage' },
 ]
 
 /**
@@ -113,22 +112,22 @@ function DeviceEditor({ device, onDone }: { device: SyncDevice; onDone: () => vo
   const save = async () => { await window.drive.sync.setDevice(device.id, { name, kind }); onDone() }
   return (
     <Modal onClose={onDone}>
-      <h3>This device</h3>
-      <label className="editor-label" htmlFor="device-name">What to call it</label>
+      <h3>{t('sync.thisDevice')}</h3>
+      <label className="editor-label" htmlFor="device-name">{t('sync.whatToCall')}</label>
       <input id="device-name" className="field" value={name} onChange={e => setName(e.target.value)} autoFocus
         onKeyDown={e => { if (e.key === 'Enter') save() }} />
       <div className="rule-options kind-picker">
         {DEVICE_KINDS.map(k => (
           <button key={k.kind} className={kind === k.kind ? 'on' : ''} onClick={() => setKind(k.kind)}>
             <span className="glyph"><Icon name={k.kind} size={18} /></span>
-            <span className="rule-label">{k.label}</span>
+            <span className="rule-label">{t(k.label)}</span>
           </button>
         ))}
       </div>
-      <p className="rule-hint">It reported {device.name} when it paired. The name is only used here.</p>
+      <p className="rule-hint">{t('sync.reportedName', { name: device.name })}</p>
       <div className="dialog-actions">
-        <button onClick={onDone}>Cancel</button>
-        <button className="filled-button" onClick={save}>Save</button>
+        <button onClick={onDone}>{t('common.cancel')}</button>
+        <button className="filled-button" onClick={save}>{t('common.save')}</button>
       </div>
     </Modal>
   )
@@ -145,43 +144,38 @@ function SelfEditor({ self, onDone }: { self: SyncSelf; onDone: () => void }) {
   const save = async () => { await window.drive.sync.setSelf({ name, kind }); onDone() }
   return (
     <Modal onClose={onDone}>
-      <h3>This device</h3>
-      <label className="editor-label" htmlFor="self-name">What to call it</label>
+      <h3>{t('sync.thisDevice')}</h3>
+      <label className="editor-label" htmlFor="self-name">{t('sync.whatToCall')}</label>
       <input id="self-name" className="field" value={name} onChange={e => setName(e.target.value)} autoFocus
         onKeyDown={e => { if (e.key === 'Enter') save() }} />
       <div className="rule-options kind-picker">
         {DEVICE_KINDS.map(k => (
           <button key={k.kind} className={kind === k.kind ? 'on' : ''} onClick={() => setKind(k.kind)}>
             <span className="glyph"><Icon name={k.kind} size={18} /></span>
-            <span className="rule-label">{k.label}</span>
+            <span className="rule-label">{t(k.label)}</span>
           </button>
         ))}
       </div>
-      <p className="rule-hint">Every rule on this page is written from a device's side, so this is the word on the
-        other end of each of them: {SELF_WORDS[kind] ?? 'here'}.</p>
+      <p className="rule-hint">{t('sync.selfWordHint', { word: SELF_WORDS[kind] ? t(SELF_WORDS[kind]) : t('sync.here') })}</p>
       <div className="dialog-actions">
-        <button onClick={onDone}>Cancel</button>
-        <button className="filled-button" onClick={save}>Save</button>
+        <button onClick={onDone}>{t('common.cancel')}</button>
+        <button className="filled-button" onClick={save}>{t('common.save')}</button>
       </div>
     </Modal>
   )
 }
 
-const SELF_WORDS: Record<string, string> = { device: 'this phone', tablet: 'this tablet', computer: 'this PC', server: 'this server', database: 'this storage' }
+const SELF_WORDS: Record<string, string> = { device: 'sync.selfDevice', tablet: 'sync.selfTablet', computer: 'sync.selfComputer', server: 'sync.selfServer', database: 'sync.selfDatabase' }
 
 /** What this machine does for the others, said once, where it is asked. */
 function HubInfo({ self, onClose }: { self: SyncSelf; onClose: () => void }) {
   return (
     <Modal onClose={onClose}>
-      <h3>{self.name} is the hub</h3>
-      <p>Every device pairs with this machine and with nothing else. A phone and a tablet never talk to each
-        other — they each talk to {self.label}, which is how anything gets from one to the other.</p>
-      <p>So: <b>connect every device to this one.</b> It is also the only machine that can see the whole
-        picture — what exists, how many copies there are, and what is safe to free — because it is the only one
-        every device reports to.</p>
-      <p>It has to be running and on the same network for anything to cross. Nothing is ever deleted by a sync,
-        and a device is only ever <i>offered</i> the chance to free space, never told.</p>
-      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>Close</button></div>
+      <h3>{t('sync.hubTitle', { name: self.name })}</h3>
+      <p>{t('sync.hub1', { label: self.label })}</p>
+      <p>{tr('sync.hub2', { connect: <b>{t('sync.hubConnect')}</b> })}</p>
+      <p>{tr('sync.hub3', { offered: <i>{t('sync.hubOffered')}</i> })}</p>
+      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>{t('common.close')}</button></div>
     </Modal>
   )
 }
@@ -192,10 +186,10 @@ function HubInfo({ self, onClose }: { self: SyncSelf; onClose: () => void }) {
  */
 function whyNotHere(name: string, count: number, here: string, device?: SyncDevice): string {
   const direction = device?.connections?.find(c => c.content === 'photos')?.direction
-  const head = `${here[0].toUpperCase()}${here.slice(1)} has never been given these ${count.toLocaleString()} files.`
-  if (direction === 'receive') return `${head} Its Photos row for ${name} is "${here} → ${name}", so ${name} never offers anything and these will stay where they are until that changes.`
-  if (direction === 'off') return `${head} Photos are switched off for ${name}, so nothing crosses in either direction.`
-  return `${head} ${name} is allowed to send photos, so these were offered and did not make it across — a failed transfer, or a file Android would not let it read. The device knows which; it does not say yet.`
+  const head = t('sync.whyHead', { Here: `${here[0].toUpperCase()}${here.slice(1)}`, count, n: count.toLocaleString() })
+  if (direction === 'receive') return t('sync.whyReceive', { head, name, here })
+  if (direction === 'off') return t('sync.whyOff', { head, name })
+  return t('sync.whyOther', { head, name })
 }
 
 /**
@@ -209,14 +203,14 @@ function FileList({ what, title, deviceId, why, here, onClose }: { what: 'onlyTh
     <Modal onClose={onClose}>
       <h3>{title}</h3>
       {why && <p className="rule-hint">{why}</p>}
-      {!files ? <span className="spinner" /> : files.length === 0 ? <p className="rule-hint">Nothing here — good.</p> : (
+      {!files ? <span className="spinner" /> : files.length === 0 ? <p className="rule-hint">{t('sync.nothingGood')}</p> : (
         <div className="file-scroll">
-          <div className="file-row head"><span>File</span><span>Size</span><span>Where</span></div>
+          <div className="file-row head"><span>{t('sync.colFile')}</span><span>{t('sync.colSize')}</span><span>{t('sync.colWhere')}</span></div>
           {files.map(f => (
             <div className="file-row" key={f.sha256 + (f.device ?? '')}>
               <span className="file-name">
                 <Icon name={f.isVideo ? 'video' : 'photos'} size={16} />
-                <span>{f.name ? f.name.split('/').pop() : <i>not named by the device yet</i>}</span>
+                <span>{f.name ? f.name.split('/').pop() : <i>{t('sync.notNamed')}</i>}</span>
               </span>
               <span>{f.size ? formatBytes(f.size) : '—'}</span>
               <span>{f.here ? here : f.device}</span>
@@ -224,7 +218,7 @@ function FileList({ what, title, deviceId, why, here, onClose }: { what: 'onlyTh
           ))}
         </div>
       )}
-      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>Close</button></div>
+      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>{t('common.close')}</button></div>
     </Modal>
   )
 }
@@ -235,29 +229,29 @@ function Library({ overview, paired, here, setDialog }: { overview: SyncOverview
   const stored = overview.stored ?? []
   const notHere = total - overview.here.files - stored.reduce((a, s) => a + s.files, 0)
   // One band per number of places, as many as there are devices holding photos, each a colour of its own (copiesColor).
-  const WORDS = ['', 'One copy', 'Two places', 'Three places', 'Four places', 'Five places', 'Six places']
+  const WORDS = ['', 'sync.copies1', 'sync.copies2', 'sync.copies3', 'sync.copies4', 'sync.copies5', 'sync.copies6']
   const bands = overview.copies.filter(c => c.copies > 0).map(c => ({
     key: `c${c.copies}`, copies: c.copies, color: copiesColor(c.copies),
-    label: WORDS[c.copies] ?? `${c.copies} places`, files: c.files, bytes: c.bytes,
-    hint: c.copies === 1 ? 'in one place in the world' : c.copies === 2 ? 'one machine could fail' : 'safe',
+    label: WORDS[c.copies] ? t(WORDS[c.copies]) : t('sync.copiesN', { n: c.copies }), files: c.files, bytes: c.bytes,
+    hint: c.copies === 1 ? t('sync.hintOne') : c.copies === 2 ? t('sync.hintTwo') : t('sync.hintSafe'),
   }))
   return (
     <section className="island library">
-      <h3><Icon name="database" size={20} />The library, and where it is</h3>
+      <h3><Icon name="database" size={20} />{t('sync.libraryTitle')}</h3>
       <p className="library-total">
-        <strong>{total.toLocaleString()}</strong> photos known · <strong>{overview.here.files.toLocaleString()}</strong> of them on {here}
-        {stored.map(s => <span key={s.name}> · <strong>{s.files.toLocaleString()}</strong> on {s.name}</span>)}
-        {notHere > 0 && <> · <b className="risk">{notHere.toLocaleString()} only on a device</b></>}
+        {tr('sync.totalKnown', { total: <strong>{total.toLocaleString()}</strong>, onHere: <strong>{overview.here.files.toLocaleString()}</strong>, here })}
+        {stored.map(s => <span key={s.name}> · {tr('sync.totalOn', { n: <strong>{s.files.toLocaleString()}</strong>, name: s.name })}</span>)}
+        {notHere > 0 && <> · <b className="risk">{t('sync.onlyOnDevice', { n: notHere.toLocaleString() })}</b></>}
       </p>
-      <div className="copies-bar" role="img" aria-label="how many machines hold each file">
+      <div className="copies-bar" role="img" aria-label={t('sync.copiesAria')}>
         {bands.map(b => b.files > 0 && <i key={b.copies} className={b.key} style={{ width: `${(b.files / total) * 100}%`, background: b.color }} title={`${b.label}: ${b.files.toLocaleString()}`} />)}
       </div>
       <ul className="copies-key">
         {bands.map(b => (
           <li key={b.copies}><span className="dot" style={{ background: b.color }} />
             {b.copies === 1 && b.files > 0
-              ? <button className="link" onClick={() => setDialog(<FileList what="alone" here={here} title="Files that exist in one place only" onClose={() => setDialog(null)}
-                  why="One machine holds these and nothing else does. Losing that machine loses the file." />)}>{b.label}</button>
+              ? <button className="link" onClick={() => setDialog(<FileList what="alone" here={here} title={t('sync.aloneTitle')} onClose={() => setDialog(null)}
+                  why={t('sync.aloneWhy')} />)}>{b.label}</button>
               : b.label}
             <small>{b.files.toLocaleString()} {b.bytes > 0 && `· ${formatBytes(b.bytes)} `}— {b.hint}</small>
           </li>
@@ -265,32 +259,32 @@ function Library({ overview, paired, here, setDialog }: { overview: SyncOverview
       </ul>
       {overview.kinds.length > 0 && (
         <>
-          <h4 className="library-sub">What it is made of
-            <button className="link" onClick={() => setDialog(<FileList what="largest" here={here} title={`The biggest files on ${here}`} onClose={() => setDialog(null)} />)}>the biggest files</button>
+          <h4 className="library-sub">{t('sync.madeOf')}
+            <button className="link" onClick={() => setDialog(<FileList what="largest" here={here} title={t('sync.biggestTitle', { here })} onClose={() => setDialog(null)} />)}>{t('sync.biggestLink')}</button>
           </h4>
-          <div className="copies-bar kinds" role="img" aria-label="what the library is made of, by size">
+          <div className="copies-bar kinds" role="img" aria-label={t('sync.madeOfAria')}>
             {overview.kinds.map(k => <i key={k.kind} className={k.kind} style={{ width: `${(k.bytes / Math.max(1, overview.here.bytes)) * 100}%` }} title={`${k.kind}: ${formatBytes(k.bytes)}`} />)}
           </div>
           <ul className="copies-key">
             {overview.kinds.map(k => (
-              <li key={k.kind}><span className={`dot ${k.kind}`} />{k.kind === 'video' ? 'Videos' : k.kind === 'document' ? 'Documents' : 'Photos'}
-                <small>{k.files.toLocaleString()} · {formatBytes(k.bytes)} — {Math.round((k.bytes / Math.max(1, overview.here.bytes)) * 100)}% of the disk</small>
+              <li key={k.kind}><span className={`dot ${k.kind}`} />{k.kind === 'video' ? t('sync.kindVideos') : k.kind === 'document' ? t('sync.kindDocuments') : t('app.photos')}
+                <small>{t('sync.kindShare', { files: k.files.toLocaleString(), size: formatBytes(k.bytes), pct: Math.round((k.bytes / Math.max(1, overview.here.bytes)) * 100) })}</small>
               </li>
             ))}
           </ul>
         </>
       )}
       <table className="holdings">
-        <thead><tr><th>Device</th><th>Holds</th><th>Also in the library</th><th>Only there</th><th>Could free</th></tr></thead>
+        <thead><tr><th>{t('sync.colDevice')}</th><th>{t('sync.colHolds')}</th><th>{t('sync.colAlso')}</th><th>{t('sync.colOnlyThere')}</th><th>{t('sync.colCouldFree')}</th></tr></thead>
         <tbody>
           {overview.devices.map(d => (
             <tr key={d.id}>
-              <th scope="row"><Icon name={(paired.find(p => p.id === d.id)?.kind as IconName) ?? 'device'} size={16} />{d.name}<small>{d.last_seen ? `as of ${when.format(d.last_seen)}` : 'never synced'}</small></th>
+              <th scope="row"><Icon name={(paired.find(p => p.id === d.id)?.kind as IconName) ?? 'device'} size={16} />{d.name}<small>{d.last_seen ? t('sync.asOf', { when: when.format(d.last_seen) }) : t('sync.neverSynced')}</small></th>
               <td>{d.holds.toLocaleString()}</td>
               <td>{d.alsoHere.toLocaleString()}</td>
               <td className={d.onlyThere > 0 ? 'risk' : ''}>
                 {d.onlyThere > 0
-                  ? <button className="link risk" onClick={() => setDialog(<FileList what="onlyThere" deviceId={d.id} here={here} title={`On ${d.name} and nowhere else`} onClose={() => setDialog(null)}
+                  ? <button className="link risk" onClick={() => setDialog(<FileList what="onlyThere" deviceId={d.id} here={here} title={t('sync.onlyThereTitle', { name: d.name })} onClose={() => setDialog(null)}
                       why={whyNotHere(d.name, d.onlyThere, here, paired.find(p => p.id === d.id))} />)}>{d.onlyThere.toLocaleString()}</button>
                   : d.onlyThere.toLocaleString()}
               </td>
@@ -301,19 +295,11 @@ function Library({ overview, paired, here, setDialog }: { overview: SyncOverview
       </table>
       {overview.staleReceipts > 0 && (
         <p className="rule-hint risk">
-          {overview.staleReceipts.toLocaleString()} {overview.staleReceipts === 1 ? 'file was' : 'files were'} received and checked on {here} and
-          {overview.staleReceipts === 1 ? ' is' : ' are'} no longer on disk. They are counted as missing again, so the device that has them
-          will be asked for them on its next sync.
+          {t('sync.staleReceipts', { count: overview.staleReceipts, n: overview.staleReceipts.toLocaleString(), here })}
         </p>
       )}
       <p className="library-note">
-        Photos only: the Drive folder is a second library with its own manifest, and counting the two together
-        made every number ambiguous. Counted over everything known anywhere, not only what is on {here} — a
-        photo on one phone and nowhere else is the one worth warning about, so it has to be in the picture.
-        Sizes are only known for what {here} holds, so a file that is only on a device is counted and never
-        weighed. <b>Could free</b> is what a device could give back, because every byte of it was read back and
-        checked on {here} — nothing is deleted by a sync, the device would be asked first. Each row is as fresh
-        as that device's last sync.
+        {tr('sync.libraryNote', { here, couldFree: <b>{t('sync.colCouldFree')}</b> })}
       </p>
     </section>
   )
@@ -328,21 +314,20 @@ function Library({ overview, paired, here, setDialog }: { overview: SyncOverview
 function AddDevice({ onClose, onDone, setDialog }: { onClose: () => void; onDone: () => void; setDialog: (d: ReactNode) => void }) {
   return (
     <Modal onClose={onClose}>
-      <h3>Add a device</h3>
+      <h3>{t('sync.addDevice')}</h3>
       <div className="rule-options">
-        <button onClick={() => setDialog(<Modal onClose={onDone}><h3>Pair a phone or tablet</h3><PairingCode />
-          <p className="rule-hint">Nothing crosses until you have answered what should cross: the new device
-            appears below with every row Off, waiting for that.</p>
-          <div className="dialog-actions"><button className="filled-button" onClick={onDone}>Done</button></div></Modal>)}>
+        <button onClick={() => setDialog(<Modal onClose={onDone}><h3>{t('sync.pairPhoneOrTablet')}</h3><PairingCode />
+          <p className="rule-hint">{t('sync.pairNothingCrosses')}</p>
+          <div className="dialog-actions"><button className="filled-button" onClick={onDone}>{t('common.done')}</button></div></Modal>)}>
           <span className="glyph"><Icon name="device" size={18} /></span>
-          <span className="rule-label">A phone or a tablet<small> · show a pairing code</small></span>
+          <span className="rule-label">{t('sync.addPhone')}<small> · {t('sync.addPhoneSub')}</small></span>
         </button>
         <button onClick={() => setDialog(<AddDrive onClose={onClose} onDone={onDone} />)}>
           <span className="glyph"><Icon name="database" size={18} /></span>
-          <span className="rule-label">A drive that is plugged in<small> · back up to it</small></span>
+          <span className="rule-label">{t('sync.addDrivePlugged')}<small> · {t('sync.addDriveSub')}</small></span>
         </button>
       </div>
-      <div className="dialog-actions"><button onClick={onClose}>Cancel</button></div>
+      <div className="dialog-actions"><button onClick={onClose}>{t('common.cancel')}</button></div>
     </Modal>
   )
 }
@@ -388,49 +373,48 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
 
   if (done) return (
     <Modal onClose={onClose}>
-      <h3>{picked?.label} is up to date</h3>
-      <p>{done.copied.toLocaleString()} copied, {done.already.toLocaleString()} already there.
-        {done.failed.length > 0 && ` ${done.failed.length} could not be copied.`}</p>
+      <h3>{t('sync.driveUpToDate', { name: picked?.label ?? '' })}</h3>
+      <p>{t('sync.copiedAlready', { copied: done.copied.toLocaleString(), already: done.already.toLocaleString() })}
+        {done.failed.length > 0 && ' ' + t('sync.couldNotCopy', { n: done.failed.length })}</p>
       {done.failed.slice(0, 5).map(f => <p key={f} className="error">{f}</p>)}
-      <p className="rule-hint">It counts as a copy from now on, so anything that lives only on this computer
-        and on that drive shows as two places rather than one.</p>
-      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>Close</button></div>
+      <p className="rule-hint">{t('sync.countsAsCopy')}</p>
+      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>{t('common.close')}</button></div>
     </Modal>
   )
 
   return (
     <Modal onClose={busy ? () => {} : onClose}>
-      <h3>Add a drive</h3>
+      <h3>{t('sync.addDrive')}</h3>
       {!list ? <span className="spinner" /> : list.length === 0 ? (
-        <p className="rule-hint">Nothing is plugged in that this app can write to. Connect a drive and open this again.</p>
+        <p className="rule-hint">{t('sync.noDrive')}</p>
       ) : (
         <div className="rule-options drive-list">
           {list.map(d => (
             <button key={d.uuid} className={picked?.uuid === d.uuid ? 'on' : ''} disabled={!!busy} onClick={() => select(d)}>
               <span className="glyph"><Icon name="database" size={18} /></span>
-              <span className="rule-label">{d.label}<small> · {d.fstype} · {formatBytes(d.freeBytes)} free</small></span>
-              {d.device && <span className="rule-note">added</span>}
+              <span className="rule-label">{d.label}<small> · {d.fstype} · {t('sync.free', { size: formatBytes(d.freeBytes) })}</small></span>
+              {d.device && <span className="rule-note">{t('sync.added')}</span>}
             </button>
           ))}
         </div>
       )}
-      {picked && !scan && <p className="rule-hint">Looking at {picked.label}…</p>}
+      {picked && !scan && <p className="rule-hint">{t('sync.lookingAt', { name: picked.label })}</p>}
       {scan?.plugged && (
         <>
-          <div className="file-row head" style={{ marginTop: 14 }}><span>What would happen</span><span>Files</span><span>Size</span></div>
-          <div className="file-row"><span>Already on {picked?.label}</span><span>{((scan.have ?? 0) + (scan.files?.have ?? 0)).toLocaleString()}</span><span>{formatBytes(scan.haveBytes ?? 0)}</span></div>
-          <div className="file-row"><span>Photos to copy</span><span>{scan.need?.toLocaleString()}</span><span>{formatBytes(scan.needBytes ?? 0)}</span></div>
-          <div className="file-row"><span>Drive files to copy</span><span>{scan.files?.need.toLocaleString()}</span><span>{formatBytes(scan.files?.needBytes ?? 0)}</span></div>
-          <div className="file-row"><span>Free afterwards</span><span /><span>{formatBytes(Math.max(0, (scan.free ?? 0) - (scan.needBytes ?? 0) - (scan.files?.needBytes ?? 0)))}</span></div>
-          {!scan.writable && <p className="error">This app cannot write to {scan.mount}. Nothing was changed.</p>}
-          {scan.writable && !scan.enough && <p className="error">There is not enough room: {formatBytes(scan.needBytes ?? 0)} to copy, {formatBytes(scan.free ?? 0)} free.</p>}
+          <div className="file-row head" style={{ marginTop: 14 }}><span>{t('sync.wouldHappen')}</span><span>{t('app.files')}</span><span>{t('sync.colSize')}</span></div>
+          <div className="file-row"><span>{t('sync.alreadyOn', { name: picked?.label ?? '' })}</span><span>{((scan.have ?? 0) + (scan.files?.have ?? 0)).toLocaleString()}</span><span>{formatBytes(scan.haveBytes ?? 0)}</span></div>
+          <div className="file-row"><span>{t('sync.photosToCopy')}</span><span>{scan.need?.toLocaleString()}</span><span>{formatBytes(scan.needBytes ?? 0)}</span></div>
+          <div className="file-row"><span>{t('sync.driveFilesToCopy')}</span><span>{scan.files?.need.toLocaleString()}</span><span>{formatBytes(scan.files?.needBytes ?? 0)}</span></div>
+          <div className="file-row"><span>{t('sync.freeAfter')}</span><span /><span>{formatBytes(Math.max(0, (scan.free ?? 0) - (scan.needBytes ?? 0) - (scan.files?.needBytes ?? 0)))}</span></div>
+          {!scan.writable && <p className="error">{t('sync.cannotWrite', { mount: scan.mount ?? '' })}</p>}
+          {scan.writable && !scan.enough && <p className="error">{t('sync.notEnoughRoom', { need: formatBytes(scan.needBytes ?? 0), free: formatBytes(scan.free ?? 0) })}</p>}
           {scan.writable && scan.enough && (
             <>
-              <h4 className="library-sub" style={{ marginTop: 16 }}>And the rules</h4>
+              <h4 className="library-sub" style={{ marginTop: 16 }}>{t('sync.andTheRules')}</h4>
               {(['photos', 'files'] as const).map(content => (
                 <div key={content} className="rule-options" style={{ marginBottom: 6 }}>
-                  {([['off', 'block', content === 'photos' ? 'No photos' : 'No Drive files'],
-                     ['receive', 'arrowRight', `Copy ${content === 'photos' ? 'photos' : 'Drive files'} to ${picked?.label}`]] as const).map(([value, icon, label]) => (
+                  {([['off', 'block', content === 'photos' ? t('sync.noPhotos') : t('sync.noDriveFiles')],
+                     ['receive', 'arrowRight', t(content === 'photos' ? 'sync.copyPhotosTo' : 'sync.copyDriveFilesTo', { name: picked?.label ?? '' })]] as const).map(([value, icon, label]) => (
                     <button key={value} className={rules[content] === value ? 'on' : ''}
                       onClick={() => setRules(r => ({ ...r, [content]: value }))}>
                       <span className="glyph"><Icon name={icon} size={18} /></span>
@@ -440,35 +424,32 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
                 </div>
               ))}
               <label className="rule-hint check-row"><input type="checkbox" checked={keepPurgatory} onChange={e => setKeepPurgatory(e.target.checked)} />
-                <span>Keep the purgatory on {picked?.label}<br />deleted items wait there for their last days instead of on this PC; what is in it now moves there</span></label>
-              <p className="rule-hint">A Drive file that changed replaces the drive's copy, and the older one is kept in
-                Tetra/Files history. To let old photos live on it instead of this PC, make it Storage on its card afterwards.</p>
-              <p className="rule-hint">Everything goes under <b>{scan.mount}/Tetra</b> and nothing else on the drive is
-                touched. Each file is read back and checked after it is written, and nothing is ever deleted or lost —
-                on the drive or here. Nothing crosses until you press Start.</p>
+                <span>{t('sync.keepPurgatoryOn', { name: picked?.label ?? '' })}<br />{t('sync.keepPurgatoryOnSub')}</span></label>
+              <p className="rule-hint">{t('sync.driveFileChanged')}</p>
+              <p className="rule-hint">{tr('sync.everythingUnder', { path: <b>{scan.mount}/Tetra</b> })}</p>
             </>
           )}
         </>
       )}
-      {scan && !scan.plugged && <p className="error">That drive is no longer plugged in.</p>}
-      {busy && <p className="rule-hint">Copying… {busy.done.toLocaleString()} of {busy.total.toLocaleString()}, {busy.copied.toLocaleString()} written.</p>}
+      {scan && !scan.plugged && <p className="error">{t('sync.noLongerPlugged')}</p>}
+      {busy && <p className="rule-hint">{t('sync.copyingProgress', { done: busy.done.toLocaleString(), total: busy.total.toLocaleString(), copied: busy.copied.toLocaleString() })}</p>}
       {error && <p className="error">{error}</p>}
       <div className="dialog-actions">
-        <button onClick={onClose} disabled={!!busy}>Cancel</button>
+        <button onClick={onClose} disabled={!!busy}>{t('common.cancel')}</button>
         <button className="filled-button" disabled={!scan?.plugged || !scan?.writable || !scan?.enough || !!busy} onClick={start}>
-          {busy ? 'Copying…' : 'Start'}
+          {busy ? t('sync.copying') : t('common.start')}
         </button>
       </div>
     </Modal>
   )
 }
 
-const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+const day = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' })
 
 /** "3 months", "1 year", "10 days": a number of days in the largest unit it divides into. */
 function spanOf(days: number) {
   const [unit, per] = [...UNITS].reverse().find(([, n]) => days % n === 0) ?? UNITS[0]
-  return `${days / per} ${unit}${days / per > 1 ? 's' : ''}`
+  return t(spanKey(unit), { count: days / per })
 }
 
 /**
@@ -480,7 +461,7 @@ function MoveDialog({ device, connection, here, onClose, onDone }: { device: Syn
   const [keepFavorites, setKeepFavorites] = useState(connection.keepFavorites ?? true)
   const [p, setP] = useState<MovePreview | null>(null)
   const files = connection.content === 'files'
-  const it = files ? 'files' : 'photos', What = files ? 'Files' : 'Photos'
+  const It = files ? 'Files' : 'Photos', What = files ? t('app.files') : t('app.photos')
   useEffect(() => { window.drive.sync.movePreview(device.id, { keepDays, keepFavorites, content: connection.content }).then(setP) }, [keepDays, keepFavorites])
   const start = async () => {
     await window.drive.sync.setConnection(device.id, connection.content, { direction: 'send', keep: 'nothing', keepDays, keepFavorites })
@@ -490,31 +471,27 @@ function MoveDialog({ device, connection, here, onClose, onDone }: { device: Syn
   const Here = here[0].toUpperCase() + here.slice(1)
   return (
     <Modal onClose={onClose}>
-      <h3>Move {it} from {device.name} to {here}</h3>
+      <h3>{t(`sync.moveTitle${It}`, { device: device.name, here })}</h3>
       <ol className="move-steps">
-        <li>{device.name} sends {here} the {it} it is missing, each checked on arrival. {Here} stops sending {it} to {device.name}.</li>
-        <li>{device.name} keeps the last <span className="drive-window"><Days days={keepDays} onChange={setKeepDays} /></span>
-          <label className="check-row"><input type="checkbox" checked={keepFavorites} onChange={e => setKeepFavorites(e.target.checked)} /><span>and every favorite, however old</span></label></li>
-        {files
-          ? <li>Older files that {here} holds go to {device.name}'s own Trash at each sync — only files; every folder stays,
-              Documents and Scanned Documents included. They wait there their 30 days and then go to the purgatory.</li>
-          : <li>Older photos that {here} holds are offered on {device.name}'s Sync page to move off it — into its Trash, where
-              they wait their 30 days and then go to the purgatory. Nothing is removed without that tap.</li>}
-        <li>{Here} keeps every one of them, whatever {device.name} puts in its Trash.</li>
+        <li>{t(`sync.moveStep1${It}`, { device: device.name, here, Here })}</li>
+        <li>{tr('sync.moveKeepsLast', { device: device.name, days: <span className="drive-window"><Days days={keepDays} onChange={setKeepDays} /></span> })}
+          <label className="check-row"><input type="checkbox" checked={keepFavorites} onChange={e => setKeepFavorites(e.target.checked)} /><span>{t('sync.everyFavorite')}</span></label></li>
+        <li>{t(`sync.moveStep3${It}`, { device: device.name, here })}</li>
+        <li>{t('sync.moveStep4', { device: device.name, Here })}</li>
       </ol>
       {!p ? <span className="spinner" /> : (
         <>
-          <div className="file-row head" style={{ marginTop: 10 }}><span>On {device.name}{p.lastSeen ? `, as of ${when.format(p.lastSeen)}` : ''}</span><span>{What}</span><span>Size</span></div>
-          <div className="file-row"><span>Would move to {here}</span><span>{p.go.toLocaleString()}</span><span>{formatBytes(p.goBytes)}</span></div>
-          <div className="file-row"><span>Stay on {device.name}</span><span>{p.keep.toLocaleString()}</span><span /></div>
-          {p.notOnPc > 0 && <div className="file-row"><span>Not on {here} yet — sent first, then counted</span><span>{p.notOnPc.toLocaleString()}</span><span /></div>}
-          {p.holds === 0 && <p className="rule-hint">{device.name} has not listed its {it} yet; the numbers appear after its next sync.</p>}
+          <div className="file-row head" style={{ marginTop: 10 }}><span>{p.lastSeen ? t('sync.onDeviceAsOf', { name: device.name, when: when.format(p.lastSeen) }) : t('sync.onDevice', { name: device.name })}</span><span>{What}</span><span>{t('sync.colSize')}</span></div>
+          <div className="file-row"><span>{t('sync.wouldMoveTo', { here })}</span><span>{p.go.toLocaleString()}</span><span>{formatBytes(p.goBytes)}</span></div>
+          <div className="file-row"><span>{t('sync.stayOn', { name: device.name })}</span><span>{p.keep.toLocaleString()}</span><span /></div>
+          {p.notOnPc > 0 && <div className="file-row"><span>{t('sync.notHereYet', { here })}</span><span>{p.notOnPc.toLocaleString()}</span><span /></div>}
+          {p.holds === 0 && <p className="rule-hint">{t(`sync.notListed${It}`, { name: device.name })}</p>}
         </>
       )}
-      <p className="rule-hint">A Move means {here} keeps everything and {device.name} only a window. To keep everything on both, choose Both ways or a Copy instead.</p>
+      <p className="rule-hint">{t('sync.moveMeans', { here, device: device.name })}</p>
       <div className="dialog-actions">
-        <button onClick={onClose}>Cancel</button>
-        <button className="filled-button" onClick={start}>Start the Move</button>
+        <button onClick={onClose}>{t('common.cancel')}</button>
+        <button className="filled-button" onClick={start}>{t('sync.startMove')}</button>
       </div>
     </Modal>
   )
@@ -526,11 +503,11 @@ function HistoryDialog({ here, onClose }: { here: string; onClose: () => void })
   useEffect(() => { window.drive.history({ limit: 500 }).then(setRows) }, [])
   return (
     <Modal onClose={onClose}>
-      <h3>History</h3>
-      <p className="rule-hint">Everything that crossed, moved or was deleted, and for which device. Nothing here is ever edited.</p>
-      {!rows ? <span className="spinner" /> : rows.length === 0 ? <p className="rule-hint">Nothing yet.</p> : (
+      <h3>{t('sync.history')}</h3>
+      <p className="rule-hint">{t('sync.historyHint')}</p>
+      {!rows ? <span className="spinner" /> : rows.length === 0 ? <p className="rule-hint">{t('sync.nothingYet')}</p> : (
         <div className="file-scroll">
-          <div className="file-row head history-row"><span>When</span><span>What</span><span>Where</span></div>
+          <div className="file-row head history-row"><span>{t('sync.colWhen')}</span><span>{t('sync.colWhat')}</span><span>{t('sync.colWhere')}</span></div>
           {rows.map(r => (
             <div className="file-row history-row" key={r.id}>
               <span>{when.format(r.at)}</span>
@@ -540,12 +517,15 @@ function HistoryDialog({ here, onClose }: { here: string; onClose: () => void })
           ))}
         </div>
       )}
-      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>Close</button></div>
+      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>{t('common.close')}</button></div>
     </Modal>
   )
 }
 
 const UNITS = [['day', 1], ['week', 7], ['month', 30], ['year', 365]] as const
+/** "3 months" (sync.spanMonth) or, without the number, "months" (sync.unitMonth): plural forms by count */
+const spanKey = (u: string) => `sync.span${u[0].toUpperCase()}${u.slice(1)}`
+const unitKey = (u: string) => `sync.unit${u[0].toUpperCase()}${u.slice(1)}`
 /** A number of days, shown as the largest unit it divides into evenly. */
 function Days({ days, onChange, allowNever }: { days: number; onChange: (days: number) => void; allowNever?: boolean }) {
   const [unit, per] = [...UNITS].reverse().find(([, n]) => days > 0 && days % n === 0) ?? UNITS[0]
@@ -554,9 +534,9 @@ function Days({ days, onChange, allowNever }: { days: number; onChange: (days: n
     <span className="drive-window">
       {!never && <input className="field" type="number" min={1} max={999} value={days / per} onChange={e => onChange(Math.max(1, Number(e.target.value) || 1) * per)} />}
       {!never && <select className="field" value={unit} onChange={e => onChange((days / per) * UNITS.find(u => u[0] === e.target.value)![1])}>
-        {UNITS.map(([u]) => <option key={u} value={u}>{u}{days / per > 1 ? 's' : ''}</option>)}
+        {UNITS.map(([u]) => <option key={u} value={u}>{t(unitKey(u), { count: days / per })}</option>)}
       </select>}
-      {allowNever && <label><input type="checkbox" checked={never} onChange={e => onChange(e.target.checked ? 0 : 30)} /> never delete</label>}
+      {allowNever && <label><input type="checkbox" checked={never} onChange={e => onChange(e.target.checked ? 0 : 30)} /> {t('sync.neverDelete')}</label>}
     </span>
   )
 }
@@ -575,14 +555,13 @@ function DeletedItems({ here, drives, setDialog }: { here: string; drives: SyncD
   const place = drives.find(d => d.id === s.location)?.name ?? here
   return (
     <section className="island library">
-      <h3><Icon name="trash" size={20} />Deleted items
-        <button className="link" onClick={() => setDialog(<HistoryDialog here={here} onClose={() => setDialog(null)} />)}>History</button>
+      <h3><Icon name="trash" size={20} />{t('sync.deletedItems')}
+        <button className="link" onClick={() => setDialog(<HistoryDialog here={here} onClose={() => setDialog(null)} />)}>{t('sync.history')}</button>
       </h3>
-      <p className="rule-hint drive-window">In the Trash for <Days days={s.trashDays} onChange={trashDays => set({ trashDays })} /></p>
-      <p className="rule-hint drive-window">then in the purgatory on {place} for <Days days={s.purgatoryDays} allowNever onChange={purgatoryDays => set({ purgatoryDays })} /></p>
-      <p className="rule-hint">After its time in the Trash an item is not deleted: it goes to a hidden <b>.purgatory</b> folder on the{' '}
-        {s.location ? 'drive' : 'computer'}, checked byte for byte, and only after that time is it gone. {s.location ? 'With the drive unplugged it waits in the Trash. ' : 'Tick \u201cKeep the purgatory here\u201d on a drive\u2019s card to keep it there instead. '}
-        Emptying the Trash by hand is a plain delete.{held && held.items > 0 && ` The purgatory holds ${held.items.toLocaleString()} items, ${formatBytes(held.bytes)}.`}</p>
+      <p className="rule-hint drive-window">{tr('sync.inTrashFor', { days: <Days days={s.trashDays} onChange={trashDays => set({ trashDays })} /> })}</p>
+      <p className="rule-hint drive-window">{tr('sync.thenPurgatory', { place, days: <Days days={s.purgatoryDays} allowNever onChange={purgatoryDays => set({ purgatoryDays })} /> })}</p>
+      <p className="rule-hint">{tr(s.location ? 'sync.purgatoryHowDrive' : 'sync.purgatoryHowComputer', { folder: <b>.purgatory</b> })}
+        {held && held.items > 0 && ' ' + t('sync.purgatoryHolds', { n: held.items.toLocaleString(), size: formatBytes(held.bytes) })}</p>
     </section>
   )
 }
@@ -607,41 +586,35 @@ export function OffloadDialog({ deviceId, onClose }: { deviceId: string; onClose
   }
   if (done) return (
     <Modal onClose={onClose}>
-      <h3>{formatBytes(done.bytes)} freed</h3>
-      <p>{done.moved.toLocaleString()} photos now live on {plan?.name}. They are still in Photos, People and search; opening
-        one needs {plan?.name} plugged in.</p>
-      {after && <p className="rule-hint">This disk now: {after.percent} % full, {formatBytes(after.free)} free.</p>}
-      {done.failed.length > 0 && <p className="error">{done.failed.length} stayed here: {done.failed.slice(0, 3).join(' · ')}</p>}
-      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>Close</button></div>
+      <h3>{t('sync.freed', { size: formatBytes(done.bytes) })}</h3>
+      <p>{t('sync.nowLiveOn', { n: done.moved.toLocaleString(), name: plan?.name ?? '' })}</p>
+      {after && <p className="rule-hint">{t('sync.diskNow', { pct: after.percent, free: formatBytes(after.free) })}</p>}
+      {done.failed.length > 0 && <p className="error">{t('sync.stayedHere', { n: done.failed.length, list: done.failed.slice(0, 3).join(' · ') })}</p>}
+      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>{t('common.close')}</button></div>
     </Modal>
   )
-  const why = plan && (plan.rules.offload ? `to bring this disk under ${plan.rules.percent} %`
-    : `older than ${plan.rules.keep} ${plan.rules.unit}${plan.rules.keep > 1 ? 's' : ''}`)
+  const why = plan && (plan.rules.offload ? t('sync.whyUnder', { pct: plan.rules.percent })
+    : t('sync.whyOlder', { span: t(spanKey(plan.rules.unit), { count: plan.rules.keep }) }))
   return (
     <Modal onClose={busy ? () => {} : onClose}>
       {!plan ? (error ? <p className="error">{error}</p> : <span className="spinner" />) : plan.count === 0 ? (
-        <><h3>Nothing to free</h3><p className="rule-hint">Every photo {why} that {plan.name} holds has already left this PC,
-          or is a favorite{plan.rules.copies > 1 ? `, or is not yet in ${plan.rules.copies} places` : ''}. A backup to {plan.name} runs
-          by itself while it is plugged in.</p></>
+        <><h3>{t('sync.nothingToFree')}</h3><p className="rule-hint">{t('sync.nothingToFreeWhy', { why: why ?? '', name: plan.name, copies: plan.rules.copies > 1 ? t('sync.orNotInPlaces', { n: plan.rules.copies }) : '' })}</p></>
       ) : (
         <>
-          <h3>Free {formatBytes(plan.bytes)}?</h3>
-          <p>{plan.count.toLocaleString()} photos {why} are safe on <b>{plan.name}</b>
-            {plan.oldest && plan.newest && <> — from {day.format(plan.oldest)} to {day.format(plan.newest)}</>}.</p>
-          <p className="rule-hint">Each one is read back from {plan.name} and checked, and only then is this PC's copy deleted —
-            not put in the Trash, which is on this same disk and would free nothing. They stay in your library: thumbnails,
-            People, collections and search keep them, and they open from {plan.name} whenever it is plugged in.{plan.rules.favorites && ' Favorites stay here.'}</p>
-          {plan.disk && <p className="rule-hint">This disk: {plan.disk.percent} % full, {formatBytes(plan.disk.free)} free.</p>}
-          {!!plan.short && <p className="rule-hint risk">Even every photo that may go leaves this disk above {plan.rules.percent} %:
-            another {formatBytes(plan.short)} is other things on it.</p>}
+          <h3>{t('sync.freeAsk', { size: formatBytes(plan.bytes) })}</h3>
+          <p>{tr('sync.safeOn', { n: plan.count.toLocaleString(), why: why ?? '', name: <b>{plan.name}</b> })}
+            {plan.oldest && plan.newest && <> {t('sync.fromTo', { from: day.format(plan.oldest), to: day.format(plan.newest) })}</>}.</p>
+          <p className="rule-hint">{t('sync.readBack', { name: plan.name })}{plan.rules.favorites && ' ' + t('sync.favoritesStay')}</p>
+          {plan.disk && <p className="rule-hint">{t('sync.diskThis', { pct: plan.disk.percent, free: formatBytes(plan.disk.free) })}</p>}
+          {!!plan.short && <p className="rule-hint risk">{t('sync.evenEvery', { pct: plan.rules.percent, size: formatBytes(plan.short) })}</p>}
         </>
       )}
-      {busy && <p className="rule-hint">Checking and moving… {busy.done.toLocaleString()} of {busy.total.toLocaleString()}, {busy.moved.toLocaleString()} moved.</p>}
+      {busy && <p className="rule-hint">{t('sync.checkingMoving', { done: busy.done.toLocaleString(), total: busy.total.toLocaleString(), moved: busy.moved.toLocaleString() })}</p>}
       {error && plan && <p className="error">{error}</p>}
       <div className="dialog-actions">
-        <button onClick={onClose} disabled={!!busy}>{plan?.count ? 'Not now' : 'Close'}</button>
-        {!!plan?.count && plan.count > 10 && <button disabled={!!busy} onClick={() => go(10)}>Try 10 first</button>}
-        {!!plan?.count && <button className="filled-button" disabled={!!busy} onClick={() => go()}>Yes, free {formatBytes(plan.bytes)}</button>}
+        <button onClick={onClose} disabled={!!busy}>{plan?.count ? t('sync.notNow') : t('common.close')}</button>
+        {!!plan?.count && plan.count > 10 && <button disabled={!!busy} onClick={() => go(10)}>{t('sync.try10')}</button>}
+        {!!plan?.count && <button className="filled-button" disabled={!!busy} onClick={() => go()}>{t('sync.yesFree', { size: formatBytes(plan.bytes) })}</button>}
       </div>
     </Modal>
   )
@@ -660,10 +633,10 @@ function DriveCard({ device, disk, onChange, setDialog }: { device: SyncDevice; 
   const [moving, setMoving] = useState('')
   useEffect(() => { window.drive.purgatory.settings().then(s => setPurgatoryHere(s.location === device.id)) }, [device.id])
   const placePurgatory = async (here: boolean) => {
-    setMoving('Moving the purgatory…')
+    setMoving(t('sync.movingPurgatory'))
     const r = await window.drive.purgatory.setLocation(here ? device.id : null)
     setPurgatoryHere(here)
-    setMoving(r.failed.length ? `${r.moved} moved, ${r.failed.length} failed.` : r.waiting ? `${r.moved} moved; ${r.waiting} wait until the drive they are on is plugged in.` : '')
+    setMoving(r.failed.length ? t('sync.movedFailed', { moved: r.moved, n: r.failed.length }) : r.waiting ? t('sync.movedWaiting', { moved: r.moved, n: r.waiting }) : '')
     onChange()
   }
   // Again whenever the disk changes: after a Free space the card must not still offer what already went.
@@ -675,8 +648,8 @@ function DriveCard({ device, disk, onChange, setDialog }: { device: SyncDevice; 
     onChange()
   }
   const backUp = async () => {
-    setBacking('Backing up…')
-    try { const b = await window.drive.sync.backUpToDrive(device.id); setBacking(`${b.copied.toLocaleString()} copied, ${b.already.toLocaleString()} already there${b.failed.length ? `, ${b.failed.length} failed` : ''}.`) }
+    setBacking(t('sync.backingUp'))
+    try { const b = await window.drive.sync.backUpToDrive(device.id); setBacking(t(b.failed.length ? 'sync.copiedAlreadyFailed' : 'sync.copiedAlready', { copied: b.copied.toLocaleString(), already: b.already.toLocaleString(), n: b.failed.length })) }
     catch (e) { setBacking(e instanceof Error ? e.message : String(e)) }
     onChange()
   }
@@ -689,60 +662,59 @@ function DriveCard({ device, disk, onChange, setDialog }: { device: SyncDevice; 
     <>
       {device.connections.map(c => {
         const on = c.direction === 'receive' || c.direction === 'both'
-        const what = c.content === 'files' ? 'Drive files' : 'Photos'
+        const what = c.content === 'files' ? t('sync.driveFiles') : t('app.photos')
         return (
           <section key={c.content} className="connection-rules">
             <h4><Icon name={c.content === 'files' ? 'folder' : 'photos'} size={18} />{what}</h4>
             <div className="rule-options">
-              {opt(!on, 'block', 'Off', () => copy(c.content, false))}
-              {opt(on, 'arrowRight', `Copy to ${device.name}`, () => copy(c.content, true))}
+              {opt(!on, 'block', t('common.off'), () => copy(c.content, false))}
+              {opt(on, 'arrowRight', t('sync.copyTo', { name: device.name }), () => copy(c.content, true))}
             </div>
           </section>
         )
       })}
       <section className="connection-rules">
-        <h4><Icon name="database" size={18} />What {device.name} is for</h4>
+        <h4><Icon name="database" size={18} />{t('sync.whatFor', { name: device.name })}</h4>
         <div className="rule-options">
-          {opt(r.role === 'backup', 'copy', 'Backup', () => set({ role: 'backup' }), 'a copy')}
-          {opt(r.role === 'storage', 'moveTo', 'Storage', () => set({ role: 'storage' }), 'photos live here')}
+          {opt(r.role === 'backup', 'copy', t('sync.roleBackup'), () => set({ role: 'backup' }), t('sync.roleBackupNote'))}
+          {opt(r.role === 'storage', 'moveTo', t('sync.kindStorage'), () => set({ role: 'storage' }), t('sync.roleStorageNote'))}
         </div>
         {r.role === 'storage' && (
           <>
             <div className="rule-options">
-              {opt(r.offload, 'moveTo', 'Offload on', () => set({ offload: true }), 'keep the disk under a line')}
-              {opt(!r.offload, 'photos', 'Offload off', () => set({ offload: false }), 'keep a window here')}
+              {opt(r.offload, 'moveTo', t('sync.offloadOn'), () => set({ offload: true }), t('sync.offloadOnNote'))}
+              {opt(!r.offload, 'photos', t('sync.offloadOff'), () => set({ offload: false }), t('sync.offloadOffNote'))}
             </div>
             {r.offload ? (
-              <label className="rule-hint drive-slider">Keep this disk under <b>{r.percent} %</b> full{disk && ` (now ${disk.percent} %)`}
+              <label className="rule-hint drive-slider">{tr('sync.keepUnder', { pct: <b>{r.percent} %</b> })}{disk && ' ' + t('sync.nowPct', { pct: disk.percent })}
                 <input type="range" min={50} max={95} step={5} defaultValue={r.percent} onChange={e => set({ percent: Number(e.target.value) })} />
               </label>
             ) : (
-              <label className="rule-hint drive-window">Keep the last
-                <input className="field" type="number" min={1} max={1000} value={r.keep} onChange={e => set({ keep: Math.max(1, Number(e.target.value) || 1) })} />
-                <select className="field" value={r.unit} onChange={e => set({ unit: e.target.value as DriveRules['unit'] })}>
-                  {(['day', 'week', 'month', 'year'] as const).map(u => <option key={u} value={u}>{u}{r.keep > 1 ? 's' : ''}</option>)}
-                </select>
-                on this PC
+              <label className="rule-hint drive-window">{tr('sync.keepLastOnPc', {
+                n: <input className="field" type="number" min={1} max={1000} value={r.keep} onChange={e => set({ keep: Math.max(1, Number(e.target.value) || 1) })} />,
+                unit: <select className="field" value={r.unit} onChange={e => set({ unit: e.target.value as DriveRules['unit'] })}>
+                  {(['day', 'week', 'month', 'year'] as const).map(u => <option key={u} value={u}>{t(unitKey(u), { count: r.keep })}</option>)}
+                </select> })}
               </label>
             )}
-            <label className="rule-hint drive-window">Only once
+            <label className="rule-hint drive-window">{t('sync.onlyOnce')}
               <select className="field" value={r.copies} onChange={e => set({ copies: Number(e.target.value) })}>
                 {[1, 2, 3].map(n => <option key={n} value={n}>{n}</option>)}
               </select>
-              {r.copies === 1 ? 'place holds it' : 'places hold it'} ({device.name} counts, this PC does not)
+              {t('sync.placesHold', { count: r.copies, name: device.name })}
             </label>
-            <label className="rule-hint check-row"><input type="checkbox" checked={r.favorites} onChange={e => set({ favorites: e.target.checked })} /><span>Favorites always stay on this PC</span></label>
-            <p className="rule-hint">{plan ? (plan.count ? <>{plan.count.toLocaleString()} photos, <b>{formatBytes(plan.bytes)}</b>, could go now.</> : 'Nothing to free right now.') : '…'}
-              {' '}{r.auto ? 'It goes by itself, and you are told.' : 'You are always asked first.'}</p>
-            <label className="rule-hint check-row"><input type="checkbox" checked={r.auto} onChange={e => set({ auto: e.target.checked })} /><span>Free space by itself, without asking</span></label>
-            {!!plan?.count && <button className="filled-button" onClick={() => setDialog(<OffloadDialog deviceId={device.id} onClose={() => { setDialog(null); onChange() }} />)}>Free {formatBytes(plan.bytes)}…</button>}
+            <label className="rule-hint check-row"><input type="checkbox" checked={r.favorites} onChange={e => set({ favorites: e.target.checked })} /><span>{t('sync.favoritesAlwaysStay')}</span></label>
+            <p className="rule-hint">{plan ? (plan.count ? tr('sync.couldGoNow', { n: plan.count.toLocaleString(), size: <b>{formatBytes(plan.bytes)}</b> }) : t('sync.nothingToFreeNow')) : '…'}
+              {' '}{r.auto ? t('sync.goesByItself') : t('sync.alwaysAsked')}</p>
+            <label className="rule-hint check-row"><input type="checkbox" checked={r.auto} onChange={e => set({ auto: e.target.checked })} /><span>{t('sync.autoFree')}</span></label>
+            {!!plan?.count && <button className="filled-button" onClick={() => setDialog(<OffloadDialog deviceId={device.id} onClose={() => { setDialog(null); onChange() }} />)}>{t('sync.freeEllipsis', { size: formatBytes(plan.bytes) })}</button>}
           </>
         )}
-        <label className="rule-hint check-row"><input type="checkbox" checked={!!r.screenshots} onChange={e => set({ screenshots: e.target.checked })} /><span>Back up screenshots</span></label>
+        <label className="rule-hint check-row"><input type="checkbox" checked={!!r.screenshots} onChange={e => set({ screenshots: e.target.checked })} /><span>{t('sync.backUpScreenshots')}</span></label>
         {purgatoryHere !== null && <label className="rule-hint check-row"><input type="checkbox" checked={purgatoryHere} disabled={!!moving && moving.endsWith('…')}
-          onChange={e => placePurgatory(e.target.checked)} /><span>Keep the purgatory here<br />otherwise it stays on this PC</span></label>}
+          onChange={e => placePurgatory(e.target.checked)} /><span>{t('sync.keepPurgatoryHere')}<br />{t('sync.keepPurgatoryHereSub')}</span></label>}
         {moving && <p className="rule-hint">{moving}</p>}
-        <button className="text-button" onClick={backUp} disabled={backing === 'Backing up…'}>Back up now</button>
+        <button className="text-button" onClick={backUp} disabled={backing === t('sync.backingUp')}>{t('sync.backUpNow')}</button>
         {backing && <p className="rule-hint">{backing}</p>}
       </section>
     </>
@@ -755,36 +727,37 @@ export function SyncPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
   useEffect(() => { load(); const off = window.drive.sync.onReceived(load); const t = setInterval(load, 3000); return () => { off(); clearInterval(t) } }, [])
   const close = () => { setDialog(null); load() }
   const add = () => setDialog(<AddDevice onClose={() => setDialog(null)} onDone={close} setDialog={setDialog} />)
-  const forget = (d: SyncDevice) => setDialog(<Confirm title={`Forget ${d.name}?`} action="Forget device" danger onClose={close}
-    body="It can no longer send photos until you pair it again. Photos already received stay." onConfirm={async () => { await window.drive.sync.forget(d.id).catch(e => alert(e instanceof Error ? e.message : String(e))); load() }} />)
-  const state = (d: SyncDevice) => !d.last_seen ? 'Not connected yet' : Date.now() - d.last_seen < 15_000 ? 'Connected · sending' : Date.now() - d.last_seen < 120_000 ? 'Connected' : `Last seen ${when.format(d.last_seen)}`
+  const forget = (d: SyncDevice) => setDialog(<Confirm title={t('sync.forgetTitle', { name: d.name })} action={t('sync.forgetDevice')} danger onClose={close}
+    body={t('sync.forgetBody')} onConfirm={async () => { await window.drive.sync.forget(d.id).catch(e => alert(e instanceof Error ? e.message : String(e))); load() }} />)
+  // [what it says, connected]: the badge lights by the flag, never by the words
+  const state = (d: SyncDevice): [string, boolean] => !d.last_seen ? [t('sync.notConnectedYet'), false] : Date.now() - d.last_seen < 15_000 ? [t('sync.connectedSending'), true] : Date.now() - d.last_seen < 120_000 ? [t('sync.connected'), true] : [t('sync.lastSeen', { when: when.format(d.last_seen) }), false]
   const devices = status?.devices ?? []
   const self = status?.self
-  const here = self?.label ?? 'here'
+  const here = self?.label ?? t('sync.here')
   return (
     <div className="timeline">
       <header className="topbar">
-        <div className="island title-island"><Icon name="device" /><h1>Devices</h1></div>
+        <div className="island title-island"><Icon name="device" /><h1>{t('app.devices')}</h1></div>
         {self && (
           <div className="island self-island">
             <button className="self-chip" onClick={() => setDialog(<SelfEditor self={self} onDone={close} />)}
-              title="What this machine is, and what to call it">
+              title={t('sync.selfChipTitle')}>
               <Icon name={self.kind as IconName} size={20} />
-              <span>This device</span>
+              <span>{t('sync.thisDevice')}</span>
               {status?.counts && <span className="device-tally inline">
-                <span title={`photos on ${here}`}><Icon name="photos" size={16} />{status.counts.photos.toLocaleString()}</span>
-                <span title={`files on ${here}`}><Icon name="folder" size={16} />{status.counts.files.toLocaleString()}</span>
+                <span title={t('sync.photosOnHere', { here })}><Icon name="photos" size={16} />{status.counts.photos.toLocaleString()}</span>
+                <span title={t('sync.filesOnHere', { here })}><Icon name="folder" size={16} />{status.counts.files.toLocaleString()}</span>
               </span>}
             </button>
-            <button className="round small" title="What this machine does for the others"
+            <button className="round small" title={t('sync.hubButtonTitle')}
               onClick={() => setDialog(<HubInfo self={self} onClose={() => setDialog(null)} />)}><Icon name="info" size={18} /></button>
           </div>
         )}
       </header>
-      {status?.error && <div className="island analysis"><Icon name="warning" /><span>Sync is not running: {status.error}</span></div>}
+      {status?.error && <div className="island analysis"><Icon name="warning" /><span>{t('sync.notRunning', { error: status.error })}</span></div>}
       {status && devices.length === 0 && !status.error && (
         <div className="island add-first">
-          <h2>Pair your phone</h2>
+          <h2>{t('sync.pairYourPhone')}</h2>
           <PairingCode />
         </div>
       )}
@@ -793,42 +766,41 @@ export function SyncPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
       {devices.length > 0 && (
         <div className="device-grid">
           {devices.map(d => {
-            const s = state(d)
+            const [s, live] = state(d)
             return (
               <div key={d.id} className="island device-card">
                 <header className="device-head">
-                  <button className="card-edit" title="Rename, or change the picture"
+                  <button className="card-edit" title={t('sync.renameDevice')}
                     onClick={() => setDialog(<DeviceEditor device={d} onDone={close} />)}><Icon name="edit" size={20} /></button>
-                  <span className={`sync-badge ${s.startsWith('Connected') ? 'on' : ''}`}><Icon name={(d.kind as IconName) ?? 'device'} size={30} /></span>
+                  <span className={`sync-badge ${live ? 'on' : ''}`}><Icon name={(d.kind as IconName) ?? 'device'} size={30} /></span>
                   <strong>{d.name}</strong>
-                  <small className={s.startsWith('Connected') ? 'live' : ''}>{s}</small>
+                  <small className={live ? 'live' : ''}>{s}</small>
                   <div className="device-tally">
-                    <span title={`photos on ${d.name}`}><Icon name="photos" size={16} />{d.holdsPhotos.toLocaleString()}</span>
-                    <span title={`files on ${d.name}`}><Icon name="folder" size={16} />{d.holdsFiles == null ? '—' : d.holdsFiles.toLocaleString()}</span>
+                    <span title={t('sync.photosOnDevice', { name: d.name })}><Icon name="photos" size={16} />{d.holdsPhotos.toLocaleString()}</span>
+                    <span title={t('sync.filesOnDevice', { name: d.name })}><Icon name="folder" size={16} />{d.holdsFiles == null ? '—' : d.holdsFiles.toLocaleString()}</span>
                   </div>
                 </header>
                 {!d.set_up_at && (
-                  <p className="rule-hint risk">Not set up yet — nothing crosses until you say what should.
-                    Choose below, then it starts.</p>
+                  <p className="rule-hint risk">{t('sync.notSetUp')}</p>
                 )}
                 {d.volume_uuid && d.rules ? <DriveCard device={d} disk={status?.disk ?? null} onChange={load} setDialog={setDialog} />
                   : d.connections?.map(c => <Rules key={c.content} device={d} connection={c} here={here} setDialog={setDialog}
                   onChange={async () => { if (!d.set_up_at) await window.drive.sync.completeSetup(d.id); load() }} />)}
                 <footer className="device-foot">
-                  <small>Paired {when.format(d.paired_at)}</small>
-                  <button className="text-button" onClick={() => forget(d)}>Forget</button>
+                  <small>{t('sync.paired', { when: when.format(d.paired_at) })}</small>
+                  <button className="text-button" onClick={() => forget(d)}>{t('sync.forget')}</button>
                 </footer>
               </div>
             )
           })}
           <button className="island device-card add" onClick={add}>
             <span className="sync-badge"><Icon name="add" size={30} /></span>
-            <strong>Add a device</strong>
-            <small>Show a pairing code</small>
+            <strong>{t('sync.addDevice')}</strong>
+            <small>{t('sync.showPairingCode')}</small>
           </button>
         </div>
       )}
-      {status && !status.error && <p className="hint">Listening on {status.addresses.join(', ') || 'this computer'} · port {status.port}. Only paired devices can reach it. Every file is checked by SHA-256 on the side that receives it before it is kept, nothing is overwritten, and a sync never deletes anything on either device.</p>}
+      {status && !status.error && <p className="hint">{t('sync.listening', { addresses: status.addresses.join(', ') || t('sync.thisComputer'), port: status.port })}</p>}
     </div>
   )
 }

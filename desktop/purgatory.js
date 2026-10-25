@@ -13,6 +13,7 @@ const fsp = require('node:fs/promises')
 const path = require('node:path')
 const crypto = require('node:crypto')
 const library = require('./library')
+const { t } = require('./i18n')
 const history = require('./history')
 
 const DAY = 86_400_000
@@ -172,7 +173,7 @@ async function copyTree(src, target) {
   const back = crypto.createHash('sha256')
   for await (const c of fs.createReadStream(part)) back.update(c)
   const sha256 = written.digest('hex')
-  if (back.digest('hex') !== sha256) { await fsp.rm(part, { force: true }); throw new Error('the copy on the drive did not read back the same') }
+  if (back.digest('hex') !== sha256) { await fsp.rm(part, { force: true }); throw new Error(t('sync.errPurgatoryReadBack')) }
   await fsp.rename(part, target)
   return { size: st.size, sha256 }
 }

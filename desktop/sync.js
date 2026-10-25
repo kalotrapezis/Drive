@@ -12,13 +12,14 @@ const crypto = require('node:crypto')
 const library = require('./library')
 const drives = require('./drives')
 const history = require('./history')
+const { t } = require('./i18n')
 
 const PORT = 43180
 const BEACON_PORT = 43181
 /** The pictures a device may be drawn with. `device` is a phone; the rest are for what this app will meet later. */
 const DEVICE_KINDS = ['device', 'tablet', 'computer', 'server', 'database']
-/** What to call this machine in a sentence, once it has said what it is. */
-const SELF_LABEL = { device: 'this phone', tablet: 'this tablet', computer: 'this PC', server: 'this server', database: 'this storage' }
+/** What to call this machine in a sentence, once it has said what it is (the words' keys). */
+const SELF_LABEL = { device: 'sync.selfDevice', tablet: 'sync.selfTablet', computer: 'sync.selfComputer', server: 'sync.selfServer', database: 'sync.selfDatabase' }
 
 const PAIRING_MS = 10 * 60 * 1000
 const MAX_HAVE = 5000
@@ -84,7 +85,7 @@ async function copyVerified(src, dest, expected) {
     read.on('error', reject); write.on('error', reject); write.on('finish', resolve)
     read.pipe(write)
   })
-  if (hash.digest('hex') !== expected) { await fsp.rm(part, { force: true }); throw new Error('It changed on the way; nothing was kept.') }
+  if (hash.digest('hex') !== expected) { await fsp.rm(part, { force: true }); throw new Error(t('sync.errChanged')) }
   await fsp.rename(part, dest)
 }
 
@@ -282,7 +283,7 @@ class SyncServer {
     const device = this.db.prepare('SELECT id, name, volume_uuid FROM sync_devices WHERE id = ?').get(String(deviceId))
     if (!device?.volume_uuid) throw new Error('That device is not a drive.')
     const mount = await drives.mountOf(device.volume_uuid)
-    if (!mount) throw new Error(`${device.name} is not plugged in.`)
+    if (!mount) throw new Error(t('sync.errNotPlugged', { name: device.name }))
     const root = path.join(mount, 'Tetra', 'Photos')
     // The folders are made as soon as the drive is, like a phone's: what arrives in Photos is the drive's collection.
     for (const dir of ['Photos', 'Files']) await fsp.mkdir(path.join(mount, 'Tetra', dir), { recursive: true })
@@ -352,7 +353,7 @@ class SyncServer {
     const d = this.db.prepare('SELECT id, name, volume_uuid FROM sync_devices WHERE id = ?').get(String(deviceId))
     if (!d?.volume_uuid) throw new Error('That device is not a drive.')
     const mount = await drives.mountOf(d.volume_uuid)
-    if (!mount) throw new Error(`Plug in ${d.name} first.`)
+    if (!mount) throw new Error(t('sync.errPlugInFirst', { name: d.name }))
     return { ...d, root: path.join(mount, 'Tetra', 'Photos') }
   }
 
@@ -364,7 +365,7 @@ class SyncServer {
     for (const sha of new Set(shas)) {
       this.db.prepare('DELETE FROM drive_removed WHERE device_id = ? AND sha256 = ?').run(d.id, sha)
       const row = this.db.prepare('SELECT path, sha256, size, location FROM media WHERE sha256 = ? ORDER BY location IS NOT NULL').get(sha)
-      if (!row || row.location) { if (row?.location !== d.id) out.failed.push(`${row?.path ?? sha}: not on this PC`); continue }
+      if (!row || row.location) { if (row?.location !== d.id) out.failed.push(`${row?.path ?? sha}: ${t('sync.errNotOnPc')}`); continue }
       const target = path.join(d.root, row.path)
       try {
         if (!(fs.existsSync(target) && fs.statSync(target).size === row.size)) await copyVerified(path.join(this.photosRoot, row.path), target, sha)
@@ -394,12 +395,12 @@ class SyncServer {
         if (!drivePath) continue
         if (there && !here) {
           const target = path.join(this.photosRoot, there.path)
-          if (fs.existsSync(target)) throw new Error('another file has its name on this PC')
+          if (fs.existsSync(target)) throw new Error(t('sync.errNameTaken'))
           await copyVerified(path.join(d.root, there.path), target, sha)
           this.db.prepare('UPDATE media SET location = NULL WHERE id = ?').run(there.id)
           out.broughtBack++
         } else if (there) this.db.prepare('DELETE FROM media WHERE id = ?').run(there.id) // this PC has it under another name
-        else if (!here) throw new Error('it is on no other place; it stays')
+        else if (!here) throw new Error(t('sync.errNoOtherPlace'))
         await fsp.rm(path.join(d.root, drivePath), { force: true })
         this.db.prepare('DELETE FROM sync_receipts WHERE device_id = ? AND sha256 = ?').run(d.id, sha)
         this.db.prepare("DELETE FROM device_holdings WHERE device_id = ? AND kind = 'photo' AND sha256 = ?").run(d.id, sha)
@@ -420,7 +421,7 @@ class SyncServer {
   async deleteFromDrive(deviceId, shas) {
     const d = await this.mountedDrive(deviceId)
     const pg = await this.purgatoryDrive()
-    if (!pg) throw new Error('The purgatory is not reachable (its drive is unplugged); nothing was deleted.')
+    if (!pg) throw new Error(t('sync.errPurgatoryUnreachable'))
     const out = { deleted: 0, failed: [] }
     for (const sha of new Set(shas)) {
       const rows = this.db.prepare('SELECT id, path, size, location FROM media WHERE sha256 = ?').all(sha)
@@ -430,9 +431,9 @@ class SyncServer {
       const here = rows.filter(r => !r.location).map(r => path.join(this.photosRoot, r.path)).filter(f => fs.existsSync(f))
       const source = onDrive && fs.existsSync(onDrive) ? onDrive : here[0]
       try {
-        if (!source) throw new Error('no copy to keep in the purgatory; it stays')
+        if (!source) throw new Error(t('sync.errNoPurgatoryCopy'))
         const rel = await this.purgatory.enter(pg.id, pg.mount, 'photo', source, `${d.name.replace(/[\/\0]/g, '_')}/${drivePath ?? rows[0].path}`)
-        if (this.db.prepare('SELECT sha256 FROM purgatory WHERE drive_id = ? AND rel = ?').get(pg.id, rel)?.sha256 !== sha) throw new Error('the purgatory copy is not this photo')
+        if (this.db.prepare('SELECT sha256 FROM purgatory WHERE drive_id = ? AND rel = ?').get(pg.id, rel)?.sha256 !== sha) throw new Error(t('sync.errPurgatoryNotThis'))
         for (const f of [onDrive, ...here]) if (f) await fsp.rm(f, { force: true })
         this.db.prepare('DELETE FROM media WHERE sha256 = ?').run(sha)
         this.deletedHere([sha])
@@ -481,7 +482,7 @@ class SyncServer {
     })
     const back = crypto.createHash('sha256')
     for await (const c of fs.createReadStream(part)) back.update(c)
-    if (read.digest('hex') !== back.digest('hex')) { await fsp.rm(part, { force: true }); throw new Error('The copy on the drive did not read back the same; nothing was kept.') }
+    if (read.digest('hex') !== back.digest('hex')) { await fsp.rm(part, { force: true }); throw new Error(t('sync.errReadBack')) }
     if (fs.existsSync(target)) {
       const older = path.join(mount, 'Tetra', 'Files history', new Date().toISOString().replace(/[:.]/g, '-'), f.path)
       await fsp.mkdir(path.dirname(older), { recursive: true })
@@ -510,8 +511,8 @@ class SyncServer {
   }
   forget(id) {
     // Photos that live on this drive would have nowhere to be opened from, and nobody to ask for them.
-    if (this.db.prepare('SELECT 1 FROM media WHERE location = ?').get(String(id))) throw new Error('Photos live on this drive. Bring them back before forgetting it.')
-    if (this.purgatory?.settings().location === String(id)) throw new Error('The purgatory is on this drive. Move it back to this PC before forgetting it.')
+    if (this.db.prepare('SELECT 1 FROM media WHERE location = ?').get(String(id))) throw new Error(t('sync.errPhotosLiveHere'))
+    if (this.purgatory?.settings().location === String(id)) throw new Error(t('sync.errPurgatoryHere'))
     this.db.prepare('DELETE FROM sync_devices WHERE id = ?').run(String(id))
   }
 
@@ -618,7 +619,7 @@ class SyncServer {
     if (!row.location) return { file: path.join(this.photosRoot, row.path) }
     const d = this.db.prepare('SELECT name, volume_uuid FROM sync_devices WHERE id = ?').get(row.location)
     const mount = d?.volume_uuid && await drives.mountOf(d.volume_uuid)
-    if (!mount) return { file: null, why: `Plug in ${d?.name ?? 'the drive it was moved to'} to open this.` }
+    if (!mount) return { file: null, why: t('sync.errPlugInToOpen', { name: d?.name ?? t('sync.theDriveMovedTo') }) }
     return { file: path.join(mount, 'Tetra', 'Photos', row.path) }
   }
 
@@ -669,7 +670,7 @@ class SyncServer {
     const plan = this.offloadPlan(deviceId)
     const d = this.db.prepare('SELECT id, name, volume_uuid FROM sync_devices WHERE id = ?').get(plan.deviceId)
     const mount = await drives.mountOf(d.volume_uuid)
-    if (!mount) throw new Error(`${d.name} is not plugged in.`)
+    if (!mount) throw new Error(t('sync.errNotPlugged', { name: d.name }))
     const ids = plan.ids.slice(0, limit)
     const get = this.db.prepare('SELECT id, path, sha256, size FROM media WHERE id = ? AND location IS NULL')
     const put = this.db.prepare('UPDATE media SET location = ? WHERE id = ?')
@@ -682,7 +683,7 @@ class SyncServer {
       const copy = path.join(mount, 'Tetra', 'Photos', row.path)
       try {
         const st = await fsp.stat(copy).catch(() => null)
-        if (st?.size !== row.size || await library.sha256(copy) !== row.sha256) throw new Error(`the copy on ${d.name} is not the same; this one stays here`)
+        if (st?.size !== row.size || await library.sha256(copy) !== row.sha256) throw new Error(t('sync.errCopyNotSame', { name: d.name }))
         put.run(d.id, row.id) // first, so a scan running meanwhile reads the missing file as moved, not deleted
         try { await fsp.rm(path.join(this.photosRoot, row.path)) } catch (e) { put.run(null, row.id); throw e }
         moved++; bytes += row.size
@@ -748,18 +749,18 @@ class SyncServer {
   async phoneLocation(ms = 60_000) {
     const devices = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
       WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL ORDER BY kind = 'tablet'`).all()
-    if (!devices.length) return { error: 'No phone is paired with this computer. Pair one in Settings › Sync.' }
+    if (!devices.length) return { error: t('sync.errNoPhonePaired') }
     let said = null // the first thing a device said instead of a fix ("location is off", "no permission")
     for (const tier of [devices.filter(d => d.kind !== 'tablet'), devices.filter(d => d.kind === 'tablet')]) {
       const fix = await Promise.any(tier.map(async d => {
         const got = await this.reach(d, '/location', ms)
         if (got?.status === 200 && Number.isFinite(got.body?.lat) && Number.isFinite(got.body?.lng)) return { ...got.body, device: d.name }
-        said ||= got && (got.status !== 404 && typeof got.body?.error === 'string' ? `${d.name}: ${got.body.error}` : `${d.name} cannot answer that yet: it needs the new Tetra.`)
+        said ||= got && (got.status !== 404 && typeof got.body?.error === 'string' ? `${d.name}: ${got.body.error}` : t('sync.errCannotAnswer', { name: d.name }))
         throw new Error('no fix')
       })).catch(() => null)
       if (fix) return fix
     }
-    return { error: said ?? 'No phone answered. Open Tetra on the phone, on the same network as this computer.' }
+    return { error: said ?? t('sync.errNoPhoneAnswered') }
   }
 
   /**
@@ -769,18 +770,18 @@ class SyncServer {
    */
   async callOnPhone(number, name = '') {
     const n = String(number || '').replace(/[^\d+*#]/g, '')
-    if (n.replace(/\D/g, '').length < 3) return { error: 'Not a phone number.' }
+    if (n.replace(/\D/g, '').length < 3) return { error: t('sync.errNotPhoneNumber') }
     const phones = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
       WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind != 'tablet'`).all()
-    if (!phones.length) return { error: 'No phone is paired with this computer. Pair one in Settings › Sync.' }
+    if (!phones.length) return { error: t('sync.errNoPhonePaired') }
     let said = null
     const got = await Promise.any(phones.map(async d => {
       const r = await this.reach(d, `/call?number=${encodeURIComponent(n)}&name=${encodeURIComponent(String(name).slice(0, 80))}`, 8000)
       if (r?.status === 200 && r.body?.how) return { how: r.body.how, device: d.name }
-      said ||= r && (r.status !== 404 && typeof r.body?.error === 'string' ? `${d.name}: ${r.body.error}` : `${d.name} cannot place calls yet: it needs the new Tetra.`)
+      said ||= r && (r.status !== 404 && typeof r.body?.error === 'string' ? `${d.name}: ${r.body.error}` : t('sync.errCannotCall', { name: d.name }))
       throw new Error('no call')
     })).catch(() => null)
-    return got ?? { error: said ?? 'No phone answered. Open Tetra on the phone, on the same network as this computer.' }
+    return got ?? { error: said ?? t('sync.errNoPhoneAnswered') }
   }
 
   /** A call's state passed on to the paired tablets, which have no calls of their own (their SyncServer /call/state). */
@@ -800,10 +801,10 @@ class SyncServer {
     const got = await Promise.any(phones.map(async d => {
       const r = await this.reach(d, `/call/action?do=${encodeURIComponent(what)}`, 8000)
       if (r?.status === 200) return { ok: true }
-      said ||= r && (r.status !== 404 && typeof r.body?.error === 'string' ? r.body.error : `${d.name} needs the new Tetra for this.`)
+      said ||= r && (r.status !== 404 && typeof r.body?.error === 'string' ? r.body.error : t('sync.errNeedsNewTetra', { name: d.name }))
       throw new Error('no')
     })).catch(() => null)
-    return got ?? { error: said ?? 'The phone did not answer.' }
+    return got ?? { error: said ?? t('sync.errPhoneNoAnswer') }
   }
 
   /** Keeps the newer open/close of each path; answers with every path's newest. */
@@ -878,11 +879,11 @@ class SyncServer {
   async sendToDevice(paths, ms = 60_000) {
     const devices = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
       WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL ORDER BY kind = 'tablet'`).all()
-    if (!devices.length) return { error: 'No phone is paired with this computer. Pair one in Settings › Sync.' }
+    if (!devices.length) return { error: t('sync.errNoPhonePaired') }
     const files = []
     for (const p of paths) {
       const st = await fsp.stat(p).catch(() => null)
-      if (!st?.isFile()) return { error: `${path.basename(p)} is not a file.` }
+      if (!st?.isFile()) return { error: t('sync.errNotAFile', { name: path.basename(p) }) }
       const hash = crypto.createHash('sha256')
       for await (const c of fs.createReadStream(p)) hash.update(c)
       files.push({ path: p, size: st.size, sha256: hash.digest('hex'), modified: Math.round(st.mtimeMs) })
@@ -894,12 +895,12 @@ class SyncServer {
       for (const f of files) {
         const got = await put(d, f)
         if (got?.status === 200 && got.body?.verified) { sent++; continue }
-        said ||= got && (got.status === 404 ? `${d.name} needs the new Tetra for this.` : `${d.name}: ${got.body?.error ?? `answered ${got.status}`}`)
+        said ||= got && (got.status === 404 ? t('sync.errNeedsNewTetra', { name: d.name }) : `${d.name}: ${got.body?.error ?? t('sync.errAnswered', { status: got.status })}`)
         break
       }
-      if (sent) return sent === files.length ? { sent, device: d.name } : { sent, device: d.name, error: `${files.length - sent} of ${files.length} did not go: ${said ?? 'the phone stopped answering'}` }
+      if (sent) return sent === files.length ? { sent, device: d.name } : { sent, device: d.name, error: t('sync.errDidNotGo', { n: files.length - sent, total: files.length, why: said ?? t('sync.errStoppedAnswering') }) }
     }
-    return { error: said ?? 'No phone answered. Open Tetra on the phone, on the same network as this computer.' }
+    return { error: said ?? t('sync.errNoPhoneAnswered') }
   }
 
   /**
@@ -1526,7 +1527,7 @@ class SyncServer {
    */
   self() {
     const kind = DEVICE_KINDS.includes(this.setting('selfKind')) ? this.setting('selfKind') : 'computer'
-    return { kind, name: this.setting('selfName') || os.hostname(), label: SELF_LABEL[kind] }
+    return { kind, name: this.setting('selfName') || os.hostname(), label: t(SELF_LABEL[kind]) }
   }
 
   setSelf({ kind, name } = {}) {
