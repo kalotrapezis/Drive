@@ -5,6 +5,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const library = require('./library')
+const { t } = require('./i18n')
 
 /** Always shown, never asked: the camera, screenshots, and what the computer sends to devices. */
 const DEFAULTS = new Set(['camera', 'screenshots', 'tetra'])
@@ -102,7 +103,7 @@ class Folders {
    */
   move(root, ids, dest) {
     const parts = String(dest ?? '').split('/').filter(Boolean)
-    if (!parts.length || parts.some(p => p === '.' || p === '..' || /[\\\0]/.test(p) || p.startsWith('.'))) throw new Error('That is not a folder in Photos.')
+    if (!parts.length || parts.some(p => p === '.' || p === '..' || /[\\\0]/.test(p) || p.startsWith('.'))) throw new Error(t('photos.errNotPhotosFolder'))
     const rel = parts.join('/'), dir = path.join(root, rel)
     fs.mkdirSync(dir, { recursive: true })
     const get = this.db.prepare('SELECT id, path, sha256 FROM media WHERE id = ?')
@@ -114,7 +115,7 @@ class Folders {
     for (const id of ids) {
       const row = get.get(Number(id))
       if (!row) continue
-      if (this.db.prepare('SELECT location FROM media WHERE id = ?').get(row.id).location) { out.failed.push(`${row.path}: it lives on a storage drive`); continue }
+      if (this.db.prepare('SELECT location FROM media WHERE id = ?').get(row.id).location) { out.failed.push(t('photos.errOnDrive', { path: row.path })); continue }
       if (path.dirname(row.path) === rel) continue
       const { name, ext } = path.parse(row.path)
       let target = path.join(dir, name + ext)

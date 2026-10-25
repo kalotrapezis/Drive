@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Collection, PhotoPlace } from './drive'
 import { Icon } from './Icon'
+import { t } from './i18n'
 
 /** Native modal <dialog>: focus trap, Esc and backdrop come from the platform. */
 export function Modal({ onClose, children }: { onClose: () => void; children: ReactNode }) {
@@ -21,7 +22,7 @@ export function Confirm({ title, body, action, danger, onConfirm, onClose }:
       <h3>{title}</h3>
       <p>{body}</p>
       <div className="dialog-actions">
-        <button className="text-button" onClick={onClose}>Cancel</button>
+        <button className="text-button" onClick={onClose}>{t('common.cancel')}</button>
         <button className={`filled-button ${danger ? 'danger' : ''}`} autoFocus onClick={() => { onClose(); onConfirm() }}>{action}</button>
       </div>
     </Modal>
@@ -39,12 +40,12 @@ export function NewCollection({ onCreate, onClose }: { onCreate: (name: string) 
   return (
     <Modal onClose={onClose}>
       <form onSubmit={submit}>
-        <h3>New collection</h3>
-        <input className="field" autoFocus maxLength={60} placeholder="Collection name" value={name} onChange={e => { setName(e.target.value); setError('') }} />
+        <h3>{t('collections.new')}</h3>
+        <input className="field" autoFocus maxLength={60} placeholder={t('collections.namePlaceholder')} value={name} onChange={e => { setName(e.target.value); setError('') }} />
         {error && <p className="error">{error}</p>}
         <div className="dialog-actions">
-          <button type="button" className="text-button" onClick={onClose}>Cancel</button>
-          <button className="filled-button" disabled={!name.trim()}>Create</button>
+          <button type="button" className="text-button" onClick={onClose}>{t('common.cancel')}</button>
+          <button className="filled-button" disabled={!name.trim()}>{t('dialogs.create')}</button>
         </div>
       </form>
     </Modal>
@@ -55,9 +56,9 @@ export function CollectionPicker({ collections, count, onPick, onNew, onClose }:
   { collections: Collection[]; count: number; onPick: (c: Collection) => void; onNew: () => void; onClose: () => void }) {
   return (
     <Modal onClose={onClose}>
-      <h3>Add {count === 1 ? 'item' : `${count} items`} to collection</h3>
+      <h3>{t('dialogs.addToCollection', { count })}</h3>
       <div className="picker">
-        <button className="picker-row" onClick={onNew}><span className="picker-cover"><Icon name="add" /></span>New collection</button>
+        <button className="picker-row" onClick={onNew}><span className="picker-cover"><Icon name="add" /></span>{t('collections.new')}</button>
         {collections.map(c => (
           <button key={c.id} className="picker-row" onClick={() => { onClose(); onPick(c) }}>
             <span className="picker-cover">{c.cover ? <img src={`media://thumb/${c.cover}`} alt="" /> : <Icon name="collections" />}</span>
@@ -65,7 +66,7 @@ export function CollectionPicker({ collections, count, onPick, onNew, onClose }:
           </button>
         ))}
       </div>
-      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button></div>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.cancel')}</button></div>
     </Modal>
   )
 }
@@ -78,12 +79,11 @@ export function FolderPicker({ count, leaving, onPick, onClose }: { count: numbe
   const [places, setPlaces] = useState<PhotoPlace[] | null>(null)
   const [name, setName] = useState('')
   useEffect(() => { window.drive.places().then(setPlaces) }, [])
-  const what = count === 1 ? 'this photo' : `${count} photos`
   const shown = places?.filter(p => !leaving || p.name.toLowerCase() !== leaving.toLowerCase())
   return (
     <Modal onClose={onClose}>
-      <h3>{leaving ? `Move ${what} out of “${leaving}”` : `Move ${what} to a folder`}</h3>
-      <p className="rule-hint">The file really moves, on this computer. Favorites, collections and people stay with it.</p>
+      <h3>{leaving ? t('dialogs.moveOut', { count, folder: leaving }) : t('dialogs.moveToFolder', { count })}</h3>
+      <p className="rule-hint">{t('dialogs.moveHint')}</p>
       <div className="picker">
         {!shown ? <span className="spinner" /> : shown.map(p => (
           <button key={p.path} className="picker-row" onClick={() => { onClose(); onPick(p.path) }}>
@@ -93,10 +93,10 @@ export function FolderPicker({ count, leaving, onPick, onClose }: { count: numbe
         ))}
       </div>
       <form className="new-folder" onSubmit={e => { e.preventDefault(); if (name.trim()) { onClose(); onPick(`Pictures/${name.trim()}`) } }}>
-        <input className="field" maxLength={60} placeholder="New folder in Pictures" value={name} onChange={e => setName(e.target.value.replace(/[\\/]/g, ''))} />
-        <button className="filled-button" disabled={!name.trim()}>Move</button>
+        <input className="field" maxLength={60} placeholder={t('dialogs.newFolderInPictures')} value={name} onChange={e => setName(e.target.value.replace(/[\\/]/g, ''))} />
+        <button className="filled-button" disabled={!name.trim()}>{t('common.move')}</button>
       </form>
-      <div className="dialog-actions"><button className="text-button" onClick={onClose}>Cancel</button></div>
+      <div className="dialog-actions"><button className="text-button" onClick={onClose}>{t('common.cancel')}</button></div>
     </Modal>
   )
 }
@@ -109,15 +109,16 @@ export function TagsDialog({ title, hint, noun = 'tag', initial, known, onSave, 
   const [chosen, setChosen] = useState(new Set(initial))
   const [all, setAll] = useState([...new Set([...known, ...initial])].sort((a, b) => a.localeCompare(b)))
   const [draft, setDraft] = useState('')
+  const label = noun === 'label' // Notes' labels; Files' tags otherwise
   const [error, setError] = useState('')
   const toggle = (t: string) => setChosen(s => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n })
   function add(e: React.FormEvent) {
     e.preventDefault()
-    const t = draft.trim()
-    if (!t || t.length > 32 || t.includes(',')) return setError(`${noun[0].toUpperCase()}${noun.slice(1)}s must be 1\u201332 characters and cannot contain commas.`)
-    const existing = all.find(x => x.toLowerCase() === t.toLowerCase())
-    if (!existing) setAll(a => [...a, t])
-    setChosen(s => new Set(s).add(existing ?? t)); setDraft(''); setError('')
+    const tag = draft.trim()
+    if (!tag || tag.length > 32 || tag.includes(',')) return setError(t(label ? 'dialogs.labelRule' : 'dialogs.tagRule'))
+    const existing = all.find(x => x.toLowerCase() === tag.toLowerCase())
+    if (!existing) setAll(a => [...a, tag])
+    setChosen(s => new Set(s).add(existing ?? tag)); setDraft(''); setError('')
   }
   return (
     <Modal onClose={onClose}>
@@ -125,13 +126,13 @@ export function TagsDialog({ title, hint, noun = 'tag', initial, known, onSave, 
       {hint && <p className="hint">{hint}</p>}
       <div className="chips wrap">{all.map(t => <button key={t} className={`chip ${chosen.has(t) ? 'on' : ''}`} onClick={() => toggle(t)}>{t}</button>)}</div>
       <form onSubmit={add} className="tag-add">
-        <input className="field" placeholder={`New ${noun}`} maxLength={32} value={draft} onChange={e => { setDraft(e.target.value); setError('') }} />
-        <button className="round" title={`Add ${noun}`} disabled={!draft.trim()}><Icon name="add" /></button>
+        <input className="field" placeholder={t(label ? 'dialogs.newLabel' : 'dialogs.newTag')} maxLength={32} value={draft} onChange={e => { setDraft(e.target.value); setError('') }} />
+        <button className="round" title={t(label ? 'dialogs.addLabel' : 'dialogs.addTag')} disabled={!draft.trim()}><Icon name="add" /></button>
       </form>
       {error && <p className="error">{error}</p>}
       <div className="dialog-actions">
-        <button className="text-button" onClick={onClose}>Cancel</button>
-        <button className="filled-button" onClick={async () => { try { await onSave([...chosen]); onClose() } catch (e) { setError(errorText(e)) } }}>Save</button>
+        <button className="text-button" onClick={onClose}>{t('common.cancel')}</button>
+        <button className="filled-button" onClick={async () => { try { await onSave([...chosen]); onClose() } catch (e) { setError(errorText(e)) } }}>{t('common.save')}</button>
       </div>
     </Modal>
   )

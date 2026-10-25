@@ -20,13 +20,14 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 const library = require('./library')
 const history = require('./history')
+const { t } = require('./i18n')
 
 const MEDIA = /\.(jpe?g|png|heic|heif|webp|gif|tiff?|bmp|avif|dng|cr2|cr3|nef|arw|orf|rw2|raf|mp4|mov|m4v|3gp|mkv|webm|avi)$/i
 const BATCH = 1 << 30
 
 /** Read back: the copy is what was hashed, byte for byte, or the original stays. */
 async function letGo(src, copies, sha) {
-  for (const c of copies) if (await library.sha256(c) !== sha) throw new Error('a copy did not read back the same; the original stays')
+  for (const c of copies) if (await library.sha256(c) !== sha) throw new Error(t('import.errReadBack'))
   await fsp.rm(src)
 }
 
@@ -86,7 +87,7 @@ async function copyChecked(src, dest, expected = null) {
     r.pipe(w)
   })
   const got = hash.digest('hex')
-  if (expected && got !== expected) { await fsp.rm(part, { force: true }); throw new Error('it changed while it was copied') }
+  if (expected && got !== expected) { await fsp.rm(part, { force: true }); throw new Error(t('import.errChanged')) }
   await fsp.rename(part, target)
   const st = await fsp.stat(src)
   await fsp.utimes(target, st.atime, st.mtime)
@@ -115,13 +116,13 @@ async function importPhotos({ db, photosRoot, sources, drive = null, move = fals
       for (const b of batch) {
         const r = row.get(b.rel)
         try {
-          if (!r) throw new Error('not read by the scan')
+          if (!r) throw new Error(t('import.errNotScanned'))
           const st = await fsp.stat(path.join(drive.mount, 'Tetra', 'Photos', r.path)).catch(() => null)
-          if (st?.size !== r.size) throw new Error(`the copy on ${drive.name} is not there`)
+          if (st?.size !== r.size) throw new Error(t('import.errNotOnDrive', { drive: drive.name }))
           put.run(drive.id, r.id) // first, so a scan running meanwhile reads the missing file as moved, not deleted
           await fsp.rm(path.join(photosRoot, r.path))
           history.record(db, { action: 'imported to drive', kind: 'photo', name: r.path, sha256: r.sha256, size: r.size, device: drive.id })
-        } catch (e) { out.failed.push(`${b.rel}: ${e.message} (it stays on this computer)`) }
+        } catch (e) { out.failed.push(t('import.errStays', { rel: b.rel, why: e.message })) }
       }
     }
     batch = []; bytes = 0

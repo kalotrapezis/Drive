@@ -5,6 +5,7 @@ const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { sha256 } = require('./library')
 const thumbs = require('./thumbs')
+const { t } = require('./i18n')
 
 const TRASH = 'Trash'
 /**
@@ -24,7 +25,7 @@ const OPTIONAL_FOLDERS = ['Music', 'Videos', 'Finance', 'Work', 'Education', 'Ga
  * leaving one out on either side is not undone by the other (SYNC_PLAN.md 6g). The phone has the same rule.
  */
 const incomingWins = (local, incoming) => incoming.updatedAt > local.updatedAt || (incoming.updatedAt === local.updatedAt && incoming.chosen && !local.chosen)
-const systemFail = rel => fail(`${rel.split('/').pop()} is a system folder and stays where it is.`)
+const systemFail = rel => fail(t('files.errSystemFolder', { name: rel.split('/').pop() }))
 const RECENTS_LIMIT = 50
 const COLORS = ['Blue', 'Green', 'Yellow', 'Red', 'Purple']
 
@@ -54,7 +55,7 @@ function scopeTest(scope) {
 
 function tagName(value) {
   const name = String(value ?? '').trim()
-  if (!name || name.length > 32 || name.includes(',')) fail('Tags must be 1–32 characters and cannot contain commas.')
+  if (!name || name.length > 32 || name.includes(',')) fail(t('dialogs.tagRule'))
   return name
 }
 
@@ -94,7 +95,7 @@ class Files {
    * never among them: it is not one of the thirteen.
    */
   async chooseSystemFolders(names, contents = 'out') {
-    if (contents !== 'out' && contents !== 'trash') fail('Choose where their contents go.')
+    if (contents !== 'out' && contents !== 'trash') fail(t('files.errChooseContents'))
     const wanted = new Set(Array.isArray(names) ? names : [])
     const now = Date.now()
     const leftOut = []
@@ -128,11 +129,11 @@ class Files {
 
   /** Absolute path for a relative one, after resolving symlinks, refusing anything outside the root. */
   resolve(rel, mustExist = true) {
-    if (!isSafeRel(rel)) fail('Invalid Drive item.')
+    if (!isSafeRel(rel)) fail(t('files.errInvalidItem'))
     const full = path.join(this.root, rel)
     let real
-    try { real = fs.realpathSync(full) } catch { if (mustExist) fail('This item no longer exists.'); real = path.join(fs.realpathSync(path.dirname(full)), path.basename(full)) }
-    if (real !== this.root && !real.startsWith(this.root + path.sep)) fail('Item is outside Drive.')
+    try { real = fs.realpathSync(full) } catch { if (mustExist) fail(t('files.errGone')); real = path.join(fs.realpathSync(path.dirname(full)), path.basename(full)) }
+    if (real !== this.root && !real.startsWith(this.root + path.sep)) fail(t('files.errOutside'))
     return real
   }
   rel(full) { return path.relative(this.root, full).split(path.sep).join('/') }
@@ -148,7 +149,7 @@ class Files {
 
   async list(rel) {
     const dir = this.resolve(rel)
-    if (!(await fsp.stat(dir)).isDirectory()) fail('Not a folder.')
+    if (!(await fsp.stat(dir)).isDirectory()) fail(t('files.errNotFolder'))
     const out = []
     for (const e of await fsp.readdir(dir, { withFileTypes: true })) {
       if (e.isSymbolicLink() || e.name.startsWith('.')) continue // never follow links out of Drive; dotfiles stay hidden like in file managers
@@ -187,17 +188,17 @@ class Files {
 
   target(sourceFull, destRel) {
     const dest = this.resolve(destRel)
-    if (!fs.statSync(dest).isDirectory()) fail('Destination is not a folder.')
-    if (fs.statSync(sourceFull).isDirectory() && (dest === sourceFull || dest.startsWith(sourceFull + path.sep))) fail('A folder cannot be placed inside itself.')
+    if (!fs.statSync(dest).isDirectory()) fail(t('files.errDestNotFolder'))
+    if (fs.statSync(sourceFull).isDirectory() && (dest === sourceFull || dest.startsWith(sourceFull + path.sep))) fail(t('files.errInsideItself'))
     const target = path.join(dest, path.basename(sourceFull))
-    if (fs.existsSync(target)) fail('A file with this name already exists.')
+    if (fs.existsSync(target)) fail(t('files.errExists'))
     return target
   }
 
   /** Copies and verifies every file by SHA-256; a mismatch removes the bad copy. Never overwrites. */
   async copy(rel, destRel) {
     const src = this.resolve(rel)
-    if (src === this.root) fail('Drive itself cannot be copied.')
+    if (src === this.root) fail(t('files.errCopyRoot'))
     const target = this.target(src, destRel)
     const copyTree = async (from, to) => {
       const st = await fsp.lstat(from)
@@ -207,7 +208,7 @@ class Files {
         for (const name of await fsp.readdir(from)) await copyTree(path.join(from, name), path.join(to, name))
       } else {
         await fsp.copyFile(from, to, fs.constants.COPYFILE_EXCL)
-        if (await sha256(from) !== await sha256(to)) { await fsp.rm(to); fail(`Copy of ${path.basename(from)} did not verify; nothing was kept.`) }
+        if (await sha256(from) !== await sha256(to)) { await fsp.rm(to); fail(t('files.errNotVerified', { name: path.basename(from) })) }
       }
     }
     try { await copyTree(src, target) } catch (e) { if (!fs.existsSync(target) || e.code === 'EEXIST') throw e; await fsp.rm(target, { recursive: true, force: true }); throw e }
@@ -215,7 +216,7 @@ class Files {
   }
 
   async moveTo(src, target) {
-    if (fs.existsSync(target)) fail('A file with this name already exists.')
+    if (fs.existsSync(target)) fail(t('files.errExists'))
     await fsp.rename(src, target)
     this.rewrite(this.rel(src), this.rel(target))
     return this.rel(target)
@@ -223,15 +224,15 @@ class Files {
 
   async move(rel, destRel) {
     const src = this.resolve(rel)
-    if (src === this.root) fail('Drive itself cannot be moved.')
+    if (src === this.root) fail(t('files.errMoveRoot'))
     if (this.isSystem(rel)) systemFail(rel)
     return this.moveTo(src, this.target(src, destRel))
   }
 
   async rename(rel, name) {
-    if (!isSafeName(name)) fail('Invalid name.')
+    if (!isSafeName(name)) fail(t('files.errInvalidName'))
     const src = this.resolve(rel)
-    if (src === this.root) fail('Drive itself cannot be renamed.')
+    if (src === this.root) fail(t('files.errRenameRoot'))
     if (this.isSystem(rel)) systemFail(rel)
     const target = path.join(path.dirname(src), name)
     if (target === src) return rel
@@ -240,9 +241,9 @@ class Files {
 
   /** Reversible: Drive/Trash/ is an ordinary folder; Move brings items back. */
   async trash(rel) {
-    if (inTrash(rel)) fail('This item is already in Trash.')
+    if (inTrash(rel)) fail(t('files.errInTrash'))
     const src = this.resolve(rel)
-    if (src === this.root) fail('Drive itself cannot be moved.')
+    if (src === this.root) fail(t('files.errMoveRoot'))
     if (this.isSystem(rel)) systemFail(rel)
     await fsp.mkdir(path.join(this.root, TRASH), { recursive: true })
     return this.moveTo(src, this.freeTarget(this.resolve(TRASH), path.basename(src)))
@@ -282,7 +283,7 @@ class Files {
   setFavorite(rel, on) { this.setMeta(rel, 'favorite', on ? 1 : 0) }
   setColor(rel, color) {
     if (color !== null && !COLORS.includes(color)) fail('Unknown colour.')
-    if (!fs.statSync(this.resolve(rel)).isDirectory()) fail('Only folders have a colour.')
+    if (!fs.statSync(this.resolve(rel)).isDirectory()) fail(t('files.errColourFolders'))
     this.setMeta(rel, 'color', color)
   }
 
@@ -296,7 +297,7 @@ class Files {
   }
 
   recordOpen(rel) {
-    if (!fs.statSync(this.resolve(rel)).isFile()) fail('Not a file.')
+    if (!fs.statSync(this.resolve(rel)).isFile()) fail(t('files.errNotFile'))
     this.db.prepare('INSERT INTO file_recents(path, opened_at) VALUES(?,?) ON CONFLICT(path) DO UPDATE SET opened_at = excluded.opened_at').run(rel, Date.now())
     this.db.prepare(`DELETE FROM file_recents WHERE path NOT IN (SELECT path FROM file_recents ORDER BY opened_at DESC LIMIT ${RECENTS_LIMIT})`).run()
   }
@@ -320,7 +321,7 @@ class Files {
   setTags(rel, names) {
     this.resolve(rel)
     const cleaned = [...new Set((names ?? []).map(tagName))]
-    if (cleaned.length !== (names ?? []).length) fail('Tags must be unique.')
+    if (cleaned.length !== (names ?? []).length) fail(t('files.errTagsUnique'))
     const now = Date.now()
     this.db.prepare('UPDATE file_tags SET deleted = 1, updated_at = ? WHERE path = ? AND deleted = 0').run(now, rel)
     const put = this.db.prepare('INSERT INTO file_tags(path, tag, updated_at, deleted) VALUES(?,?,?,0) ON CONFLICT(path, tag) DO UPDATE SET deleted = 0, updated_at = excluded.updated_at')

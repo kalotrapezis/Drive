@@ -7,6 +7,7 @@ const crypto = require('node:crypto')
 const os = require('node:os')
 const { execFile } = require('node:child_process')
 const { DatabaseSync } = require('node:sqlite')
+const { t } = require('./i18n')
 
 const IMAGE = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif', '.heic': 'image/heic', '.heif': 'image/heif', '.avif': 'image/avif', '.tif': 'image/tiff', '.tiff': 'image/tiff', '.bmp': 'image/bmp',
   // Camera raw. 83 .NEF sat in this library for months, verified and invisible, because they were not on this
@@ -208,7 +209,7 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
   const known = new Map(db.prepare('SELECT path, size, mtime, sha256, thumb, meta_v FROM media WHERE location IS NULL').all().map(r => [r.path, r]))
   // A folder that is not there is not a library that was emptied: a renamed folder or an unmounted disk must never
   // read as "every photo was deleted", which would drop every face and every place with them.
-  if (known.size && !fs.existsSync(root)) throw new Error(`The Photos folder is missing (${root}); nothing was changed.`)
+  if (known.size && !fs.existsSync(root)) throw new Error(t('photos.errFolderMissing', { root }))
   const seen = new Set()
   const insert = db.prepare(`INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, width, height, latitude, longitude, camera, thumb, meta_v)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,${META_VERSION}) ON CONFLICT(path) DO UPDATE SET sha256=excluded.sha256, mime=excluded.mime, is_video=excluded.is_video,
@@ -238,7 +239,7 @@ async function scan(db, root, dataDir, onProgress = () => {}) {
   }
   // An empty mount point looks exactly like this. A handful of photos all deleted on purpose is allowed through.
   // ponytail: a count, not a mount check; switch to comparing the folder's device id if it ever misfires.
-  if (known.size >= 20 && seen.size === 0) throw new Error(`The Photos folder is empty (${root}); nothing was changed.`)
+  if (known.size >= 20 && seen.size === 0) throw new Error(t('photos.errFolderEmpty', { root }))
   const del = db.prepare('DELETE FROM media WHERE path = ? AND location IS NULL')
   const byPath = db.prepare('SELECT sha256 FROM media WHERE path = ?')
   const gone = []
@@ -318,9 +319,9 @@ function setFavorite(db, shas, favorite) {
 // Same rules as the phone (PhotoMetadataRules.collectionName).
 function collectionName(raw) {
   const name = String(raw ?? '').trim()
-  if (!name) throw new Error('Collection name cannot be empty.')
-  if (name.length > 60) throw new Error('Collection names can be at most 60 characters.')
-  if (/\p{Cc}/u.test(name)) throw new Error('Collection name contains unsupported characters.')
+  if (!name) throw new Error(t('collections.errEmpty'))
+  if (name.length > 60) throw new Error(t('collections.errTooLong'))
+  if (/\p{Cc}/u.test(name)) throw new Error(t('collections.errChars'))
   return name
 }
 
@@ -335,14 +336,14 @@ function collections(db) {
 
 function createCollection(db, raw) {
   const name = collectionName(raw)
-  if (db.prepare('SELECT 1 FROM collections WHERE deleted = 0 AND name = ? COLLATE NOCASE').get(name)) throw new Error(`A collection named “${name}” already exists.`)
+  if (db.prepare('SELECT 1 FROM collections WHERE deleted = 0 AND name = ? COLLATE NOCASE').get(name)) throw new Error(t('collections.errExists', { name }))
   const id = crypto.randomUUID(), now = Date.now()
   db.prepare('INSERT INTO collections(id, name, created_at, updated_at) VALUES(?,?,?,?)').run(id, name, now, now)
   return { id, name, count: 0, cover: null }
 }
 
 function liveCollection(db, id) {
-  if (!db.prepare('SELECT 1 FROM collections WHERE id = ? AND deleted = 0').get(String(id))) throw new Error('This collection no longer exists.')
+  if (!db.prepare('SELECT 1 FROM collections WHERE id = ? AND deleted = 0').get(String(id))) throw new Error(t('collections.errGone'))
 }
 
 /** Removes the collection and its memberships only; photos stay in the library. */
@@ -427,7 +428,7 @@ async function restoreTrashed(photosRoot, ids) {
     if (!wanted.has(item.id)) continue
     const target = path.join(photosRoot, item.path)
     try {
-      if (fs.existsSync(target)) throw new Error('Something else is already there.')
+      if (fs.existsSync(target)) throw new Error(t('photos.errSomethingThere'))
       await fsp.mkdir(path.dirname(target), { recursive: true })
       await fsp.rename(item.file, target)
       await fsp.rm(path.join(dir, 'info', item.id + '.trashinfo'), { force: true })

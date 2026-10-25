@@ -5,6 +5,7 @@ const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const crypto = require('node:crypto')
+const { t } = require('./i18n')
 
 const CHUNK = 64 * 1024
 const CHECK = 'local-drive-vault-v1'
@@ -41,8 +42,8 @@ class Vault {
   }
 
   async setup(passphrase) {
-    if (this.status().configured) throw new Error('Hidden is already set up.')
-    if (String(passphrase).length < 8) throw new Error('Use a passphrase of at least 8 characters.')
+    if (this.status().configured) throw new Error(t('hidden.errSetUp'))
+    if (String(passphrase).length < 8) throw new Error(t('hidden.errShort'))
     const s = await ready()
     const salt = s.randombytes_buf(s.crypto_pwhash_SALTBYTES)
     const [ops, mem] = [s.crypto_pwhash_OPSLIMIT_MODERATE, s.crypto_pwhash_MEMLIMIT_MODERATE]
@@ -53,14 +54,14 @@ class Vault {
 
   async unlock(passphrase) {
     const c = this.db.prepare('SELECT salt, ops, mem, check_box FROM vault_config').get()
-    if (!c) throw new Error('Hidden is not set up yet.')
+    if (!c) throw new Error(t('hidden.errNotSetUp'))
     const key = await this.derive(passphrase, new Uint8Array(c.salt), c.ops, c.mem)
-    try { if (this.unbox(key, Buffer.from(c.check_box)).toString() !== CHECK) throw 0 } catch { throw new Error('Wrong passphrase.') }
+    try { if (this.unbox(key, Buffer.from(c.check_box)).toString() !== CHECK) throw 0 } catch { throw new Error(t('hidden.errWrong')) }
     this.key = key
   }
 
   lock() { if (this.key) sodium.memzero(this.key); this.key = null }
-  need() { if (!this.key) throw new Error('Hidden is locked.') }
+  need() { if (!this.key) throw new Error(t('hidden.errLocked')) }
 
   async encryptFile(src, dst) {
     const s = sodium
@@ -95,12 +96,12 @@ class Vault {
     const block = CHUNK + s.crypto_secretstream_xchacha20poly1305_ABYTES
     while (pos < data.length) {
       const r = s.crypto_secretstream_xchacha20poly1305_pull(state, data.subarray(pos, pos + block))
-      if (!r) throw new Error('A hidden file is damaged.')
+      if (!r) throw new Error(t('hidden.errDamaged'))
       parts.push(Buffer.from(r.message))
       pos += block
       final = r.tag === s.crypto_secretstream_xchacha20poly1305_TAG_FINAL
     }
-    if (!final) throw new Error('A hidden file is incomplete.')
+    if (!final) throw new Error(t('hidden.errIncomplete'))
     return Buffer.concat(parts)
   }
 
@@ -115,7 +116,7 @@ class Vault {
     await this.encryptFile(fullPath, target)
     try {
       const plain = await this.decrypt(id)
-      if (crypto.createHash('sha256').update(plain).digest('hex') !== item.sha256) throw new Error(`${item.path} changed while hiding; it was left in Photos.`)
+      if (crypto.createHash('sha256').update(plain).digest('hex') !== item.sha256) throw new Error(t('hidden.errChanged', { path: item.path }))
       const thumb = fs.existsSync(thumbFile) ? this.box(this.key, await fsp.readFile(thumbFile)) : null
       this.db.prepare('INSERT INTO vault_items(id, sha256, name, rel_path, mime, is_video, size, taken_at, thumb, created_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
         .run(id, item.sha256, path.basename(item.path), item.path, item.mime, item.is_video, item.size, item.taken_at, thumb, Date.now())
@@ -139,9 +140,9 @@ class Vault {
   async restore(id, photosRoot) {
     this.need()
     const r = this.db.prepare('SELECT * FROM vault_items WHERE id = ?').get(String(id))
-    if (!r) throw new Error('This hidden item no longer exists.')
+    if (!r) throw new Error(t('hidden.errGone'))
     const plain = await this.decrypt(id)
-    if (crypto.createHash('sha256').update(plain).digest('hex') !== r.sha256) throw new Error('A hidden file is damaged; it was kept in Hidden.')
+    if (crypto.createHash('sha256').update(plain).digest('hex') !== r.sha256) throw new Error(t('hidden.errDamagedKept'))
     let target = path.join(photosRoot, r.rel_path)
     const root = path.resolve(photosRoot) + path.sep
     if (!path.resolve(target).startsWith(root)) target = path.join(photosRoot, r.name)

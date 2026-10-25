@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal, errorText } from './Dialogs'
 import { Icon } from './Icon'
 import { formatBytes } from './timeline'
+import { t } from './i18n'
 
 /**
  * Import photos or files (importer.js): choose folders or files, then where they go — this computer, or straight to
@@ -24,46 +25,45 @@ export function ImportDialog({ kind, onClose, onDone }: { kind: 'photos' | 'file
     setError(''); setProgress({ done: 0, total: 0, imported: 0, skipped: 0 })
     try {
       const r = await window.drive.imports.run(kind, sources, to, move)
-      setResult(`${r.stopped ? 'Stopped. ' : ''}${move ? 'Moved in' : 'Imported'} ${r.imported.toLocaleString()}` + (r.skipped ? `, ${r.skipped.toLocaleString()} already in the library` : '')
-        + (r.failed.length ? `. ${r.failed.length} could not be copied: ${r.failed.slice(0, 2).join('; ')}` : '.'))
+      setResult((r.stopped ? t('import.stopped') + ' ' : '') + t(move ? 'import.movedIn' : 'import.importedN', { n: r.imported.toLocaleString() }) + (r.skipped ? t('import.alreadyIn', { n: r.skipped.toLocaleString() }) : '')
+        + (r.failed.length ? t('import.couldNotCopy', { count: r.failed.length, list: r.failed.slice(0, 2).join('; ') }) : '.'))
       onDone()
     } catch (e) { setError(errorText(e)); setProgress(null) }
   }
-  const what = kind === 'photos' ? 'photos and videos' : 'files'
   return (
     <Modal onClose={() => { if (running) { setStopping(true); window.drive.imports.cancel() } else onClose() }}>
-      <h3>Import {kind}</h3>
+      <h3>{t(kind === 'photos' ? 'import.titlePhotos' : 'import.titleFiles')}</h3>
       {result ? <p>{result}</p> : running ? (
         <>
-          <p>{progress.total ? `${progress.done.toLocaleString()} of ${progress.total.toLocaleString()} · ${progress.imported.toLocaleString()} imported` : 'Looking…'}
-            {to && ' — each batch is checked on the drive before this computer lets it go.'}</p>
+          <p>{progress.total ? t('import.progress', { done: progress.done.toLocaleString(), total: progress.total.toLocaleString(), imported: progress.imported.toLocaleString() }) : t('import.looking')}
+            {to && t('import.batchChecked')}</p>
           <progress value={progress.done} max={Math.max(progress.total, 1)} style={{ width: '100%' }} />
         </>
       ) : (
         <>
-          <p>Choose folders or single files; every {kind === 'photos' ? 'photo' : 'file'} is copied and checked.
-            {kind === 'photos' && ' Photos the library already has are skipped.'}</p>
+          <p>{t(kind === 'photos' ? 'import.choosePhotos' : 'import.chooseFiles')}
+            {kind === 'photos' && ' ' + t('import.skipKnown')}</p>
           <div className="dialog-actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
-            <button className="text-button" onClick={() => add(true)}><Icon name="folder" size={18} /> Add folders…</button>
-            <button className="text-button" onClick={() => add(false)}><Icon name="file" size={18} /> Add files…</button>
+            <button className="text-button" onClick={() => add(true)}><Icon name="folder" size={18} /> {t('import.addFolders')}</button>
+            <button className="text-button" onClick={() => add(false)}><Icon name="file" size={18} /> {t('import.addFiles')}</button>
           </div>
-          {sources.length > 0 && <ul className="import-list">{sources.map(s => <li key={s}>{s}<button className="round flat" title="Leave out" onClick={() => setSources(x => x.filter(y => y !== s))}><Icon name="close" size={16} /></button></li>)}</ul>}
-          <h4 className="import-head">Into</h4>
-          <label className="check-row"><input type="radio" checked={to === null} onChange={() => setTo(null)} /><span>This computer — {kind === 'photos' ? 'Photos' : 'Files'} / Imported</span></label>
+          {sources.length > 0 && <ul className="import-list">{sources.map(s => <li key={s}>{s}<button className="round flat" title={t('import.leaveOut')} onClick={() => setSources(x => x.filter(y => y !== s))}><Icon name="close" size={16} /></button></li>)}</ul>}
+          <h4 className="import-head">{t('import.into')}</h4>
+          <label className="check-row"><input type="radio" checked={to === null} onChange={() => setTo(null)} /><span>{t('import.thisComputer', { path: `${kind === 'photos' ? 'Photos' : 'Files'} / Imported` })}</span></label>
           {drives.map(d => <label key={d.id} className="check-row"><input type="radio" checked={to === d.id} onChange={() => setTo(d.id)} />
-            <span>Straight to {d.name} ({formatBytes(d.free)} free) — {kind === 'photos' ? 'the photos live on the drive, and show here like moved ones' : 'into its Tetra / Files / Imported'}</span></label>)}
-          {!drives.length && <p className="hint">Plug in a set-up drive to import {what} straight to it.</p>}
-          <h4 className="import-head">Originals</h4>
+            <span>{t(kind === 'photos' ? 'import.straightToPhotos' : 'import.straightToFiles', { name: d.name, free: formatBytes(d.free) })}</span></label>)}
+          {!drives.length && <p className="hint">{t(kind === 'photos' ? 'import.plugInPhotos' : 'import.plugInFiles')}</p>}
+          <h4 className="import-head">{t('import.originals')}</h4>
           <label className="check-row"><input type="checkbox" checked={move} onChange={e => setMove(e.target.checked)} />
-            <span>Move instead of copy — each original is deleted once its copy reads back the same{kind === 'photos' ? '; ones the library already has go too' : ''}. Emptied folders go.</span></label>
+            <span>{t(kind === 'photos' ? 'import.moveInsteadPhotos' : 'import.moveInsteadFiles')}</span></label>
         </>
       )}
       {error && <p className="error">{error}</p>}
       <div className="dialog-actions">
-        {result ? <button className="filled-button" onClick={onClose}>Done</button> : <>
+        {result ? <button className="filled-button" onClick={onClose}>{t('common.done')}</button> : <>
           {/* Cancel while it runs stops it: after the photo in hand, with what came in so far kept whole. */}
-          <button className="text-button" disabled={stopping} onClick={() => { if (running) { setStopping(true); window.drive.imports.cancel() } else onClose() }}>{stopping ? 'Stopping…' : 'Cancel'}</button>
-          <button className="filled-button" disabled={!sources.length || running} onClick={start}>Import</button>
+          <button className="text-button" disabled={stopping} onClick={() => { if (running) { setStopping(true); window.drive.imports.cancel() } else onClose() }}>{stopping ? t('import.stopping') : t('common.cancel')}</button>
+          <button className="filled-button" disabled={!sources.length || running} onClick={start}>{t('common.import')}</button>
         </>}
       </div>
     </Modal>
