@@ -184,11 +184,14 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
     if (c.kind === 'pin') pin.current = new maplibregl.Marker({ color: '#e5484d' }).setLngLat([c.lng, c.lat]).addTo(map.current!)
     window.drive.mapsDescribe(s.lat, s.lng, c.kind === 'pin' ? c.road : null).then(setAddress, () => {})
   }
-  /** Where I am: this computer has no GPS, so the paired phone is asked for one fix (sync.js phoneLocation). */
-  async function whereAmI() {
+  /**
+   * Where I am: this computer has no GPS, so the paired phone is asked for one fix (sync.js phoneLocation) — or the one kept
+   * from before, as Settings › Location says; `fresh` (the Where I am button) always asks the phone.
+   */
+  async function whereAmI(fresh = false) {
     if (asking) return null
     setAsking(true)
-    const r = await window.drive.mapsPhoneLocation().catch(e => ({ error: errorText(e) }))
+    const r = await window.drive.mapsPhoneLocation(fresh).catch(e => ({ error: errorText(e) }))
     setAsking(false)
     if (r.error !== undefined) { say(r.error); return null }
     const el = document.createElement('div')
@@ -198,7 +201,7 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
     meMarker.current = new maplibregl.Marker({ element: el }).setLngLat([r.lng, r.lat]).addTo(map.current!)
     return { kind: 'me' as const, lat: r.lat, lng: r.lng, accuracy: r.accuracy, device: r.device }
   }
-  async function showMe() { const me = await whereAmI(); if (me) open(me) }
+  async function showMe() { const me = await whereAmI(true); if (me) open(me) }
   async function startHere() { const me = await whereAmI(); if (me) addStop(me) }
   function closeCard() { setCard(null); setEdit(null); pin.current?.remove(); pin.current = null }
 

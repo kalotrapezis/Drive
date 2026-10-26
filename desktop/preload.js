@@ -73,7 +73,9 @@ contextBridge.exposeInMainWorld('drive', {
   mapsGoogle: q => ipcRenderer.invoke('maps:google', q),
   mapsWeb: url => ipcRenderer.invoke('maps:web', url),
   mapsRoute: (points, mode, main) => ipcRenderer.invoke('maps:route', points, mode, main),
-  mapsPhoneLocation: () => ipcRenderer.invoke('maps:phoneLocation'),
+  mapsPhoneLocation: fresh => ipcRenderer.invoke('maps:phoneLocation', !!fresh),
+  locationEvery: () => ipcRenderer.invoke('settings:locationEvery'),
+  setLocationEvery: v => ipcRenderer.invoke('settings:setLocationEvery', v),
   onMapsChanged: cb => { const f = () => cb(); ipcRenderer.on('maps-changed', f); return () => ipcRenderer.removeListener('maps-changed', f) },
   onTimerChanged: cb => { const f = () => cb(); ipcRenderer.on('timer-changed', f); return () => ipcRenderer.removeListener('timer-changed', f) },
   calendarPickImport: () => ipcRenderer.invoke('calendar:pickImport'),
@@ -101,9 +103,11 @@ contextBridge.exposeInMainWorld('drive', {
   i18n: ipcRenderer.sendSync('i18n:words'), // the language's words, before the first render (src/i18n.ts)
   role: {
     get: () => ipcRenderer.invoke('role:get'),
-    server: () => ipcRenderer.invoke('role:server'),
+    server: nas => ipcRenderer.invoke('role:server', !!nas),
+    setNas: on => ipcRenderer.invoke('role:setNas', !!on),
     join: key => ipcRenderer.invoke('role:join', key),
     syncNow: () => ipcRenderer.invoke('client:syncNow'),
+    setMirror: on => ipcRenderer.invoke('client:setMirror', !!on),
     onSynced: fn => { const l = (_, s) => fn(s); ipcRenderer.on('client-synced', l); return () => ipcRenderer.off('client-synced', l) },
   },
   reset: {

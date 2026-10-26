@@ -101,8 +101,9 @@ async function copyVerified(src, dest, expected) {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan); onSent({ device, paths }) after a burst of Send to computer. */
-  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, onCall = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null, data = null }) {
-    Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, onSent, onCall, port, beaconPort, trashItem, purgatory, data })
+  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, onCall = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null, data = null, soundHere = () => false, callAudio = null }) {
+    // soundHere(): the phone is on this computer's Bluetooth; callAudio(received, send) → stop: its call sound both ways (callaudio.js)
+    Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, onSent, onCall, port, beaconPort, trashItem, purgatory, data, soundHere, callAudio })
     this.sentQuiet = 2000 // a share's files arrive one after another: one notification once they stop
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
@@ -224,6 +225,18 @@ class SyncServer {
     const code = newPhrase()
     this.codes.set(code, Date.now() + PAIRING_MS)
     return { v: 1, name: os.hostname(), hosts: lanAddresses(), port: this.port, fp: this.fingerprint, code, key: showPhrase(code) }
+  }
+
+  /** A server ticked "this is a NAS" at the first start: it keeps the files; nobody sits at it (main.js, Role.tsx). */
+  nas() { return this.role() === 'server' && this.setting('nas') === '1' }
+
+  /**
+   * Who does the slow photo analysis (faces, documents) for a NAS: the first client computer to join, by itself (the user,
+   * 26 Oct: "until a real computer gets the crown"). Null when the server does it itself, or when no computer has joined.
+   */
+  crown() {
+    if (!this.nas()) return null
+    return this.db.prepare("SELECT id FROM sync_devices WHERE kind = 'computer' AND volume_uuid IS NULL ORDER BY paired_at LIMIT 1").get()?.id ?? null
   }
 
   /** 'server', 'client', or null before the first start's question is answered (main.js; locked until a reset). */
@@ -644,6 +657,7 @@ class SyncServer {
    */
   async locate(row) {
     if (!row.location) return { file: path.join(this.photosRoot, row.path) }
+    if (row.location === 'server') return this.client ? this.client.fetchMirror(row) : { file: null } // a client's mirror
     const d = this.db.prepare('SELECT name, volume_uuid FROM sync_devices WHERE id = ?').get(row.location)
     const mount = d?.volume_uuid && await drives.mountOf(d.volume_uuid)
     if (!mount) return { file: null, why: t('sync.errPlugInToOpen', { name: d?.name ?? t('sync.theDriveMovedTo') }) }
@@ -775,8 +789,9 @@ class SyncServer {
    * first; a tablet only when no phone answers. { lat, lng, accuracy, at, provider, device } or { error }.
    */
   async phoneLocation(ms = 60_000) {
+    if (this.role() === 'client') return this.client.relay('/location/phone', ms + 5000)
     const devices = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
-      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL ORDER BY kind = 'tablet'`).all()
+      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind IS NOT 'computer' ORDER BY kind = 'tablet'`).all()
     if (!devices.length) return { error: t('sync.errNoPhonePaired') }
     let said = null // the first thing a device said instead of a fix ("location is off", "no permission")
     for (const tier of [devices.filter(d => d.kind !== 'tablet'), devices.filter(d => d.kind === 'tablet')]) {
@@ -796,35 +811,40 @@ class SyncServer {
    * at once when Tetra may call there, else as a notification to tap. Phones only (a tablet has no calls). The voice is
    * the phone's (or a Bluetooth headset's). { how: 'calling' | 'notification', device } or { error }.
    */
-  async callOnPhone(number, name = '') {
+  async callOnPhone(number, name = '', by = 'server') {
+    if (this.role() === 'client') return this.client.relay(`/call/place?number=${encodeURIComponent(number)}&name=${encodeURIComponent(name)}`, 15_000)
     const n = String(number || '').replace(/[^\d+*#]/g, '')
     if (n.replace(/\D/g, '').length < 3) return { error: t('sync.errNotPhoneNumber') }
     const phones = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
-      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind != 'tablet'`).all()
+      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind NOT IN ('tablet', 'computer')`).all()
     if (!phones.length) return { error: t('sync.errNoPhonePaired') }
     let said = null
     const got = await Promise.any(phones.map(async d => {
       const r = await this.reach(d, `/call?number=${encodeURIComponent(n)}&name=${encodeURIComponent(String(name).slice(0, 80))}`, 8000)
-      if (r?.status === 200 && r.body?.how) return { how: r.body.how, device: d.name }
+      if (r?.status === 200 && r.body?.how) { this.callTaken = by; return { how: r.body.how, device: d.name } }
       said ||= r && (r.status !== 404 && typeof r.body?.error === 'string' ? `${d.name}: ${r.body.error}` : t('sync.errCannotCall', { name: d.name }))
       throw new Error('no call')
     })).catch(() => null)
     return got ?? { error: said ?? t('sync.errNoPhoneAnswered') }
   }
 
-  /** A call's state passed on to the paired tablets, which have no calls of their own (their SyncServer /call/state). */
+  /**
+   * A call's state passed on to the paired tablets, which have no calls of their own (their SyncServer /call/state), and to
+   * the client computers (client.js), whose bubbles show it too: every computer, "like a switch" (the user, 26 Oct).
+   */
   toTablets(s) {
     const tablets = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
-      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind = 'tablet'`).all()
+      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind IN ('tablet', 'computer')`).all()
     for (const d of tablets) this.reach(d, `/call/state?s=${encodeURIComponent(JSON.stringify(s))}`, 4000).catch(() => {})
   }
 
   /** The call bubble's Answer, Decline or End, done by the phone (SyncServer.kt /call/action). { ok } or { error }. */
-  async callAction(what) {
+  async callAction(what, by = 'server') {
+    if (this.role() === 'client') return this.client.relay(`/call/act?do=${encodeURIComponent(what)}`, 15_000)
     // hold, unhold, mute, unmute and the keypad's tones only while Tetra is the phone's phone app (Drive-Android PhoneCalls.act)
     if (!/^(answer|decline|end|hold|unhold|mute|unmute|dtmf[0-9*#])$/.test(what)) return { error: 'Unknown action.' }
     const phones = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
-      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind != 'tablet'`).all()
+      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind NOT IN ('tablet', 'computer')`).all()
     let said = null
     const got = await Promise.any(phones.map(async d => {
       const r = await this.reach(d, `/call/action?do=${encodeURIComponent(what)}`, 8000)
@@ -832,6 +852,7 @@ class SyncServer {
       said ||= r && (r.status !== 404 && typeof r.body?.error === 'string' ? r.body.error : t('sync.errNeedsNewTetra', { name: d.name }))
       throw new Error('no')
     })).catch(() => null)
+    if (got && what === 'answer') this.callTaken = by // the phone picked up for that computer: the other bubbles go
     return got ?? { error: said ?? t('sync.errPhoneNoAnswer') }
   }
 
@@ -906,7 +927,7 @@ class SyncServer {
    */
   async sendToDevice(paths, ms = 60_000) {
     const devices = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
-      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL ORDER BY kind = 'tablet'`).all()
+      WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind IS NOT 'computer' ORDER BY kind = 'tablet'`).all()
     if (!devices.length) return { error: t('sync.errNoPhonePaired') }
     const files = []
     for (const p of paths) {
@@ -1281,6 +1302,11 @@ class SyncServer {
     // A client answers its server's "sync now" (nudge) and nothing else: phones pair with the server, not here.
     if (this.role() === 'client') {
       if (req.method === 'POST' && url.pathname === '/sync' && this.client?.isServer(req)) { this.client.soon(); return this.send(res, 200, { ok: true }) }
+      // a call on the phone, passed on by the server as to a tablet: the bubble shows here too
+      if (req.method === 'POST' && url.pathname === '/call/state' && this.client?.isServer(req)) {
+        try { this.onCall(JSON.parse(url.searchParams.get('s') ?? '')) } catch {}
+        return this.send(res, 200, { ok: true })
+      }
       return this.send(res, 403, { error: 'This computer is a client of another Tetra server.' })
     }
     if (req.method === 'POST' && url.pathname === '/pair') {
@@ -1347,7 +1373,7 @@ class SyncServer {
         devices: o.devices.map(d => ({ id: d.id, name: d.name, kind: kinds.get(d.id) ?? null, lastSeen: d.last_seen, holds: d.holds, alsoHere: d.alsoHere, onlyThere: d.onlyThere })) })
     }
     if (req.method === 'GET' && url.pathname === '/connections') {
-      return this.send(res, 200, { name: os.hostname(), connections: this.connections(device.id) })
+      return this.send(res, 200, { name: os.hostname(), connections: this.connections(device.id), nas: this.nas(), crown: this.crown() === device.id })
     }
     // The other direction of /have: the phone says what it holds, the computer answers with what it could send.
     if (req.method === 'POST' && url.pathname === '/library/manifest') {
@@ -1357,6 +1383,16 @@ class SyncServer {
       const photos = this.connection(device.id, 'photos').direction
       if (photos === 'send' || photos === 'off') return this.send(res, 200, { send: [] }) // nothing goes that way
       return this.send(res, 200, { send: this.toSend(hashes) })
+    }
+    // a client computer's mirror (client.js mirror): every photo here, to show there without its bytes, and its thumbnail
+    if (req.method === 'GET' && url.pathname === '/library/mirror') {
+      return this.send(res, 200, { photos: this.db.prepare(`SELECT path, sha256, mime, is_video, size, mtime, taken_at, width, height, latitude, longitude,
+        camera, place, place_names FROM media WHERE location IS NULL`).all() })
+    }
+    const thumb = /^\/thumb\/([0-9a-f]{64})$/.exec(url.pathname)
+    if (req.method === 'GET' && thumb) {
+      const file = path.join(this.dataDir, 'thumbs', `${thumb[1]}.webp`)
+      return fs.existsSync(file) ? this.sendFile(res, file) : this.send(res, 404, { error: 'No thumbnail yet.' })
     }
     const blob = /^\/blob\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'GET' && blob) {
@@ -1434,10 +1470,13 @@ class SyncServer {
       const b = await this.json(req, 4096)
       const s = { state: String(b.state || ''), direction: b.direction === 'out' ? 'out' : 'in', number: String(b.number || '').replace(/[^\d+*#]/g, '').slice(0, 32), missed: !!b.missed,
         muted: !!b.muted, phoneApp: !!b.phoneApp, device: device.name }
-      // a call a tablet placed shows on the tablet, not in this computer's bubble too
+      // which computer took it ('server' or a client's id): the other bubbles close (calls.js fromPhone)
+      if (s.state === 'ringing') this.callTaken = null
+      s.takenBy = this.callTaken ?? null
+      // a call a tablet placed shows on the tablet, not in this computer's bubble too; a NAS shows none (nobody is at it)
       const tablets = this.tabletCall && s.direction === 'out' && Date.now() - this.tabletCall.at < 120_000
-      if (!tablets) this.onCall(s)
-      if (s.state === 'ended') this.tabletCall = null
+      if (!tablets && !this.nas()) this.onCall(s)
+      if (s.state === 'ended') { this.tabletCall = null; this.callTaken = null; this.audioStop?.(); this.audioStop = null }
       this.toTablets(s)
       return this.send(res, 200, { ok: true })
     }
@@ -1457,12 +1496,26 @@ class SyncServer {
     }
     // a tablet's Phone: the call placed by the phone, and the tablet's call notification's buttons done by the phone
     if (req.method === 'POST' && url.pathname === '/call/place') {
-      const r = await this.callOnPhone(url.searchParams.get('number'), url.searchParams.get('name') || '')
+      const r = await this.callOnPhone(url.searchParams.get('number'), url.searchParams.get('name') || '', device.id)
       if (!r.error) this.tabletCall = { at: Date.now() }
       return this.send(res, r.error ? 409 : 200, r)
     }
+    // a call's sound for the computer that answered it, when the phone is on this one's Bluetooth (callaudio.js): asked
+    // before answering, then one request that streams both ways until the call ends
+    if (req.method === 'GET' && url.pathname === '/call/sound') return this.send(res, 200, { here: !!this.soundHere() && !!this.callAudio })
+    if (req.method === 'POST' && url.pathname === '/call/audio') {
+      if (!this.callAudio || this.callTaken !== device.id) return this.send(res, 409, { error: 'That call is not yours.' })
+      this.audioStop?.()
+      res.writeHead(200, { 'content-type': 'application/octet-stream' })
+      res.flushHeaders()
+      const stop = this.audioStop = await this.callAudio(req, res)
+      req.on('close', () => { stop(); if (this.audioStop === stop) this.audioStop = null })
+      return
+    }
+    // a client computer's Maps: the phone's fix, asked for it (client.js relay)
+    if (req.method === 'POST' && url.pathname === '/location/phone') return this.send(res, 200, await this.phoneLocation())
     if (req.method === 'POST' && url.pathname === '/call/act') {
-      const r = await this.callAction(String(url.searchParams.get('do') || ''))
+      const r = await this.callAction(String(url.searchParams.get('do') || ''), device.id)
       return this.send(res, r.error ? 409 : 200, r)
     }
     const sent = /^\/send\/([0-9a-f]{64})$/.exec(url.pathname)

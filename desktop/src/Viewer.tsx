@@ -167,7 +167,8 @@ export function Viewer({ media, index, setIndex, onClose, onFavorite, onTrash, o
                 src={failed ? thumbUrl(item) : fileUrl(item)}
                 onError={() => setFailed(true)} // formats Chromium cannot draw (HEIC) fall back to the thumbnail
                 style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }} />}
-          {item.location && failed && <div className="island plug-in"><Icon name="database" size={20} />{t('viewer.plugIn', { drive: item.drive ?? '' })}</div>}
+          {item.location && failed && <div className="island plug-in"><Icon name={item.location === 'server' ? 'server' : 'database'} size={20} />
+            {item.location === 'server' ? t('client.mirrorAway', { name: item.drive ?? '' }) : t('viewer.plugIn', { drive: item.drive ?? '' })}</div>}
           {index > 0 && <button className="round nav prev" title={t('viewer.previous')} onClick={() => go(index - 1)}><Icon name="back" /></button>}
           {index < media.length - 1 && <button className="round nav next" title={t('viewer.next')} onClick={() => go(index + 1)}><Icon name="forward" /></button>}
         </div>

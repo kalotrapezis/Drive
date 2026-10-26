@@ -105,8 +105,15 @@ async function bluetooth() {
 }
 
 class Calls {
-  /** [contacts]: for a number's face and name; [act](what) → the phone; [notify](title, body). */
-  constructor({ contacts, act, notify, recordings }) { Object.assign(this, { contacts, act, notify, recordings, win: null, state: null, bt: { available: false, phones: [] }, closer: null }) }
+  /**
+   * [contacts]: for a number's face and name; [act](what) → the phone; [notify](title, body); [me]() this computer as the
+   * server names who took a call ('server' or its id there); [early]() whether to bring the phone onto this computer's
+   * Bluetooth as soon as a call starts — only a server with no other computer, or every computer would reach for it.
+   */
+  constructor({ contacts, act, notify, recordings, me = () => 'server', early = () => true, relayable = async () => false, relay = null }) {
+    // relayable(): the server can carry the sound here (the phone on its Bluetooth); relay() → stop: that sound, both ways
+    Object.assign(this, { contacts, act, notify, recordings, me, early, relayable, relay, relayStop: null, win: null, state: null, bt: { available: false, phones: [] }, closer: null })
+  }
 
   /** The contact a number belongs to (its last nine digits), for the bubble. */
   who(number) {
@@ -117,6 +124,7 @@ class Calls {
   }
 
   sound() {
+    if (this.relayStop) return `${t('calls.soundRelayed')} · ${t('release.alpha')}` // not yet tried with two computers
     const on = this.bt.phones.find(p => p.connected)
     if (on) return t('calls.soundHere', { name: on.name })
     if (this.connecting) return t('calls.soundConnecting', { name: this.connecting })
@@ -141,9 +149,11 @@ class Calls {
   outgoing(number, name, device) { this.show({ direction: 'out', state: 'calling', number, name: name || this.who(number)?.name || '', photo: this.who(number)?.photo ?? null, device, since: Date.now() }) }
 
   /** A state the phone told: ringing (with the number), active, ended. */
-  fromPhone({ state, direction, number, missed, device, muted, phoneApp }) {
+  fromPhone({ state, direction, number, missed, device, muted, phoneApp, takenBy }) {
     // calling (dialled, not answered yet) and held: only from a phone where Tetra is the phone app, as are muted and phoneApp
     if (!['ringing', 'calling', 'active', 'held', 'ended'].includes(state)) return
+    // taken on another computer, "like a switch" (the user, 26 Oct): this bubble goes, and the call stays there
+    if (takenBy && takenBy !== this.me()) { if (this.state) this.close(); return }
     const was = this.state
     if (state === 'ended' && !was) return // nothing on the screen to end
     const c = this.who(number || was?.number)
@@ -157,7 +167,7 @@ class Calls {
   show(s) {
     clearTimeout(this.closer)
     // a call begins (it rings, or the phone dials): its sound needs the phone on this computer's Bluetooth
-    if (['ringing', 'calling'].includes(s.state) && !['ringing', 'calling', 'active', 'held'].includes(this.state?.state)) { this.unreached = null; this.reconnect() }
+    if (['ringing', 'calling'].includes(s.state) && !['ringing', 'calling', 'active', 'held'].includes(this.state?.state)) { this.unreached = null; if (this.early()) this.reconnect() }
     if (s.state === 'ended' && recorder.proc) { recorder.stop(); this.notify(t('calls.recorded'), path.basename(recorder.file || '')) }
     this.state = { ...s, sound: this.sound(), canRecord: !!echo.module && ['active', 'held'].includes(s.state), recording: !!recorder.proc }
     if (!this.win || this.win.isDestroyed()) {
@@ -173,14 +183,14 @@ class Calls {
       this.win.webContents.send('call', this.state)
       if (s.state === 'ringing') { this.win.show(); this.win.focus() } else this.win.showInactive()
     }
-    if (s.state === 'ended') { echo.off(); this.closer = setTimeout(() => this.close(), 6000) }
+    if (s.state === 'ended') { this.relayStop?.(); this.relayStop = null; echo.off(); this.closer = setTimeout(() => this.close(), 6000) }
     else if (['calling', 'active', 'held'].includes(s.state) && this.bt.phones.some(p => p.connected)) echo.on()
   }
 
   /** The bubble's keypad open or shut: its window grows to hold it. */
   height(h) { if (this.win && !this.win.isDestroyed()) { const [x, y] = this.win.getPosition(), [, was] = this.win.getSize(); this.win.setBounds({ x, y: y + was - h, width: 360, height: h }) } }
 
-  close() { clearTimeout(this.closer); this.state = null; echo.off(); if (this.win && !this.win.isDestroyed()) this.win.close() }
+  close() { clearTimeout(this.closer); this.state = null; this.relayStop?.(); this.relayStop = null; echo.off(); if (this.win && !this.win.isDestroyed()) this.win.close() }
 
   /** The app quitting: the echo canceller goes and the speaker and microphone are as they were. */
   quit() { recorder.stop(); echo.offNow() }
@@ -191,8 +201,22 @@ class Calls {
     // recording happens here, not on the phone; the bubble asked "They agreed?" before sending it
     if (what === 'record' && echo.module) { recorder.start(this.recordings, this.state?.name || this.state?.number); return this.show(this.state) }
     if (what === 'stoprec') { recorder.stop(); this.notify(t('calls.recorded'), path.basename(recorder.file || '')); return this.show(this.state) }
+    // with other computers about, the sound comes here only where the call is answered (the user, 26 Oct): the phone on this
+    // computer's Bluetooth already, or through the server when it has the phone ("Bluetooth > Wi-Fi > speaker"), or else
+    // the phone comes onto this one's Bluetooth
+    let relayed = false
+    if (what === 'answer' && !this.early()) {
+      this.bt = await bluetooth().catch(() => this.bt)
+      if (!this.bt.phones.some(p => p.connected)) relayed = await this.relayable().catch(() => false)
+      if (!relayed) await this.reconnect()
+    }
     const r = await this.act(what).catch(e => ({ error: e.message }))
     if (r?.error) { this.win?.webContents.send('said', r.error); return r }
+    if (relayed && this.relay) {
+      await echo.on() // the speaker and microphone through the echo canceller, as for Bluetooth
+      this.relayStop = await this.relay().catch(e => { this.win?.webContents.send('said', e.message); return null })
+      if (this.state) this.show(this.state)
+    }
     if (what === 'end' || what === 'decline') this.show({ ...this.state, state: 'ended', missed: false })
     return r
   }
