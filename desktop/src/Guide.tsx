@@ -11,7 +11,7 @@ import { t } from './i18n'
  */
 
 export type GuideGo = 'files' | 'settings' | 'sync' | null
-type Pic = 'welcome' | 'settingsRow' | 'role' | 'pair' | 'client' | 'filesNav' | 'filesTick' | 'filesBar' | 'filesMore' | 'filesTrash' | 'filesSend' | 'settingsLook'
+type Pic = 'welcome' | 'settingsRow' | 'role' | 'pair' | 'client' | 'filesNav' | 'filesTick' | 'filesBar' | 'filesMore' | 'filesTrash' | 'filesSend' | 'settingsLook' | 'icons'
 type Step = { key: string; pic: Pic; go?: GuideGo }
 
 const CHAPTERS: { key: string; icon: IconName; steps: Step[] }[] = [
@@ -23,7 +23,11 @@ const CHAPTERS: { key: string; icon: IconName; steps: Step[] }[] = [
     { key: 'filesSend', pic: 'filesSend', go: 'files' }, { key: 'filesTrash', pic: 'filesTrash', go: 'files' },
   ] },
   { key: 'guide.chSettings', icon: 'settings', steps: [{ key: 'look', pic: 'settingsLook', go: 'settings' }] },
+  { key: 'guide.chIcons', icon: 'grid', steps: [{ key: 'icons', pic: 'icons' }] },
 ]
+
+/** The icon catalog (the user, 26 Oct: "a catalog with the iconography, the SVGs, and what each means"): Icon.tsx's own drawings. */
+const ICONS: IconName[] = ['back', 'close', 'checked', 'unchecked', 'add', 'search', 'rename', 'more', 'copy', 'moveTo', 'trash', 'undo', 'deleteForever', 'tag', 'heart', 'device', 'computer', 'server', 'refresh', 'lock', 'bell', 'info', 'settings', 'folder', 'drive', 'grid', 'list', 'sort', 'tune', 'palette', 'eraser']
 
 /** Every step as [chapter, step], in reading order: Back and Next walk this. */
 export const STEPS = CHAPTERS.flatMap((c, ci) => c.steps.map((_, si) => [ci, si] as const))
@@ -150,6 +154,9 @@ function Picture({ pic }: { pic: Pic }) {
         <span className="island-item guide-mark"><Icon name="trash" size={20} /><span>{t('photos.trash')}</span></span>
       </nav>
       <Flow places={['drive', 'trash']} back label={`${t('photos.trash')} · ${t('common.restore')}`} />
+    </div>
+    case 'icons': return <div className="guide-icons">
+      {ICONS.map(name => <div key={name}><span className="round"><Icon name={name} size={22} /></span><span>{t(`guide.icon.${name}`)}</span></div>)}
     </div>
     case 'settingsLook': return <div className="settings-card island">
       <h3>{t('settings.appearance')}</h3>
