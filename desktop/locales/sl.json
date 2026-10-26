@@ -1898,7 +1898,7 @@
  "guide.againTitle": "Vrnite se kadar koli",
  "guide.againBody": "Če želite, ga zdaj zaprite. Vodnik je vedno v Nastavitve › Vodnik.",
  "guide.roleTitle": "Strežnik ali odjemalec",
- "guide.roleBody": "Ob prvem zagonu vas Tetra vpraša, kaj je ta računalnik. Za glavni računalnik, ki ostane doma, izberite Strežnik: hrani vse skupaj z varnostnimi kopijami, telefoni, tablice in vaši drugi računalniki pa se sinhronizirajo z njim. Izbira ostane; za spremembo je potrebna ponastavitev (Nastavitve › Strežnik ali odjemalec).",
+ "guide.roleBody": "Ob prvem zagonu vas Tetra vpraša, kaj je ta računalnik: Strežnik je glavni računalnik doma, Odjemalec vsak drug. Poznejša sprememba zahteva ponastavitev (Nastavitve › Strežnik ali odjemalec).",
  "guide.pairTitle": "Seznanite telefon ali tablico",
  "guide.pairBody": "Na strežniku v stranski vrstici kliknite Naprave, nato Dodaj napravo: Tetra pokaže kodo. V telefonu odprite Sinhronizacija, se dotaknite Optično preberi kodo in usmerite fotoaparat vanjo.",
  "guide.clientTitle": "Drug računalnik",

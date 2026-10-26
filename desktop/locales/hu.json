@@ -1724,7 +1724,7 @@
  "guide.againTitle": "Bármikor visszatérhetsz",
  "guide.againBody": "Most bezárhatod, ha szeretnéd. Az útmutató mindig megtalálható itt: Beállítások › Útmutató.",
  "guide.roleTitle": "Szerver vagy kliens",
- "guide.roleBody": "Az első indításkor a Tetra megkérdezi, mi ez a számítógép. A Szerver lehetőséget a fő számítógépnél válaszd, amelyik otthon marad: mindent megőriz a biztonsági mentésekkel együtt, és a telefonok, a táblagépek és a többi számítógéped ezzel szinkronizál. A választás megmarad; a módosításához visszaállítás kell (Beállítások › Szerver vagy kliens).",
+ "guide.roleBody": "Az első indításkor a Tetra megkérdezi, mi ez a számítógép: Szerver az otthonod fő számítógépe, Kliens bármelyik másik. Később csak visszaállítással módosítható (Beállítások › Szerver vagy kliens).",
  "guide.pairTitle": "Telefon vagy táblagép párosítása",
  "guide.pairBody": "A szerveren kattints az oldalsávon az Eszközök elemre, majd az Eszköz hozzáadása gombra: a Tetra egy kódot mutat. A telefonon nyisd meg a Szinkron elemet, koppints a Kód beolvasása gombra, és irányítsd a kamerát a kódra.",
  "guide.clientTitle": "Másik számítógép",

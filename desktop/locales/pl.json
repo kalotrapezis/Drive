@@ -1898,7 +1898,7 @@
  "guide.againTitle": "Wróć w dowolnej chwili",
  "guide.againBody": "Jeśli chcesz, zamknij go teraz. Przewodnik jest zawsze w Ustawienia › Przewodnik.",
  "guide.roleTitle": "Serwer czy klient",
- "guide.roleBody": "Przy pierwszym uruchomieniu Tetra pyta, czym jest ten komputer. Wybierz Serwer dla głównego komputera, który zostaje w domu: przechowuje wszystko wraz z kopiami zapasowymi, a telefony, tablety i Twoje inne komputery synchronizują się z nim. Wybór zostaje; zmiana wymaga resetu (Ustawienia › Serwer czy klient).",
+ "guide.roleBody": "Przy pierwszym uruchomieniu Tetra pyta, czym jest ten komputer: Serwer to główny komputer w domu, Klient to każdy inny. Zmiana później wymaga resetu (Ustawienia › Serwer czy klient).",
  "guide.pairTitle": "Sparuj telefon lub tablet",
  "guide.pairBody": "Na serwerze kliknij Urządzenia na pasku bocznym, a potem Dodaj urządzenie: Tetra pokaże kod. Na telefonie otwórz Synchronizacja, dotknij Zeskanuj kod i skieruj na niego aparat.",
  "guide.clientTitle": "Inny komputer",

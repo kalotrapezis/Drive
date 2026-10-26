@@ -1724,7 +1724,7 @@
  "guide.againTitle": "Come back any time",
  "guide.againBody": "Close it now if you like. The guide is always in Settings › Guide.",
  "guide.roleTitle": "Server or client",
- "guide.roleBody": "The first time it opens, Tetra asks what this computer is. Choose Server for the main computer that stays at home: it keeps everything and the backups, and phones, tablets and your other computers sync with it. The choice stays; changing it takes a reset (Settings › Server or client).",
+ "guide.roleBody": "The first time it opens, Tetra asks what this computer is: Server for the main computer in your home, Client for any other. Changing it later takes a reset (Settings › Server or client).",
  "guide.pairTitle": "Pair a phone or tablet",
  "guide.pairBody": "On the server, click Devices in the sidebar, then Add a device: Tetra shows a code. On the phone, open Local Sync, tap Scan a code and point the camera at it.",
  "guide.clientTitle": "Another computer",

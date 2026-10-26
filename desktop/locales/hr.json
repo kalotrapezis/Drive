@@ -1810,7 +1810,7 @@
  "guide.againTitle": "Vratite se bilo kada",
  "guide.againBody": "Ako želite, sada ga zatvorite. Vodič je uvijek u Postavke › Vodič.",
  "guide.roleTitle": "Poslužitelj ili klijent",
- "guide.roleBody": "Pri prvom pokretanju Tetra pita što je ovo računalo. Odaberite Poslužitelj za glavno računalo koje ostaje kod kuće: čuva sve i sigurnosne kopije, a telefoni, tableti i vaša druga računala sinkroniziraju se s njim. Odabir ostaje; za promjenu sve treba ponovno postaviti (Postavke › Poslužitelj ili klijent).",
+ "guide.roleBody": "Pri prvom pokretanju Tetra pita što je ovo računalo: Poslužitelj je glavno računalo u vašem domu, Klijent svako drugo. Kasnija promjena zahtijeva ponovno postavljanje (Postavke › Poslužitelj ili klijent).",
  "guide.pairTitle": "Uparite telefon ili tablet",
  "guide.pairBody": "Na poslužitelju kliknite Uređaji na bočnoj traci, a zatim Dodaj uređaj: Tetra prikazuje kod. Na telefonu otvorite Sinkronizacija, dodirnite Skeniraj kod i usmjerite kameru prema njemu.",
  "guide.clientTitle": "Drugo računalo",

@@ -1724,7 +1724,7 @@
  "guide.againTitle": "Palaa milloin vain",
  "guide.againBody": "Voit sulkea sen nyt. Opas on aina kohdassa Asetukset › Opas.",
  "guide.roleTitle": "Palvelin vai asiakas",
- "guide.roleBody": "Kun Tetra avautuu ensimmäisen kerran, se kysyy, mikä tämä tietokone on. Valitse Palvelin pääasialliselle tietokoneelle, joka pysyy kotona: se säilyttää kaiken ja varmuuskopiot, ja puhelimet, tabletit ja muut tietokoneesi synkronoivat sen kanssa. Valinta pysyy; sen vaihtaminen vaatii nollauksen (Asetukset › Palvelin vai asiakas).",
+ "guide.roleBody": "Kun Tetra avautuu ensimmäisen kerran, se kysyy, mikä tämä tietokone on: Palvelin on kotisi pääasiallinen tietokone, Asiakas mikä tahansa muu. Myöhemmin muuttaminen vaatii nollauksen (Asetukset › Palvelin vai asiakas).",
  "guide.pairTitle": "Yhdistä puhelin tai tabletti",
  "guide.pairBody": "Napsauta palvelimella sivupalkista Laitteet ja sitten Lisää laite: Tetra näyttää koodin. Avaa puhelimessa Synkronointi, napauta Skannaa koodi ja osoita kameralla koodia.",
  "guide.clientTitle": "Toinen tietokone",

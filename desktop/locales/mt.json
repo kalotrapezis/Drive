@@ -1898,7 +1898,7 @@
  "guide.againTitle": "Erġa’ lura meta trid",
  "guide.againBody": "Agħlaqha issa jekk trid. Il-gwida dejjem tinsab f’Settings › Gwida.",
  "guide.roleTitle": "Server jew klijent",
- "guide.roleBody": "L-ewwel darba li jinfetaħ, Tetra jistaqsi x’inhu dan il-kompjuter. Agħżel Server għall-kompjuter ewlieni li jibqa’ d-dar: iżomm kollox u l-backups, u t-telefowns, it-tablets u l-kompjuters l-oħra tiegħek jissinkronizzaw miegħu. L-għażla tibqa’; biex tibdilha trid tirrisettja (Settings › Server jew klijent).",
+ "guide.roleBody": "L-ewwel darba li jinfetaħ, Tetra jistaqsi x’inhu dan il-kompjuter: Server għall-kompjuter ewlieni tad-dar, Klijent għal kull wieħed ieħor. Biex tibdilha aktar tard trid tirrisettja (Settings › Server jew klijent).",
  "guide.pairTitle": "Qabbad telefon jew tablet",
  "guide.pairBody": "Fuq is-server, ikklikkja Apparati fil-kolonna tal-ġenb, imbagħad Żid apparat: Tetra juri kodiċi. Fuq it-telefon, iftaħ Sinkronizza, agħfas Iskenja kodiċi u ipponta l-kamera lejh.",
  "guide.clientTitle": "Kompjuter ieħor",
