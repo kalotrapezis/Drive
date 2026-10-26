@@ -50,10 +50,10 @@ export function GuidePanel({ go, onClose }: { go: (to: GuideGo) => void; onClose
         <h2>{t(`guide.${step.key}Title`)}</h2>
         <p>{t(`guide.${step.key}Body`)}</p>
         <div className="guide-pic" aria-hidden="true"><Picture pic={step.pic} /></div>
+        {step.go && <button className="filled-button secondary guide-show" onClick={() => go(step.go!)}>{t('guide.showMe')}</button>}
       </div>
       <div className="guide-buttons">
         {at > 0 && <button className="filled-button secondary" onClick={() => setAt(at - 1)}>{t('common.back')}</button>}
-        {step.go && <button className="filled-button secondary" onClick={() => go(step.go!)}>{t('guide.showMe')}</button>}
         <button className="filled-button" onClick={() => (at + 1 < STEPS.length ? setAt(at + 1) : close())}>{at + 1 < STEPS.length ? t('guide.next') : t('guide.finish')}</button>
       </div>
     </aside>
@@ -102,13 +102,12 @@ function Picture({ pic }: { pic: Pic }) {
       <FileRow icon="folderDocuments" name="Documents" /><FileRow icon="fileDoc" name="Report.docx" on mark="check" /><FileRow icon="fileSheet" name="Budget.xlsx" />
     </div>
     case 'filesBar': return <div className="island selection-bar">
-      <span className="round flat"><Icon name="close" /></span><strong>{t('files.selected', { count: 1 })}</strong>
+      <span className="round flat"><Icon name="close" /></span><strong>{t('photos.selected', { count: 1 })}</strong>
       <span className="round flat guide-mark"><Icon name="copy" /></span><span className="round flat guide-mark"><Icon name="moveTo" /></span>
-      <span className="round flat"><Icon name="tag" /></span><span className="round flat"><Icon name="trash" /></span>
     </div>
     case 'filesMore': return <div className="file-list"><FileRow icon="fileDoc" name="Report.docx" mark="more" /></div>
     case 'filesSend': return <div className="island selection-bar">
-      <span className="round flat"><Icon name="close" /></span><strong>{t('files.selected', { count: 1 })}</strong>
+      <strong>{t('photos.selected', { count: 1 })}</strong>
       <span className="round flat"><Icon name="copy" /></span><span className="round flat"><Icon name="moveTo" /></span>
       <span className="round flat guide-mark"><Icon name="device" /></span>
     </div>

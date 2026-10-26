@@ -1096,3 +1096,7 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .guide-hub-server { color: var(--text); padding: 10px; border-radius: 50%; display: grid; }
 .guide-add { display: inline-flex; align-self: flex-start; padding: 10px 16px; margin: 8px 0 0 16px; }
 .guide-key { font-family: monospace; letter-spacing: .08em; }
+.guide-show { width: 100%; margin-top: 12px; }
+.guide-pic .selection-bar strong { white-space: nowrap; }
+.guide-pic .segmented { flex-wrap: wrap; }
+.guide-pic .segmented button { padding: 8px 12px; }
