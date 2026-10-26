@@ -6,7 +6,7 @@ const path = require('node:path')
 const https = require('node:https')
 const crypto = require('node:crypto')
 const library = require('../library')
-const { SyncServer } = require('../sync')
+const { SyncServer, identity } = require('../sync')
 const { SyncClient } = require('../client')
 const { Documents } = require('../documents')
 const { People } = require('../faces')
@@ -17,13 +17,13 @@ const reset = require('../reset')
 const sha = b => crypto.createHash('sha256').update(b).digest('hex')
 
 /** One Tetra computer in a folder of its own: its database, Photos, Files and Notes, its sync listening on free ports. */
-async function computer(tmp, name) {
+async function computer(tmp, name, { onCall = () => {} } = {}) {
   const dir = path.join(tmp, name)
   const db = library.open(path.join(dir, 'data'))
   const files = new Files(db, path.join(dir, 'Files'))
   fs.mkdirSync(files.root, { recursive: true })
   const sync = await new SyncServer({ db, files, documents: new Documents(db), people: new People(db, path.join(dir, 'data')),
-    notes: new Notes(path.join(dir, 'Files', '.notes'), name), dataDir: path.join(dir, 'data'), photosRoot: path.join(dir, 'Photos'), port: 0, beaconPort: 0 }).start()
+    notes: new Notes(path.join(dir, 'Files', '.notes'), name), dataDir: path.join(dir, 'data'), photosRoot: path.join(dir, 'Photos'), port: 0, beaconPort: 0, onCall }).start()
   return { dir, db, files, sync }
 }
 
@@ -160,4 +160,168 @@ test('reset: the second acknowledgement only after 10 seconds, a verified backup
     assert.equal(fs.existsSync(tetra) || fs.existsSync(data), false)
     assert.ok(fs.existsSync(path.join(done.to, 'Tetra', 'Files', 'Work', 'a.txt')), 'the backup stays')
   } finally { fs.rmSync(tmp, { recursive: true }) }
+})
+
+/** A stand-in phone: Tetra's SyncServer.kt answers for /call, /call/action and /location, behind its own certificate. */
+async function phone(dir) {
+  const id = await identity(dir)
+  const asked = []
+  const server = https.createServer({ key: id.key, cert: id.cert }, (req, res) => {
+    asked.push(req.url)
+    const body = req.url.startsWith('/location') ? { lat: 40.64, lng: 22.94, accuracy: 12 } : req.url.startsWith('/call?') ? { how: 'calling' } : { ok: true }
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(body))
+  })
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  return { fp: id.fingerprint, port: server.address().port, asked, close: () => new Promise(r => server.close(r)) }
+}
+
+test("a client computer shows the phone's calls, answers them through the server, and asks it where the phone is", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tetra-calls-'))
+  const onServer = [], onLaptop = []
+  const server = await computer(tmp, 'server', { onCall: s => onServer.push(s) }), laptop = await computer(tmp, 'laptop', { onCall: s => onLaptop.push(s) })
+  const p = await phone(path.join(tmp, 'phone'))
+  try {
+    server.sync.setRole('server')
+    const client = new SyncClient(laptop.sync)
+    await client.join(server.sync.startPairing().key, { targets: ['127.0.0.1'], beaconPort: server.sync.beaconPort })
+    server.db.prepare("UPDATE sync_devices SET peer_hosts = '127.0.0.1'").run()
+    // the phone pairs as a phone does: its certificate, port and the token the computer calls it with
+    const { code } = server.sync.startPairing()
+    const paired = await new Promise((resolve, reject) => {
+      const req = https.request({ host: '127.0.0.1', port: server.sync.port, method: 'POST', path: '/pair', rejectUnauthorized: false }, r => { const b = []; r.on('data', c => b.push(c)).on('end', () => resolve(JSON.parse(Buffer.concat(b)))) })
+      req.on('error', reject)
+      req.end(JSON.stringify({ code, name: 'Xiaomi 15', widthDp: 400, fp: p.fp, hosts: ['127.0.0.1'], port: p.port, token: 'phone-token' }))
+    })
+    const state = s => new Promise((resolve, reject) => {
+      const req = https.request({ host: '127.0.0.1', port: server.sync.port, method: 'POST', path: '/call/state', rejectUnauthorized: false, headers: { authorization: `Bearer ${paired.token}` } }, r => { r.resume(); r.on('end', resolve) })
+      req.on('error', reject)
+      req.end(JSON.stringify(s))
+    })
+    const until = async fn => { for (let i = 0; i < 100 && !fn(); i++) await new Promise(r => setTimeout(r, 50)); assert.ok(fn()) }
+
+    await state({ state: 'ringing', number: '6900000001' })
+    await until(() => onLaptop.length === 1)
+    assert.equal(onServer[0].state, 'ringing')
+    assert.deepEqual([onLaptop[0].state, onLaptop[0].number, onLaptop[0].takenBy], ['ringing', '6900000001', null], 'the bubble on the client too')
+
+    // Answer on the laptop: through the server to the phone; from then on every computer knows who took it
+    assert.deepEqual(await laptop.sync.callAction('answer'), { ok: true })
+    assert.ok(p.asked.includes('/call/action?do=answer'))
+    await state({ state: 'active', number: '6900000001' })
+    await until(() => onLaptop.length === 2)
+    const me = client.pairing().id
+    assert.equal(onServer[1].takenBy, me, "the server's bubble closes")
+    assert.equal(onLaptop[1].takenBy, me)
+    await state({ state: 'ended' })
+    await until(() => onLaptop.length === 3)
+    await state({ state: 'ringing', number: '6900000002' })
+    await until(() => onLaptop.length === 4)
+    assert.equal(onLaptop[3].takenBy, null, "a new call is nobody's yet")
+
+    // Maps' "where I am" and a call placed from the laptop, both through the server
+    const fix = await laptop.sync.phoneLocation()
+    assert.deepEqual([fix.lat, fix.lng, fix.device], [40.64, 22.94, 'Xiaomi 15'])
+    assert.deepEqual(await laptop.sync.callOnPhone('6900000003', 'Anna'), { how: 'calling', device: 'Xiaomi 15' })
+    assert.ok(p.asked.some(u => u.startsWith('/call?number=6900000003')))
+    // a client computer is never taken for a phone
+    assert.ok(!p.asked.some(u => u.includes('laptop')))
+  } finally {
+    await server.sync.stop(); await laptop.sync.stop(); await p.close()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('a NAS: the first client computer to join holds the crown', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tetra-nas-'))
+  const server = await computer(tmp, 'nas'), first = await computer(tmp, 'first'), second = await computer(tmp, 'second')
+  const near = { targets: ['127.0.0.1'], beaconPort: server.sync.beaconPort }
+  try {
+    server.sync.setRole('server')
+    assert.equal(server.sync.crown(), null, 'not a NAS: the server does its own analysis')
+    server.db.prepare("INSERT OR REPLACE INTO settings(key, value) VALUES('nas', '1')").run()
+    assert.equal(server.sync.nas(), true)
+    assert.equal(server.sync.crown(), null, 'nobody to hold it yet')
+    const crowned = []
+    const a = new SyncClient(first.sync, { onCrown: c => crowned.push(['first', c]) }), b = new SyncClient(second.sync, { onCrown: c => crowned.push(['second', c]) })
+    await a.join(server.sync.startPairing().key, near)
+    await new Promise(r => setTimeout(r, 20))
+    await b.join(server.sync.startPairing().key, near)
+    await a.now(); await b.now()
+    assert.equal(server.sync.crown(), a.pairing().id)
+    assert.deepEqual(crowned, [['first', true], ['second', false]], 'the first to join does the photo analysis; the second learns its server is a NAS, and not its own')
+    assert.equal(b.status().crown, false)
+  } finally {
+    await server.sync.stop(); await first.sync.stop(); await second.sync.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test("a call's sound crosses over Wi-Fi: the phone's voice to the computer that took the call, its microphone back", async () => {
+  const { spawn } = require('node:child_process')
+  const { bridge } = require('../callaudio')
+  // stand-ins for parec (a voice) and pacat (a speaker that remembers what it played)
+  const voice = text => spawn('sh', ['-c', `printf '%s' '${text}'; sleep 5`], { stdio: ['ignore', 'pipe', 'ignore'] })
+  const speaker = into => { const p = spawn('cat', { stdio: ['pipe', 'pipe', 'ignore'] }); p.stdout.on('data', d => into.push(String(d))); return p }
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tetra-sound-'))
+  const server = await computer(tmp, 'server'), laptop = await computer(tmp, 'laptop')
+  try {
+    server.sync.setRole('server')
+    const client = new SyncClient(laptop.sync)
+    await client.join(server.sync.startPairing().key, { targets: ['127.0.0.1'], beaconPort: server.sync.beaconPort })
+    const toPhone = [], here = []
+    assert.equal(await client.soundThere(), false, "the phone not on the server's Bluetooth: nothing to carry")
+    server.sync.soundHere = () => true
+    server.sync.callAudio = async (received, send) => bridge(received, send, {}, { capture: () => voice('caller says hi'), play: () => speaker(toPhone) })
+    assert.equal(await client.soundThere(), true)
+    const mine = (r, s) => bridge(r, s, {}, { capture: () => voice('laptop mic'), play: () => speaker(here) })
+    await assert.rejects(client.callAudio(mine), 'not the computer that took the call')
+    server.sync.callTaken = client.pairing().id
+    const stop = await client.callAudio(mine)
+    for (let i = 0; i < 100 && !(here.join('') && toPhone.join('')); i++) await new Promise(r => setTimeout(r, 50))
+    assert.equal(here.join(''), 'caller says hi')
+    assert.equal(toPhone.join(''), 'laptop mic')
+    stop()
+  } finally {
+    await server.sync.stop(); await laptop.sync.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test("the mirror: the server's photos shown on a client with their thumbnails, a photo fetched only when opened", async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tetra-mirror-'))
+  const server = await computer(tmp, 'server'), laptop = await computer(tmp, 'laptop')
+  try {
+    server.sync.setRole('server')
+    const client = new SyncClient(laptop.sync)
+    await client.join(server.sync.startPairing().key, { targets: ['127.0.0.1'], beaconPort: server.sync.beaconPort })
+    const [device] = server.sync.devices()
+    for (const c of ['photos', 'files']) server.sync.setConnection(device.id, c, { direction: 'both', keep: 'everything' })
+    server.sync.completeSetup(device.id)
+    const photo = crypto.randomBytes(4000), h = sha(photo)
+    fs.mkdirSync(path.join(server.dir, 'Photos', '2026'), { recursive: true })
+    fs.writeFileSync(path.join(server.dir, 'Photos', '2026', 'nas.jpg'), photo)
+    server.db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at, thumb) VALUES('2026/nas.jpg', ?, 'image/jpeg', 0, ?, 1, 1700000000000, 1)").run(h, photo.length)
+    fs.mkdirSync(path.join(server.dir, 'data', 'thumbs'), { recursive: true })
+    fs.writeFileSync(path.join(server.dir, 'data', 'thumbs', `${h}.webp`), 'a small preview')
+
+    client.setMirror(true)
+    await client.now()
+    assert.equal(client.status().error, null)
+    const row = laptop.db.prepare("SELECT path, location, thumb, taken_at FROM media WHERE sha256 = ?").get(h)
+    assert.deepEqual({ ...row }, { path: '2026/nas.jpg', location: 'server', thumb: 1, taken_at: 1700000000000 })
+    assert.equal(fs.readFileSync(path.join(laptop.dir, 'data', 'thumbs', `${h}.webp`), 'utf8'), 'a small preview')
+    assert.equal(fs.existsSync(path.join(laptop.dir, 'Photos', '2026', 'nas.jpg')), false, 'shown, not fetched')
+    // opened: the bytes come, checked, into the cache; a second open is the kept one
+    const opened = await laptop.sync.locate({ ...row, sha256: h })
+    assert.deepEqual(fs.readFileSync(opened.file), photo)
+    await server.sync.stop()
+    assert.equal((await laptop.sync.locate({ ...row, sha256: h })).file, opened.file, 'kept: opens with the server away')
+    assert.equal((await laptop.sync.locate({ path: '2026/other.jpg', sha256: 'f'.repeat(64), location: 'server' })).file, null)
+    // off: the rows go
+    client.setMirror(false)
+    assert.equal(laptop.db.prepare("SELECT COUNT(*) n FROM media WHERE location = 'server'").get().n, 0)
+  } finally {
+    await server.sync.stop().catch(() => {}); await laptop.sync.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
 })

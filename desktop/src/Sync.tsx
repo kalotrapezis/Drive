@@ -6,7 +6,7 @@ import { copiesColor } from './colors'
 import { Icon } from './Icon'
 import { Confirm, Modal } from './Dialogs'
 import { lang, t, tr } from './i18n'
-import { ClientPage, PairingKey } from './Role'
+import { ClientCard, PairingKey } from './Role'
 
 const LOCALE = lang() === 'en' ? 'en-GB' : lang()
 const when = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -727,15 +727,16 @@ export function SyncPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
   const [client, setClient] = useState<boolean | null>(null)
   useEffect(() => { window.drive.role.get().then(r => setClient(r.role === 'client')) }, [])
   if (client === null) return null
-  return client ? <ClientPage /> : <ServerPage setDialog={setDialog} />
+  return <ServerPage setDialog={setDialog} client={client} />
 }
 
-function ServerPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
+/** A client shows its server instead of the pairing and the library, and only drives on its cards (it has no phones). */
+function ServerPage({ setDialog, client }: { setDialog: (d: ReactNode) => void; client: boolean }) {
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const load = () => window.drive.sync.status().then(setStatus)
   useEffect(() => { load(); const off = window.drive.sync.onReceived(load); const t = setInterval(load, 3000); return () => { off(); clearInterval(t) } }, [])
   const close = () => { setDialog(null); load() }
-  const add = () => setDialog(<AddDevice onClose={() => setDialog(null)} onDone={close} setDialog={setDialog} />)
+  const add = () => setDialog(client ? <AddDrive onClose={() => setDialog(null)} onDone={close} /> : <AddDevice onClose={() => setDialog(null)} onDone={close} setDialog={setDialog} />)
   const forget = (d: SyncDevice) => setDialog(<Confirm title={t('sync.forgetTitle', { name: d.name })} action={t('sync.forgetDevice')} danger onClose={close}
     body={t('sync.forgetBody')} onConfirm={async () => { await window.drive.sync.forget(d.id).catch(e => alert(e instanceof Error ? e.message : String(e))); load() }} />)
   // [what it says, connected]: the badge lights by the flag, never by the words
@@ -764,15 +765,16 @@ function ServerPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
         )}
       </header>
       {status?.error && <div className="island analysis"><Icon name="warning" /><span>{t('sync.notRunning', { error: status.error })}</span></div>}
-      {status && devices.length === 0 && !status.error && (
+      {client && <ClientCard />}
+      {!client && status && devices.length === 0 && !status.error && (
         <div className="island add-first">
           <h2>{t('sync.pairYourPhone')}</h2>
           <PairingCode />
         </div>
       )}
-      {status?.overview && devices.length > 0 && <Library overview={status.overview} paired={devices} here={here} setDialog={setDialog} />}
-      {devices.length > 0 && <DeletedItems here={here} drives={devices.filter(d => d.volume_uuid)} setDialog={setDialog} />}
-      {devices.length > 0 && (
+      {!client && status?.overview && devices.length > 0 && <Library overview={status.overview} paired={devices} here={here} setDialog={setDialog} />}
+      {(client || devices.length > 0) && <DeletedItems here={here} drives={devices.filter(d => d.volume_uuid)} setDialog={setDialog} />}
+      {(client || devices.length > 0) && (
         <div className="device-grid">
           {devices.map(d => {
             const [s, live] = state(d)
@@ -805,11 +807,11 @@ function ServerPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
           <button className="island device-card add" onClick={add}>
             <span className="sync-badge"><Icon name="add" size={30} /></span>
             <strong>{t('sync.addDevice')}</strong>
-            <small>{t('sync.showPairingCode')}</small>
+            <small>{client ? t('sync.addDriveSub') : t('sync.showPairingCode')}</small>
           </button>
         </div>
       )}
-      {status && !status.error && <p className="hint">{t('sync.listening', { addresses: status.addresses.join(', ') || t('sync.thisComputer'), port: status.port })}</p>}
+      {!client && status && !status.error && <p className="hint">{t('sync.listening', { addresses: status.addresses.join(', ') || t('sync.thisComputer'), port: status.port })}</p>}
     </div>
   )
 }

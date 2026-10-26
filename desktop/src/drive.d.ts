@@ -34,7 +34,7 @@ export interface PersonFace { id: string; sha256: string; quality: number; chose
 export interface SyncConnection { content: 'photos' | 'files'; direction: 'off' | 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing'; keepDays?: number; keepFavorites?: boolean }
 export interface MovePreview { holds: number; onPc: number; go: number; goBytes: number; keep: number; notOnPc: number; lastSeen: number | null }
 /** A desktop client's server (client.js status). */
-export interface ClientStatus { name: string; lastSync: number | null; error: string | null; running: boolean }
+export interface ClientStatus { name: string; lastSync: number | null; error: string | null; running: boolean; crown: boolean; mirror: boolean }
 export interface DriveRules { role: 'backup' | 'storage'; offload: boolean; percent: number; keep: number; unit: 'day' | 'week' | 'month' | 'year'; copies: number; favorites: boolean; screenshots: boolean; auto: boolean }
 export interface OffloadPlan { deviceId: string; name: string; rules: DriveRules; disk: Disk | null; count: number; bytes: number; oldest: number | null; newest: number | null; short?: number }
 export interface Disk { size: number; free: number; percent: number }
@@ -64,7 +64,7 @@ export interface DriveScan {
 export interface SyncStatus { port: number; fingerprint: string; error: string | null; addresses: string[]; devices: SyncDevice[]; overview: SyncOverview; self: SyncSelf; disk: Disk | null; counts: { photos: number; files: number } }
 
 export interface TrashedPhoto { id: string; name: string; path: string; size: number; deletedAt: number }
-export interface Collection { id: string; name: string; count: number; cover: string | null; hidden: boolean; folder?: boolean; drive?: boolean }
+export interface Collection { id: string; name: string; count: number; cover: string | null; hidden: boolean; folder?: boolean; drive?: boolean; mirror?: boolean }
 export interface AppNotification { id: number; at: number; title: string; body: string | null; read: number }
 export interface PhotoPlace { path: string; name: string; count: number }
 
@@ -220,7 +220,9 @@ declare global {
       mapsWeb(url: string): Promise<void>
       /** Directions on this computer (router.js): the line, metres, seconds and turns from the first point through the others. */
       mapsRoute(points: { lat: number; lng: number }[], mode: 'car' | 'foot' | 'bike' | 'wheelchair', main?: boolean): Promise<{ metres: number; seconds: number; line: [number, number][]; steps: { text: string; metres: number; seconds: number; sign: number }[] }>
-      mapsPhoneLocation(): Promise<{ lat: number; lng: number; accuracy: number; at: number; provider: string; device: string; error?: undefined } | { error: string }>
+      locationEvery(): Promise<'off' | '30m' | '1d' | '1w'>
+      setLocationEvery(v: 'off' | '30m' | '1d' | '1w'): Promise<void>
+      mapsPhoneLocation(fresh?: boolean): Promise<{ lat: number; lng: number; accuracy: number; at: number; provider: string; device: string; error?: undefined } | { error: string }>
       onMapsChanged(cb: () => void): () => void
       onNotesChanged(cb: () => void): () => void
       notesSynced(): Promise<{ at: number; device: string } | null>
@@ -234,10 +236,12 @@ declare global {
       }
       i18n: import('./i18n').Words
       role: {
-        get(): Promise<{ role: 'server' | 'client' | null; server: ClientStatus | null }>
-        server(): Promise<void>
+        get(): Promise<{ role: 'server' | 'client' | null; server: ClientStatus | null; nas: boolean }>
+        server(nas: boolean): Promise<void>
+        setNas(on: boolean): Promise<void>
         join(key: string): Promise<{ name: string }>
         syncNow(): Promise<ClientStatus | null>
+        setMirror(on: boolean): Promise<void>
         onSynced(cb: (s: ClientStatus | null) => void): () => void
       }
       reset: {

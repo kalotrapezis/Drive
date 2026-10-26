@@ -13,6 +13,7 @@ const docs = require('./documents')
 const { SyncServer, lanAddresses, FROM_PHONE } = require('./sync')
 const { SyncClient } = require('./client')
 const reset = require('./reset')
+const callaudio = require('./callaudio')
 const { Folders } = require('./folders')
 const { Purgatory } = require('./purgatory')
 const history = require('./history')
@@ -334,7 +335,7 @@ function notify(title, body, open = null) {
     db.prepare('INSERT INTO notifications(at, title, body) VALUES(?,?,?)').run(Date.now(), String(title), body == null ? null : String(body))
     win?.webContents.send('notifications-changed')
   } catch (e) { console.warn('[notify]', e.message) }
-  if (!Notification.isSupported()) return
+  if (!Notification.isSupported() || sync?.nas()) return // a NAS: nobody sits at it; the list keeps it
   const n = new Notification({ title, body, icon: path.join(__dirname, 'public', 'icon.png') })
   n.on('click', () => { showWindow(); if (open) open(); else if (offer) win?.webContents.send('offload-offer', offer.deviceId) })
   // held until it closes: one nobody holds is collected, and its click does nothing (the user, 23 Oct)
@@ -427,6 +428,9 @@ async function sendFilesToPhone() {
 /** `rescan` — 'faces' or 'documents' — reads photos that were read before, because the rules changed since. */
 function analyzeLibrary(rescan = null) {
   if (analysis.running) return
+  // the slow analysis runs on one computer: the server, or for a NAS the client holding the crown (sync.js crown); the
+  // others get its results with the metadata
+  if (sync?.nas() || (sync?.role() === 'client' && !sync.client?.pairing()?.crown)) return
   analysis.running = true // until the analyzer says otherwise, so a second request does not start a second pass
   worker().postMessage({ type: 'start', rescan,
     wantFaces: setting('people_enabled') === '1' && rescan !== 'documents',
@@ -452,7 +456,11 @@ app.whenReady().then(() => {
   calendar = new Calendar(path.join(FILES_ROOT, 'Calendar'), path.join(FILES_ROOT, 'Trash'))
   try { fs.mkdirSync(calendar.root, { recursive: true }) } catch {}
   contacts = new Contacts(path.join(FILES_ROOT, 'Contacts'), path.join(FILES_ROOT, 'Trash'), calendar)
-  calls = new Calls({ contacts, act: what => sync.callAction(what), notify: (t, b) => notify(t, b), recordings: path.join(FILES_ROOT, 'Phone', 'Recordings') })
+  calls = new Calls({ contacts, act: what => sync.callAction(what), notify: (t, b) => notify(t, b), recordings: path.join(FILES_ROOT, 'Phone', 'Recordings'),
+    me: () => sync.role() === 'client' ? sync.client?.pairing()?.id : 'server',
+    early: () => sync.role() !== 'client' && !db.prepare("SELECT 1 FROM sync_devices WHERE kind = 'computer' AND volume_uuid IS NULL").get(),
+    relayable: () => sync.role() === 'client' ? sync.client.soundThere() : false,
+    relay: () => sync.client.callAudio((received, send) => callaudio.bridge(received, send)) })
   calls.watch()
   contacts.chosen = setting('contactsBirthdays') || null // the calendar birthdays go into (Γενέθλια when none chosen)
   try { fs.mkdirSync(contacts.root, { recursive: true }) } catch {}
@@ -482,7 +490,14 @@ app.whenReady().then(() => {
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
   purgatory = new Purgatory({ db, photosRoot: PHOTOS_ROOT, files, serverBase: path.dirname(HOME.root) })
-  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, data: dataCounter, port: Number(process.env.DRIVE_PORT) || undefined, onCall: s => calls?.fromPhone(s), onReceived: () => {
+  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, data: dataCounter, port: Number(process.env.DRIVE_PORT) || undefined,
+    // a call answered on a client computer: its sound from and to the phone on this one's Bluetooth (callaudio.js)
+    soundHere: () => !!calls?.bt.phones.some(p => p.connected),
+    callAudio: async (received, send) => {
+      const d = await callaudio.bluez()
+      if (!d.source || !d.sink) throw new Error('The phone\'s call sound is not on this computer\'s Bluetooth.')
+      return callaudio.bridge(received, send, d)
+    }, onCall: s => calls?.fromPhone(s), onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   }, onSent: ({ device, paths }) => { // Send to computer: the phone's share menu, into Files › From phone
@@ -492,7 +507,8 @@ app.whenReady().then(() => {
   } })
   // A client of another Tetra (client.js): its "sync now" is the nudge every change here already sends, plus a look
   // every 5 minutes and the server's own nudge. A server never runs it.
-  const client = new SyncClient(sync, { onSynced: s => win?.webContents.send('client-synced', s), onNotes: () => win?.webContents.send('notes-changed') })
+  const client = new SyncClient(sync, { onSynced: s => win?.webContents.send('client-synced', s), onNotes: () => win?.webContents.send('notes-changed'),
+    onCrown: crown => { if (crown) analyzeLibrary() } })
   if (!process.env.DRIVE_HIDDEN) setInterval(() => { if (sync.role() === 'client') client.soon(0) }, 5 * 60_000)
   // started: the devices are told at once, so what waited for this computer (Send to computer's outbox) goes now
   sync.start().then(() => { if (!process.env.DRIVE_HIDDEN) sync.nudge().catch(() => {}) }).catch(e => { sync.error = e.message })
@@ -562,6 +578,7 @@ app.whenReady().then(() => {
   ipcMain.handle('library:list', () => {
     const c = folders.choices()
     const names = new Map(db.prepare('SELECT id, name FROM sync_devices WHERE volume_uuid IS NOT NULL').all().map(d => [d.id, d.name]))
+    names.set('server', sync.client?.pairing()?.name ?? t('main.aDrive')) // a client's mirror of its server's photos (client.js mirror)
     return library.pairMotion(library.list(db).filter(m => folders.isShown(m.path, c)).map(m => m.location ? { ...m, drive: names.get(m.location) ?? t('main.aDrive') } : m))
   })
   ipcMain.handle('folders:list', () => folders.list().map(({ shas, ...f }) => f))
@@ -575,7 +592,11 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:setMotion', (_, v) => { if (['one', 'remove'].includes(v)) setSetting('motionPhotos', v) })
   ipcMain.handle('settings:motionAutoplay', () => setting('motionAutoplay') === '1')
   ipcMain.handle('settings:setMotionAutoplay', (_, on) => setSetting('motionAutoplay', on ? '1' : '0'))
-  ipcMain.handle('photos:trash', async (_, ids) => {
+  ipcMain.handle('photos:trash', async (_, picked) => {
+    // a mirrored photo lives on the server: deleted there, not from here
+    const mirrored = id => db.prepare("SELECT 1 FROM media WHERE id = ? AND location = 'server'").get(Number(id))
+    const ids = picked.filter(id => !mirrored(id))
+    if (!ids.length && picked.length) throw new Error(t('photos.mirrorNoTrash', { name: sync.client?.pairing()?.name ?? '' }))
     const rows = ids.map(id => db.prepare('SELECT path, sha256, size FROM media WHERE id = ?').get(Number(id))).filter(Boolean)
     for (const r of rows) history.record(db, { action: 'trashed', kind: 'photo', name: r.path, sha256: r.sha256, size: r.size })
     const result = await library.trash(db, PHOTOS_ROOT, ids, f => shell.trashItem(f))
@@ -590,12 +611,19 @@ app.whenReady().then(() => {
     return r
   })
   // A collection named after an included folder is that folder: taking a photo out of it moves the file.
-  ipcMain.handle('collections:list', () => { const albums = folders.folderAlbums(); return [...library.collections(db).map(c => ({ ...c, folder: albums.has(c.name.toLowerCase()) })), ...sync.driveAlbums()] })
+  // the server's photos on a client (its mirror), as an album of their own: shown, not deleted or rearranged here
+  const mirrorAlbum = () => {
+    const n = db.prepare("SELECT COUNT(DISTINCT sha256) n FROM media WHERE location = 'server'").get().n
+    if (!n) return []
+    const cover = db.prepare("SELECT sha256 FROM media WHERE location = 'server' AND thumb = 1 ORDER BY taken_at DESC LIMIT 1").get()?.sha256 ?? null
+    return [{ id: 'mirror', name: sync.client?.pairing()?.name ?? '', count: n, cover, hidden: false, mirror: true }]
+  }
+  ipcMain.handle('collections:list', () => { const albums = folders.folderAlbums(); return [...library.collections(db).map(c => ({ ...c, folder: albums.has(c.name.toLowerCase()) })), ...sync.driveAlbums(), ...mirrorAlbum()] })
   ipcMain.handle('collections:create', (_, name) => library.createCollection(db, name))
   ipcMain.handle('collections:delete', (_, id) => library.deleteCollection(db, id))
   // A drive's collection is the drive (sync.js driveMembers): adding copies there, removing takes it off.
   const driveOf = id => String(id).startsWith('drive:') ? String(id).slice(6) : null
-  ipcMain.handle('collections:members', (_, id) => driveOf(id) ? sync.driveMembers(driveOf(id)) : library.members(db, id))
+  ipcMain.handle('collections:members', (_, id) => id === 'mirror' ? sync.driveMembers('server') : driveOf(id) ? sync.driveMembers(driveOf(id)) : library.members(db, id))
   ipcMain.handle('collections:set', async (_, id, shas, member) => {
     if (!driveOf(id)) return library.setMembership(db, id, shas, member)
     const r = member ? await sync.addToDrive(driveOf(id), shas) : await sync.removeFromDrive(driveOf(id), shas)
@@ -712,7 +740,21 @@ app.whenReady().then(() => {
   ipcMain.handle('maps:describe', (_, lat, lng, road) => maps.describe(lat, lng, road))
   ipcMain.handle('maps:near', (_, lat, lng, name) => maps.near(lat, lng, name))
   ipcMain.handle('maps:route', (_, points, mode, main) => router.route(points, mode, !!main))
-  ipcMain.handle('maps:phoneLocation', () => sync.phoneLocation()) // this computer has no GPS: the paired phone's fix
+  // this computer has no GPS: the paired phone's fix — kept, since a PC rarely moves (the user, 26 Oct). The kept one is used
+  // until it is older than Settings › Location says ('off': for good); Where I am asks the phone again whatever its age.
+  const EVERY_MS = { '30m': 30 * 60_000, '1d': 86_400_000, '1w': 7 * 86_400_000 }
+  ipcMain.handle('maps:phoneLocation', async (_, fresh) => {
+    let kept = null
+    try { kept = JSON.parse(setting('lastFix')) } catch {}
+    const every = setting('locationEvery') || 'off'
+    if (!fresh && kept && (every === 'off' || Date.now() - kept.at < (EVERY_MS[every] ?? 0))) return kept
+    const fix = await sync.phoneLocation()
+    if (fix.error) return fresh || !kept ? fix : kept // the phone away: the kept one still says where this computer is
+    setSetting('lastFix', JSON.stringify({ ...fix, at: Date.now() }))
+    return fix
+  })
+  ipcMain.handle('settings:locationEvery', () => setting('locationEvery') || 'off')
+  ipcMain.handle('settings:setLocationEvery', (_, v) => { if (['off', '30m', '1d', '1w'].includes(v)) setSetting('locationEvery', v) })
   // online: Google's page of the place, with its reviews and photos (the phone's place card does the same)
   // a place's website (or its Διαύγεια decision): web pages only
   ipcMain.handle('maps:web', (_, url) => { if (typeof url !== 'string' || !/^https?:\/\/[^\s]+$/i.test(url)) throw new Error(t('main.errNotWeb')); return shell.openExternal(url) })
@@ -750,10 +792,13 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('sync:files', (_, what, options) => sync.fileList(what, options ?? {}))
   // The first start's question (Setup.tsx) and a client's own Devices page
-  ipcMain.handle('role:get', () => ({ role: sync.role(), server: client.status() }))
-  ipcMain.handle('role:server', () => sync.setRole('server'))
+  ipcMain.handle('role:get', () => ({ role: sync.role(), server: client.status(), nas: sync.nas() }))
+  ipcMain.handle('role:server', (_, nas) => { sync.setRole('server'); if (nas) setSetting('nas', '1') })
+  // a NAS can become a computer someone sits at, and back, without a reset: no data moves
+  ipcMain.handle('role:setNas', (_, on) => { if (sync.role() !== 'server') return; setSetting('nas', on ? '1' : '0'); if (!on) analyzeLibrary() })
   ipcMain.handle('role:join', (_, key) => client.join(String(key ?? '')))
   ipcMain.handle('client:syncNow', () => client.now().then(() => client.status()))
+  ipcMain.handle('client:setMirror', (_, on) => client.setMirror(!!on))
   // Settings › Reset (reset.js): what goes, a verified backup first, or the second acknowledgement after its 10 s
   const wiped = () => [...(process.env.DRIVE_FILES || process.env.DRIVE_PHOTOS ? [PHOTOS_ROOT, FILES_ROOT] : [HOME.root]), DATA_DIR]
   let armedAt = 0

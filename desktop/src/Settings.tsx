@@ -76,8 +76,30 @@ export function SettingsPage({ onGuide }: { onGuide: () => void }) {
         </div>
         <p className="muted">{autoplay ? t('settings.motionAutoplayOn') : t('settings.motionAutoplayOff')}</p>
       </section>
+      <LocationCard />
       <ResetCard />
     </div>
+  )
+}
+
+/**
+ * Settings › Location (the user, 26 Oct: "PCs and laptops in general don't move much"): how long Maps keeps using the
+ * phone's last fix before asking it again. Off, by default: until Where I am is pressed.
+ */
+function LocationCard() {
+  const [every, setEvery] = useState<'off' | '30m' | '1d' | '1w' | null>(null)
+  useEffect(() => { window.drive.locationEvery().then(setEvery) }, [])
+  const pick = (v: 'off' | '30m' | '1d' | '1w') => { setEvery(v); window.drive.setLocationEvery(v) }
+  return (
+    <section className="settings-card island">
+      <h3><Icon name="myLocation" size={20} />{t('settings.location')}</h3>
+      <h4>{t('settings.locationEvery')}</h4>
+      <div className="segmented">
+        {([['off', 'settings.locationOff'], ['30m', 'settings.every30m'], ['1d', 'settings.everyDay'], ['1w', 'settings.everyWeek']] as const).map(([id, name]) =>
+          <button key={id} className={every === id ? 'on' : ''} onClick={() => pick(id)}>{t(name)}</button>)}
+      </div>
+      <p className="muted">{t('settings.locationNote')}</p>
+    </section>
   )
 }
 

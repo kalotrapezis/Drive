@@ -1143,6 +1143,16 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .role-warning { display: flex; align-items: center; gap: 8px; color: #ff7a6b; font-weight: 600; }
 @media (prefers-color-scheme: light) { .role-warning { color: #b3261e; } }
 .role-lines { display: grid; gap: 6px; }
+.role-nas > span { display: grid; gap: 4px; }
+/* Beta and Alpha (Role.tsx): what is new and not yet tried on the equipment it is for */
+.alpha-badge, .beta-badge { display: inline-block; padding: 1px 8px; margin-right: 6px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: .3px; vertical-align: 2px; }
+.alpha-badge { background: #d93025; color: #fff; }
+.beta-badge { background: #b85600; color: #fff; }
+.release-card { display: grid; gap: 8px; padding: 14px 16px; border-radius: 16px; background: var(--island-2); }
+.release-card p { margin: 0; line-height: 1.45; }
+.brand .alpha-badge, .brand .beta-badge { margin: 0 0 0 8px; }
+.badge.where { top: 6px; bottom: auto; }
+.role-choice .alpha-badge { color: #fff; } /* the card's grey text is not the badge's */
 .guide-role .role-warning { margin: 12px 0 0; font-size: 13px; }
 .guide-icons { display: grid; gap: 10px; width: 100%; }
 .guide-icons > div { display: flex; align-items: center; gap: 12px; font-size: 14px; line-height: 1.3; }

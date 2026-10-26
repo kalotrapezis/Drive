@@ -7,7 +7,11 @@ const path = require('node:path')
 const https = require('node:https')
 const dgram = require('node:dgram')
 const crypto = require('node:crypto')
-const { lanAddresses, broadcastAddresses, BEACON_PORT, pairAsk, pairProof, plainPhrase, isHash } = require('./sync')
+const { PassThrough } = require('node:stream')
+const { lanAddresses, broadcastAddresses, BEACON_PORT, pairAsk, pairProof, plainPhrase, isHash, safeRel } = require('./sync')
+
+const MIRROR_KEEP = 1 << 30 // the photos opened last from the server's mirror, kept here: 1 GB
+const MIRROR_THUMBS = 500 // thumbnails fetched a sync; the next one goes on
 const { t } = require('./i18n')
 
 const sha = s => crypto.createHash('sha256').update(s).digest('hex')
@@ -18,10 +22,10 @@ const certOf = socket => socket.getPeerCertificate().fingerprint256?.replace(/:/
  * One request to the server, answered only by the certificate pinned at pairing: checked before a byte of the body
  * goes, as sync.js askFor does. Resolves to the response, a stream; `file` ({ path, size }) is a PUT of its bytes.
  */
-function open(host, port, fp, method, url, { token, json, file, ms = 60_000 } = {}) {
+function open(host, port, fp, method, url, { token, json, file, stream, ms = 60_000 } = {}) {
   return new Promise((resolve, reject) => {
     const body = json === undefined ? null : Buffer.from(JSON.stringify(json))
-    const headers = { 'content-length': body ? body.length : file ? file.size : 0 }
+    const headers = stream ? {} : { 'content-length': body ? body.length : file ? file.size : 0 } // a stream goes chunked
     if (token) headers.authorization = `Bearer ${token}`
     if (body) headers['content-type'] = 'application/json'
     const req = https.request({ host, port, method, path: url, rejectUnauthorized: false, agent: false, timeout: 4000, headers }, res => {
@@ -32,8 +36,9 @@ function open(host, port, fp, method, url, { token, json, file, ms = 60_000 } = 
     req.on('error', reject)
     req.on('socket', s => s.once('secureConnect', () => {
       if (certOf(s) !== fp) return req.destroy(new Error(t('client.errNotTheServer')))
-      req.setTimeout(ms)
-      if (file) fs.createReadStream(file.path).on('error', e => req.destroy(e)).pipe(req)
+      req.setTimeout(ms) // 0: none (a call's sound)
+      if (stream) { stream.pipe(req); req.flushHeaders() } // headers now: the answer is awaited before the first byte
+      else if (file) fs.createReadStream(file.path).on('error', e => req.destroy(e)).pipe(req)
       else req.end(body ?? undefined)
     }))
   })
@@ -50,15 +55,26 @@ async function readJson(res) {
 
 class SyncClient {
   /** `sync` is this computer's SyncServer: its database, files, notes and receive code; onSynced(status) after each run. */
-  constructor(sync, { onSynced = () => {}, onNotes = () => {} } = {}) {
-    Object.assign(this, { sync, onSynced, onNotes, error: null, running: null, again: false, timer: null })
+  constructor(sync, { onSynced = () => {}, onNotes = () => {}, onCrown = () => {} } = {}) {
+    Object.assign(this, { sync, onSynced, onNotes, onCrown, error: null, running: null, again: false, timer: null })
     sync.client = this
   }
 
   get db() { return this.sync.db }
   pairing() { try { return JSON.parse(this.sync.setting('syncServer')) } catch { return null } }
   save(p) { this.db.prepare('INSERT OR REPLACE INTO settings(key, value) VALUES(?, ?)').run('syncServer', JSON.stringify(p)) }
-  status() { const p = this.pairing(); return p && { name: p.name, lastSync: p.lastSync ?? null, error: this.error, running: !!this.running } }
+  status() { const p = this.pairing(); return p && { name: p.name, lastSync: p.lastSync ?? null, error: this.error, running: !!this.running, crown: !!p.crown, mirror: !!p.mirror } }
+
+  /** Mirror on or off (the client's Devices page). Off: its rows and the photos kept from it go. */
+  setMirror(on) {
+    const p = this.pairing()
+    if (!p) return
+    this.save({ ...p, mirror: !!on })
+    if (on) return this.soon(0)
+    this.db.prepare("DELETE FROM media WHERE location = 'server'").run()
+    fs.rmSync(path.join(this.sync.dataDir, 'mirror'), { recursive: true, force: true })
+    this.sync.onReceived({ mirror: 0 })
+  }
 
   /** The server's "sync now" carries the token this computer gave it when it paired; only its hash is kept here. */
   isServer(req) {
@@ -135,10 +151,42 @@ class SyncClient {
     throw new Error(t('client.errNotReached', { name: p.name }))
   }
 
+  /** A request the server passes on to the phone (a call, Maps' "where I am"): its answer, or { error }. */
+  async relay(url, ms = 15_000) {
+    const p = this.pairing()
+    if (!p) return { error: t('client.errNoAnswer') }
+    try {
+      const { host, port } = await this.reach(p)
+      return await readJson(await open(host, port, p.fp, 'POST', url, { token: p.token, ms }))
+    } catch (e) { return { error: e.message } }
+  }
+
+  /** Whether the server can carry a call's sound here: the phone is on its Bluetooth (sync.js /call/sound). */
+  async soundThere() {
+    try {
+      const p = this.pairing(), { host, port } = await this.reach(p)
+      return !!(await readJson(await open(host, port, p.fp, 'GET', '/call/sound', { token: p.token, ms: 4000 }))).here
+    } catch { return false }
+  }
+
+  /**
+   * The call answered here, its sound carried by the server: one request, this computer's microphone going up it and the
+   * caller's voice coming down, handed to bridge(received, send) → stop (callaudio.js). Answers stop().
+   */
+  async callAudio(bridge) {
+    const p = this.pairing(), { host, port } = await this.reach(p)
+    const send = new PassThrough()
+    const res = await open(host, port, p.fp, 'POST', '/call/audio', { token: p.token, stream: send, ms: 0 })
+    if (res.statusCode !== 200) { send.end(); await readJson(res); throw new Error(t('client.errNoAnswer')) }
+    return bridge(res, send)
+  }
+
   async run() {
     const p = this.pairing()
     if (!p) return
-    const { host, port, connections } = await this.reach(p)
+    const { host, port, connections, nas = false, crown = false } = await this.reach(p)
+    // the server a NAS, and this computer the one doing its photo analysis (sync.js crown): said once it changes
+    if (nas !== !!p.nas || crown !== !!p.crown) { this.save({ ...this.pairing(), nas, crown }); this.onCrown(crown) }
     const call = (method, url, o) => open(host, port, p.fp, method, url, { token: p.token, ...o })
     const post = async (url, json) => readJson(await call('POST', url, { json }))
     const way = c => connections?.find(x => x.content === c)?.direction ?? 'off' // the server's rules, from this computer's side
@@ -146,7 +194,10 @@ class SyncClient {
     const server = { id: `server:${p.id}`, name: p.name } // how this computer's receipts and history name the server
     const failed = []
     const step = async (what, fn) => { try { await fn() } catch (e) { failed.push(`${what}: ${e.message}`) } }
-    await step(t('app.photos'), () => this.photos(call, post, server, sends('photos'), receives('photos'), way('photos') === 'both'))
+    // with the mirror on, the server's photos are shown, not fetched: only what is opened comes (fetchMirror)
+    const mirror = !!this.pairing().mirror
+    await step(t('app.photos'), () => this.photos(call, post, server, sends('photos'), receives('photos') && !mirror, way('photos') === 'both'))
+    if (mirror) await step(t('role.mirrorShort'), () => this.mirror(call))
     await step(t('app.files'), () => this.files(call, post, server, sends('files'), receives('files')))
     await step(t('app.notes'), async () => {
       const answer = await post('/notes', { notes: this.sync.notes.list(), deletions: this.sync.notes.deletions() })
@@ -196,6 +247,68 @@ class SyncClient {
       if (res.statusCode !== 200) { await readJson(res); continue }
       await this.sync.receive(res, server, item.sha256, new URLSearchParams({ path: item.path ?? '', name: item.name ?? '', modified: String(item.modified ?? 0) }))
     }
+  }
+
+  /**
+   * The mirror (the user, 26 Oct: "the images that exist on the other device as an album"): a row for each photo the server
+   * holds and this library does not — `location` 'server', as a photo moved to a drive is the drive's id — and its
+   * thumbnail; never the photo itself. Rows go when the server lets the photo go or it is here after all.
+   */
+  async mirror(call) {
+    const { photos = [] } = await readJson(await call('GET', '/library/mirror'))
+    const here = new Set(this.db.prepare("SELECT sha256 FROM media WHERE location IS NULL OR location != 'server'").all().map(r => r.sha256))
+    const there = new Map(photos.filter(m => isHash(m.sha256) && safeRel(m.path) && !here.has(m.sha256)).map(m => [m.sha256, m]))
+    const mirrored = this.db.prepare("SELECT sha256 FROM media WHERE location = 'server'").all().map(r => r.sha256)
+    const drop = this.db.prepare("DELETE FROM media WHERE location = 'server' AND sha256 = ?")
+    let changed = 0
+    for (const sha of mirrored) if (!there.has(sha)) { drop.run(sha); changed++ }
+    const add = this.db.prepare(`INSERT OR IGNORE INTO media(path, sha256, mime, is_video, size, mtime, taken_at, width, height, latitude, longitude, camera, place, place_names, thumb, location)
+      VALUES(@path, @sha256, @mime, @is_video, @size, @mtime, @taken_at, @width, @height, @latitude, @longitude, @camera, @place, @place_names, 0, 'server')`)
+    const known = new Set(mirrored)
+    for (const m of there.values()) if (!known.has(m.sha256)) {
+      // a path this library already uses for other bytes: that one is not mirrored (paths are unique here)
+      changed += add.run({ width: null, height: null, latitude: null, longitude: null, camera: null, place: null, place_names: null, ...m, is_video: m.is_video ? 1 : 0 }).changes
+    }
+    const dir = path.join(this.sync.dataDir, 'thumbs')
+    await fsp.mkdir(dir, { recursive: true })
+    const done = this.db.prepare("UPDATE media SET thumb = 1 WHERE location = 'server' AND sha256 = ?")
+    for (const { sha256 } of this.db.prepare(`SELECT DISTINCT sha256 FROM media WHERE location = 'server' AND thumb = 0 LIMIT ${MIRROR_THUMBS}`).all()) {
+      const res = await call('GET', `/thumb/${sha256}`)
+      if (res.statusCode !== 200) { res.resume(); continue } // not made there yet: next time
+      const part = path.join(dir, `.${sha256}.${crypto.randomUUID()}.part`)
+      await new Promise((resolve, reject) => res.pipe(fs.createWriteStream(part)).on('finish', resolve).on('error', reject))
+      await fsp.rename(part, path.join(dir, `${sha256}.webp`))
+      done.run(sha256); changed++
+    }
+    if (changed) this.sync.onReceived({ mirror: changed }) // the gallery shows them
+  }
+
+  /**
+   * A mirrored photo opened: its bytes from the server, checked, into the mirror's cache, where the last 1 GB opened stays.
+   * { file } — or { file: null, why } when the server cannot be reached and this one was not kept.
+   */
+  async fetchMirror(row) {
+    const dir = path.join(this.sync.dataDir, 'mirror')
+    const file = path.join(dir, row.sha256 + (path.extname(row.path).toLowerCase().match(/^\.[a-z0-9]{1,5}$/)?.[0] ?? ''))
+    if (fs.existsSync(file)) { const now = new Date(); await fsp.utimes(file, now, now).catch(() => {}); return { file } }
+    const p = this.pairing()
+    try {
+      const { host, port } = await this.reach(p)
+      const res = await open(host, port, p.fp, 'GET', `/blob/${row.sha256}`, { token: p.token })
+      if (res.statusCode !== 200) await readJson(res)
+      await fsp.mkdir(dir, { recursive: true })
+      const part = `${file}.${crypto.randomUUID()}.part`
+      const hash = crypto.createHash('sha256')
+      res.on('data', c => hash.update(c))
+      await new Promise((resolve, reject) => res.pipe(fs.createWriteStream(part)).on('finish', resolve).on('error', reject))
+      if (hash.digest('hex') !== row.sha256) { await fsp.rm(part, { force: true }); throw new Error(t('sync.errChanged')) }
+      await fsp.rename(part, file)
+      // the oldest opened go once the cache is over its size
+      const kept = (await Promise.all((await fsp.readdir(dir)).filter(n => !n.endsWith('.part')).map(async n => ({ f: path.join(dir, n), st: await fsp.stat(path.join(dir, n)) })))).sort((a, b) => b.st.mtimeMs - a.st.mtimeMs)
+      let total = 0
+      for (const k of kept) if ((total += k.st.size) > MIRROR_KEEP && k.f !== file) await fsp.rm(k.f, { force: true })
+      return { file }
+    } catch { return { file: null, why: t('client.mirrorAway', { name: p?.name ?? '' }) } }
   }
 
   /** Files as the phone's syncFiles: the list goes, the server answers what it wants, what it moved and what it has. */

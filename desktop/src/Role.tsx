@@ -12,13 +12,20 @@ const keyLength = (key: string) => key.replace(/[^a-z0-9]/gi, '').length
 /** One short idea per line (the user: written for a child, step by step); "\n" in the text starts the next. */
 const lines = (text: string) => text.split('\n').map((line, i) => <span key={i}>{line}</span>)
 
+/**
+ * Alpha (the user, 26 Oct): new, and not yet tried on the equipment it is for — here, everything that needs a second
+ * computer. It may work only some of the time. The first start's card says what Beta and Alpha mean.
+ */
+export const Alpha = () => <span className="alpha-badge">{t('release.alpha')}</span>
+
 /** The first start's question (main.tsx shows it before the app while this computer has no role). */
 export function FirstStart({ onDone }: { onDone: (role: string) => void }) {
   const [joining, setJoining] = useState(false)
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const server = async () => { await window.drive.role.server(); onDone('server') }
+  const [nas, setNas] = useState(false)
+  const server = async () => { await window.drive.role.server(nas); onDone('server') }
   const join = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true); setError('')
@@ -29,6 +36,10 @@ export function FirstStart({ onDone }: { onDone: (role: string) => void }) {
       <div className="island first-card">
         <img src="./icon.png" alt="" />
         <h1>{t('role.welcome')}</h1>
+        <div className="release-card">
+          <p><span className="beta-badge">{t('release.beta')}</span>{t('release.betaNote')}</p>
+          <p><Alpha />{t('release.alphaNote')}</p>
+        </div>
         {!joining ? <>
           <p>{t('role.question')}</p>
           <div className="role-choices">
@@ -36,9 +47,10 @@ export function FirstStart({ onDone }: { onDone: (role: string) => void }) {
               <Icon name="server" size={36} /><strong>{t('role.server')}</strong>{lines(t('role.serverHint'))}
             </button>
             <button className="role-choice" onClick={() => setJoining(true)}>
-              <Icon name="computer" size={36} /><strong>{t('role.client')}</strong>{lines(t('role.clientHint'))}
+              <Icon name="computer" size={36} /><strong>{t('role.client')} <Alpha /></strong>{lines(t('role.clientHint'))}
             </button>
           </div>
+          <NasTick on={nas} onChange={setNas} />
           <p className="role-warning"><Icon name="warning" size={20} />{t('role.lossWarning')}</p>
           <p className="muted">{t('role.locked')}</p>
         </> : (
@@ -62,40 +74,51 @@ export function PairingKey({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <p className="pairing-key">
-      <span>{t('sync.anotherComputer')}</span>
+      <span>{t('sync.anotherComputer')} <Alpha /></span>
       <code>{value}</code>
       <button className="text-button" onClick={() => navigator.clipboard.writeText(value).then(() => setCopied(true))}>{copied ? t('sync.keyCopied') : t('common.copy')}</button>
     </p>
   )
 }
 
-/** Devices on a client: its server, the last sync, Sync now. Phones pair with the server, so there is nothing to add here. */
-export function ClientPage() {
+/** "This is a NAS" (the user, 26 Oct): it only stores; the screen work and the photo analysis go to the other computers. */
+function NasTick({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <label className="check-row role-nas">
+      <input type="checkbox" checked={on} onChange={e => onChange(e.target.checked)} />
+      <span><b>{t('role.nas')} <Alpha /></b><span className="role-lines">{lines(t('role.nasHint'))}</span></span>
+    </label>
+  )
+}
+
+/** A client's server, the last sync, Sync now (the top of a client's Devices page, Sync.tsx). Phones pair with the server. */
+export function ClientCard() {
   const [s, setS] = useState<ClientStatus | null>(null)
   const [busy, setBusy] = useState(false)
   useEffect(() => { window.drive.role.get().then(r => setS(r.server)); return window.drive.role.onSynced(setS) }, [])
   const now = async () => { setBusy(true); try { setS(await window.drive.role.syncNow()) } finally { setBusy(false) } }
   const running = busy || !!s?.running
+  if (!s) return null
   return (
-    <div className="timeline">
-      <header className="topbar"><div className="island title-island"><Icon name="device" /><h1>{t('app.devices')}</h1></div></header>
-      {s && (
         <div className="island client-card">
           <span className={`sync-badge ${s.error ? '' : 'on'}`}><Icon name="server" size={30} /></span>
-          <h2>{t('role.clientOf', { name: s.name })}</h2>
+          <h2>{t('role.clientOf', { name: s.name })} <Alpha /></h2>
           <p>{running ? t('role.syncing') : s.lastSync ? t('role.lastSync', { when: when.format(s.lastSync) }) : t('role.notYet')}</p>
           {s.error && <p className="error">{s.error}</p>}
           <button className="filled-button" disabled={running} onClick={now}>{t('role.syncNow')}</button>
+          {s.crown && <p>{t('role.crown', { name: s.name })}</p>}
+          <label className="check-row role-nas">
+            <input type="checkbox" checked={s.mirror} onChange={e => { const on = e.target.checked; setS({ ...s, mirror: on }); window.drive.role.setMirror(on) }} />
+            <span><b>{t('role.mirror', { name: s.name })} <Alpha /></b><span className="role-lines">{lines(t('role.mirrorHint'))}</span></span>
+          </label>
           <p className="muted">{t('role.clientNote', { name: s.name })}</p>
         </div>
-      )}
-    </div>
   )
 }
 
 /** Settings › Server or client: what this computer is, and the reset that alone changes it (reset.js). */
 export function ResetCard() {
-  const [role, setRole] = useState<{ role: string | null; server: ClientStatus | null } | null>(null)
+  const [role, setRole] = useState<{ role: string | null; server: ClientStatus | null; nas: boolean } | null>(null)
   const [dialog, setDialog] = useState<ReactNode>(null)
   const [said, setSaid] = useState('')
   useEffect(() => { window.drive.role.get().then(setRole) }, [])
@@ -121,6 +144,7 @@ export function ResetCard() {
       <p><strong>{role?.role === 'client' ? t('reset.isClient', { name: role.server?.name ?? '' }) : t('reset.isServer')}</strong></p>
       {/* what that means, in the first start's words */}
       <p className="role-lines">{lines(role?.role === 'client' ? t('role.clientHint') : t('role.serverHint'))}</p>
+      {role?.role === 'server' && <NasTick on={role.nas} onChange={on => window.drive.role.setNas(on).then(() => setRole({ ...role, nas: on }))} />}
       <p className="role-warning"><Icon name="warning" size={20} />{t('role.lossWarning')}</p>
       <p className="muted">{t('reset.why')}</p>
       <div className="reset-actions">

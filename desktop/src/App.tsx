@@ -68,6 +68,10 @@ export function App() {
   const [vault, setVault] = useState<VaultStatus | null>(null)
   const [editing, setEditing] = useState<{ item: Media; hide?: Hide } | null>(null)
   const [unread, setUnread] = useState(0)
+  const [nas, setNas] = useState(false) // a NAS rings no timer: nobody sits at it (Role.tsx)
+  // the pill by the name (the user, 26 Oct): Alpha when set up as a client or a NAS (not yet tried with a second computer), else Beta
+  const [alpha, setAlpha] = useState(false)
+  useEffect(() => { window.drive.role.get().then(r => { setNas(r.nas); setAlpha(r.role === 'client' || r.nas) }) }, [])
   const [guide, setGuide] = useState(guideFirstTime) // the guide's panel beside the page: the first time, and from Settings › Guide
   useEffect(() => { const t = setTimeout(preloadContacts, 1500); return () => clearTimeout(t) }, []) // Contacts read ahead, so the page opens full (24 Oct)
   useEffect(() => {
@@ -79,6 +83,7 @@ export function App() {
   // In the sidebar under Drives, with its own Screenshots and Documents (drive:<id>:screenshots), to see what to delete.
   const [, driveId = null, driveFilter = null] = page.kind === 'collection' && page.id.startsWith('drive:') ? page.id.split(':') : []
   const custom = page.kind === 'collection' && !SYSTEM.some(s => s.id === page.id) ? (driveId ? `drive:${driveId}` : page.id) : null
+  const mirror = custom === 'mirror' // the server's photos on a client: shown here, kept and arranged there
   const driveName = driveId ? collections.find(c => c.id === custom)?.name ?? t('photos.theDrive') : ''
   const memberSource = custom ? () => window.drive.members(custom) : page.kind === 'person' ? () => window.drive.people.shas(page.id) : null
 
@@ -381,7 +386,7 @@ export function App() {
   return (
     <div className="app">
       <nav className="rail island">
-        <div className="brand"><img src="./icon.png" alt="" />Tetra</div>
+        <div className="brand"><img src="./icon.png" alt="" />Tetra<span className={alpha ? 'alpha-badge' : 'beta-badge'} title={t(alpha ? 'release.alphaNote' : 'release.betaNote')}>{t(alpha ? 'release.alpha' : 'release.beta')}</span></div>
         {/* One entry each; their parts are an island at the bottom of the page (asked 2026-09-26). */}
         {nav({ kind: 'photos' }, section === 'photos', 'photos', t('app.photos'))}
         {nav({ kind: 'files', mode: 'browse', folder: '' }, section === 'files', 'drive', t('app.files'))}
@@ -429,7 +434,7 @@ export function App() {
             <strong>{t('photos.selected', { count: picked.length })}</strong>
             <button className="round flat" title={picked.every(m => m.favorite) ? t('photos.unfavorite') : t('photos.favorite')} onClick={() => favorite(picked)}>
               <Icon name={picked.every(m => m.favorite) ? 'heartFill' : 'heart'} /></button>
-            {custom
+            {custom && !mirror
               ? <button className="round flat" title={folderAlbum ? t('photos.moveOutOf', { folder: folderAlbum }) : t('viewer.uncollect')} onClick={() => uncollect(picked)}><Icon name="uncollect" /></button>
               : <button className="round flat" title={t('viewer.collect')} onClick={() => collect(picked)}><Icon name="collect" /></button>}
             {!driveId && <>
@@ -454,12 +459,12 @@ export function App() {
           onShowOnMap={m => { setOpen(null); setPage({ kind: 'map', focus: m.sha256 }) }}
           onDocument={(m, on) => run(() => window.drive.documents.set(m.sha256, on), on ? t('photos.markedDocument') : t('photos.notDocument'))}
           onFavorite={m => favorite([m])} onTrash={m => trash([m])} onHide={driveId ? undefined : m => hide([m])} onEdit={driveId ? undefined : (item, hide) => setEditing({ item, hide })}
-          onCollect={custom ? undefined : m => collect([m])} onUncollect={custom ? m => uncollect([m]) : undefined} onMove={driveId ? undefined : m => moveTo([m])}
+          onCollect={custom ? undefined : m => collect([m])} onUncollect={custom && !mirror ? m => uncollect([m]) : undefined} onMove={driveId ? undefined : m => moveTo([m])}
           uncollectTitle={folderAlbum ? t('photos.moveOutOf', { folder: folderAlbum }) : undefined} />
       )}
       {editing && <Editor item={editing.item} hide={editing.hide} onClose={() => setEditing(null)} onSaved={msg => { setEditing(null); say(msg); reload() }} />}
       {dialog}
-      <TimerBell />
+      {!nas && <TimerBell />}
       {toast && <div className="island toast" role="status">{toast.text}
         {toast.undo && <button className="text-button" onClick={() => { const u = toast.undo!; setToast(null); u() }}>{t('common.undo')}</button>}</div>}
     </div>

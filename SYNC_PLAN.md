@@ -2572,3 +2572,50 @@ event written later into the server's Calendar reached the laptop by the watcher
 left a whole "Tetra backup …" and restarted at the question; *Delete everything and reset* on the client refused an early
 delete, counted down, wiped and restarted at the question. **Not run between two real computers on Wi-Fi**, and not with
 a phone paired to the same server at the same time.
+
+### 6at. A client computer gets the phone too; a server can be a NAS (built 2026-10-26, on main)
+
+The user, 26 Oct, on what a client PC misses: no favourite PC ("over-engineering"); calls "like a switch" everywhere;
+the sound on the computer that answered, "Bluetooth > Wi-Fi > speaker"; Maps' location everywhere; a NAS tick.
+
+- **Calls.** The server passes each call state to client computers as it does to tablets (`toTablets`, now kinds
+  tablet and computer); a client answers `POST /call/state` from its server only. A client's Answer, Decline, End and
+  Call go to the server (`/call/act`, `/call/place`), which does them on the phone. The server notes who took the call
+  (`callTaken`: 'server' or the device's id, once the phone confirmed) and every state carries `takenBy`; a bubble whose
+  computer did not take it closes (`calls.js fromPhone`). A new ringing call is nobody's.
+- **Bluetooth.** Only a server with no other computer brings the phone onto its Bluetooth when a call starts (as before);
+  with other computers it happens where Answer is pressed — unless the server holds the phone, then the sound is relayed.
+- **Sound over Wi-Fi** (`callaudio.js`). A client answering with the phone on the server's Bluetooth asks `GET /call/sound`;
+  if yes, one `POST /call/audio` carries its microphone up and the caller's voice down, 16 kHz mono PCM (`parec`/`pacat`
+  on the phone's `bluez_` streams on the server, the echo canceller's defaults on the client), until the call ends. Only
+  the computer that took the call may open it. **Not built:** relaying from a client that holds the phone's Bluetooth to
+  another computer (that one takes the phone instead).
+- **Phone-only queries** (`callOnPhone`, `callAction`, `phoneLocation`, `sendToDevice`) now leave out client computers,
+  which are paired devices too.
+- **Maps.** A client's "where I am" goes to the server (`POST /location/phone`). Every computer keeps the last fix
+  (`settings.lastFix`) and reuses it as Settings › Location says: Off (default: until the Where I am button), every half
+  hour, once a day, once a week; the button always asks the phone. Live location while navigating: later.
+- **NAS** (`settings.nas`, the tick under the first start's cards or in Settings › Server or client, changeable): no system
+  notifications, no call bubble, no timer bell, no photo analysis on it. The analysis runs on one computer: the server, or
+  for a NAS the first client computer to join (`crown()`, told in `/connections`, `client.js onCrown`); until one joins,
+  nobody runs it. A client without the crown leaves the analysis to whoever has it and gets the results with the metadata.
+- **A client's Devices page** shows its server, Deleted items with History, and backup drives (Add a device → a drive).
+- **Data** needed nothing: every computer writes its counts into Files/Data/usage, which syncs everywhere.
+
+**Checked:** `desktop/test/client.test.js` (calls, location, crown, the sound both ways with stand-ins for the microphone
+and speaker); 159 desktop tests; the screens on two hidden instances. **Not with a real phone call between two computers.**
+
+### 6au. A client's mirror of the server's photos; Beta and Alpha (built 2026-10-26, on main)
+
+- **Mirror** (the user: when the NAS keeps everything and the computers keep no photos, show the NAS's "as an album", as
+  a drive's are). A client's Devices card has "Show <server>'s photos here" (`client.js setMirror`). On: each sync asks
+  `GET /library/mirror` (every photo the server holds here) and keeps a `media` row with `location = 'server'` for each
+  one this library lacks — as a photo moved to a drive keeps its row with the drive's id — and fetches its thumbnail
+  (`GET /thumb/<sha>`, 500 a sync). The photos half of the sync then only sends; nothing is fetched. Opening one:
+  `locate` → `fetchMirror`: `GET /blob/<sha>`, checked, into `<data>/mirror/`, where the last 1 GB opened stays (oldest
+  out first); the server away, a kept one still opens. In the timeline with a server badge, and as an album ("mirror")
+  that cannot be emptied or deleted here; a mirrored photo cannot be put in the Trash here (deleted on the server).
+  Off: the rows and the kept photos go. Folders: the same choice as any photo (a folder not shown by default waits for
+  its yes). Not on Android.
+- **Beta and Alpha** (the user: "everything that has to do with a second PC gets an Alpha label"). The first start opens
+  with what they mean; `<Alpha />` (Role.tsx) beside every such thing; the pill by "Tetra" says which this computer is.

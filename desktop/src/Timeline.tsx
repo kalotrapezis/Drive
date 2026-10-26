@@ -136,6 +136,8 @@ export function Timeline({ items, title, tools, empty, level, setLevel, selected
                 {m.thumb ? <img src={thumbUrl(m)} loading="lazy" decoding="async" draggable={false} alt="" /> : <span className="no-thumb">{m.path.split('.').pop()}</span>}
                 {m.is_video ? <span className="badge"><Icon name="play" size={16} /></span> : null}
                 {m.favorite ? <span className="badge fav"><Icon name="heartFill" size={16} /></span> : null}
+                {/* not on this computer: on a drive, or the server's (a client's mirror) — it opens from there */}
+                {m.location ? <span className="badge where" title={t('viewer.onDrive', { drive: m.drive ?? '' })}><Icon name={m.location === 'server' ? 'server' : 'database'} size={14} /></span> : null}
                 <span className="check" title={t('timeline.select')}><Icon name={selected.has(m.id) ? 'checked' : 'unchecked'} size={24} /></span>
               </button>
             ))}
