@@ -1119,3 +1119,6 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .guide-pic .selection-bar strong { white-space: nowrap; }
 .guide-pic .segmented { flex-wrap: wrap; }
 .guide-pic .segmented button { padding: 8px 12px; }
+.role-warning { display: flex; align-items: center; gap: 8px; color: #ff7a6b; font-weight: 600; }
+@media (prefers-color-scheme: light) { .role-warning { color: #b3261e; } }
+.role-lines { display: grid; gap: 6px; }

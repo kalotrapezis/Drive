@@ -1718,9 +1718,9 @@
  "role.welcome": "Te damos la bienvenida a Tetra",
  "role.question": "¿Qué es este ordenador?",
  "role.server": "Servidor",
- "role.serverHint": "El ordenador principal, el que se queda en casa. Guarda todo y sus copias de seguridad, y comparte archivos con tus teléfonos, tabletas y otros ordenadores.",
+ "role.serverHint": "El ordenador principal de tu casa.\nDéjalo encendido casi siempre y elige el que tenga más espacio.\nGuarda todas tus fotos y archivos, y sus copias de seguridad: tu propia «nube», en casa.\nTu teléfono, tu tableta y tus otros ordenadores lo reciben todo de él.",
  "role.client": "Cliente",
- "role.clientHint": "Se une a tu servidor: recibe de él los archivos y le devuelve lo que creas aquí.",
+ "role.clientHint": "Otro ordenador tuyo, como un portátil.\nSe conecta al servidor con una clave.\nRecibe todo del servidor y le devuelve lo que haces en él.",
  "role.locked": "Esta elección se mantiene. Para cambiarla más adelante hay que restablecer Tetra (Ajustes › Servidor o cliente).",
  "role.keyHow": "En el servidor, abre Dispositivos › Añadir un dispositivo y escribe o pega abajo la clave que muestra. Los dos ordenadores deben estar en la misma red.",
  "role.connect": "Conectar",
@@ -1799,5 +1799,6 @@
  "guide.filesTrashTitle": "Papelera",
  "guide.filesTrashBody": "Lo que eliminas va primero a la Papelera. Haz clic en Papelera en la barra de abajo, marca lo que quieres recuperar y haz clic en Restaurar.",
  "guide.lookTitle": "Idioma y aspecto",
- "guide.lookBody": "Haz clic en Ajustes al pie de la barra lateral: Apariencia elige claro u oscuro, e Idioma el idioma que habla Tetra."
+ "guide.lookBody": "Haz clic en Ajustes al pie de la barra lateral: Apariencia elige claro u oscuro, e Idioma el idioma que habla Tetra.",
+ "role.lossWarning": "Elige con cuidado: cambiar esto más adelante puede hacer que pierdas datos."
 }

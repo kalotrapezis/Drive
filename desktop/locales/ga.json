@@ -1922,9 +1922,9 @@
  "role.welcome": "Fáilte go Tetra",
  "role.question": "Cad é an ríomhaire seo?",
  "role.server": "Freastalaí",
- "role.serverHint": "An príomhríomhaire, an ceann a fhanann sa bhaile. Coinníonn sé gach rud agus a gcúltacaí, agus roinneann sé comhaid le do ghutháin, do tháibléid agus do ríomhairí eile.",
+ "role.serverHint": "An príomhríomhaire i do theach.\nFág ar siúl é an chuid is mó den am, agus roghnaigh an ceann leis an spás is mó.\nCoinníonn sé do ghrianghraif agus do chomhaid go léir, agus a gcúltacaí: do “scamall” féin, sa bhaile.\nFaigheann do ghuthán, do tháibléad agus do ríomhairí eile gach rud uaidh.",
  "role.client": "Cliant",
- "role.clientHint": "Ceanglaíonn sé le d’fhreastalaí: faigheann sé na comhaid uaidh agus seolann sé ar ais a ndéanann tú anseo.",
+ "role.clientHint": "Ríomhaire eile de do chuid, cosúil le ríomhaire glúine.\nCeanglaíonn sé leis an bhfreastalaí le heochair.\nFaigheann sé gach rud ón bhfreastalaí, agus seolann sé ar ais a ndéanann tú air.",
  "role.locked": "Fanann an rogha seo. Chun é a athrú níos déanaí, caithfear Tetra a athshocrú (Socruithe › Freastalaí nó cliant).",
  "role.keyHow": "Ar an bhfreastalaí, oscail Gléasanna › Cuir gléas leis agus clóscríobh nó greamaigh an eochair a thaispeántar thíos. Caithfidh an dá ríomhaire a bheith ar an líonra céanna.",
  "role.connect": "Ceangail",
@@ -2003,5 +2003,6 @@
  "guide.filesTrashTitle": "Bruscar",
  "guide.filesTrashBody": "An rud a scriosann tú, téann sé chuig Bruscar ar dtús. Cliceáil Bruscar sa bharra ag an mbun, cuir tic leis an méid atá uait ar ais agus cliceáil Athchóirigh.",
  "guide.lookTitle": "Teanga agus cuma",
- "guide.lookBody": "Cliceáil Socruithe ag bun an bharra taoibh: roghnaíonn Cuma geal nó dorcha, agus Teanga an teanga a labhraíonn Tetra."
+ "guide.lookBody": "Cliceáil Socruithe ag bun an bharra taoibh: roghnaíonn Cuma geal nó dorcha, agus Teanga an teanga a labhraíonn Tetra.",
+ "role.lossWarning": "Roghnaigh go cúramach: má athraíonn tú é seo níos déanaí, d’fhéadfaí sonraí a chailleadh."
 }

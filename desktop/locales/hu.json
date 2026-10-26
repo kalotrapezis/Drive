@@ -1661,9 +1661,9 @@
  "role.welcome": "Üdvözöl a Tetra",
  "role.question": "Mi ez a számítógép?",
  "role.server": "Szerver",
- "role.serverHint": "A fő számítógép, amelyik otthon marad. Mindent megőriz a biztonsági mentésekkel együtt, és megosztja a fájlokat a telefonjaiddal, táblagépeiddel és többi számítógépeddel.",
+ "role.serverHint": "Az otthonod fő számítógépe.\nTartsd bekapcsolva szinte mindig, és azt válaszd, amelyiken a legtöbb hely van.\nMegőrzi az összes fotódat és fájlodat, és a biztonsági mentéseiket: a saját „felhőd”, otthon.\nA telefonod, a táblagéped és a többi számítógéped mindent tőle kap.",
  "role.client": "Kliens",
- "role.clientHint": "Csatlakozik a szerveredhez: megkapja tőle a fájlokat, és visszaküldi, amit itt készítesz.",
+ "role.clientHint": "Egy másik számítógéped, például egy laptop.\nEgy kulccsal csatlakozik a szerverhez.\nMindent a szervertől kap, és visszaküldi, amit rajta készítesz.",
  "role.locked": "Ez a választás megmarad. Későbbi módosításához alaphelyzetbe kell állítani a Tetrát (Beállítások › Szerver vagy kliens).",
  "role.keyHow": "A szerveren nyisd meg az Eszközök › Eszköz hozzáadása lapot, és az ott látható kulcsot írd be vagy illeszd be lent. Mindkét számítógépnek ugyanazon a hálózaton kell lennie.",
  "role.connect": "Csatlakozás",
@@ -1742,5 +1742,6 @@
  "guide.filesTrashTitle": "Kuka",
  "guide.filesTrashBody": "Amit törölsz, először a Kukába kerül. Kattints az alsó sávon a Kuka gombra, pipáld ki, amit vissza szeretnél kapni, és kattints a Visszaállítás gombra.",
  "guide.lookTitle": "Nyelv és megjelenés",
- "guide.lookBody": "Kattints az oldalsáv alján a Beállítások elemre: a Megjelenés részben a világos vagy sötét témát, a Nyelv részben pedig a Tetra nyelvét választhatod ki."
+ "guide.lookBody": "Kattints az oldalsáv alján a Beállítások elemre: a Megjelenés részben a világos vagy sötét témát, a Nyelv részben pedig a Tetra nyelvét választhatod ki.",
+ "role.lossWarning": "Gondosan válassz: ha később megváltoztatod, adatok veszhetnek el."
 }

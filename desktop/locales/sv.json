@@ -1661,9 +1661,9 @@
  "role.welcome": "Välkommen till Tetra",
  "role.question": "Vilken roll har den här datorn?",
  "role.server": "Server",
- "role.serverHint": "Huvuddatorn, den som stannar hemma. Den sparar allt och säkerhetskopiorna av det och delar filer med dina telefoner, surfplattor och andra datorer.",
+ "role.serverHint": "Huvuddatorn i ditt hem.\nHa den på för det mesta, och välj den som har mest plats.\nDen sparar alla dina foton och filer och deras säkerhetskopior: ditt eget ”moln”, hemma.\nDin telefon, surfplatta och andra datorer får allt från den.",
  "role.client": "Klient",
- "role.clientHint": "Ansluter till din server: den hämtar filerna därifrån och skickar tillbaka det du gör här.",
+ "role.clientHint": "En annan dator du har, som en bärbar dator.\nDen ansluter till servern med en nyckel.\nDen får allt från servern och skickar tillbaka det du gör på den.",
  "role.locked": "Det här valet står fast. För att ändra det senare måste Tetra återställas (Inställningar › Server eller klient).",
  "role.keyHow": "Öppna Enheter › Lägg till en enhet på servern och skriv eller klistra in nyckeln som visas där i fältet nedan. Båda datorerna måste vara på samma nätverk.",
  "role.connect": "Anslut",
@@ -1742,5 +1742,6 @@
  "guide.filesTrashTitle": "Papperskorg",
  "guide.filesTrashBody": "Det du tar bort hamnar först i Papperskorg. Klicka på Papperskorg i fältet längst ned, bocka för det du vill ha tillbaka och klicka på Återställ.",
  "guide.lookTitle": "Språk och utseende",
- "guide.lookBody": "Klicka på Inställningar längst ned i sidofältet: Utseende väljer ljust eller mörkt, och Språk vilket språk Tetra talar."
+ "guide.lookBody": "Klicka på Inställningar längst ned i sidofältet: Utseende väljer ljust eller mörkt, och Språk vilket språk Tetra talar.",
+ "role.lossWarning": "Välj noga: om du ändrar det här senare kan data gå förlorade."
 }

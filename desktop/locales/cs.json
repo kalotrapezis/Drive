@@ -1835,9 +1835,9 @@
  "role.welcome": "Vítá vás Tetra",
  "role.question": "Čím je tento počítač?",
  "role.server": "Server",
- "role.serverHint": "Hlavní počítač, ten, který zůstává doma. Uchovává vše včetně záloh a sdílí soubory s vašimi telefony, tablety a dalšími počítači.",
+ "role.serverHint": "Hlavní počítač u vás doma.\nNechte ho většinu času zapnutý a vyberte ten, který má nejvíc místa.\nUchovává všechny vaše fotky a soubory i jejich zálohy: váš vlastní „cloud“ doma.\nVáš telefon, tablet a další počítače z něj dostávají všechno.",
  "role.client": "Klient",
- "role.clientHint": "Připojí se k vašemu serveru: získává z něj soubory a posílá zpět to, co vytvoříte zde.",
+ "role.clientHint": "Další váš počítač, třeba notebook.\nK serveru se připojí pomocí klíče.\nZe serveru dostává všechno a posílá zpět to, co na něm vytvoříte.",
  "role.locked": "Tato volba zůstává. Pozdější změna vyžaduje resetování Tetry (Nastavení › Server, nebo klient).",
  "role.keyHow": "Na serveru otevřete Zařízení › Přidat zařízení a klíč, který se tam zobrazí, zadejte nebo vložte níže. Oba počítače musí být ve stejné síti.",
  "role.connect": "Připojit",
@@ -1916,5 +1916,6 @@
  "guide.filesTrashTitle": "Koš",
  "guide.filesTrashBody": "Co smažete, jde nejdřív do Koše. Klikněte v liště dole na Koš, zaškrtněte, co chcete vrátit, a klikněte na Obnovit.",
  "guide.lookTitle": "Jazyk a vzhled",
- "guide.lookBody": "Klikněte na Nastavení dole v postranním panelu: Vzhled volí světlý nebo tmavý režim a Jazyk jazyk, kterým Tetra mluví."
+ "guide.lookBody": "Klikněte na Nastavení dole v postranním panelu: Vzhled volí světlý nebo tmavý režim a Jazyk jazyk, kterým Tetra mluví.",
+ "role.lossWarning": "Vybírejte pečlivě: pozdější změna může vést ke ztrátě dat."
 }

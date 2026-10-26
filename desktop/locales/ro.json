@@ -1748,9 +1748,9 @@
  "role.welcome": "Bun venit în Tetra",
  "role.question": "Ce este acest computer?",
  "role.server": "Server",
- "role.serverHint": "Computerul principal, cel care rămâne acasă. Păstrează totul împreună cu copiile de rezervă și partajează fișiere cu telefoanele, tabletele și celelalte computere ale tale.",
+ "role.serverHint": "Computerul principal din casa ta.\nȚine-l pornit aproape tot timpul și alege-l pe cel cu cel mai mult spațiu.\nPăstrează toate fotografiile și fișierele tale, și copiile lor de rezervă: propriul tău „cloud”, acasă.\nTelefonul, tableta și celelalte computere ale tale primesc totul de la el.",
  "role.client": "Client",
- "role.clientHint": "Se alătură serverului tău: primește fișierele de la el și trimite înapoi ce creezi aici.",
+ "role.clientHint": "Un alt computer al tău, cum ar fi un laptop.\nSe conectează la server cu o cheie.\nPrimește totul de la server și trimite înapoi ce creezi pe el.",
  "role.locked": "Această alegere rămâne. Pentru a o schimba mai târziu, trebuie să resetezi Tetra (Setări › Server sau client).",
  "role.keyHow": "Pe server, deschide Dispozitive › Adaugă un dispozitiv și tastează sau lipește cheia afișată mai jos. Ambele computere trebuie să fie în aceeași rețea.",
  "role.connect": "Conectează",
@@ -1829,5 +1829,6 @@
  "guide.filesTrashTitle": "Coșul de gunoi",
  "guide.filesTrashBody": "Ce ștergi ajunge mai întâi în Coșul de gunoi. Dă clic pe Coșul de gunoi în bara de jos, bifează ce vrei înapoi și dă clic pe Restaurează.",
  "guide.lookTitle": "Limbă și aspect",
- "guide.lookBody": "Dă clic pe Setări în partea de jos a barei laterale: Aspect alege tema luminoasă sau întunecată, iar Limbă, limba în care vorbește Tetra."
+ "guide.lookBody": "Dă clic pe Setări în partea de jos a barei laterale: Aspect alege tema luminoasă sau întunecată, iar Limbă, limba în care vorbește Tetra.",
+ "role.lossWarning": "Alege cu grijă: dacă schimbi asta mai târziu, poți pierde date."
 }

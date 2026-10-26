@@ -1748,9 +1748,9 @@
  "role.welcome": "Bienvenue dans Tetra",
  "role.question": "Quel est le rôle de cet ordinateur ?",
  "role.server": "Serveur",
- "role.serverHint": "L’ordinateur principal, celui qui reste à la maison. Il conserve tout ainsi que les sauvegardes, et partage les fichiers avec vos téléphones, tablettes et autres ordinateurs.",
+ "role.serverHint": "L’ordinateur principal de votre maison.\nLaissez-le allumé presque tout le temps, et choisissez celui qui a le plus de place.\nIl garde toutes vos photos et tous vos fichiers, et leurs sauvegardes : votre propre « cloud », à la maison.\nVotre téléphone, votre tablette et vos autres ordinateurs reçoivent tout de lui.",
  "role.client": "Client",
- "role.clientHint": "Rejoint votre serveur : il en reçoit les fichiers et lui renvoie ce que vous créez ici.",
+ "role.clientHint": "Un autre de vos ordinateurs, comme un portable.\nIl se connecte au serveur avec une clé.\nIl reçoit tout du serveur et lui renvoie ce que vous y créez.",
  "role.locked": "Ce choix est définitif. Pour le modifier plus tard, il faut réinitialiser Tetra (Paramètres › Serveur ou client).",
  "role.keyHow": "Sur le serveur, ouvrez Appareils › Ajouter un appareil, puis tapez ou collez ci-dessous la clé qu’il affiche. Les deux ordinateurs doivent être sur le même réseau.",
  "role.connect": "Se connecter",
@@ -1829,5 +1829,6 @@
  "guide.filesTrashTitle": "Corbeille",
  "guide.filesTrashBody": "Ce que vous supprimez va d’abord dans la Corbeille. Cliquez sur Corbeille dans la barre du bas, cochez ce que vous voulez récupérer et cliquez sur Restaurer.",
  "guide.lookTitle": "Langue et apparence",
- "guide.lookBody": "Cliquez sur Paramètres en bas de la barre latérale : Apparence choisit clair ou sombre, et Langue la langue que parle Tetra."
+ "guide.lookBody": "Cliquez sur Paramètres en bas de la barre latérale : Apparence choisit clair ou sombre, et Langue la langue que parle Tetra.",
+ "role.lossWarning": "Choisissez avec soin : changer ce choix plus tard peut entraîner une perte de données."
 }

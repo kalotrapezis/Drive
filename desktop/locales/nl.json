@@ -1661,9 +1661,9 @@
  "role.welcome": "Welkom bij Tetra",
  "role.question": "Welke rol heeft deze computer?",
  "role.server": "Server",
- "role.serverHint": "De hoofdcomputer, die thuis blijft. Hij bewaart alles en de back-ups ervan, en deelt bestanden met je telefoons, tablets en andere computers.",
+ "role.serverHint": "De hoofdcomputer in je huis.\nLaat hem bijna altijd aanstaan en kies de computer met de meeste ruimte.\nHij bewaart al je foto's en bestanden, en de back-ups ervan: je eigen ‘cloud’, thuis.\nJe telefoon, tablet en andere computers krijgen alles van hem.",
  "role.client": "Client",
- "role.clientHint": "Maakt verbinding met je server: krijgt de bestanden ervan en stuurt terug wat je hier maakt.",
+ "role.clientHint": "Een andere computer van je, zoals een laptop.\nHij maakt met een sleutel verbinding met de server.\nHij krijgt alles van de server en stuurt terug wat je erop maakt.",
  "role.locked": "Deze keuze blijft. Om deze later te wijzigen, moet Tetra opnieuw worden ingesteld (Instellingen › Server of client).",
  "role.keyHow": "Open op de server Apparaten › Apparaat toevoegen en typ of plak hieronder de sleutel die daar wordt getoond. Beide computers moeten op hetzelfde netwerk zitten.",
  "role.connect": "Verbinden",
@@ -1742,5 +1742,6 @@
  "guide.filesTrashTitle": "Prullenbak",
  "guide.filesTrashBody": "Wat je verwijdert, gaat eerst naar de Prullenbak. Klik op Prullenbak in de balk onderaan, vink aan wat je terug wilt en klik op Terugzetten.",
  "guide.lookTitle": "Taal en weergave",
- "guide.lookBody": "Klik op Instellingen onderaan de zijbalk: Weergave kiest licht of donker, en Taal de taal die Tetra spreekt."
+ "guide.lookBody": "Klik op Instellingen onderaan de zijbalk: Weergave kiest licht of donker, en Taal de taal die Tetra spreekt.",
+ "role.lossWarning": "Kies goed: als je dit later verandert, kun je gegevens kwijtraken."
 }

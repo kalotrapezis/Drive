@@ -1748,9 +1748,9 @@
  "role.welcome": "Bem-vindo ao Tetra",
  "role.question": "Qual é a função deste computador?",
  "role.server": "Servidor",
- "role.serverHint": "O computador principal, o que fica em casa. Guarda tudo e as respetivas cópias de segurança, e partilha ficheiros com os seus telemóveis, tablets e outros computadores.",
+ "role.serverHint": "O computador principal da sua casa.\nMantenha-o ligado quase sempre e escolha o que tiver mais espaço.\nGuarda todas as suas fotos e ficheiros, e as cópias de segurança deles: a sua própria «nuvem», em casa.\nO seu telemóvel, tablet e outros computadores recebem tudo dele.",
  "role.client": "Cliente",
- "role.clientHint": "Junta-se ao seu servidor: recebe dele os ficheiros e envia de volta o que criar aqui.",
+ "role.clientHint": "Outro computador seu, como um portátil.\nLiga-se ao servidor com uma chave.\nRecebe tudo do servidor e envia de volta o que criar nele.",
  "role.locked": "Esta escolha mantém-se. Para a alterar mais tarde, é preciso repor o Tetra (Definições › Servidor ou cliente).",
  "role.keyHow": "No servidor, abra Dispositivos › Adicionar um dispositivo e escreva ou cole abaixo a chave que ele mostra. Os dois computadores têm de estar na mesma rede.",
  "role.connect": "Ligar",
@@ -1829,5 +1829,6 @@
  "guide.filesTrashTitle": "Lixo",
  "guide.filesTrashBody": "O que elimina vai primeiro para o Lixo. Clique em Lixo na barra em baixo, assinale o que quer recuperar e clique em Restaurar.",
  "guide.lookTitle": "Idioma e aspeto",
- "guide.lookBody": "Clique em Definições no fundo da barra lateral: Aspeto escolhe claro ou escuro, e Idioma o idioma que o Tetra fala."
+ "guide.lookBody": "Clique em Definições no fundo da barra lateral: Aspeto escolhe claro ou escuro, e Idioma o idioma que o Tetra fala.",
+ "role.lossWarning": "Escolha com cuidado: mudar isto mais tarde pode levar à perda de dados."
 }

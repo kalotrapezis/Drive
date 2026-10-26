@@ -1661,9 +1661,9 @@
  "role.welcome": "Velkommen til Tetra",
  "role.question": "Hvad er denne computer?",
  "role.server": "Server",
- "role.serverHint": "Hovedcomputeren, den der bliver derhjemme. Den gemmer alt og sikkerhedskopierne af det og deler filer med dine telefoner, tablets og andre computere.",
+ "role.serverHint": "Hovedcomputeren i dit hjem.\nLad den være tændt det meste af tiden, og vælg den med mest plads.\nDen gemmer alle dine billeder og filer og deres sikkerhedskopier: din egen „sky“ derhjemme.\nDin telefon, tablet og andre computere får alt fra den.",
  "role.client": "Klient",
- "role.clientHint": "Tilslutter sig din server: Den henter filerne fra den og sender det, du laver her, tilbage.",
+ "role.clientHint": "En anden af dine computere, fx en bærbar.\nDen forbinder sig til serveren med en nøgle.\nDen får alt fra serveren og sender det tilbage, du laver på den.",
  "role.locked": "Dette valg er fast. Hvis du vil ændre det senere, skal Tetra nulstilles (Indstillinger › Server eller klient).",
  "role.keyHow": "Åbn Enheder › Tilføj en enhed på serveren, og skriv eller indsæt nøglen, der vises der, herunder. Begge computere skal være på det samme netværk.",
  "role.connect": "Opret forbindelse",
@@ -1742,5 +1742,6 @@
  "guide.filesTrashTitle": "Papirkurv",
  "guide.filesTrashBody": "Det, du sletter, havner først i Papirkurv. Klik på Papirkurv i bjælken nederst, markér det, du vil have tilbage, og klik på Gendan.",
  "guide.lookTitle": "Sprog og udseende",
- "guide.lookBody": "Klik på Indstillinger nederst i sidepanelet: Udseende vælger lys eller mørk, og Sprog det sprog, Tetra taler."
+ "guide.lookBody": "Klik på Indstillinger nederst i sidepanelet: Udseende vælger lys eller mørk, og Sprog det sprog, Tetra taler.",
+ "role.lossWarning": "Vælg med omhu: Hvis du ændrer det senere, kan du miste data."
 }

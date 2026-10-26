@@ -1835,9 +1835,9 @@
  "role.welcome": "Merħba f’Tetra",
  "role.question": "X’inhu dan il-kompjuter?",
  "role.server": "Server",
- "role.serverHint": "Il-kompjuter ewlieni, dak li jibqa’ d-dar. Iżomm kollox u l-backups tiegħu, u jaqsam il-fajls mat-telefowns, it-tablets u l-kompjuters l-oħra tiegħek.",
+ "role.serverHint": "Il-kompjuter ewlieni f’darek.\nŻommu mixgħul ħafna mill-ħin, u agħżel dak bl-aktar spazju.\nIżomm ir-ritratti u l-fajls kollha tiegħek, u l-backups tagħhom: il-“cloud” tiegħek stess, id-dar.\nIt-telefown, it-tablet u l-kompjuters l-oħra tiegħek jieħdu kollox minnu.",
  "role.client": "Klijent",
- "role.clientHint": "Jingħaqad mas-server tiegħek: jieħu l-fajls minnu u jibgħatlu lura dak li tagħmel hawn.",
+ "role.clientHint": "Kompjuter ieħor tiegħek, bħal laptop.\nJikkonnettja mas-server b’ċavetta.\nJieħu kollox mis-server, u jibgħat lura dak li tagħmel fuqu.",
  "role.locked": "Din l-għażla tibqa’. Biex tibdilha aktar tard, trid tirrisettja Tetra (Settings › Server jew klijent).",
  "role.keyHow": "Fuq is-server, iftaħ Apparati › Żid apparat u ittajpja jew waħħal iċ-ċavetta li tidher hawn taħt. Iż-żewġ kompjuters iridu jkunu fuq l-istess netwerk.",
  "role.connect": "Qabbad",
@@ -1916,5 +1916,6 @@
  "guide.filesTrashTitle": "Iskart",
  "guide.filesTrashBody": "Dak li tħassar imur l-ewwel f’Iskart. Ikklikkja Iskart fil-bar t’isfel, immarka dak li trid lura u kklikkja Erġa’ tpoġġi.",
  "guide.lookTitle": "Lingwa u dehra",
- "guide.lookBody": "Ikklikkja Settings f’qiegħ il-kolonna tal-ġenb: Dehra tagħżel ċar jew skur, u Lingwa l-lingwa li jitkellem Tetra."
+ "guide.lookBody": "Ikklikkja Settings f’qiegħ il-kolonna tal-ġenb: Dehra tagħżel ċar jew skur, u Lingwa l-lingwa li jitkellem Tetra.",
+ "role.lossWarning": "Agħżel b’attenzjoni: jekk tibdel dan aktar tard, tista’ titlef id-data."
 }

@@ -1661,9 +1661,9 @@
  "role.welcome": "Willkommen bei Tetra",
  "role.question": "Was ist dieser Computer?",
  "role.server": "Server",
- "role.serverHint": "Der Hauptcomputer, der zu Hause bleibt. Er bewahrt alles samt Sicherungen auf und teilt Dateien mit deinen Telefonen, Tablets und anderen Computern.",
+ "role.serverHint": "Der Hauptcomputer bei dir zu Hause.\nLass ihn meistens eingeschaltet und nimm den mit dem meisten Platz.\nEr bewahrt alle deine Fotos und Dateien und ihre Sicherungen auf: deine eigene „Cloud“ zu Hause.\nDein Telefon, dein Tablet und deine anderen Computer bekommen alles von ihm.",
  "role.client": "Client",
- "role.clientHint": "Verbindet sich mit deinem Server: Er bekommt die Dateien von ihm und schickt zurück, was du hier erstellst.",
+ "role.clientHint": "Ein anderer Computer von dir, zum Beispiel ein Laptop.\nEr verbindet sich mit einem Schlüssel mit dem Server.\nEr bekommt alles vom Server und schickt zurück, was du auf ihm machst.",
  "role.locked": "Diese Wahl bleibt. Um sie später zu ändern, muss Tetra zurückgesetzt werden (Einstellungen › Server oder Client).",
  "role.keyHow": "Öffne auf dem Server Geräte › Gerät hinzufügen und gib den dort angezeigten Schlüssel unten ein oder füge ihn ein. Beide Computer müssen im selben Netzwerk sein.",
  "role.connect": "Verbinden",
@@ -1742,5 +1742,6 @@
  "guide.filesTrashTitle": "Papierkorb",
  "guide.filesTrashBody": "Was du löschst, kommt zuerst in den Papierkorb. Klicke unten in der Leiste auf Papierkorb, hake an, was du zurückhaben willst, und klicke auf Wiederherstellen.",
  "guide.lookTitle": "Sprache und Aussehen",
- "guide.lookBody": "Klicke unten in der Seitenleiste auf Einstellungen: Darstellung wählt hell oder dunkel, und Sprache die Sprache, die Tetra spricht."
+ "guide.lookBody": "Klicke unten in der Seitenleiste auf Einstellungen: Darstellung wählt hell oder dunkel, und Sprache die Sprache, die Tetra spricht.",
+ "role.lossWarning": "Wähle sorgfältig: Wenn du das später änderst, können Daten verloren gehen."
 }

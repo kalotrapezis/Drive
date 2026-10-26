@@ -1661,9 +1661,9 @@
  "role.welcome": "Welcome to Tetra",
  "role.question": "What is this computer?",
  "role.server": "Server",
- "role.serverHint": "The main computer, the one that stays at home. It keeps everything and its backups, and shares files with your phones, tablets and other computers.",
+ "role.serverHint": "The main computer in your home.\nKeep it on most of the time, and pick the one with the most space.\nIt keeps all your photos and files, and their backups: your own cloud, at home.\nYour phone, tablet and other computers get everything from it.",
  "role.client": "Client",
- "role.clientHint": "Joins your server: it gets the files from it and sends back what you make here.",
+ "role.clientHint": "Another computer of yours, like a laptop.\nIt connects to the server with a key.\nIt gets everything from the server, and sends back what you make on it.",
  "role.locked": "This choice stays. Changing it later takes a reset of Tetra (Settings › Server or client).",
  "role.keyHow": "On the server, open Devices › Add a device and type or paste the key it shows below. Both computers must be on the same network.",
  "role.connect": "Connect",
@@ -1742,5 +1742,6 @@
  "guide.filesTrashTitle": "Trash",
  "guide.filesTrashBody": "What you delete goes to Trash first. Click Trash in the bar at the bottom, tick what you want back and click Restore.",
  "guide.lookTitle": "Language and look",
- "guide.lookBody": "Click Settings at the foot of the sidebar: Appearance chooses light or dark, and Language the language Tetra speaks."
+ "guide.lookBody": "Click Settings at the foot of the sidebar: Appearance chooses light or dark, and Language the language Tetra speaks.",
+ "role.lossWarning": "Choose carefully: changing this later can lead to data loss."
 }
