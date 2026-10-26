@@ -28,9 +28,9 @@ test('every language has every English key, with the same {placeholders}, and no
     for (const [k, v] of Object.entries(other)) {
       assert.ok(k in en || `${base(k)}_other` in en, `${tag}.json has ${k}, which English has not`)
       const english = en[k] ?? en[`${base(k)}_other`]
-      // a plural's one-form may say "one" instead of {count}
+      // a plural's one-form may say "one" instead of {count}, or keep {count} (Croatian's "one" is also 21, 31…)
       if (k === base(k) || !/_(one|zero|two)$/.test(k)) assert.equal(holes(v), holes(english), `${tag}.json ${k}: {placeholders}`)
-      else assert.ok(holes(v).split(',').every(h => !h || holes(english).split(',').includes(h)), `${tag}.json ${k}: {placeholders}`)
+      else assert.ok(holes(v).split(',').every(h => !h || h === 'count' || holes(english).split(',').includes(h)), `${tag}.json ${k}: {placeholders}`)
       assert.ok(v.trim(), `${tag}.json ${k} is empty`)
     }
   }

@@ -92,10 +92,10 @@ function LanguageCard() {
   return (
     <section className="settings-card island">
       <h3>{t('settings.language')}</h3>
-      <div className="segmented">
-        {now && ['system', ...now.languages].map(id =>
-          <button key={id} className={now.choice === id ? 'on' : ''} onClick={() => pick(id)}>{id === 'system' ? t('settings.languageSystem') : own(id)}</button>)}
-      </div>
+      {/* a list, not buttons: every EU language is too many for one row */}
+      {now && <select className="field" value={now.choice} onChange={e => pick(e.target.value)}>
+        {['system', ...now.languages].map(id => <option key={id} value={id}>{id === 'system' ? t('settings.languageSystem') : own(id)}</option>)}
+      </select>}
       <p className="muted">{t('settings.languageNote')}</p>
     </section>
   )
