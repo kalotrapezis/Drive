@@ -1080,7 +1080,7 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .first-card p { margin: 0; }
 .first-card form { display: grid; gap: 14px; }
 .role-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-.role-choice { display: grid; justify-items: start; gap: 8px; padding: 20px; border-radius: var(--radius); background: var(--island-2); color: var(--text); text-align: left; }
+.role-choice { display: grid; justify-items: start; align-content: start; gap: 8px; padding: 20px; border-radius: var(--radius); background: var(--island-2); color: var(--text); text-align: left; }
 .role-choice:hover { outline: 2px solid var(--accent); }
 .role-choice strong { font-size: 18px; }
 .role-choice span { color: var(--muted); line-height: 1.4; }

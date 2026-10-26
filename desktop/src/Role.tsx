@@ -116,6 +116,8 @@ export function ResetCard() {
     <section className="settings-card island">
       <h3><Icon name={role?.role === 'client' ? 'computer' : 'server'} size={20} />{t('reset.title')}</h3>
       <p><strong>{role?.role === 'client' ? t('reset.isClient', { name: role.server?.name ?? '' }) : t('reset.isServer')}</strong></p>
+      {/* what that means, in the first start's words */}
+      <p>{role?.role === 'client' ? t('role.clientHint') : t('role.serverHint')}</p>
       <p className="muted">{t('reset.why')}</p>
       <div className="reset-actions">
         <button className="filled-button secondary" onClick={backUp}>{t('reset.backUpAndReset')}</button>
