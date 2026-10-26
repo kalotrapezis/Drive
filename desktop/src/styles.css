@@ -1111,8 +1111,12 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .guide-mark { outline: 3px solid #ffb020; outline-offset: 3px; border-radius: 999px; animation: guide-pulse 1.3s ease-out infinite; }
 @media (prefers-color-scheme: light) { .guide-mark { outline-color: #b25e00; } }
 @keyframes guide-pulse { from { box-shadow: 0 0 0 0 #ffb020aa; } to { box-shadow: 0 0 0 14px #ffb02000; } }
-.guide-hub { display: flex; align-items: center; gap: 14px; color: var(--muted); }
-.guide-hub-server { color: var(--text); padding: 10px; border-radius: 50%; display: grid; }
+.guide-role { width: 100%; }
+.guide-role p { margin: 0 0 12px; font-weight: 600; }
+.guide-role .role-choice { padding: 14px; gap: 6px; }
+.guide-role .role-choice.guide-mark { border-radius: 20px; }
+.guide-role .role-choice strong { font-size: 16px; }
+.guide-role .role-choice span { font-size: 13px; }
 .guide-add { display: inline-flex; align-self: flex-start; padding: 10px 16px; margin: 8px 0 0 16px; }
 .guide-key { font-family: monospace; letter-spacing: .08em; }
 .guide-show { width: 100%; margin-top: 12px; }

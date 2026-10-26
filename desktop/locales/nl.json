@@ -1724,7 +1724,7 @@
  "guide.againTitle": "Kom altijd terug",
  "guide.againBody": "Sluit haar nu als je wilt. De handleiding staat altijd in Instellingen › Handleiding.",
  "guide.roleTitle": "Server of client",
- "guide.roleBody": "De eerste keer dat Tetra opent, vraagt het wat deze computer is. Kies De server voor de computer die meestal aan staat: telefoons, tablets en je andere computers synchroniseren ermee. De keuze blijft; wijzigen kan alleen met een reset (Instellingen › Server of client).",
+ "guide.roleBody": "De eerste keer dat Tetra opent, vraagt het wat deze computer is. De server is het apparaat waar uiteindelijk alles terechtkomt, verantwoordelijk voor de back-ups en het delen van bestanden: telefoons, tablets en je andere computers synchroniseren ermee. Kies hem voor de computer die meestal aan staat, en Een client van mijn server voor elke andere. De keuze blijft; wijzigen kan alleen met een reset (Instellingen › Server of client).",
  "guide.pairTitle": "Telefoon of tablet koppelen",
  "guide.pairBody": "Klik op de server in de zijbalk op Apparaten en dan op Apparaat toevoegen: Tetra toont een code. Open op de telefoon Sync, tik op Code scannen en richt de camera erop.",
  "guide.clientTitle": "Nog een computer",

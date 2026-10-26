@@ -1811,7 +1811,7 @@
  "guide.againTitle": "Revino oricând",
  "guide.againBody": "Poți să-l închizi acum. Ghidul este mereu în Setări › Ghid.",
  "guide.roleTitle": "Server sau client",
- "guide.roleBody": "Prima dată când se deschide, Tetra întreabă ce este acest computer. Alege Serverul pentru computerul care e pornit cel mai des: telefoanele, tabletele și celelalte computere ale tale se sincronizează cu el. Alegerea rămâne; ca s-o schimbi, e nevoie de o resetare (Setări › Server sau client).",
+ "guide.roleBody": "Prima dată când se deschide, Tetra întreabă ce este acest computer. Serverul este dispozitivul final, cel care răspunde de copiile de rezervă și de partajarea fișierelor: telefoanele, tabletele și celelalte computere ale tale se sincronizează cu el. Alege-l pentru computerul care e pornit cel mai des și Un client al serverului meu pentru oricare altul. Alegerea rămâne; ca s-o schimbi, e nevoie de o resetare (Setări › Server sau client).",
  "guide.pairTitle": "Asociază un telefon sau o tabletă",
  "guide.pairBody": "Pe server, dă clic pe Dispozitive în bara laterală, apoi pe Adaugă un dispozitiv: Tetra arată un cod. Pe telefon, deschide Sincronizare, atinge Scanează un cod și îndreaptă camera spre el.",
  "guide.clientTitle": "Alt computer",

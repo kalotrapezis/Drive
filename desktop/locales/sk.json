@@ -1898,7 +1898,7 @@
  "guide.againTitle": "Vráťte sa kedykoľvek",
  "guide.againBody": "Ak chcete, teraz ho zatvorte. Sprievodca je vždy v Nastavenia › Sprievodca.",
  "guide.roleTitle": "Server alebo klient",
- "guide.roleBody": "Pri prvom spustení sa Tetra opýta, čím je tento počítač. Pre počítač, ktorý je väčšinu času zapnutý, zvoľte Server: telefóny, tablety a vaše ďalšie počítače sa s ním synchronizujú. Voľba platí natrvalo; zmena vyžaduje reset (Nastavenia › Server alebo klient).",
+ "guide.roleBody": "Pri prvom spustení sa Tetra opýta, čím je tento počítač. Server je cieľové zariadenie, ktoré zodpovedá za zálohy a za zdieľanie súborov: telefóny, tablety a vaše ďalšie počítače sa s ním synchronizujú. Server zvoľte pre počítač, ktorý je väčšinu času zapnutý, a Klient môjho servera pre každý iný. Voľba platí natrvalo; zmena vyžaduje reset (Nastavenia › Server alebo klient).",
  "guide.pairTitle": "Spárujte telefón alebo tablet",
  "guide.pairBody": "Na serveri kliknite v bočnom paneli na Zariadenia a potom na Pridať zariadenie: Tetra zobrazí kód. V telefóne otvorte Synchronizácia, ťuknite na Naskenovať kód a namierte naň fotoaparát.",
  "guide.clientTitle": "Ďalší počítač",

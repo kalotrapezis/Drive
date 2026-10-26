@@ -1898,7 +1898,7 @@
  "guide.againTitle": "Grįžkite bet kada",
  "guide.againBody": "Jei norite, dabar galite jį uždaryti. Vadovas visada yra skiltyje „Nustatymai › Vadovas“.",
  "guide.roleTitle": "Serveris ar klientas",
- "guide.roleBody": "Pirmą kartą atidaryta Tetra klausia, kas yra šis kompiuteris. Pasirinkite „Serveris“ tam kompiuteriui, kuris dažniausiai būna įjungtas: telefonai, planšetės ir kiti jūsų kompiuteriai sinchronizuojasi su juo. Pasirinkimas išlieka; norint jį pakeisti, reikia viską nustatyti iš naujo („Nustatymai › Serveris ar klientas“).",
+ "guide.roleBody": "Pirmą kartą atidaryta Tetra klausia, kas yra šis kompiuteris. Serveris – tai galutinis įrenginys, atsakingas už atsargines kopijas ir failų bendrinimą: telefonai, planšetės ir kiti jūsų kompiuteriai sinchronizuojasi su juo. Pasirinkite „Serveris“ tam kompiuteriui, kuris dažniausiai būna įjungtas, o „Mano serverio klientas“ – bet kuriam kitam. Pasirinkimas išlieka; norint jį pakeisti, reikia viską nustatyti iš naujo („Nustatymai › Serveris ar klientas“).",
  "guide.pairTitle": "Susieti telefoną ar planšetę",
  "guide.pairBody": "Serveryje šoninėje juostoje spustelėkite „Įrenginiai“, tada „Pridėti įrenginį“: Tetra parodys kodą. Telefone atidarykite „Sinchronizavimas“, bakstelėkite „Nuskaityti kodą“ ir nukreipkite fotoaparatą į kodą.",
  "guide.clientTitle": "Kitas kompiuteris",

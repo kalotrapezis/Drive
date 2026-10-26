@@ -1811,7 +1811,7 @@
  "guide.againTitle": "Volte quando quiser",
  "guide.againBody": "Feche-o agora, se quiser. O guia está sempre em Definições › Guia.",
  "guide.roleTitle": "Servidor ou cliente",
- "guide.roleBody": "Da primeira vez que abre, o Tetra pergunta o que é este computador. Escolha O servidor para o computador que está ligado quase sempre: os telemóveis, os tablets e os seus outros computadores sincronizam com ele. A escolha mantém-se; para a mudar é preciso repor (Definições › Servidor ou cliente).",
+ "guide.roleBody": "Da primeira vez que abre, o Tetra pergunta o que é este computador. O servidor é o dispositivo final, o responsável pelas cópias de segurança e pela partilha de ficheiros: os telemóveis, os tablets e os seus outros computadores sincronizam com ele. Escolha-o para o computador que está ligado quase sempre, e Um cliente do meu servidor para qualquer outro. A escolha mantém-se; para a mudar é preciso repor (Definições › Servidor ou cliente).",
  "guide.pairTitle": "Emparelhar um telemóvel ou tablet",
  "guide.pairBody": "No servidor, clique em Dispositivos na barra lateral e depois em Adicionar um dispositivo: o Tetra mostra um código. No telemóvel, abra Sincronizar, toque em Ler um código e aponte a câmara para ele.",
  "guide.clientTitle": "Outro computador",

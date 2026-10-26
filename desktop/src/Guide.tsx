@@ -85,9 +85,13 @@ function Picture({ pic }: { pic: Pic }) {
       <Nav icon="bell" label={t('app.notifications')} /><Nav icon="settings" label={t('app.settings')} mark />
       <div className="settings-card island"><h3>{t('guide.title')}</h3><span className="filled-button secondary">{t('guide.open')}</span></div>
     </div>
-    // the server in the middle, phones, tablets and the other computers round it (Plan.md (6), 26 Oct)
-    case 'role': return <div className="guide-hub">
-      <Icon name="device" size={32} /><Icon name="arrowRight" /><span className="guide-mark guide-hub-server"><Icon name="server" size={40} /></span><Icon name="swap" /><Icon name="computer" size={32} />
+    // the first start's own page (Role.tsx FirstStart), The server ringed: the guide shows what Tetra asks
+    case 'role': return <div className="guide-role">
+      <p>{t('role.question')}</p>
+      <div className="role-choices">
+        <div className="role-choice guide-mark"><Icon name="server" size={28} /><strong>{t('role.server')}</strong><span>{t('role.serverHint')}</span></div>
+        <div className="role-choice"><Icon name="computer" size={28} /><strong>{t('role.client')}</strong></div>
+      </div>
     </div>
     case 'pair': return <div className="guide-rail">
       <Nav icon="refresh" label={t('app.devices')} mark />

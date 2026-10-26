@@ -1724,7 +1724,7 @@
  "guide.againTitle": "Jederzeit wieder da",
  "guide.againBody": "Schließe sie jetzt, wenn du möchtest. Die Anleitung ist immer unter Einstellungen › Anleitung.",
  "guide.roleTitle": "Server oder Client",
- "guide.roleBody": "Beim ersten Start fragt Tetra, was dieser Computer ist. Wähle Der Server für den Computer, der meistens eingeschaltet ist: Telefone, Tablets und deine anderen Computer synchronisieren sich mit ihm. Die Wahl bleibt; ändern lässt sie sich nur durch Zurücksetzen (Einstellungen › Server oder Client).",
+ "guide.roleBody": "Beim ersten Start fragt Tetra, was dieser Computer ist. Der Server ist das Gerät, bei dem am Ende alles ankommt, zuständig für die Sicherungen und das Teilen von Dateien: Telefone, Tablets und deine anderen Computer synchronisieren sich mit ihm. Wähle ihn für den Computer, der meistens eingeschaltet ist, und Ein Client meines Servers für jeden anderen. Die Wahl bleibt; ändern lässt sie sich nur durch Zurücksetzen (Einstellungen › Server oder Client).",
  "guide.pairTitle": "Telefon oder Tablet koppeln",
  "guide.pairBody": "Klicke auf dem Server in der Seitenleiste auf Geräte und dann auf Gerät hinzufügen: Tetra zeigt einen Code. Öffne auf dem Telefon Sync, tippe auf Code scannen und richte die Kamera darauf.",
  "guide.clientTitle": "Ein weiterer Computer",

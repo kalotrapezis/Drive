@@ -1724,7 +1724,7 @@
  "guide.againTitle": "Tulge tagasi millal tahes",
  "guide.againBody": "Soovi korral sulgege see praegu. Juhend on alati menüüs Seaded › Juhend.",
  "guide.roleTitle": "Server või klient",
- "guide.roleBody": "Esimesel avamisel küsib Tetra, mis arvuti see on. Valige Server sellele arvutile, mis on enamasti sees: telefonid, tahvelarvutid ja teie teised arvutid sünkroonivad sellega. Valik jääb kehtima; selle muutmiseks tuleb teha lähtestamine (Seaded › Server või klient).",
+ "guide.roleBody": "Esimesel avamisel küsib Tetra, mis arvuti see on. Server on sihtseade, mis vastutab varukoopiate ja failide jagamise eest: telefonid, tahvelarvutid ja teie teised arvutid sünkroonivad sellega. Valige Server sellele arvutile, mis on enamasti sees, ja Minu serveri klient igale teisele. Valik jääb kehtima; selle muutmiseks tuleb teha lähtestamine (Seaded › Server või klient).",
  "guide.pairTitle": "Seo telefon või tahvelarvuti",
  "guide.pairBody": "Klõpsake serveris külgribal valikut Seadmed ja seejärel Lisa seade: Tetra näitab koodi. Avage telefonis Sünkroonimine, puudutage nuppu Skanni kood ja suunake kaamera koodile.",
  "guide.clientTitle": "Teine arvuti",

@@ -1811,7 +1811,7 @@
  "guide.againTitle": "Atgriezieties jebkurā laikā",
  "guide.againBody": "Ja vēlaties, aizveriet to tagad. Ceļvedis vienmēr ir sadaļā „Iestatījumi › Ceļvedis”.",
  "guide.roleTitle": "Serveris vai klients",
- "guide.roleBody": "Pirmajā atvēršanas reizē Tetra jautā, kas ir šis dators. Izvēlieties „Serveris” tam datoram, kas lielākoties ir ieslēgts: tālruņi, planšetdatori un citi jūsu datori sinhronizējas ar to. Izvēle paliek; lai to mainītu, vajadzīga atiestatīšana („Iestatījumi › Serveris vai klients”).",
+ "guide.roleBody": "Pirmajā atvēršanas reizē Tetra jautā, kas ir šis dators. Serveris ir galamērķa ierīce, kas atbild par dublējumkopijām un failu kopīgošanu: tālruņi, planšetdatori un citi jūsu datori sinhronizējas ar to. Izvēlieties „Serveris” tam datoram, kas lielākoties ir ieslēgts, un „Mana servera klients” – jebkuram citam. Izvēle paliek; lai to mainītu, vajadzīga atiestatīšana („Iestatījumi › Serveris vai klients”).",
  "guide.pairTitle": "Savienot pārī tālruni vai planšetdatoru",
  "guide.pairBody": "Serverī sānjoslā noklikšķiniet uz „Ierīces”, tad uz „Pievienot ierīci”: Tetra parāda kodu. Tālrunī atveriet „Sinhronizācija”, pieskarieties „Skenēt kodu” un pavērsiet kameru pret kodu.",
  "guide.clientTitle": "Cits dators",

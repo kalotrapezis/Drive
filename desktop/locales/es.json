@@ -1781,7 +1781,7 @@
  "guide.againTitle": "Vuelve cuando quieras",
  "guide.againBody": "Ciérrala ahora si quieres. La guía siempre está en Ajustes › Guía.",
  "guide.roleTitle": "Servidor o cliente",
- "guide.roleBody": "La primera vez que se abre, Tetra pregunta qué es este ordenador. Elige El servidor para el ordenador que está encendido casi siempre: los teléfonos, las tablets y tus otros ordenadores se sincronizan con él. La elección se mantiene; para cambiarla hay que restablecer (Ajustes › Servidor o cliente).",
+ "guide.roleBody": "La primera vez que se abre, Tetra pregunta qué es este ordenador. El servidor es el dispositivo final, el que se encarga de las copias de seguridad y de compartir archivos: los teléfonos, las tablets y tus otros ordenadores se sincronizan con él. Elígelo para el ordenador que está encendido casi siempre, y Un cliente de mi servidor para cualquier otro. La elección se mantiene; para cambiarla hay que restablecer (Ajustes › Servidor o cliente).",
  "guide.pairTitle": "Vincular un teléfono o una tablet",
  "guide.pairBody": "En el servidor, haz clic en Dispositivos en la barra lateral y luego en Añadir un dispositivo: Tetra muestra un código. En el teléfono, abre Sincronizar, toca Escanear un código y apunta la cámara hacia él.",
  "guide.clientTitle": "Otro ordenador",

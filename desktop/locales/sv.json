@@ -1724,7 +1724,7 @@
  "guide.againTitle": "Kom tillbaka när du vill",
  "guide.againBody": "Stäng den nu om du vill. Guiden finns alltid i Inställningar › Guide.",
  "guide.roleTitle": "Server eller klient",
- "guide.roleBody": "Första gången Tetra öppnas frågar den vad den här datorn är. Välj Servern för datorn som är på det mesta av tiden: telefoner, surfplattor och dina andra datorer synkar med den. Valet står kvar; för att ändra det krävs en återställning (Inställningar › Server eller klient).",
+ "guide.roleBody": "Första gången Tetra öppnas frågar den vad den här datorn är. Servern är enheten där allt hamnar till slut, den som ansvarar för säkerhetskopiorna och för att dela filer: telefoner, surfplattor och dina andra datorer synkar med den. Välj den för datorn som är på det mesta av tiden, och En klient till min server för alla andra. Valet står kvar; för att ändra det krävs en återställning (Inställningar › Server eller klient).",
  "guide.pairTitle": "Parkoppla en telefon eller surfplatta",
  "guide.pairBody": "Klicka på Enheter i sidofältet på servern och sedan på Lägg till en enhet: Tetra visar en kod. Öppna Synk på telefonen, tryck på Skanna en kod och rikta kameran mot den.",
  "guide.clientTitle": "En annan dator",
