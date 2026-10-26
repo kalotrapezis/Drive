@@ -2181,6 +2181,8 @@ the same protocol, no screen, nothing new in the wire format.
 Icons for it are in place: `database` and `server` in `Icon.tsx`, beside `computer`
 and `device`.
 
+**Built 2026-10-26 (6as):** a computer is the server or a client, chosen at its first start.
+
 ### D4. Keep for a week, a month, a year (asked 2026-09-24)
 
 Keep the last week on the phone, or the last month, or the last year, and let the
@@ -2265,6 +2267,8 @@ show the **same code as text, with a copy button**, next to the QR — the QR fo
 phone, the text for the other machine, one code either way. The other side then
 needs somewhere to paste it, which is the half of §D3 that does not exist yet: the
 desktop has never been a client.
+
+**Built 2026-10-26 (6as):** the code is a typeable phrase under the QR, with Copy; a client pastes it at its first start.
 
 ### E. Settings, as an island of categories
 
@@ -2516,3 +2520,55 @@ version was "both changed", one more "(n)".
 versions with one date: each replaces, none comes back; memory left disagreeing heals) — fails without either computer
 half; all desktop tests; the Android unit suite. **Not yet run between real devices.** The copies already made stay until
 Data's cleanup takes them.
+
+### 6as. A computer is the server or a client of one (built 2026-10-26, on main)
+
+**Asked (the user, 26 Oct).** "On the sync front the structure does not change at all." Android stays a client only (too
+many restrictions to be a server); a second computer joins the first as a client, with a key that can be copied; what a
+computer is gets chosen when Tetra first opens and cannot change afterwards except by a reset, with a forced backup or
+two acknowledgements of deleting the Tetra folder, the second actionable only after 10 seconds. Agreed with the user the
+same day: a client syncs everything a phone does; the key is a short phrase; the same network as phones; a backup is a
+verified copy to a chosen folder, after which everything here is deleted as in the other path.
+
+- **The role** is a row in `settings` (`role` = server | client), written once (`SyncServer.setRole` refuses the other
+  one). The first start asks (`src/Role.tsx` FirstStart, before the app). A Tetra that ran before the question was asked
+  is the server, silently (it has `notesImported`; `roleAsked` marks a start that asked, so closing before answering asks
+  again). A hidden QA copy is a server too, unless `DRIVE_ASK_ROLE` is set (for the guide's screenshots).
+- **The key** is the pairing code itself, made typeable: 16 of 32 letters and digits with no I, O, 0, 1 (80 bits), shown
+  as `ABCD-EFGH-JKLM-NPQR` under the QR with a Copy button; one use, 10 minutes, as the QR. The QR carries the same code,
+  so a phone pairs as before. The server takes it in any case, with or without dashes or spaces.
+- **Finding the server by the key** (`client.js find`): one UDP probe to every broadcast address on the beacon port
+  (43181, 6k) carrying `sha256("tetra-pair:" + code)` — never the code. A server showing that code answers with its port,
+  its certificate fingerprint and `HMAC(code, fingerprint)`. The client trusts the fingerprint only if the HMAC checks
+  out, so a stranger on the network can neither learn the phrase from the probe nor pass for the server; then `/pair`
+  goes over TLS pinned to that fingerprint, exactly as a phone's does, with `kind: 'computer'` and the client's own
+  fingerprint, addresses, port and a token (stored on the client as its hash). From then on it is a paired device: its
+  card on the server starts with everything Off (6aj) until the rules are answered there.
+- **The client syncs as a phone** (`client.js run`, the order of `SyncClient.backUp`): `/connections` (the server's
+  rules), photos up (`/have`, `PUT /blob`) and down (`/library/manifest`, `GET /blob`), on Both ways its Trash and the
+  server's declined photos (`/trashed`, `trashFromDevice`), Files (`/files/manifest`; uploads what is wanted, follows
+  `moveTo`, downloads `have`, an edit replacing via `file_updates`), Notes (`/notes`), editor tabs, then metadata
+  (`POST /metadata` with `SyncServer.metadata(0)`, `GET /metadata?since=` applied by its own `applyMetadata`). What
+  arrives goes through the server's own receive code (`receive`, `receiveFile`): the same `.part`, hash and no-overwrite
+  rules. **When:** every change that nudges devices on a server nudges the server on a client (`nudge()` in client
+  role), every 5 minutes, and when the server nudges it (`POST /sync` with the token it was given — the only request a
+  client answers; phones pair with the server, `/pair` is refused with 403).
+- **Not done on a client:** a Move (keep nothing) keeps the client's files (`shortcut:` in client.js); `/inventory`
+  (names and sizes for the server's Move preview) is not sent; scoped syncs are whole syncs.
+- **Reset** (Settings › Server or client, `reset.js`): *Back up and reset* copies the Tetra folder and the app's data to a
+  new "Tetra backup <date>" in a chosen folder, refuses a folder inside what is deleted or without the room, checks every
+  file's size, then deletes and restarts. *Delete everything and reset* asks twice; the second dialog's Reset counts down
+  10 s, and main refuses a delete less than 10 s after that dialog armed it. The wipe never takes the home folder, a
+  folder above it, or `/`. After the restart the first start's question comes back.
+
+**Checked (26 Oct):** `desktop/test/client.test.js` — the role lock; the key typed in lower case with spaces; a client
+joining by the phrase (and a wrong phrase or a forged answer finding nobody), files, photos and notes both ways, an edit
+on the server replacing the client's copy, a second sync bringing nothing twice, the server's nudge answered and `/pair`
+refused on a client; the reset's 10 s gate, its backup and its guards. All 156 desktop tests. Then two hidden instances
+from source on this PC (own data folders and ports, the installed Tetra left running): chosen server and client in the
+window, the key read off the server's Devices page and typed into the client, the rules set on the server's card and its
+nudge starting the client's sync; the laptop's file and photo reached the server, the server's reached the laptop, and an
+event written later into the server's Calendar reached the laptop by the watcher's nudge. *Back up and reset* on the server
+left a whole "Tetra backup …" and restarted at the question; *Delete everything and reset* on the client refused an early
+delete, counted down, wiped and restarted at the question. **Not run between two real computers on Wi-Fi**, and not with
+a phone paired to the same server at the same time.

@@ -99,6 +99,19 @@ contextBridge.exposeInMainWorld('drive', {
     onProgress: cb => { const f = (_, p) => cb(p); ipcRenderer.on('import-progress', f); return () => ipcRenderer.removeListener('import-progress', f) },
   },
   i18n: ipcRenderer.sendSync('i18n:words'), // the language's words, before the first render (src/i18n.ts)
+  role: {
+    get: () => ipcRenderer.invoke('role:get'),
+    server: () => ipcRenderer.invoke('role:server'),
+    join: key => ipcRenderer.invoke('role:join', key),
+    syncNow: () => ipcRenderer.invoke('client:syncNow'),
+    onSynced: fn => { const l = (_, s) => fn(s); ipcRenderer.on('client-synced', l); return () => ipcRenderer.off('client-synced', l) },
+  },
+  reset: {
+    info: () => ipcRenderer.invoke('reset:info'),
+    backUp: () => ipcRenderer.invoke('reset:backUp'),
+    arm: () => ipcRenderer.invoke('reset:arm'),
+    delete: () => ipcRenderer.invoke('reset:delete'),
+  },
   languages: () => ipcRenderer.invoke('settings:languages'),
   setLanguage: choice => ipcRenderer.invoke('settings:setLanguage', choice),
   theme: () => ipcRenderer.invoke('settings:theme'),

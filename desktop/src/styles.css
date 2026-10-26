@@ -1071,3 +1071,23 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 /* Translations (25 Oct): a label stays on one line and ends in … when a language's words are longer — never wrapped, never shrunk */
 .segmented button, .text-button, .filled-button, .outline-button, .chip, .self-chip, .island-item, .nav-item, .cal-chip, .ct-action small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .island-item > span, .nav-item > span, .filled-button.big > span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* Server or client (Role.tsx): the first start's question, the key beside the QR, a client's Devices, Settings › Reset */
+.first-start { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--bg); }
+.first-card { width: min(720px, 100%); padding: 32px; display: grid; gap: 14px; }
+.first-card > img { width: 56px; height: 56px; }
+.first-card h1 { margin: 0; font-size: 26px; }
+.first-card p { margin: 0; }
+.first-card form { display: grid; gap: 14px; }
+.role-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.role-choice { display: grid; justify-items: start; gap: 8px; padding: 20px; border-radius: var(--radius); background: var(--island-2); color: var(--text); text-align: left; }
+.role-choice:hover { outline: 2px solid var(--accent); }
+.role-choice strong { font-size: 18px; }
+.role-choice span { color: var(--muted); line-height: 1.4; }
+.key-field { font-family: ui-monospace, monospace; font-size: 20px; letter-spacing: 2px; text-transform: uppercase; }
+.pairing-key { grid-column: 1 / -1; margin: 4px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.pairing-key code { font-size: 20px; letter-spacing: 2px; padding: 6px 12px; border-radius: 10px; background: var(--island-2); user-select: all; }
+.client-card { padding: 24px 28px; display: grid; justify-items: start; gap: 10px; max-width: 640px; }
+.client-card h2, .client-card p { margin: 0; }
+.client-card .error { color: #e3685f; }
+.reset-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

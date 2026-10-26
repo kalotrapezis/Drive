@@ -33,6 +33,8 @@ export interface VaultItem { id: string; sha256: string; name: string; rel_path:
 export interface PersonFace { id: string; sha256: string; quality: number; chosen: boolean; takenAt: number }
 export interface SyncConnection { content: 'photos' | 'files'; direction: 'off' | 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing'; keepDays?: number; keepFavorites?: boolean }
 export interface MovePreview { holds: number; onPc: number; go: number; goBytes: number; keep: number; notOnPc: number; lastSeen: number | null }
+/** A desktop client's server (client.js status). */
+export interface ClientStatus { name: string; lastSync: number | null; error: string | null; running: boolean }
 export interface DriveRules { role: 'backup' | 'storage'; offload: boolean; percent: number; keep: number; unit: 'day' | 'week' | 'month' | 'year'; copies: number; favorites: boolean; screenshots: boolean; auto: boolean }
 export interface OffloadPlan { deviceId: string; name: string; rules: DriveRules; disk: Disk | null; count: number; bytes: number; oldest: number | null; newest: number | null; short?: number }
 export interface Disk { size: number; free: number; percent: number }
@@ -113,7 +115,7 @@ declare global {
       purgatory: { settings(): Promise<PurgatorySettings>; set(changes: Partial<PurgatorySettings>): Promise<PurgatorySettings>; setLocation(driveId: string | null): Promise<{ moved: number; waiting: number; failed: string[] }> }
       sync: {
         status(): Promise<SyncStatus>
-        pair(): Promise<{ payload: { hosts: string[]; port: number }; qr: string }>
+        pair(): Promise<{ payload: { hosts: string[]; port: number; key: string }; qr: string }>
         forget(id: string): Promise<void>
         files(what: 'onlyThere' | 'alone' | 'largest', options?: { deviceId?: string; limit?: number }): Promise<SyncFile[]>
         setDevice(id: string, changes: { name?: string; kind?: string }): Promise<SyncDevice | null>
@@ -231,6 +233,19 @@ declare global {
         onProgress(cb: (p: { done: number; total: number; imported: number; skipped: number }) => void): () => void
       }
       i18n: import('./i18n').Words
+      role: {
+        get(): Promise<{ role: 'server' | 'client' | null; server: ClientStatus | null }>
+        server(): Promise<void>
+        join(key: string): Promise<{ name: string }>
+        syncNow(): Promise<ClientStatus | null>
+        onSynced(cb: (s: ClientStatus | null) => void): () => void
+      }
+      reset: {
+        info(): Promise<{ paths: string[]; files: number; bytes: number }>
+        backUp(): Promise<{ to: string; files: number; bytes: number } | null>
+        arm(): Promise<number>
+        delete(): Promise<void>
+      }
       languages(): Promise<{ choice: string; system: string; languages: string[] }>
       setLanguage(choice: string): Promise<void>
       theme(): Promise<'system' | 'light' | 'dark'>

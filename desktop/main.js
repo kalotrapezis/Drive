@@ -11,6 +11,8 @@ const { Vault } = require('./vault')
 const editor = require('./editor')
 const docs = require('./documents')
 const { SyncServer, lanAddresses, FROM_PHONE } = require('./sync')
+const { SyncClient } = require('./client')
+const reset = require('./reset')
 const { Folders } = require('./folders')
 const { Purgatory } = require('./purgatory')
 const history = require('./history')
@@ -434,6 +436,14 @@ function analyzeLibrary(rescan = null) {
 app.whenReady().then(() => {
   db = library.open(DATA_DIR)
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)') // read below (Contacts) before the line that made it; a new computer's first start failed
+  // Server or client is asked at the first start (Setup.tsx). A Tetra that ran before the question was the server, and
+  // a hidden QA copy is one too: neither is asked. notesImported is written at every first start (below); roleAsked
+  // marks a start that asked, so closing before answering asks again rather than making it a server.
+  if (!setting('role')) {
+    // DRIVE_ASK_ROLE: a hidden run that shows the question anyway, for its screenshots (the setup guide's)
+    if ((process.env.DRIVE_HIDDEN && !process.env.DRIVE_ASK_ROLE) || (setting('notesImported') && !setting('roleAsked'))) setSetting('role', 'server')
+    else setSetting('roleAsked', '1')
+  }
   i18n.use(setting('language') || 'system', [app.getLocale()]) // before anything says a word: reminders, the tray
   files = new Files(db, FILES_ROOT)
   // Notes live in a hidden folder of Files (notes.js), and sync through their own step, newest edit wins.
@@ -472,7 +482,7 @@ app.whenReady().then(() => {
   // Phone sync: always listening (paired phones only); received photos show up after a short, batched rescan.
   let rescanTimer = null
   purgatory = new Purgatory({ db, photosRoot: PHOTOS_ROOT, files, serverBase: path.dirname(HOME.root) })
-  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, data: dataCounter, onCall: s => calls?.fromPhone(s), onReceived: () => {
+  sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, data: dataCounter, port: Number(process.env.DRIVE_PORT) || undefined, onCall: s => calls?.fromPhone(s), onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   }, onSent: ({ device, paths }) => { // Send to computer: the phone's share menu, into Files › From phone
@@ -480,6 +490,10 @@ app.whenReady().then(() => {
       () => win?.webContents.send('open-files-folder', FROM_PHONE))
     win?.webContents.send('sync-received')
   } })
+  // A client of another Tetra (client.js): its "sync now" is the nudge every change here already sends, plus a look
+  // every 5 minutes and the server's own nudge. A server never runs it.
+  const client = new SyncClient(sync, { onSynced: s => win?.webContents.send('client-synced', s), onNotes: () => win?.webContents.send('notes-changed') })
+  if (!process.env.DRIVE_HIDDEN) setInterval(() => { if (sync.role() === 'client') client.soon(0) }, 5 * 60_000)
   // started: the devices are told at once, so what waited for this computer (Send to computer's outbox) goes now
   sync.start().then(() => { if (!process.env.DRIVE_HIDDEN) sync.nudge().catch(() => {}) }).catch(e => { sync.error = e.message })
   purgatory.held = sha => sync.heldSafely(sha)
@@ -735,6 +749,38 @@ app.whenReady().then(() => {
     return { payload, qr: await require('qrcode').toDataURL(JSON.stringify(payload), { margin: 1, width: 360, errorCorrectionLevel: 'M' }) }
   })
   ipcMain.handle('sync:files', (_, what, options) => sync.fileList(what, options ?? {}))
+  // The first start's question (Setup.tsx) and a client's own Devices page
+  ipcMain.handle('role:get', () => ({ role: sync.role(), server: client.status() }))
+  ipcMain.handle('role:server', () => sync.setRole('server'))
+  ipcMain.handle('role:join', (_, key) => client.join(String(key ?? '')))
+  ipcMain.handle('client:syncNow', () => client.now().then(() => client.status()))
+  // Settings › Reset (reset.js): what goes, a verified backup first, or the second acknowledgement after its 10 s
+  const wiped = () => [...(process.env.DRIVE_FILES || process.env.DRIVE_PHOTOS ? [PHOTOS_ROOT, FILES_ROOT] : [HOME.root]), DATA_DIR]
+  let armedAt = 0
+  const resetNow = async () => {
+    quitting = true
+    dataCounter?.stop(); analyzer?.terminate()
+    await sync.stop().catch(() => {})
+    db.close()
+    reset.wipe(wiped())
+    app.relaunch()
+    app.exit(0)
+  }
+  ipcMain.handle('reset:info', async () => ({ paths: wiped(), ...await reset.measure(wiped()) }))
+  ipcMain.handle('reset:backUp', async () => {
+    const { filePaths: [dest] = [] } = await dialog.showOpenDialog(win, { title: t('reset.backupWhere'), properties: ['openDirectory', 'createDirectory'] })
+    if (!dest) return null
+    const sources = process.env.DRIVE_FILES || process.env.DRIVE_PHOTOS ? [{ from: PHOTOS_ROOT, name: 'Photos' }, { from: FILES_ROOT, name: 'Files' }] : [{ from: HOME.root, name: 'Tetra' }]
+    db.pragma('wal_checkpoint(TRUNCATE)') // the database whole in its one file, not half in its -wal
+    const done = await reset.backUp([...sources, { from: DATA_DIR, name: 'App data' }], dest)
+    setTimeout(resetNow, 1500) // the window says where the backup is first
+    return done
+  })
+  ipcMain.handle('reset:arm', () => { armedAt = Date.now(); return reset.WAIT_MS })
+  ipcMain.handle('reset:delete', () => {
+    if (!reset.mayDelete(armedAt)) throw new Error('Wait for the 10 seconds.')
+    return resetNow()
+  })
   ipcMain.handle('sync:setDevice', (_, id, changes) => sync.setDevice(id, changes ?? {}))
   ipcMain.handle('sync:setSelf', (_, changes) => sync.setSelf(changes ?? {}))
   ipcMain.handle('sync:completeSetup', (_, id) => sync.completeSetup(id))

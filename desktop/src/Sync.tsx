@@ -6,13 +6,14 @@ import { copiesColor } from './colors'
 import { Icon } from './Icon'
 import { Confirm, Modal } from './Dialogs'
 import { lang, t, tr } from './i18n'
+import { ClientPage, PairingKey } from './Role'
 
 const LOCALE = lang() === 'en' ? 'en-GB' : lang()
 const when = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 
 /** Pairing QR: the phone scans it in Tetra › Sync. It carries the address, the certificate fingerprint and a one-time code. */
 function PairingCode() {
-  const [pair, setPair] = useState<{ qr: string; payload: { hosts: string[]; port: number } } | null>(null)
+  const [pair, setPair] = useState<{ qr: string; payload: { hosts: string[]; port: number; key: string } } | null>(null)
   const [left, setLeft] = useState(600)
   const renew = () => { setPair(null); setLeft(600); window.drive.sync.pair().then(setPair) }
   useEffect(renew, [])
@@ -27,6 +28,7 @@ function PairingCode() {
       </ol>
       <p className="hint">{left ? t('sync.codeWorks', { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` }) : t('sync.codeExpired')}
         {pair && ' ' + t('sync.codeAddress', { hosts: pair.payload.hosts.join(', ') || t('sync.noNetwork'), port: pair.payload.port })}</p>
+      {pair && left > 0 && <PairingKey value={pair.payload.key} />}
     </div>
   )
 }
@@ -722,6 +724,13 @@ function DriveCard({ device, disk, onChange, setDialog }: { device: SyncDevice; 
 }
 
 export function SyncPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
+  const [client, setClient] = useState<boolean | null>(null)
+  useEffect(() => { window.drive.role.get().then(r => setClient(r.role === 'client')) }, [])
+  if (client === null) return null
+  return client ? <ClientPage /> : <ServerPage setDialog={setDialog} />
+}
+
+function ServerPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const load = () => window.drive.sync.status().then(setStatus)
   useEffect(() => { load(); const off = window.drive.sync.onReceived(load); const t = setInterval(load, 3000); return () => { off(); clearInterval(t) } }, [])

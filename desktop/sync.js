@@ -47,6 +47,16 @@ function fitName(name, max = 200) {
   while (base.length && Buffer.byteLength(base.join('') + ext) > max) base.pop()
   return base.join('').trimEnd() + ext
 }
+// The pairing code is a phrase a person can type on another computer (the user, 26 Oct): 16 of 32 letters and digits
+// that cannot be mistaken for one another (no I, O, 0, 1) — 80 bits, one use, 10 minutes. The QR carries the same code.
+const PHRASE = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+const newPhrase = () => [...crypto.randomBytes(16)].map(b => PHRASE[b & 31]).join('')
+const plainPhrase = s => String(s ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+const showPhrase = code => code.match(/.{1,4}/g).join('-')
+// A desktop client looks for the server by the phrase's hash; the server proves it knows the phrase by signing its own
+// fingerprint with it, so a stranger on the network can neither learn the phrase nor pass for the server (client.js).
+const pairAsk = code => sha(`tetra-pair:${plainPhrase(code)}`)
+const pairProof = (code, fp) => crypto.createHmac('sha256', plainPhrase(code)).update(fp).digest('hex')
 const safeName = n => typeof n === 'string' && n.length > 0 && n.length < 256 && !/[/\\\0]/.test(n) && n !== '.' && n !== '..'
 
 async function identity(dir) {
@@ -189,6 +199,11 @@ class SyncServer {
       if (msg.length > 256) return
       let ask
       try { ask = JSON.parse(msg.toString('utf8')) } catch { return }
+      if (ask?.v === 1 && typeof ask.pair === 'string') { // a desktop client with a phrase (client.js find)
+        const code = [...this.codes].find(([c, until]) => until > Date.now() && pairAsk(c) === ask.pair)?.[0]
+        if (code) beacon.send(Buffer.from(JSON.stringify({ v: 1, name: this.self().name, port: this.port, fp: this.fingerprint, proof: pairProof(code, this.fingerprint) })), from.port, from.address)
+        return
+      }
       if (ask?.v !== 1 || ask.fp !== this.fingerprint) return
       beacon.send(Buffer.from(JSON.stringify({ v: 1, name: os.hostname(), port: this.port })), from.port, from.address)
     })
@@ -203,11 +218,23 @@ class SyncServer {
     return new Promise(r => this.server ? this.server.close(r) : r())
   }
 
-  /** A fresh one-time code for the QR; valid 10 minutes or until used. */
+  /** A fresh one-time code for the QR, and as a phrase for another computer (`key`); valid 10 minutes or until used. */
   startPairing() {
-    const code = crypto.randomBytes(16).toString('base64url')
+    if (this.role() === 'client') throw new Error(t('sync.errClientPairs'))
+    const code = newPhrase()
     this.codes.set(code, Date.now() + PAIRING_MS)
-    return { v: 1, name: os.hostname(), hosts: lanAddresses(), port: this.port, fp: this.fingerprint, code }
+    return { v: 1, name: os.hostname(), hosts: lanAddresses(), port: this.port, fp: this.fingerprint, code, key: showPhrase(code) }
+  }
+
+  /** 'server', 'client', or null before the first start's question is answered (main.js; locked until a reset). */
+  role() { return this.setting('role') ?? null }
+
+  /** Chosen once: asking again for the same role is fine, another one waits for a reset (reset.js wipes this database). */
+  setRole(role) {
+    if (role !== 'server' && role !== 'client') throw new Error('Unknown role.')
+    const now = this.role()
+    if (now && now !== role) throw new Error(t('sync.errRoleLocked'))
+    this.db.prepare("INSERT OR REPLACE INTO settings(key, value) VALUES('role', ?)").run(role)
   }
 
   /**
@@ -708,6 +735,7 @@ class SyncServer {
    */
   /** Answers how many devices said yes (Calendar's Refresh). */
   async nudge() {
+    if (this.role() === 'client') return this.client ? (this.client.soon(), 1) : 0 // something changed here: to the server
     let asked = 0
     const devices = this.db.prepare('SELECT id, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL').all()
     await Promise.all(devices.map(async d => {
@@ -1225,7 +1253,7 @@ class SyncServer {
     const rows = hashes.flatMap(h => find.all(h))
     if (!rows.length) return 0
     const r = await library.trash(this.db, this.photosRoot, rows.map(x => x.id), this.trashItem)
-    const name = this.db.prepare('SELECT name FROM sync_devices WHERE id = ?').get(device.id)?.name
+    const name = this.db.prepare('SELECT name FROM sync_devices WHERE id = ?').get(device.id)?.name ?? device.name // a client's server is no row
     for (const x of rows) history.record(this.db, { action: 'trashed', kind: 'photo', name: x.path, sha256: x.sha256, size: x.size, device: device.id, detail: `trashed on ${name}` })
     this.hereAt = 0
     if (r.trashed) this.onReceived({ trashed: r.trashed })
@@ -1250,10 +1278,16 @@ class SyncServer {
 
   async handle(req, res) {
     const url = new URL(req.url, 'https://x')
+    // A client answers its server's "sync now" (nudge) and nothing else: phones pair with the server, not here.
+    if (this.role() === 'client') {
+      if (req.method === 'POST' && url.pathname === '/sync' && this.client?.isServer(req)) { this.client.soon(); return this.send(res, 200, { ok: true }) }
+      return this.send(res, 403, { error: 'This computer is a client of another Tetra server.' })
+    }
     if (req.method === 'POST' && url.pathname === '/pair') {
       const body = await this.json(req)
       for (const [c, until] of this.codes) if (Date.now() > until) this.codes.delete(c)
-      const code = typeof body.code === 'string' ? [...this.codes.keys()].find(c => c.length === body.code.length && crypto.timingSafeEqual(Buffer.from(c), Buffer.from(body.code))) : null
+      const asked = plainPhrase(body.code)
+      const code = asked ? [...this.codes.keys()].find(c => c.length === asked.length && crypto.timingSafeEqual(Buffer.from(c), Buffer.from(asked))) : null
       if (!code) {
         console.warn(`[sync] pairing refused from ${req.socket.remoteAddress}: ${this.codes.size ? 'unknown or expired code' : 'no code is being shown'}`)
         return this.send(res, 403, { error: 'Pairing code is not valid. Show a new QR code on the computer.' })
@@ -1264,7 +1298,7 @@ class SyncServer {
       const peerHosts = Array.isArray(body.hosts) ? body.hosts.filter(h => typeof h === 'string').slice(0, 8).join(',') : null
       // 600dp is where Android itself draws the line between a phone and a tablet, so nobody has to be asked.
       const width = Number(body.widthDp) || 0
-      const kind = width >= 600 ? 'tablet' : width > 0 ? 'device' : null
+      const kind = body.kind === 'computer' ? 'computer' : width >= 600 ? 'tablet' : width > 0 ? 'device' : null // a desktop client says so
       this.db.prepare(`INSERT INTO sync_devices(id, name, token_hash, paired_at, peer_fp, peer_hosts, peer_port, peer_token, kind)
         VALUES(?,?,?,?,?,?,?,?,?)`).run(id, String(body.name ?? 'Phone').slice(0, 80), sha(token), Date.now(),
         peerFp, peerHosts, Number(body.port) || null, typeof body.token === 'string' ? body.token.slice(0, 128) : null, kind)
@@ -1434,15 +1468,17 @@ class SyncServer {
     const sent = /^\/send\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'PUT' && sent) return this.send(res, 200, await this.receiveSent(req, device, sent[1], url.searchParams))
     if (req.method === 'POST' && url.pathname === '/metadata') return this.send(res, 200, this.applyMetadata(await this.json(req, 1 << 24)))
-    if (req.method === 'GET' && url.pathname === '/metadata') {
-      const since = Number(url.searchParams.get('since')) || 0
-      return this.send(res, 200, {
-        documents: this.documents.changedSince(since), ...library.metadataSince(this.db, since), ...this.people.changedSince(since),
-        files: this.files?.metadataSince(since) ?? [], fileRecents: this.files?.recentsAll() ?? [],
-        viewSettings: this.viewSettings(), systemFolders: this.files?.systemFolderRecords() ?? [],
-      })
-    }
+    if (req.method === 'GET' && url.pathname === '/metadata') return this.send(res, 200, this.metadata(Number(url.searchParams.get('since')) || 0))
     this.send(res, 404, { error: 'Unknown request.' })
+  }
+
+  /** What was made here since `since`, in the shape applyMetadata takes: a phone's pull, and a desktop client's push (client.js). */
+  metadata(since = 0) {
+    return {
+      documents: this.documents.changedSince(since), ...library.metadataSince(this.db, since), ...this.people.changedSince(since),
+      files: this.files?.metadataSince(since) ?? [], fileRecents: this.files?.recentsAll() ?? [],
+      viewSettings: this.viewSettings(), systemFolders: this.files?.systemFolderRecords() ?? [],
+    }
   }
 
   /**
@@ -1665,4 +1701,4 @@ class SyncServer {
   }
 }
 
-module.exports = { SyncServer, identity, lanAddresses, PORT, FROM_PHONE, fitName }
+module.exports = { SyncServer, identity, lanAddresses, broadcastAddresses, PORT, BEACON_PORT, FROM_PHONE, fitName, pairAsk, pairProof, plainPhrase, safeRel, safeName, isHash }

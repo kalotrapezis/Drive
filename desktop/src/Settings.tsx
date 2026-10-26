@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AppNotification } from './drive'
 import { Icon } from './Icon'
 import { locale, t } from './i18n'
+import { ResetCard } from './Role'
 
 // The foot of the sidebar (asked 2026-09-26): what Tetra said, kept — a notification goes by in seconds — and Settings.
 
@@ -70,6 +71,7 @@ export function SettingsPage() {
         </div>
         <p className="muted">{autoplay ? t('settings.motionAutoplayOn') : t('settings.motionAutoplayOff')}</p>
       </section>
+      <ResetCard />
     </div>
   )
 }
