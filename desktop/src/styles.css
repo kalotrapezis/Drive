@@ -1091,3 +1091,31 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .client-card h2, .client-card p { margin: 0; }
 .client-card .error { color: #e3685f; }
 .reset-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* The guide (Guide.tsx): a panel beside the page; its pictures are Tetra's own pieces, still, the spot to click ringed */
+.guide { width: 340px; flex: none; display: flex; flex-direction: column; gap: 10px; padding: 16px; min-height: 0; }
+.guide-head { display: flex; gap: 8px; align-items: center; }
+.guide-head .field { padding: 10px 14px; }
+.guide-body { flex: 1; overflow-y: auto; min-height: 0; }
+.guide-body h2 { font-size: 20px; margin: 4px 0 8px; }
+.guide-body p { margin: 0 0 16px; line-height: 1.5; }
+.guide-pic { pointer-events: none; border: 1px solid var(--island-2); border-radius: 20px; background: var(--bg); padding: 22px 16px; display: grid; place-items: center; overflow: hidden; }
+.guide-pic > * { max-width: 100%; }
+.guide-pic .selection-bar, .guide-pic .notes-island { position: static; translate: none; box-shadow: none; }
+.guide-pic .file-list { width: 100%; }
+.guide-pic .file-list .file { grid-template-columns: 44px 1fr 44px; }
+.guide-pic .guide-check { opacity: 1; }
+.guide-pic .settings-card { margin: 8px 0 0; padding: 14px 16px; width: 100%; }
+.guide-rail { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.guide-buttons { display: flex; gap: 8px; }
+.guide-buttons button { flex: 1; }
+.guide-mark { outline: 3px solid #ffb020; outline-offset: 3px; border-radius: 999px; animation: guide-pulse 1.3s ease-out infinite; }
+@media (prefers-color-scheme: light) { .guide-mark { outline-color: #b25e00; } }
+@keyframes guide-pulse { from { box-shadow: 0 0 0 0 #ffb020aa; } to { box-shadow: 0 0 0 14px #ffb02000; } }
+.guide-hub { display: flex; align-items: center; gap: 14px; color: var(--muted); }
+.guide-hub-server { color: var(--text); padding: 10px; border-radius: 50%; display: grid; }
+.guide-add { display: inline-flex; align-self: flex-start; padding: 10px 16px; margin: 8px 0 0 16px; }
+.guide-key { font-family: monospace; letter-spacing: .08em; }
+.guide-show { width: 100%; margin-top: 12px; }
+.guide-pic .selection-bar strong { white-space: nowrap; }
+.guide-pic .segmented { flex-wrap: wrap; }
+.guide-pic .segmented button { padding: 8px 12px; }
