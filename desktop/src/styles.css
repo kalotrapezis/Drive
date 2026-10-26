@@ -1123,3 +1123,20 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .guide-pic .selection-bar strong { white-space: nowrap; }
 .guide-pic .segmented { flex-wrap: wrap; }
 .guide-pic .segmented button { padding: 8px 12px; }
+
+/* The guide's flows: a file flying from one place to the next, over and over (Guide.tsx Flow) */
+.flow-wrap { display: grid; justify-items: center; gap: 4px; margin-top: 14px; width: 100%; }
+.flow { position: relative; width: 240px; height: 56px; display: flex; justify-content: space-between; align-items: center; }
+.flow-end { width: 52px; height: 52px; border-radius: 16px; background: var(--island-2); display: grid; place-items: center; z-index: 1; }
+.flow-token { position: absolute; left: 15px; top: -6px; z-index: 2; color: #ffb020; background: var(--island); border-radius: 8px; padding: 3px; display: grid; box-shadow: 0 1px 4px #0005; }
+@media (prefers-color-scheme: light) { .flow-token { color: #b25e00; } }
+.flow-fly { animation: flow-go 2.6s ease-in-out infinite; }
+.flow-stay { opacity: .9; }
+@keyframes flow-go { 0%, 12% { transform: translate(0, 0); opacity: 1; } 62% { transform: translate(188px, 0); opacity: 1; } 75%, 100% { transform: translate(188px, 0); opacity: 0; } }
+.flow-back .flow-fly { animation-name: flow-back; animation-duration: 3.6s; }
+@keyframes flow-back { 0%, 8% { transform: translate(0, 0); opacity: 1; } 38% { transform: translate(188px, 0) scale(.6); opacity: .2; } 55% { transform: translate(188px, 0) scale(.6); opacity: .2; } 88%, 100% { transform: translate(0, 0); opacity: 1; } }
+.flow-3 .flow-fly { animation-name: flow-half; animation-duration: 3.4s; }
+.flow-3 .flow-on { left: 109px; animation-name: flow-half2; }
+@keyframes flow-half { 0%, 8% { transform: translate(0, 0); opacity: 1; } 42% { transform: translate(94px, 0); opacity: 1; } 50%, 100% { transform: translate(94px, 0); opacity: 0; } }
+@keyframes flow-half2 { 0%, 46% { transform: translate(0, 0); opacity: 0; } 50% { opacity: 1; } 88% { transform: translate(94px, 0); opacity: 1; } 96%, 100% { transform: translate(94px, 0); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .flow-token { animation: none !important; } }

@@ -75,6 +75,25 @@ function FileRow({ icon, name, on, mark }: { icon: IconName; name: string; on?: 
 const Nav = ({ icon, label, mark }: { icon: IconName; label: string; mark?: boolean }) =>
   <div className={`nav-item ${mark ? 'guide-mark' : ''}`}><Icon name={icon} /><span>{label}</span></div>
 
+/**
+ * What a step does, played over and over (the user, 26 Oct: "if you throw files there they fly there, if you click copy
+ * there they go everywhere"): a file flies from one place to the next. [copy]: one stays behind; [back]: it goes and
+ * comes back (Trash, then Restore); three places: it reaches the middle one, then goes on from there to the last.
+ */
+function Flow({ places, copy, back, label }: { places: IconName[]; copy?: boolean; back?: boolean; label?: string }) {
+  return (
+    <div className="flow-wrap">
+      {label && <small className="muted">{label}</small>}
+      <div className={`flow flow-${places.length} ${back ? 'flow-back' : ''}`}>
+        {places.map((p, i) => <span key={i} className="flow-end"><Icon name={p} size={26} /></span>)}
+        {copy && <span className="flow-token flow-stay"><Icon name="file" size={18} /></span>}
+        <span className="flow-token flow-fly"><Icon name="file" size={18} /></span>
+        {places.length === 3 && <span className="flow-token flow-fly flow-on"><Icon name="file" size={18} /></span>}
+      </div>
+    </div>
+  )
+}
+
 function Picture({ pic }: { pic: Pic }) {
   switch (pic) {
     case 'welcome': return <div className="guide-rail">
@@ -96,6 +115,7 @@ function Picture({ pic }: { pic: Pic }) {
     case 'pair': return <div className="guide-rail">
       <Nav icon="refresh" label={t('app.devices')} mark />
       <span className="filled-button secondary guide-add"><Icon name="add" size={20} /></span>
+      <Flow places={['device', 'server', 'computer']} copy />
     </div>
     case 'client': return <div className="guide-rail">
       <span className="field guide-key">ABCD-EFGH-JKLM-NPQR</span>
@@ -105,21 +125,31 @@ function Picture({ pic }: { pic: Pic }) {
     case 'filesTick': return <div className="file-list">
       <FileRow icon="folderDocuments" name="Documents" /><FileRow icon="fileDoc" name="Report.docx" on mark="check" /><FileRow icon="fileSheet" name="Budget.xlsx" />
     </div>
-    case 'filesBar': return <div className="island selection-bar">
-      <span className="round flat"><Icon name="close" /></span><strong>{t('photos.selected', { count: 1 })}</strong>
-      <span className="round flat guide-mark"><Icon name="copy" /></span><span className="round flat guide-mark"><Icon name="moveTo" /></span>
+    case 'filesBar': return <div className="guide-rail">
+      <div className="island selection-bar">
+        <span className="round flat"><Icon name="close" /></span><strong>{t('photos.selected', { count: 1 })}</strong>
+        <span className="round flat guide-mark"><Icon name="copy" /></span><span className="round flat guide-mark"><Icon name="moveTo" /></span>
+      </div>
+      <Flow places={['folderDocuments', 'folder']} label={t('common.move')} />
+      <Flow places={['folderDocuments', 'folder']} copy label={t('common.copy')} />
     </div>
     case 'filesMore': return <div className="file-list"><FileRow icon="fileDoc" name="Report.docx" mark="more" /></div>
-    case 'filesSend': return <div className="island selection-bar">
-      <strong>{t('photos.selected', { count: 1 })}</strong>
-      <span className="round flat"><Icon name="copy" /></span><span className="round flat"><Icon name="moveTo" /></span>
-      <span className="round flat guide-mark"><Icon name="device" /></span>
+    case 'filesSend': return <div className="guide-rail">
+      <div className="island selection-bar">
+        <strong>{t('photos.selected', { count: 1 })}</strong>
+        <span className="round flat"><Icon name="copy" /></span><span className="round flat"><Icon name="moveTo" /></span>
+        <span className="round flat guide-mark"><Icon name="device" /></span>
+      </div>
+      <Flow places={['computer', 'device']} copy />
     </div>
-    case 'filesTrash': return <nav className="notes-island island">
-      <span className="island-item on"><Icon name="drive" size={20} /><span>{t('files.drive')}</span></span>
-      <span className="island-item"><Icon name="heart" size={20} /></span>
-      <span className="island-item guide-mark"><Icon name="trash" size={20} /><span>{t('photos.trash')}</span></span>
-    </nav>
+    case 'filesTrash': return <div className="guide-rail">
+      <nav className="notes-island island">
+        <span className="island-item on"><Icon name="drive" size={20} /><span>{t('files.drive')}</span></span>
+        <span className="island-item"><Icon name="heart" size={20} /></span>
+        <span className="island-item guide-mark"><Icon name="trash" size={20} /><span>{t('photos.trash')}</span></span>
+      </nav>
+      <Flow places={['drive', 'trash']} back label={`${t('photos.trash')} · ${t('common.restore')}`} />
+    </div>
     case 'settingsLook': return <div className="settings-card island">
       <h3>{t('settings.appearance')}</h3>
       <div className="segmented guide-mark"><button tabIndex={-1} className="on">{t('settings.themeAuto')}</button><button tabIndex={-1}>{t('settings.themeLight')}</button><button tabIndex={-1}>{t('settings.themeDark')}</button></div>
