@@ -1661,9 +1661,9 @@
  "role.welcome": "Tere tulemast Tetrasse",
  "role.question": "Mis see arvuti on?",
  "role.server": "Server",
- "role.serverHint": "Telefonid, tahvelarvutid ja teised arvutid sünkroonivad sellega. Valige see arvuti jaoks, mis on enamasti sisse lülitatud.",
- "role.client": "Minu serveri klient",
- "role.clientHint": "See arvuti sünkroonib teise arvutiga, milles Tetra töötab serverina. Vajate võtit, mida see kuvab.",
+ "role.serverHint": "Teie kodu peamine arvuti.\nHoidke see enamasti sees ja valige see, kus on kõige rohkem ruumi.\nSee hoiab kõiki teie fotosid ja faile ning nende varukoopiaid: teie oma „pilv“ kodus.\nTeie telefon, tahvelarvuti ja teised arvutid saavad kõik sellelt.",
+ "role.client": "Klient",
+ "role.clientHint": "Teie teine arvuti, näiteks sülearvuti.\nSee ühendub serveriga võtme abil.\nSee saab serverist kõik ja saadab tagasi selle, mida te sellel loote.",
  "role.locked": "See valik jääb. Selle hilisem muutmine nõuab Tetra lähtestamist (Seaded › Server või klient).",
  "role.keyHow": "Avage serveris Seadmed › Lisa seade ja tippige või kleepige allpool kuvatud võti. Mõlemad arvutid peavad olema samas võrgus.",
  "role.connect": "Ühenda",
@@ -1742,5 +1742,6 @@
  "guide.filesTrashTitle": "Prügikast",
  "guide.filesTrashBody": "Kustutatu läheb kõigepealt prügikasti. Klõpsake alumisel ribal nuppu Prügikast, märkige, mida tagasi soovite, ja klõpsake nuppu Taasta.",
  "guide.lookTitle": "Keel ja välimus",
- "guide.lookBody": "Klõpsake külgriba allosas valikut Seaded: Välimus valib heleda või tumeda teema ja Keel keele, mida Tetra räägib."
+ "guide.lookBody": "Klõpsake külgriba allosas valikut Seaded: Välimus valib heleda või tumeda teema ja Keel keele, mida Tetra räägib.",
+ "role.lossWarning": "Valige hoolikalt: kui seda hiljem muudate, võivad andmed kaduma minna."
 }

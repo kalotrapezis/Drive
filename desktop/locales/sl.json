@@ -1835,9 +1835,9 @@
  "role.welcome": "Dobrodošli v aplikaciji Tetra",
  "role.question": "Kaj je ta računalnik?",
  "role.server": "Strežnik",
- "role.serverHint": "Telefoni, tablični računalniki in drugi računalniki se sinhronizirajo z njim. To izberite za računalnik, ki je večino časa vklopljen.",
- "role.client": "Odjemalec mojega strežnika",
- "role.clientHint": "Ta računalnik se sinhronizira z drugim računalnikom, na katerem Tetra deluje kot strežnik. Potrebujete ključ, ki ga ta prikaže.",
+ "role.serverHint": "Glavni računalnik v vašem domu.\nNaj bo večino časa prižgan; izberite tistega z največ prostora.\nHrani vse vaše fotografije in datoteke ter njihove varnostne kopije: vaš lasten »oblak« doma.\nVaš telefon, tablični računalnik in drugi računalniki dobijo vse od njega.",
+ "role.client": "Odjemalec",
+ "role.clientHint": "Drug vaš računalnik, na primer prenosnik.\nS strežnikom se poveže s ključem.\nOd strežnika dobi vse in mu pošlje nazaj, kar ustvarite na njem.",
  "role.locked": "Ta izbira ostane. Če jo želite pozneje spremeniti, morate Tetro ponastaviti (Nastavitve › Strežnik ali odjemalec).",
  "role.keyHow": "Na strežniku odprite Naprave › Dodaj napravo in spodaj vnesite ali prilepite ključ, ki se tam prikaže. Oba računalnika morata biti v istem omrežju.",
  "role.connect": "Poveži",
@@ -1916,5 +1916,6 @@
  "guide.filesTrashTitle": "Koš",
  "guide.filesTrashBody": "Kar izbrišete, gre najprej v Koš. V vrstici spodaj kliknite Koš, označite, kar želite vrniti, in kliknite Obnovi.",
  "guide.lookTitle": "Jezik in videz",
- "guide.lookBody": "Kliknite Nastavitve na dnu stranske vrstice: Videz izbere svetli ali temni način, Jezik pa jezik, v katerem govori Tetra."
+ "guide.lookBody": "Kliknite Nastavitve na dnu stranske vrstice: Videz izbere svetli ali temni način, Jezik pa jezik, v katerem govori Tetra.",
+ "role.lossWarning": "Izberite previdno: če to pozneje spremenite, lahko izgubite podatke."
 }

@@ -1747,9 +1747,9 @@
  "role.welcome": "Dobro došli u Tetru",
  "role.question": "Što je ovo računalo?",
  "role.server": "Poslužitelj",
- "role.serverHint": "Telefoni, tableti i druga računala sinkroniziraju se s njim. Odaberite ovo za računalo koje je većinu vremena uključeno.",
- "role.client": "Klijent mojeg poslužitelja",
- "role.clientHint": "Ovo se računalo sinkronizira s drugim računalom na kojem Tetra radi kao poslužitelj. Potreban vam je ključ koji ono prikazuje.",
+ "role.serverHint": "Glavno računalo u vašem domu.\nNeka većinu vremena bude uključeno, a odaberite ono s najviše prostora.\nČuva sve vaše fotografije i datoteke te njihove sigurnosne kopije: vaš vlastiti „oblak” kod kuće.\nVaš telefon, tablet i druga računala sve dobivaju od njega.",
+ "role.client": "Klijent",
+ "role.clientHint": "Drugo vaše računalo, na primjer prijenosno.\nNa poslužitelj se spaja pomoću ključa.\nOd poslužitelja dobiva sve i vraća mu ono što na njemu izradite.",
  "role.locked": "Ovaj izbor ostaje. Kasnija promjena zahtijeva resetiranje Tetre (Postavke › Poslužitelj ili klijent).",
  "role.keyHow": "Na poslužitelju otvorite Uređaji › Dodaj uređaj i ključ koji se ondje prikaže upišite ili zalijepite ispod. Oba računala moraju biti na istoj mreži.",
  "role.connect": "Poveži",
@@ -1828,5 +1828,6 @@
  "guide.filesTrashTitle": "Otpad",
  "guide.filesTrashBody": "Ono što izbrišete prvo ide u Otpad. Kliknite Otpad na traci pri dnu, označite što želite vratiti i kliknite Vrati.",
  "guide.lookTitle": "Jezik i izgled",
- "guide.lookBody": "Kliknite Postavke pri dnu bočne trake: Izgled odabire svijetli ili tamni način, a Jezik jezik kojim Tetra govori."
+ "guide.lookBody": "Kliknite Postavke pri dnu bočne trake: Izgled odabire svijetli ili tamni način, a Jezik jezik kojim Tetra govori.",
+ "role.lossWarning": "Pažljivo odaberite: kasnija promjena može dovesti do gubitka podataka."
 }

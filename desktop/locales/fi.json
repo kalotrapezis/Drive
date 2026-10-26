@@ -1661,9 +1661,9 @@
  "role.welcome": "Tervetuloa Tetraan",
  "role.question": "Mikä tämä tietokone on?",
  "role.server": "Palvelin",
- "role.serverHint": "Puhelimet, tabletit ja muut tietokoneet synkronoivat sen kanssa. Valitse tämä tietokoneelle, joka on päällä suurimman osan ajasta.",
- "role.client": "Palvelimeni asiakas",
- "role.clientHint": "Tämä tietokone synkronoi toisen tietokoneen kanssa, jossa Tetra toimii palvelimena. Tarvitset avaimen, jonka se näyttää.",
+ "role.serverHint": "Kotisi pääasiallinen tietokone.\nPidä se päällä melkein aina ja valitse se, jossa on eniten tilaa.\nSe säilyttää kaikki kuvasi ja tiedostosi sekä niiden varmuuskopiot: oma ”pilvesi” kotona.\nPuhelimesi, tablettisi ja muut tietokoneesi saavat kaiken siltä.",
+ "role.client": "Asiakas",
+ "role.clientHint": "Toinen tietokoneesi, esimerkiksi kannettava.\nSe yhdistyy palvelimeen avaimella.\nSe saa kaiken palvelimelta ja lähettää takaisin sen, mitä teet sillä.",
  "role.locked": "Tämä valinta on pysyvä. Sen muuttaminen myöhemmin vaatii Tetran nollaamisen (Asetukset › Palvelin vai asiakas).",
  "role.keyHow": "Avaa palvelimella Laitteet › Lisää laite ja kirjoita tai liitä alle siellä näkyvä avain. Molempien tietokoneiden on oltava samassa verkossa.",
  "role.connect": "Yhdistä",
@@ -1742,5 +1742,6 @@
  "guide.filesTrashTitle": "Roskakori",
  "guide.filesTrashBody": "Poistamasi asiat menevät ensin roskakoriin. Napsauta alapalkista Roskakori, valitse, mitä haluat takaisin, ja napsauta Palauta.",
  "guide.lookTitle": "Kieli ja ulkoasu",
- "guide.lookBody": "Napsauta sivupalkin alareunasta Asetukset: Ulkoasu valitsee vaalean tai tumman teeman ja Kieli kielen, jota Tetra puhuu."
+ "guide.lookBody": "Napsauta sivupalkin alareunasta Asetukset: Ulkoasu valitsee vaalean tai tumman teeman ja Kieli kielen, jota Tetra puhuu.",
+ "role.lossWarning": "Valitse huolella: jos muutat tätä myöhemmin, tietoja voi kadota."
 }

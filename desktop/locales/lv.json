@@ -1748,9 +1748,9 @@
  "role.welcome": "Laipni lūdzam Tetra",
  "role.question": "Kas ir šis dators?",
  "role.server": "Serveris",
- "role.serverHint": "Tālruņi, planšetdatori un citi datori sinhronizējas ar to. Izvēlieties šo datoram, kas lielāko daļu laika ir ieslēgts.",
- "role.client": "Mana servera klients",
- "role.clientHint": "Šis dators sinhronizējas ar citu datoru, kurā Tetra darbojas kā serveris. Jums būs nepieciešama atslēga, ko tas parāda.",
+ "role.serverHint": "Galvenais dators jūsu mājās.\nTuriet to ieslēgtu lielāko daļu laika un izvēlieties to, kurā ir visvairāk vietas.\nTas glabā visus jūsu fotoattēlus un failus, kā arī to dublējumkopijas: jūsu pašu „mākonis” mājās.\nJūsu tālrunis, planšetdators un citi datori visu saņem no tā.",
+ "role.client": "Klients",
+ "role.clientHint": "Cits jūsu dators, piemēram, klēpjdators.\nTas savienojas ar serveri, izmantojot atslēgu.\nTas visu saņem no servera un nosūta atpakaļ to, ko tajā izveidojat.",
  "role.locked": "Šī izvēle paliek. Lai to vēlāk mainītu, Tetra ir jāatiestata (Iestatījumi › Serveris vai klients).",
  "role.keyHow": "Serverī atveriet Ierīces › Pievienot ierīci un ierakstiet vai ielīmējiet zemāk redzamo atslēgu. Abiem datoriem jābūt vienā tīklā.",
  "role.connect": "Savienot",
@@ -1829,5 +1829,6 @@
  "guide.filesTrashTitle": "Miskaste",
  "guide.filesTrashBody": "Tas, ko izdzēšat, vispirms nonāk miskastē. Apakšējā joslā noklikšķiniet uz „Miskaste”, atzīmējiet, ko vēlaties atgūt, un noklikšķiniet uz „Atjaunot”.",
  "guide.lookTitle": "Valoda un izskats",
- "guide.lookBody": "Sānjoslas apakšā noklikšķiniet uz „Iestatījumi”: „Izskats” izvēlas gaišo vai tumšo režīmu, bet „Valoda” – valodu, kurā runā Tetra."
+ "guide.lookBody": "Sānjoslas apakšā noklikšķiniet uz „Iestatījumi”: „Izskats” izvēlas gaišo vai tumšo režīmu, bet „Valoda” – valodu, kurā runā Tetra.",
+ "role.lossWarning": "Izvēlieties uzmanīgi: ja vēlāk to mainīsiet, var pazust dati."
 }

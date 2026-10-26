@@ -1835,9 +1835,9 @@
  "role.welcome": "Sveiki atvykę į Tetra",
  "role.question": "Kas yra šis kompiuteris?",
  "role.server": "Serveris",
- "role.serverHint": "Su juo sinchronizuojami telefonai, planšetės ir kiti kompiuteriai. Pasirinkite tai kompiuteriui, kuris dažniausiai būna įjungtas.",
- "role.client": "Mano serverio klientas",
- "role.clientHint": "Šis kompiuteris sinchronizuojamas su kitu kompiuteriu, kuriame Tetra veikia kaip serveris. Jums reikės jo rodomo rakto.",
+ "role.serverHint": "Pagrindinis jūsų namų kompiuteris.\nLaikykite jį įjungtą beveik visada ir pasirinkite tą, kuriame daugiausia vietos.\nJis saugo visas jūsų nuotraukas ir failus bei jų atsargines kopijas: jūsų pačių „debesis“ namuose.\nJūsų telefonas, planšetė ir kiti kompiuteriai viską gauna iš jo.",
+ "role.client": "Klientas",
+ "role.clientHint": "Kitas jūsų kompiuteris, pavyzdžiui, nešiojamasis.\nJis prisijungia prie serverio su raktu.\nJis viską gauna iš serverio ir siunčia atgal tai, ką jame sukuriate.",
  "role.locked": "Šis pasirinkimas lieka. Norint jį vėliau pakeisti, reikia nustatyti Tetra iš naujo (Nustatymai › Serveris ar klientas).",
  "role.keyHow": "Serveryje atidarykite Įrenginiai › Pridėti įrenginį ir įveskite arba įklijuokite toliau rodomą raktą. Abu kompiuteriai turi būti tame pačiame tinkle.",
  "role.connect": "Prisijungti",
@@ -1916,5 +1916,6 @@
  "guide.filesTrashTitle": "Šiukšlinė",
  "guide.filesTrashBody": "Tai, ką ištrinate, pirmiausia patenka į šiukšlinę. Apatinėje juostoje spustelėkite „Šiukšlinė“, pažymėkite, ką norite grąžinti, ir spustelėkite „Atkurti“.",
  "guide.lookTitle": "Kalba ir išvaizda",
- "guide.lookBody": "Šoninės juostos apačioje spustelėkite „Nustatymai“: „Išvaizda“ parenka šviesų ar tamsų režimą, o „Kalba“ – kalbą, kuria kalba Tetra."
+ "guide.lookBody": "Šoninės juostos apačioje spustelėkite „Nustatymai“: „Išvaizda“ parenka šviesų ar tamsų režimą, o „Kalba“ – kalbą, kuria kalba Tetra.",
+ "role.lossWarning": "Rinkitės atidžiai: vėliau tai pakeitus galima prarasti duomenis."
 }

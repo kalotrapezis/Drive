@@ -1747,10 +1747,10 @@
  "calls.agreed": "Hanno detto sì — registra",
  "role.welcome": "Benvenuto in Tetra",
  "role.question": "Che ruolo ha questo computer?",
- "role.server": "Il server",
- "role.serverHint": "Telefoni, tablet e altri computer si sincronizzano con esso. Sceglilo per il computer che resta acceso per la maggior parte del tempo.",
- "role.client": "Un client del mio server",
- "role.clientHint": "Questo computer si sincronizza con un altro computer che esegue Tetra come server. Ti serve la chiave che mostra.",
+ "role.server": "Server",
+ "role.serverHint": "Il computer principale di casa tua.\nTienilo acceso quasi sempre e scegli quello con più spazio.\nConserva tutte le tue foto e i tuoi file, e i loro backup: il tuo «cloud» personale, a casa.\nIl tuo telefono, il tablet e gli altri computer ricevono tutto da lui.",
+ "role.client": "Client",
+ "role.clientHint": "Un altro tuo computer, come un portatile.\nSi collega al server con una chiave.\nRiceve tutto dal server e gli rimanda quello che ci crei sopra.",
  "role.locked": "Questa scelta resta. Per cambiarla in seguito serve una reimpostazione di Tetra (Impostazioni › Server o client).",
  "role.keyHow": "Sul server apri Dispositivi › Aggiungi un dispositivo e digita o incolla qui sotto la chiave che mostra. Entrambi i computer devono essere sulla stessa rete.",
  "role.connect": "Connetti",
@@ -1829,5 +1829,6 @@
  "guide.filesTrashTitle": "Cestino",
  "guide.filesTrashBody": "Ciò che elimini va prima nel Cestino. Fai clic su Cestino nella barra in basso, spunta ciò che vuoi recuperare e fai clic su Ripristina.",
  "guide.lookTitle": "Lingua e aspetto",
- "guide.lookBody": "Fai clic su Impostazioni in fondo alla barra laterale: Aspetto sceglie chiaro o scuro, e Lingua la lingua che parla Tetra."
+ "guide.lookBody": "Fai clic su Impostazioni in fondo alla barra laterale: Aspetto sceglie chiaro o scuro, e Lingua la lingua che parla Tetra.",
+ "role.lossWarning": "Scegli con attenzione: cambiarlo in seguito può far perdere dati."
 }

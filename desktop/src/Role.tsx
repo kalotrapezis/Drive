@@ -9,6 +9,8 @@ import { lang, t } from './i18n'
 
 const when = new Intl.DateTimeFormat(lang() === 'en' ? 'en-GB' : lang(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 const keyLength = (key: string) => key.replace(/[^a-z0-9]/gi, '').length
+/** One short idea per line (the user: written for a child, step by step); "\n" in the text starts the next. */
+const lines = (text: string) => text.split('\n').map((line, i) => <span key={i}>{line}</span>)
 
 /** The first start's question (main.tsx shows it before the app while this computer has no role). */
 export function FirstStart({ onDone }: { onDone: (role: string) => void }) {
@@ -31,12 +33,13 @@ export function FirstStart({ onDone }: { onDone: (role: string) => void }) {
           <p>{t('role.question')}</p>
           <div className="role-choices">
             <button className="role-choice" onClick={server}>
-              <Icon name="server" size={36} /><strong>{t('role.server')}</strong><span>{t('role.serverHint')}</span>
+              <Icon name="server" size={36} /><strong>{t('role.server')}</strong>{lines(t('role.serverHint'))}
             </button>
             <button className="role-choice" onClick={() => setJoining(true)}>
-              <Icon name="computer" size={36} /><strong>{t('role.client')}</strong><span>{t('role.clientHint')}</span>
+              <Icon name="computer" size={36} /><strong>{t('role.client')}</strong>{lines(t('role.clientHint'))}
             </button>
           </div>
+          <p className="role-warning"><Icon name="warning" size={20} />{t('role.lossWarning')}</p>
           <p className="muted">{t('role.locked')}</p>
         </> : (
           <form onSubmit={join}>
@@ -116,6 +119,9 @@ export function ResetCard() {
     <section className="settings-card island">
       <h3><Icon name={role?.role === 'client' ? 'computer' : 'server'} size={20} />{t('reset.title')}</h3>
       <p><strong>{role?.role === 'client' ? t('reset.isClient', { name: role.server?.name ?? '' }) : t('reset.isServer')}</strong></p>
+      {/* what that means, in the first start's words */}
+      <p className="role-lines">{lines(role?.role === 'client' ? t('role.clientHint') : t('role.serverHint'))}</p>
+      <p className="role-warning"><Icon name="warning" size={20} />{t('role.lossWarning')}</p>
       <p className="muted">{t('reset.why')}</p>
       <div className="reset-actions">
         <button className="filled-button secondary" onClick={backUp}>{t('reset.backUpAndReset')}</button>

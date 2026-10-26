@@ -1835,9 +1835,9 @@
  "role.welcome": "Witamy w aplikacji Tetra",
  "role.question": "Czym jest ten komputer?",
  "role.server": "Serwer",
- "role.serverHint": "Telefony, tablety i inne komputery synchronizują się z nim. Wybierz to dla komputera, który jest włączony przez większość czasu.",
- "role.client": "Klient mojego serwera",
- "role.clientHint": "Ten komputer synchronizuje się z innym komputerem, na którym Tetra działa jako serwer. Potrzebny jest klucz, który on wyświetla.",
+ "role.serverHint": "Główny komputer w Twoim domu.\nZostawiaj go prawie zawsze włączonego i wybierz ten, który ma najwięcej miejsca.\nPrzechowuje wszystkie Twoje zdjęcia i pliki oraz ich kopie zapasowe: Twoja własna „chmura” w domu.\nTwój telefon, tablet i inne komputery dostają z niego wszystko.",
+ "role.client": "Klient",
+ "role.clientHint": "Inny Twój komputer, na przykład laptop.\nŁączy się z serwerem za pomocą klucza.\nDostaje wszystko z serwera i odsyła to, co na nim tworzysz.",
  "role.locked": "Ten wybór pozostaje. Późniejsza zmiana wymaga zresetowania Tetry (Ustawienia › Serwer czy klient).",
  "role.keyHow": "Na serwerze otwórz Urządzenia › Dodaj urządzenie i wpisz lub wklej poniżej klucz, który tam się wyświetla. Oba komputery muszą być w tej samej sieci.",
  "role.connect": "Połącz",
@@ -1916,5 +1916,6 @@
  "guide.filesTrashTitle": "Kosz",
  "guide.filesTrashBody": "To, co usuniesz, najpierw trafia do Kosza. Kliknij Kosz na pasku na dole, zaznacz, co chcesz odzyskać, i kliknij Przywróć.",
  "guide.lookTitle": "Język i wygląd",
- "guide.lookBody": "Kliknij Ustawienia na dole paska bocznego: Wygląd wybiera tryb jasny lub ciemny, a Język — język, którym mówi Tetra."
+ "guide.lookBody": "Kliknij Ustawienia na dole paska bocznego: Wygląd wybiera tryb jasny lub ciemny, a Język — język, którym mówi Tetra.",
+ "role.lossWarning": "Wybierz uważnie: zmiana tego później może spowodować utratę danych."
 }
