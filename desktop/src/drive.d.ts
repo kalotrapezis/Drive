@@ -231,7 +231,7 @@ declare global {
         onProgress(cb: (p: { done: number; total: number; imported: number; skipped: number }) => void): () => void
       }
       i18n: import('./i18n').Words
-      languages(): Promise<{ choice: string; languages: string[] }>
+      languages(): Promise<{ choice: string; system: string; languages: string[] }>
       setLanguage(choice: string): Promise<void>
       theme(): Promise<'system' | 'light' | 'dark'>
       setTheme(t: 'system' | 'light' | 'dark'): Promise<void>

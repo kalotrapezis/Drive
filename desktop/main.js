@@ -795,7 +795,7 @@ app.whenReady().then(() => {
   // Language: System default (the system's, English when Tetra has no file for it) or one of locales/*.json. The window
   // reloads to show it; the tray and what main says change at once.
   ipcMain.on('i18n:words', e => { e.returnValue = i18n.current() })
-  ipcMain.handle('settings:languages', () => ({ choice: i18n.current().choice, languages: i18n.languages() }))
+  ipcMain.handle('settings:languages', () => ({ choice: i18n.current().choice, system: i18n.resolve('system', [app.getLocale()]), languages: i18n.languages() }))
   ipcMain.handle('settings:setLanguage', (_, choice) => {
     if (choice !== 'system' && !i18n.languages().includes(choice)) return
     setSetting('language', choice); i18n.use(choice, [app.getLocale()]); updateTray()

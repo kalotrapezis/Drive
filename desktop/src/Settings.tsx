@@ -80,7 +80,7 @@ export function SettingsPage() {
  * comes back here.
  */
 function LanguageCard() {
-  const [now, setNow] = useState<{ choice: string; languages: string[] } | null>(null)
+  const [now, setNow] = useState<{ choice: string; system: string; languages: string[] } | null>(null)
   useEffect(() => { window.drive.languages().then(setNow) }, [])
   const own = (tag: string) => { const n = new Intl.DisplayNames([tag], { type: 'language' }).of(tag) ?? tag; return n.charAt(0).toLocaleUpperCase(tag) + n.slice(1) }
   const pick = async (choice: string) => {
@@ -94,7 +94,7 @@ function LanguageCard() {
       <h3>{t('settings.language')}</h3>
       {/* a list, not buttons: every EU language is too many for one row */}
       {now && <select className="field" value={now.choice} onChange={e => pick(e.target.value)}>
-        {['system', ...now.languages].map(id => <option key={id} value={id}>{id === 'system' ? t('settings.languageSystem') : own(id)}</option>)}
+        {['system', ...now.languages].map(id => <option key={id} value={id}>{id === 'system' ? `${t('settings.languageSystem')} (${own(now.system)})` : own(id)}</option>)}
       </select>}
       <p className="muted">{t('settings.languageNote')}</p>
     </section>
