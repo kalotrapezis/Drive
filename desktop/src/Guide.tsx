@@ -108,9 +108,10 @@ function Picture({ pic }: { pic: Pic }) {
     case 'role': return <div className="guide-role">
       <p>{t('role.question')}</p>
       <div className="role-choices">
-        <div className="role-choice guide-mark"><Icon name="server" size={28} /><strong>{t('role.server')}</strong><span>{t('role.serverHint')}</span></div>
-        <div className="role-choice"><Icon name="computer" size={28} /><strong>{t('role.client')}</strong></div>
+        {([['server', 'role.server', 'role.serverHint'], ['computer', 'role.client', 'role.clientHint']] as const).map(([icon, name, hint], i) =>
+          <div key={name} className={`role-choice ${i === 0 ? 'guide-mark' : ''}`}><Icon name={icon} size={28} /><strong>{t(name)}</strong>{t(hint).split('\n').map((l, j) => <span key={j}>{l}</span>)}</div>)}
       </div>
+      <p className="role-warning"><Icon name="warning" size={18} />{t('role.lossWarning')}</p>
     </div>
     case 'pair': return <div className="guide-rail">
       <Nav icon="refresh" label={t('app.devices')} mark />

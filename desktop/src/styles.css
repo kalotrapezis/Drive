@@ -1143,3 +1143,4 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .role-warning { display: flex; align-items: center; gap: 8px; color: #ff7a6b; font-weight: 600; }
 @media (prefers-color-scheme: light) { .role-warning { color: #b3261e; } }
 .role-lines { display: grid; gap: 6px; }
+.guide-role .role-warning { margin: 12px 0 0; font-size: 13px; }
