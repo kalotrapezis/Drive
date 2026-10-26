@@ -31,7 +31,7 @@ export function NotificationsPage() {
   )
 }
 
-export function SettingsPage() {
+export function SettingsPage({ onGuide }: { onGuide: () => void }) {
   const [theme, setTheme] = useState<'system' | 'light' | 'dark' | null>(null)
   useEffect(() => { window.drive.theme().then(setTheme) }, [])
   const pick = (t: 'system' | 'light' | 'dark') => { setTheme(t); window.drive.setTheme(t) }
@@ -44,6 +44,11 @@ export function SettingsPage() {
   return (
     <div className="page-scroll">
       <header className="page-head"><h1>{t('app.settings')}</h1></header>
+      <section className="settings-card island">
+        <h3><Icon name="info" size={20} />{t('guide.title')}</h3>
+        <p className="muted">{t('guide.note')}</p>
+        <button className="filled-button secondary" onClick={onGuide}>{t('guide.open')}</button>
+      </section>
       <section className="settings-card island">
         <h3>{t('settings.appearance')}</h3>
         <div className="segmented">

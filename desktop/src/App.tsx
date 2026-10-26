@@ -22,6 +22,7 @@ import { PhonePage } from './Phone'
 import { DataPage } from './Data'
 import { NotificationsPage, SettingsPage } from './Settings'
 import { ImportDialog } from './Import'
+import { GuidePanel, guideFirstTime, type GuideGo } from './Guide'
 import { shownName } from './People'
 import { t, tr } from './i18n'
 
@@ -67,6 +68,7 @@ export function App() {
   const [vault, setVault] = useState<VaultStatus | null>(null)
   const [editing, setEditing] = useState<{ item: Media; hide?: Hide } | null>(null)
   const [unread, setUnread] = useState(0)
+  const [guide, setGuide] = useState(guideFirstTime) // the guide's panel beside the page: the first time, and from Settings › Guide
   useEffect(() => { const t = setTimeout(preloadContacts, 1500); return () => clearTimeout(t) }, []) // Contacts read ahead, so the page opens full (24 Oct)
   useEffect(() => {
     const count = () => window.drive.notifications.list().then(l => setUnread(l.filter(n => !n.read).length))
@@ -303,7 +305,7 @@ export function App() {
   else if (page.kind === 'data') content = <DataPage />
   else if (page.kind === 'contacts') content = <ContactsPage setDialog={setDialog} say={say} openPerson={(id, name) => setPage({ kind: 'person', id, name })} />
   else if (page.kind === 'notifications') content = <NotificationsPage />
-  else if (page.kind === 'settings') content = <SettingsPage />
+  else if (page.kind === 'settings') content = <SettingsPage onGuide={() => setGuide(true)} />
   else if (page.kind === 'photoTrash') content = <TrashPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (page.kind === 'hidden') content = <HiddenPage onBack={() => setPage({ kind: 'collections' })} setDialog={setDialog} say={say} onChanged={reload} />
   else if (loading) content = <div className="empty">{t('common.loading')}</div>
@@ -445,6 +447,7 @@ export function App() {
           </div>
         )}
       </main>
+      {guide && <GuidePanel onClose={() => setGuide(false)} go={(to: GuideGo) => setPage(to === 'files' ? { kind: 'files', mode: 'browse', folder: '' } : { kind: to === 'sync' ? 'sync' : 'settings' })} />}
       {open !== null && items[open] && (
         <Viewer media={scoped ? scoped.map(i => items[i]) : items} index={scoped ? Math.max(0, scoped.indexOf(open)) : open}
           setIndex={i => setOpen(scoped ? scoped[i] : i)} onClose={() => { setOpen(null); setScope(null) }} people={names[items[open].sha256] ?? []}
