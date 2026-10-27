@@ -3,7 +3,8 @@
 Geofabrik's OSM extract of Greece, one line each:
 
     kind <TAB> lat <TAB> lng <TAB> name <TAB> name:en <TAB> more (address, or brand) <TAB> opening_hours <TAB> phone
-         <TAB> website <TAB> wheelchair (yes, limited, no or empty)
+         <TAB> website <TAB> wheelchair (yes, limited, no or empty) <TAB> (a note, empty here) <TAB> its other names
+         ("el=Νευροκόπι|de=…", Tetra's languages where OSM has a name that differs from its own)
 
 for the place's info page offline (the user, 21 Oct: "If I click touch on a place there is no info page for that?").
 
@@ -52,6 +53,9 @@ KINDS = {
     "toll": lambda t: t.get("barrier") == "toll_booth",
 }
 PLACES = {"city", "town", "village", "suburb", "neighbourhood", "hamlet", "island", "islet", "locality"}
+# Tetra's languages besides English (name:en has its own column): a place's name in each, where OSM has one, so a Greek phone
+# finds Гоце Делчев as Νευροκόπι and shows it under the local name (the user, 27 Oct: "the Greek names, Άνω Νευροκόπι")
+LANGS = "bg cs da de el es et fi fr ga hr hu it lt lv mt nl pl pt ro sk sl sv".split()
 
 
 ROADS = {"primary", "secondary", "tertiary", "unclassified", "residential", "living_street", "pedestrian", "service", "trunk"}
@@ -68,6 +72,12 @@ def kind(tags):
 
 def clean(s):
     return (s or "").replace("\t", " ").replace("\n", " ").strip()
+
+
+def names(tags):
+    """ "el=Νευροκόπι|de=…": the place's other names, those that differ from its own."""
+    own = tags.get("name")
+    return "|".join(f"{l}={clean(tags[f'name:{l}']).replace('|', ' ')}" for l in LANGS if tags.get(f"name:{l}") and tags.get(f"name:{l}") != own)
 
 
 class Handler(osmium.SimpleHandler):
@@ -95,7 +105,7 @@ class Handler(osmium.SimpleHandler):
         phone = tags.get("phone") or tags.get("contact:phone")
         site = tags.get("website") or tags.get("contact:website")
         self.out.write(f"{k}\t{lat:.6f}\t{lng:.6f}\t{clean(tags.get('name'))}\t{clean(tags.get('name:en'))}\t{clean(more)}"
-                       f"\t{clean(tags.get('opening_hours'))}\t{clean(phone)}\t{clean(site)}\t{clean(tags.get('wheelchair'))}\n")
+                       f"\t{clean(tags.get('opening_hours'))}\t{clean(phone)}\t{clean(site)}\t{clean(tags.get('wheelchair'))}\t\t{names(tags)}\n")
         self.count += 1
 
     def node(self, n):

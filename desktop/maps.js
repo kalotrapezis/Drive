@@ -47,15 +47,16 @@ function metres(lat1, lng1, lat2, lng2) {
   return 2 * 6_371_000 * Math.asin(Math.sqrt(a))
 }
 
-/** A search list's line (MapsSearch.parse): kind, lat, lng, name, English name, more, hours, phone, web, wheelchair, note. */
+/** A search list's line (MapsSearch.parse): kind, lat, lng, name, English name, more, hours, phone, web, wheelchair, note, other names. */
 function parsePoi(line) {
   const c = line.split('\t')
   if (c.length < 4) return null
   const lat = Number(c[1]), lng = Number(c[2])
   if (!c[1] || !c[2] || !inRange(lat, lng)) return null
-  const [kind, , , name, nameEn = '', more = '', hours = '', phone = '', web = '', wheelchair = '', note = ''] = c
-  const key = fold(`${name} ${nameEn}`)
-  return { kind, lat, lng, name, nameEn, more, hours, phone, web, wheelchair, note, key: `${key} ${latin(fold(name))}` }
+  const [kind, , , name, nameEn = '', more = '', hours = '', phone = '', web = '', wheelchair = '', note = '', names = ''] = c
+  // its names in Tetra's other languages ("el=Νευροκόπι|de=…") found too: Νευροκόπι finds Гоце Делчев
+  const key = fold(`${name} ${nameEn} ${names.replace(/\|/g, ' ')}`)
+  return { kind, lat, lng, name, nameEn, more, hours, phone, web, wheelchair, note, names, key: `${key} ${latin(fold(name))}` }
 }
 
 /** A file's place (Place.parse); anything that is not one — a stray file, half a write — is null, never an error. */
