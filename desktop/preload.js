@@ -63,7 +63,7 @@ contextBridge.exposeInMainWorld('drive', {
   mapsNeeds: id => ipcRenderer.invoke('maps:needs', id),
   mapsMissing: () => ipcRenderer.invoke('maps:missing'),
   mapsInstallSystem: packages => ipcRenderer.invoke('maps:installSystem', packages),
-  mapsBuild: (id, resume) => ipcRenderer.invoke('maps:build', id, resume),
+  mapsBuild: id => ipcRenderer.invoke('maps:build', id),
   mapsDiscardBuild: id => ipcRenderer.invoke('maps:discardBuild', id),
   mapsCancelBuild: () => ipcRenderer.invoke('maps:cancelBuild'),
   mapsBuilding: () => ipcRenderer.invoke('maps:building'),
@@ -122,6 +122,10 @@ contextBridge.exposeInMainWorld('drive', {
     syncNow: () => ipcRenderer.invoke('client:syncNow'),
     setMirror: on => ipcRenderer.invoke('client:setMirror', !!on),
     onSynced: fn => { const l = (_, s) => fn(s); ipcRenderer.on('client-synced', l); return () => ipcRenderer.off('client-synced', l) },
+  },
+  cleaner: {
+    items: () => ipcRenderer.invoke('cleaner:items'),
+    clean: id => ipcRenderer.invoke('cleaner:clean', id),
   },
   reset: {
     info: () => ipcRenderer.invoke('reset:info'),

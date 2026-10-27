@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import type { AppNotification } from './drive'
+import type { AppNotification, CleanItem } from './drive'
 import { Icon, type IconName } from './Icon'
 import { locale, t } from './i18n'
 import { ResetCard } from './Role'
 import { MapsCard } from './MapBuilder'
+import { formatBytes } from './timeline'
+import { errorText } from './Dialogs'
 
 // The foot of the sidebar (asked 2026-09-26): what Tetra said, kept — a notification goes by in seconds — and Settings.
 
@@ -34,10 +36,11 @@ export function NotificationsPage() {
 }
 
 /** Settings' pages, as the phone's (SettingsScreen.SettingsPage): the general ones, then one an app in its colour. */
-type SettingsTab = 'appearance' | 'computer' | 'photos' | 'maps' | 'phone'
+type SettingsTab = 'appearance' | 'computer' | 'cleanUp' | 'photos' | 'maps' | 'phone'
 const GENERAL: { id: SettingsTab; icon: IconName; title: string; summary: string }[] = [
   { id: 'appearance', icon: 'palette', title: 'settings.appearance', summary: 'settings.sum.appearance' },
   { id: 'computer', icon: 'server', title: 'reset.title', summary: 'settings.sum.computer' },
+  { id: 'cleanUp', icon: 'storage', title: 'clean.title', summary: 'settings.sum.cleanUp' },
 ]
 const APPS: { id: SettingsTab; icon: IconName; cat: string; title: string; summary: string }[] = [
   { id: 'photos', icon: 'photos', cat: 'photos', title: 'app.photos', summary: 'settings.sum.photos' },
@@ -83,6 +86,7 @@ export function SettingsPage({ onGuide, start }: { onGuide: () => void; start?: 
           <button className="text-button settings-back" onClick={() => setPicked(false)}><Icon name="back" size={20} />{t('common.back')}</button>
           {tab === 'appearance' && <><ThemeCard /><LanguageCard /></>}
           {tab === 'computer' && <ResetCard />}
+          {tab === 'cleanUp' && <CleanCard />}
           {tab === 'photos' && <MotionCard />}
           {tab === 'maps' && <><MapsCard /><LocationCard /></>}
           {tab === 'phone' && <CallsCard />}
@@ -206,6 +210,48 @@ function CallsCard() {
       </>}
       {said && <p className="muted">{said}</p>}
       {bt && !bt.available && <p className="muted">{t('settings.btMissing')}</p>}
+    </section>
+  )
+}
+
+/** The app names Tetra has words for; .System's other folders (Office, Sync, Backups) show as they are named on disk. */
+const APP_WORDS: Record<string, string> = { Photos: 'app.photos', Files: 'app.files', Notes: 'app.notes', Calendar: 'app.calendar', Timer: 'app.timer', Contacts: 'app.contacts', Phone: 'app.phone', Maps: 'app.maps' }
+
+/**
+ * Settings › Clean up (the user, 27 Oct: "Tetra should have a cleaner"; cleaner.js): each thing Tetra made for itself and
+ * no longer needs, its size now and its own Clean, then what runs by itself and when it last did.
+ */
+function CleanCard() {
+  const [now, setNow] = useState<Awaited<ReturnType<typeof window.drive.cleaner.items>> | null>(null)
+  const [busy, setBusy] = useState('')
+  const [said, setSaid] = useState('')
+  const load = () => window.drive.cleaner.items().then(setNow, e => setSaid(errorText(e)))
+  useEffect(() => { load() }, [])
+  const clean = async (id: string) => {
+    setBusy(id); setSaid('')
+    try { await window.drive.cleaner.clean(id) } catch (e) { setSaid(errorText(e)) }
+    setBusy(''); load()
+  }
+  const name = (i: CleanItem) => i.app ? t('clean.system', { app: APP_WORDS[i.app] ? t(APP_WORDS[i.app]) : i.app }) : t(`clean.${i.id}`)
+  const note = (i: CleanItem) => !i.ready ? t('clean.thumbsWait') : t(i.app ? 'clean.systemNote' : `clean.${i.id}Note`)
+  const when = (at?: number) => at ? new Date(at).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' }) : t('clean.never')
+  const any = now?.items.some(i => i.ready && i.files)
+  return (
+    <section className="settings-card island">
+      <h3><Icon name="storage" size={20} />{t('clean.title')}</h3>
+      <p className="muted">{t('clean.intro')}</p>
+      <div className="clean-list">
+        {now?.items.map(i => <div key={i.id} className="clean-row">
+          <span><strong>{name(i)}</strong><small>{note(i)}</small></span>
+          <span className="clean-size">{i.files ? formatBytes(i.bytes) : t('clean.nothing')}</span>
+          <button className="text-button" disabled={!i.ready || !i.files || !!busy} onClick={() => clean(i.id)}>{busy === i.id ? '…' : t('clean.clean')}</button>
+        </div>)}
+      </div>
+      <div className="reset-actions"><button className="filled-button secondary" disabled={!any || !!busy} onClick={() => clean('all')}>{busy === 'all' ? '…' : t('clean.cleanAll')}</button></div>
+      {said && <p className="muted">{said}</p>}
+      <h4>{t('clean.byItself')}</h4>
+      <p className="muted">{t('clean.lastStart', { when: when(now?.last.start) })}<br />{t('clean.lastBuild', { when: when(now?.last.build) })}<br />
+        {t('clean.lastHistory', { when: when(now?.last.history) })}<br />{t('clean.lastManual', { when: when(now?.last.manual) })}</p>
     </section>
   )
 }

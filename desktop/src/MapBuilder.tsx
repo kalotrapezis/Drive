@@ -48,8 +48,8 @@ export function MapsCard() {
   }, [])
   useEffect(() => window.drive.onMapsChanged(load), [])
   const busy = progress?.state === 'running' || progress?.state === 'offline'
-  /** A build of `id`; `resume` goes on from the step that failed (the error page's Retry). */
-  const update = (id: string, resume = false) => { setProgress(p => ({ id, step: resume ? p?.step ?? null : null, state: 'running' })); setWizard('build'); window.drive.mapsBuild(id, resume) }
+  /** A build of `id`, from the first step (the error page's Retry too: a build cleans up after itself, mapbuild.js). */
+  const update = (id: string) => { setProgress({ id, step: null, state: 'running' }); setWizard('build'); window.drive.mapsBuild(id) }
   return (
     <section className="settings-card island">
       <h3><Icon name="map" size={20} />{t('mapbuild.title')}</h3>
@@ -78,7 +78,7 @@ export function MapsCard() {
 }
 
 function Wizard({ page, setPage, progress, start, onClose }:
-  { page: Page; setPage: (p: Page) => void; progress: MapBuildProgress | null; start: (id: string, resume?: boolean) => void; onClose: () => void }) {
+  { page: Page; setPage: (p: Page) => void; progress: MapBuildProgress | null; start: (id: string) => void; onClose: () => void }) {
   const [regions, setRegions] = useState<MapRegion[] | null>(null)
   const [query, setQuery] = useState('')
   const [chosen, setChosen] = useState<MapRegion | null>(null)
@@ -184,7 +184,7 @@ function Wizard({ page, setPage, progress, start, onClose }:
           {/* Retry goes on from the failed step; Cancel gives the build up and clears its work (the user, 27 Oct: "add a retry if a step fails") */}
           {page === 'error' && <div className="dialog-actions">
             <button className="text-button" onClick={() => { if (progress?.id) window.drive.mapsDiscardBuild(progress.id); onClose() }}>{t('common.cancel')}</button>
-            {progress?.id && <button className="filled-button" autoFocus onClick={() => start(progress.id, true)}>{t('mapbuild.tryAgain')}</button>}
+            {progress?.id && <button className="filled-button" autoFocus onClick={() => start(progress.id)}>{t('mapbuild.tryAgain')}</button>}
           </div>}
         </>}
         {page === 'done' && <>

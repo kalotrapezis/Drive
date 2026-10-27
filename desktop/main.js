@@ -39,6 +39,7 @@ const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME |
 // which must not rename the real folders. Both can be overridden for testing with disposable files.
 const home = require('./home')
 const system = require('./system')
+const { Cleaner } = require('./cleaner')
 const HOME = home.roots(os.homedir(), { migrate: !process.env.DRIVE_HIDDEN })
 if (HOME.moved.length) {
   console.log('[home] moved', HOME.moved.join('; '))
@@ -66,7 +67,7 @@ async function embeddedMotion(id) {
   lastMotion = { id, video }
   return video
 }
-let notes, db, files, people, documents, folders, vault, sync, purgatory, win, scanning = null
+let notes, db, files, people, documents, folders, vault, sync, purgatory, win, scanning = null, scannedAt = 0, cleaner = null
 const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move', 'rename', 'trash', 'emptyTrash', 'setFavorite', 'setColor',
   'favorites', 'recents', 'tags', 'createTag', 'setTags', 'properties', 'usage', 'chosenFolders', 'chooseSystemFolders']
 const NOTE_CALLS = ['list', 'create', 'save', 'snapshot', 'history', 'restoreVersion', 'remove']
@@ -292,6 +293,7 @@ async function mapsBody(key) {
 function startScan() {
   scanning ??= new Promise((resolve, reject) => { scanDone = { resolve, reject }; worker().postMessage({ type: 'scan' }) })
     .then(r => {
+      scannedAt = Date.now() // Clean up's thumbnails go by the library as a finished scan left it
       const filled = folders.fill() // new photos in an included folder join its collection
       // Something new here is something a paired phone has not got: tell it, and it will come and fetch it.
       if (r?.changed || filled) { sync?.nudge().catch(() => {}); backUpPluggedDrives() }
@@ -458,11 +460,12 @@ function analyzeLibrary(rescan = null) {
 app.whenReady().then(() => {
   // ~/Tetra/.System (system.js, SYSTEM.md): the old folders beside ~/Tetra moved in once, and every app's Temp emptied, as no
   // job runs yet. Never from a hidden QA copy, which must not touch the real folders (nor a running Tetra's work).
+  let tempCleaned = false
   if (!process.env.DRIVE_HIDDEN) {
     const { moved, failed } = system.migrate()
     if (moved.length) console.log('[system] moved', moved.join('; '))
     for (const f of failed) console.warn('[system] not moved:', f)
-    try { system.cleanTemp() } catch (e) { console.warn('[system] Temp not emptied:', e.message) }
+    try { system.cleanTemp(); tempCleaned = true } catch (e) { console.warn('[system] Temp not emptied:', e.message) }
   }
   db = library.open(DATA_DIR)
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)') // read below (Contacts) before the line that made it; a new computer's first start failed
@@ -782,6 +785,7 @@ app.whenReady().then(() => {
   // the map builder (Settings › Maps): one map at a time; its progress goes to the window, a new map to the devices
   mapBuilder = new MapBuilder(maps.root, p => {
     win?.webContents.send('maps-build', p)
+    if (['done', 'error', 'cancelled'].includes(p.state)) cleaned('build') // the builder's cleanup follows at once (mapbuild.js)
     if (p.state === 'done') { win?.webContents.send('maps-changed'); sync?.nudge().catch(() => {}) }
   })
   // a map turned old: said once for each time it is due (keyed by its built date), its click opens Settings › Maps
@@ -792,6 +796,21 @@ app.whenReady().then(() => {
     setSetting('mapsOldSaid', JSON.stringify(due.map(p => `${p.id}@${p.built}`))) // the maps no longer due drop out
   }
   if (!process.env.DRIVE_HIDDEN) { setTimeout(() => checkMapAges().catch(e => console.warn('[maps age]', e.message)), 30_000); setInterval(() => checkMapAges().catch(() => {}), 6 * 3_600_000) }
+  // Settings › Clean up (cleaner.js): each item's size and its Clean; what runs by itself says when it last did
+  cleaner = new Cleaner({ db, dataDir: DATA_DIR, mapsRoot: maps.root, isServer: () => sync?.role() !== 'client', scanned: () => !!scannedAt && !scanning,
+    busy: app => app === 'Maps' && !!mapBuilder.job, routing: () => [...routers.keys()] })
+  const cleanedAt = () => { try { return JSON.parse(setting('cleanerLast') || '{}') } catch { return {} } }
+  function cleaned(what) { setSetting('cleanerLast', JSON.stringify({ ...cleanedAt(), [what]: Date.now() })) }
+  if (tempCleaned) cleaned('start')
+  // Files history keeps a replaced file 30 days, like the Trash, then lets it go: at start and once a day
+  const pruneHistory = () => cleaner.clean('history').then(() => cleaned('history'), e => console.warn('[clean] history', e.message))
+  if (!process.env.DRIVE_HIDDEN) { pruneHistory(); setInterval(pruneHistory, 86_400_000) }
+  ipcMain.handle('cleaner:items', async () => ({ items: await cleaner.items(), last: cleanedAt() }))
+  ipcMain.handle('cleaner:clean', async (_, id) => {
+    const ids = id === 'all' ? (await cleaner.items()).filter(i => i.ready && i.files).map(i => i.id) : [String(id)]
+    for (const i of ids) await cleaner.clean(i)
+    cleaned('manual')
+  })
   ipcMain.handle('maps:regions', () => mapBuilder.regions())
   ipcMain.handle('maps:needs', (_, id) => mapBuilder.needs(id))
   ipcMain.handle('maps:missing', () => mapBuilder.missing())

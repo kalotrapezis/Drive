@@ -1145,6 +1145,11 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .client-card h2, .client-card p { margin: 0; }
 .client-card .error { color: #e3685f; }
 .reset-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.clean-list { margin: 8px 0 16px; }
+.clean-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--hover); }
+.clean-row small { display: block; color: var(--muted); font-size: 13px; }
+.clean-size { color: var(--muted); font-variant-numeric: tabular-nums; max-width: 7em; text-align: right; }
+.clean-row .text-button:disabled { opacity: .4; cursor: default; }
 /* The guide (Guide.tsx): a panel beside the page; its pictures are Tetra's own pieces, still, the spot to click ringed */
 .guide { width: 340px; flex: none; display: flex; flex-direction: column; gap: 10px; padding: 16px; min-height: 0; }
 .guide-head { display: flex; gap: 8px; align-items: center; }

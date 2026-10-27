@@ -130,13 +130,13 @@ export function ResetCard() {
     setSaid('')
   }
   const backUp = () => withInfo(info => <Confirm title={t('reset.backupTitle')} action={t('reset.chooseFolder')} onClose={close}
-    body={t('reset.backupBody', { files: info.files.toLocaleString(), size: formatBytes(info.bytes) })}
+    body={`${t('reset.backupBody', { files: info.files.toLocaleString(), size: formatBytes(info.bytes) })} ${t('reset.systemStays')}`}
     onConfirm={async () => {
       setSaid(t('reset.backingUp'))
       try { const done = await window.drive.reset.backUp(); setSaid(done ? t('reset.backedUp', { to: done.to }) : '') } catch (e) { setSaid(errorText(e)) }
     }} />)
   const wipe = () => withInfo(info => <Confirm title={t('reset.deleteTitle')} action={t('common.next')} danger onClose={close}
-    body={t('reset.deleteBody', { paths: info.paths.join(', '), files: info.files.toLocaleString(), size: formatBytes(info.bytes) })}
+    body={`${t('reset.deleteBody', { paths: info.paths.join(', '), files: info.files.toLocaleString(), size: formatBytes(info.bytes) })} ${t('reset.systemStays')}`}
     onConfirm={() => setDialog(<LastChance onClose={close} />)} />)
   return (
     <section className="settings-card island">

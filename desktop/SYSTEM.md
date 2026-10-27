@@ -35,6 +35,15 @@ A new app or kind is added to `system.js` and to this file first.
 The first start of a version with `system.js` moves `~/Tetra-maps` and `~/Tetra-backups` in by renaming (never a copy,
 never a delete); a move that cannot happen leaves both where they were and is logged as `[system] not moved`.
 
+## Cleaning (cleaner.js, Settings › Clean up)
+
+By itself: every app's Temp at each start (`system.cleanTemp`), the map builder's own work at the end of every build,
+and the data dir's `Files history` past 30 days, at start and once a day. By hand, on the Clean up page, each with its
+size: every app's Temp and Cache (not a Temp a running job uses), Files history past 30 days, thumbnails whose photo is
+gone (on a server, after a finished scan), the data dir's one-off safety copies (moved to `Backups/Data`, never deleted),
+and GraphHopper's work folders (`routing/`) of maps no longer in Files/Maps. Each removes only inside its own folder;
+links are removed, never followed. The page shows when each automatic one last ran.
+
 ## What .System is kept out of
 
 - **Sync.** Only `Tetra/Photos` and `Tetra/Files` sync; `.System` is beside them, never inside.

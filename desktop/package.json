@@ -62,6 +62,7 @@
       "drives.js",
       "home.js",
       "system.js",
+      "cleaner.js",
       "thumbs.js",
       "file-kinds.json",
       "purgatory.js",

@@ -29,6 +29,8 @@ export interface Review { faceId: string; personId: string; sha256: string; name
 export interface Analysis { running: boolean; paused: boolean; done: number; total: number; error: string; enabled?: boolean; documentsEnabled?: boolean; reviews?: number }
 export interface MergeUndo { sourceId: string; faceIds: string[] }
 export type TimerAction = 'pause' | 'resume' | 'stop' | 'ok' | 'restart' | 'pin' | 'unpin' | 'trash'
+/** Settings › Clean up (cleaner.js): one thing Tetra can clean, its size now; `ready` false when it cannot be cleaned now. */
+export type CleanItem = { id: string; app?: string; bytes: number; files: number; ready: boolean }
 /** A timer as the computer counts it (timer.js active()). */
 export interface TimerItem { id: string; seconds: number; label: string; state: 'running' | 'paused' | 'stopped'; ends: number | null; left: number; rev: number; by: string; pinned: boolean; leftMs: number; ringing: boolean; ready: boolean }
 
@@ -214,7 +216,7 @@ declare global {
       mapsNeeds(id: string): Promise<{ osm: number; memory: number; hasMemory: number; disk: number; hasDisk: number }>
       mapsMissing(): Promise<string[]>
       mapsInstallSystem(packages: string[]): Promise<'done' | 'refused'>
-      mapsBuild(id: string, resume?: boolean): Promise<void>
+      mapsBuild(id: string): Promise<void>
       mapsDiscardBuild(id: string): Promise<void>
       mapsCancelBuild(): Promise<void>
       mapsBuilding(): Promise<string | null>
@@ -267,6 +269,10 @@ declare global {
         backUp(): Promise<{ to: string; files: number; bytes: number } | null>
         arm(): Promise<number>
         delete(): Promise<void>
+      }
+      cleaner: {
+        items(): Promise<{ items: CleanItem[]; last: { start?: number; build?: number; history?: number; manual?: number } }>
+        clean(id: string): Promise<void>
       }
       languages(): Promise<{ choice: string; system: string; languages: string[] }>
       setLanguage(choice: string): Promise<void>
