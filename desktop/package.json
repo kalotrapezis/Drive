@@ -8,7 +8,7 @@
     "start": "node scripts/copy-skill.js && vite build && electron .",
     "check": "tsc -p .",
     "test": "node --test src/*.test.ts test/*.test.js",
-    "dist": "node scripts/copy-skill.js && vite build && electron-builder --linux AppImage deb"
+    "dist": "node scripts/copy-skill.js && vite build && electron-builder --linux deb && scripts/bundle-tools.sh && electron-builder --linux AppImage --config electron-builder.appimage.cjs"
   },
   "author": "Theologos Kalotrapezis <kalotrapezis@gmail.com>",
   "devDependencies": {

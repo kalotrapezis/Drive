@@ -24,7 +24,7 @@ const os = require('node:os')
 const path = require('node:path')
 const crypto = require('node:crypto')
 const { spawn, spawnSync } = require('node:child_process')
-const { PROFILES, JAR, BIN, findJava } = require('./router')
+const { PROFILES, JAR, BIN, BUNDLED, findJava } = require('./router')
 const { t } = require('./i18n')
 
 const WORK = path.dirname(BIN)
@@ -36,7 +36,8 @@ const URLS = {
 }
 /** The system's packages the builder may ask for (Debian and Ubuntu names), each with why, for the wizard's page. */
 const PACKAGES = { 'openjdk-17-jre-headless': 'java', 'python3-pyosmium': 'osmium' }
-const PYTHON = '/usr/bin/python3'
+/** The AppImage's own Python with osmium (scripts/bundle-tools.sh), else the system's. */
+const PYTHON = [BUNDLED && path.join(BUNDLED, 'python', 'bin', 'python3'), '/usr/bin/python3'].find(p => p && fs.existsSync(p)) ?? '/usr/bin/python3'
 /** The steps as the wizard shows them, in order. */
 const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install']
 /** Whether the internet answers: Geofabrik's front page, within 8 s (the user, 27 Oct: "maybe an internet connection check?"). */

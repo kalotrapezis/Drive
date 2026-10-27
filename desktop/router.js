@@ -68,10 +68,13 @@ const CAR_TIME = 1.2
 /** Where the map builder keeps its tools (mapbuild.js; tools/maps-greece.sh uses the same bin). */
 const BIN = path.join(os.homedir(), 'Tetra-maps', 'bin')
 
-/** A Java of 17 or newer, as GraphHopper 10.2 needs (the map builder asks the system for one when there is none). */
+/** What the AppImage carries for the map builder (scripts/bundle-tools.sh): its own Java and Python, used before the system's. */
+const BUNDLED = process.resourcesPath ? path.join(process.resourcesPath, 'bundled') : null
+
+/** A Java of 17 or newer, as GraphHopper 10.2 needs: the AppImage's own, else the system's (the builder asks for one when there is none). */
 function findJava() {
   const major = java => { try { const r = spawnSync(java, ['-version'], { timeout: 5000, encoding: 'utf8' }); return r.status === 0 ? +(/version "(\d+)/.exec(r.stderr)?.[1] ?? 0) : 0 } catch { return 0 } }
-  return [process.env.JAVA, '/usr/lib/jvm/java-17-openjdk-amd64/bin/java', 'java'].find(j => j && major(j) >= 17) ?? null
+  return [process.env.JAVA, BUNDLED && path.join(BUNDLED, 'jre', 'bin', 'java'), '/usr/lib/jvm/java-17-openjdk-amd64/bin/java', 'java'].find(j => j && major(j) >= 17) ?? null
 }
 
 class Router {
@@ -159,4 +162,4 @@ const freePort = () => new Promise((resolve, reject) => {
   s.on('error', reject)
 })
 
-module.exports = { Router, plain, MAIN_ROADS, PROFILES, JAR, BIN, findJava }
+module.exports = { Router, plain, MAIN_ROADS, PROFILES, JAR, BIN, BUNDLED, findJava }
