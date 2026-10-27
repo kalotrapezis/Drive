@@ -671,6 +671,13 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .map-list .map-pack + .map-pack { border-top: 1px solid color-mix(in srgb, var(--text) 12%, transparent); }
 .map-pack > div, .map-credit > div { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .map-pack strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* narrow (the guide open beside): the buttons go under the name, never the name squeezed to a letter a line */
+.map-list .map-pack { flex-wrap: wrap; }
+.map-list .map-pack > div { flex: 1 1 180px; }
+.map-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-left: auto; }
+.map-actions > * { white-space: nowrap; }
+.map-old { padding: 2px 10px; border-radius: 999px; background: #5b1f1f; color: #ffd9d6; font-size: 12px; font-weight: 600; white-space: nowrap; }
+@media (prefers-color-scheme: light) { .map-old { background: #fde7e6; color: #b3261e; } }
 .map-credit .filled-button { display: flex; align-items: center; gap: 6px; padding: 8px 16px; }
 .dialog:has(.map-wizard) { width: min(560px, 94vw); }
 .map-regions { max-height: 300px; overflow: auto; margin: 12px 0; display: flex; flex-direction: column; }
