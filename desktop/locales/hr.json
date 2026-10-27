@@ -859,7 +859,6 @@
  "maps.whereIAm": "Gdje sam (pita telefon)",
  "maps.waitingPhone": "Čekam lokaciju telefona…",
  "maps.waitingPhoneHint": "Tetra je u pozadini na telefonu? Dodirnite njezinu obavijest.",
- "maps.missing": "Karta još nije na ovom računalu: {file} dolazi iz {tool} ili s telefona sinkronizacijom.",
  "maps.searchPlaceholder": "Traži mjesta, adrese, gradove",
  "maps.fewer": "Manje",
  "maps.more": "Više… ({n})",
@@ -1946,7 +1945,7 @@
  "mapbuild.step.phone": "Pozivni brojevi za pozive",
  "mapbuild.step.install": "Instalacija u aplikaciju Tetra",
  "mapbuild.step.send": "Slanje na vaš telefon i tablet",
- "mapbuild.buildNote": "Traje od nekoliko minuta do sat vremena, ovisno o zemlji. Možete zatvoriti ovaj prozor; Tetra nastavlja raditi.",
+ "mapbuild.buildNote": "Traje od nekoliko minuta do sat vremena ili više, ovisno o zemlji. Neka računalo ostane uključeno i priključeno na struju. Možete zatvoriti ovaj prozor; Tetra nastavlja raditi.",
  "mapbuild.stop": "Zaustavi",
  "mapbuild.hide": "Zatvori",
  "mapbuild.doneTitle": "Karta je gotova: {name}",
@@ -1955,5 +1954,8 @@
  "mapbuild.failed": "Karta se nije mogla izraditi: {error}",
  "mapbuild.offline": "Nema internetske veze. Karte se preuzimaju, stoga se povežite i pokušajte ponovno.",
  "mapbuild.waitingNet": "Nema internetske veze. Nastavlja se samo kad se veza vrati.",
- "mapbuild.tryAgain": "Pokušaj ponovno"
+ "mapbuild.tryAgain": "Pokušaj ponovno",
+ "maps.welcome": "Dobro došli u Karte",
+ "maps.welcomeBody": "Tetra dolazi bez karte, tako da svatko dobije kartu koju želi, izvan mreže i svoju. Izradite svoju ovdje: odaberite svoju zemlju, neka računalo ostane uključeno i priključeno na struju dok se izrađuje (nekoliko minuta za malu zemlju, sat vremena ili više za veliku), a ona sama odlazi na vaš mobitel i tablet.",
+ "maps.welcomeMake": "Izradi kartu…"
 }

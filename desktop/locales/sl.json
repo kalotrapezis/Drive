@@ -891,7 +891,6 @@
  "maps.whereIAm": "Kje sem (vpraša telefon)",
  "maps.waitingPhone": "Čakam na lokacijo telefona…",
  "maps.waitingPhoneHint": "Je Tetra tam v ozadju? Tapnite njeno obvestilo.",
- "maps.missing": "Zemljevida še ni na tem računalniku: {file} pride iz {tool} ali s telefona prek sinhronizacije.",
  "maps.searchPlaceholder": "Iščite kraje, naslove, mesta",
  "maps.fewer": "Manj",
  "maps.more": "Več… ({n})",
@@ -2034,7 +2033,7 @@
  "mapbuild.step.phone": "Omrežne skupine za klice",
  "mapbuild.step.install": "Nameščanje v aplikacijo Tetra",
  "mapbuild.step.send": "Pošiljanje na vaš telefon in tablični računalnik",
- "mapbuild.buildNote": "To traja od nekaj minut do ene ure, odvisno od države. To okno lahko zaprete; Tetra dela naprej.",
+ "mapbuild.buildNote": "To traja od nekaj minut do ene ure ali več, odvisno od države. Računalnik naj ostane vklopljen in priključen na električno omrežje. To okno lahko zaprete; Tetra dela naprej.",
  "mapbuild.stop": "Ustavi",
  "mapbuild.hide": "Zapri",
  "mapbuild.doneTitle": "Zemljevid je pripravljen: {name}",
@@ -2043,5 +2042,8 @@
  "mapbuild.failed": "Zemljevida ni bilo mogoče narediti: {error}",
  "mapbuild.offline": "Ni internetne povezave. Zemljevidi se prenašajo, zato se povežite in poskusite znova.",
  "mapbuild.waitingNet": "Ni internetne povezave. Nadaljuje se samo, ko se povezava vrne.",
- "mapbuild.tryAgain": "Poskusi znova"
+ "mapbuild.tryAgain": "Poskusi znova",
+ "maps.welcome": "Dobrodošli v Zemljevidih",
+ "maps.welcomeBody": "Tetra pride brez zemljevida, da vsak dobi zemljevid, ki ga želi, brez povezave in svojega. Naredite svojega tukaj: izberite svojo državo, računalnik naj ostane vklopljen in priključen na električno omrežje, medtem ko se ustvarja (nekaj minut za majhno državo, ura ali več za veliko), nato pa sam pride na vaš telefon in tablični računalnik.",
+ "maps.welcomeMake": "Naredi zemljevid…"
 }

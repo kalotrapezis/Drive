@@ -827,7 +827,6 @@
  "maps.whereIAm": "Där jag är (frågar telefonen)",
  "maps.waitingPhone": "Väntar på telefonens plats…",
  "maps.waitingPhoneHint": "Är Tetra i bakgrunden där? Tryck på dess avisering.",
- "maps.missing": "Kartan finns inte på den här datorn än: {file} kommer från {tool} eller från telefonen via synk.",
  "maps.searchPlaceholder": "Sök platser, adresser, orter",
  "maps.fewer": "Färre",
  "maps.more": "Fler… ({n})",
@@ -1860,7 +1859,7 @@
  "mapbuild.step.phone": "Riktnummer för samtal",
  "mapbuild.step.install": "Installerar i Tetra",
  "mapbuild.step.send": "Skickar till din telefon och surfplatta",
- "mapbuild.buildNote": "Det tar från några minuter till en timme, beroende på landet. Du kan stänga det här fönstret; Tetra fortsätter arbeta.",
+ "mapbuild.buildNote": "Det tar från några minuter till en timme eller mer, beroende på landet. Låt datorn vara på och ansluten till eluttaget. Du kan stänga det här fönstret; Tetra fortsätter arbeta.",
  "mapbuild.stop": "Stoppa",
  "mapbuild.hide": "Stäng",
  "mapbuild.doneTitle": "Kartan över {name} är klar",
@@ -1869,5 +1868,8 @@
  "mapbuild.failed": "Kartan kunde inte göras: {error}",
  "mapbuild.offline": "Ingen internetanslutning. Kartor laddas ner, så anslut och försök igen.",
  "mapbuild.waitingNet": "Ingen internetanslutning. Det fortsätter av sig självt när anslutningen är tillbaka.",
- "mapbuild.tryAgain": "Försök igen"
+ "mapbuild.tryAgain": "Försök igen",
+ "maps.welcome": "Välkommen till Kartor",
+ "maps.welcomeBody": "Tetra kommer utan karta, så att alla får den karta de vill ha, offline och sin egen. Gör din här: välj ditt land, låt datorn vara på och ansluten till eluttaget medan den görs (några minuter för ett litet land, en timme eller mer för ett stort), så går den av sig själv till din telefon och surfplatta.",
+ "maps.welcomeMake": "Gör en karta…"
 }

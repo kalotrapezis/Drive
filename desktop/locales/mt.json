@@ -891,7 +891,6 @@
  "maps.whereIAm": "Fejn jien (jistaqsi lit-telefon)",
  "maps.waitingPhone": "Qed nistenna l-pożizzjoni tat-telefon…",
  "maps.waitingPhoneHint": "Tetra fl-isfond hemm? Agħfas fuq in-notifika tiegħu.",
- "maps.missing": "Il-mappa mhix fuq dan il-kompjuter għadha: {file} ġej minn {tool} jew mit-telefon permezz tas-sinkronizzazzjoni.",
  "maps.searchPlaceholder": "Fittex postijiet, indirizzi, rħula",
  "maps.fewer": "Inqas",
  "maps.more": "Iktar… ({n})",
@@ -2034,7 +2033,7 @@
  "mapbuild.step.phone": "Kodiċijiet taż-żona għat-telefonati",
  "mapbuild.step.install": "Qed jiġi installat f'Tetra",
  "mapbuild.step.send": "Qed jintbagħat lit-telefon u t-tablet tiegħek",
- "mapbuild.buildNote": "Jieħu minn ftit minuti sa siegħa, skont il-pajjiż. Tista' tagħlaq din it-tieqa; Tetra tibqa' taħdem.",
+ "mapbuild.buildNote": "Jieħu minn ftit minuti sa siegħa jew aktar, skont il-pajjiż. Żomm il-kompjuter mixgħul u mqabbad mal-kurrent. Tista' tagħlaq din it-tieqa; Tetra tibqa' taħdem.",
  "mapbuild.stop": "Waqqaf",
  "mapbuild.hide": "Agħlaq",
  "mapbuild.doneTitle": "Il-mappa hija lesta: {name}",
@@ -2043,5 +2042,8 @@
  "mapbuild.failed": "Ma setgħetx issir il-mappa: {error}",
  "mapbuild.offline": "M'hemmx konnessjoni mal-internet. Il-mapep jitniżżlu, għalhekk ikkonnettja u erġa' pprova.",
  "mapbuild.waitingNet": "M'hemmx konnessjoni mal-internet. Ikompli waħdu meta tiġi lura l-konnessjoni.",
- "mapbuild.tryAgain": "Erġa' pprova"
+ "mapbuild.tryAgain": "Erġa' pprova",
+ "maps.welcome": "Merħba fil-Mapep",
+ "maps.welcomeBody": "Tetra tiġi mingħajr mappa, biex kulħadd ikollu l-mappa li jrid, offline u tiegħu stess. Agħmel tiegħek hawn: agħżel pajjiżek, żomm il-kompjuter mixgħul u mqabbad mal-kurrent waqt li tkun qed issir (ftit minuti għal pajjiż żgħir, siegħa jew aktar għal wieħed kbir), u tmur waħedha fuq it-telefon u t-tablet tiegħek.",
+ "maps.welcomeMake": "Agħmel mappa…"
 }

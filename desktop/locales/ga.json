@@ -923,7 +923,6 @@
  "maps.whereIAm": "Cá bhfuilim (iarrann ar an ngutthán)",
  "maps.waitingPhone": "Ag fanacht le suíomh an ghutháin…",
  "maps.waitingPhoneHint": "An bhfuil Tetra sa chúlra ar an ngutthán? Tapáil a fhógra.",
- "maps.missing": "Níl an léarscáil ar an ríomhaire seo fós: tagann {file} ó {tool} nó ón ngutthán trí shioncrónú.",
  "maps.searchPlaceholder": "Cuardaigh áiteanna, seoltaí, bailte",
  "maps.fewer": "Níos lú",
  "maps.more": "Tuilleadh… ({n})",
@@ -2121,7 +2120,7 @@
  "mapbuild.step.phone": "Cóid cheantair do ghlaonna",
  "mapbuild.step.install": "Á shuiteáil i Tetra",
  "mapbuild.step.send": "Á sheoladh chuig do ghuthán agus do tháibléad",
- "mapbuild.buildNote": "Tógann sé ó chúpla nóiméad go huair an chloig, de réir na tíre. Is féidir leat an fhuinneog seo a dhúnadh; leanann Tetra ag obair.",
+ "mapbuild.buildNote": "Tógann sé ó chúpla nóiméad go huair an chloig nó níos mó, de réir na tíre. Fág an ríomhaire air agus plugáilte isteach. Is féidir leat an fhuinneog seo a dhúnadh; leanann Tetra ag obair.",
  "mapbuild.stop": "Stop",
  "mapbuild.hide": "Dún",
  "mapbuild.doneTitle": "Tá an léarscáil réidh: {name}",
@@ -2130,5 +2129,8 @@
  "mapbuild.failed": "Níorbh fhéidir an léarscáil a dhéanamh: {error}",
  "mapbuild.offline": "Níl ceangal idirlín ann. Íoslódáiltear na léarscáileanna, mar sin ceangail agus bain triail eile as.",
  "mapbuild.waitingNet": "Níl ceangal idirlín ann. Leanfaidh sé ar aghaidh leis féin nuair a thiocfaidh an ceangal ar ais.",
- "mapbuild.tryAgain": "Bain triail eile as"
+ "mapbuild.tryAgain": "Bain triail eile as",
+ "maps.welcome": "Fáilte go Léarscáileanna",
+ "maps.welcomeBody": "Tagann Tetra gan léarscáil, ionas go bhfaigheann gach duine an léarscáil a theastaíonn uaidh, as líne agus a chuid féin. Déan do cheann féin anseo: roghnaigh do thír, fág an ríomhaire air agus plugáilte isteach cé go bhfuil sé á dhéanamh (cúpla nóiméad do thír bheag, uair an chloig nó níos mó do thír mhór), agus téann sé chuig do ghuthán agus do thabléad uaidh féin.",
+ "maps.welcomeMake": "Déan léarscáil…"
 }

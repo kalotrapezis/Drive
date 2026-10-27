@@ -859,7 +859,6 @@
  "maps.whereIAm": "Dónde estoy (pregunta al teléfono)",
  "maps.waitingPhone": "Esperando la ubicación del teléfono…",
  "maps.waitingPhoneHint": "¿Tetra en segundo plano allí? Toca su notificación.",
- "maps.missing": "El mapa aún no está en este ordenador: {file} viene de {tool} o del teléfono por sincronización.",
  "maps.searchPlaceholder": "Buscar lugares, direcciones, localidades",
  "maps.fewer": "Menos",
  "maps.more": "Más… ({n})",
@@ -1917,7 +1916,7 @@
  "mapbuild.step.phone": "Prefijos para las llamadas",
  "mapbuild.step.install": "Instalándolo en Tetra",
  "mapbuild.step.send": "Enviándolo a tu teléfono y tablet",
- "mapbuild.buildNote": "Tarda desde unos minutos hasta una hora, según el país. Puedes cerrar esta ventana; Tetra sigue trabajando.",
+ "mapbuild.buildNote": "Tarda desde unos minutos hasta una hora o más, según el país. Mantén el ordenador encendido y enchufado. Puedes cerrar esta ventana; Tetra sigue trabajando.",
  "mapbuild.stop": "Detener",
  "mapbuild.hide": "Cerrar",
  "mapbuild.doneTitle": "El mapa de {name} está listo",
@@ -1926,5 +1925,8 @@
  "mapbuild.failed": "No se pudo crear el mapa: {error}",
  "mapbuild.offline": "No hay conexión a internet. Los mapas se descargan, así que conéctate y vuelve a intentarlo.",
  "mapbuild.waitingNet": "No hay conexión a internet. Seguirá solo cuando vuelva la conexión.",
- "mapbuild.tryAgain": "Reintentar"
+ "mapbuild.tryAgain": "Reintentar",
+ "maps.welcome": "Te damos la bienvenida a Mapas",
+ "maps.welcomeBody": "Tetra viene sin mapa, para que cada uno tenga el mapa que quiere, sin conexión y propio. Haz el tuyo aquí: elige tu país, mantén el ordenador encendido y enchufado mientras se hace (unos minutos para un país pequeño, una hora o más para uno grande), y pasa solo a tu móvil y a tu tableta.",
+ "maps.welcomeMake": "Hacer un mapa…"
 }

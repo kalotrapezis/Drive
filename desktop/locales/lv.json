@@ -859,7 +859,6 @@
  "maps.whereIAm": "Kur es esmu (jautā tālrunim)",
  "maps.waitingPhone": "Gaida tālruņa atrašanās vietu…",
  "maps.waitingPhoneHint": "Vai Tetra fonā darbojas tālrunī? Pieskarieties tās paziņojumam.",
- "maps.missing": "Karte šajā datorā vēl nav: {file} nāk no {tool} vai no tālruņa ar sinhronizāciju.",
  "maps.searchPlaceholder": "Meklēt vietas, adreses, pilsētas",
  "maps.fewer": "Mazāk",
  "maps.more": "Vairāk… ({n})",
@@ -1947,7 +1946,7 @@
  "mapbuild.step.phone": "Reģionu kodi zvaniem",
  "mapbuild.step.install": "Instalēšana Tetra",
  "mapbuild.step.send": "Sūtīšana uz jūsu tālruni un planšetdatoru",
- "mapbuild.buildNote": "Tas aizņem no dažām minūtēm līdz stundai atkarībā no valsts. Šo logu varat aizvērt; Tetra turpina darbu.",
+ "mapbuild.buildNote": "Tas aizņem no dažām minūtēm līdz stundai vai ilgāk atkarībā no valsts. Turiet datoru ieslēgtu un pieslēgtu elektrībai. Šo logu varat aizvērt; Tetra turpina darbu.",
  "mapbuild.stop": "Apturēt",
  "mapbuild.hide": "Aizvērt",
  "mapbuild.doneTitle": "Karte ir gatava: {name}",
@@ -1956,5 +1955,8 @@
  "mapbuild.failed": "Karti neizdevās izveidot: {error}",
  "mapbuild.offline": "Nav interneta savienojuma. Kartes tiek lejupielādētas, tāpēc pievienojieties un mēģiniet vēlreiz.",
  "mapbuild.waitingNet": "Nav interneta savienojuma. Tas turpināsies pats, kad savienojums atjaunosies.",
- "mapbuild.tryAgain": "Mēģināt vēlreiz"
+ "mapbuild.tryAgain": "Mēģināt vēlreiz",
+ "maps.welcome": "Laipni lūdzam Kartēs",
+ "maps.welcomeBody": "Tetra nāk bez kartes, lai katrs saņemtu karti, kādu vēlas, bezsaistē un savu. Izveidojiet savu šeit: izvēlieties savu valsti, turiet datoru ieslēgtu un pieslēgtu elektrībai, kamēr tā tiek veidota (dažas minūtes mazai valstij, stunda vai ilgāk lielai), un tā pati nonāk jūsu tālrunī un planšetdatorā.",
+ "maps.welcomeMake": "Izveidot karti…"
 }

@@ -28,7 +28,11 @@ type Page = 'welcome' | 'choose' | 'needs' | 'build' | 'done' | 'error'
 export function MapsCard() {
   const [packs, setPacks] = useState<MapPack[] | null>(null)
   const [progress, setProgress] = useState<MapBuildProgress | null>(null)
-  const [wizard, setWizard] = useState<Page | null>(null)
+  // Maps' welcome sends here with the builder to open
+  const [wizard, setWizard] = useState<Page | null>(() => {
+    try { if (sessionStorage.getItem('openMapBuilder')) { sessionStorage.removeItem('openMapBuilder'); return 'welcome' } } catch {}
+    return null
+  })
   const [removing, setRemoving] = useState<MapPack | null>(null)
   const load = () => window.drive.mapsPacks().then(setPacks, () => setPacks([]))
   useEffect(() => {
