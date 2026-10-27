@@ -97,7 +97,13 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
   useEffect(() => { reload(); return window.drive.onMapsChanged(reload) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    window.drive.mapsInfo().then(i => setMissing(!i.map)).catch(() => {})
+    window.drive.mapsInfo().then(i => {
+      setMissing(!i.map)
+      // the camera stays over the maps there are (each map's bounds and a degree of sea round them)
+      const all = i.maps.filter(x => x.bounds).map(x => x.bounds!)
+      if (all.length) map.current?.setMaxBounds([[Math.min(...all.map(b => b[0])) - 1, Math.min(...all.map(b => b[1])) - 1],
+        [Math.max(...all.map(b => b[2])) + 1, Math.max(...all.map(b => b[3])) + 1]])
+    }).catch(() => {})
     const m = new maplibregl.Map({ container: box.current!, style: 'media://maps/style/light', center: [23.7, 38.4], zoom: 6.2, maxBounds: GREECE,
       attributionControl: { compact: true } })
     map.current = m

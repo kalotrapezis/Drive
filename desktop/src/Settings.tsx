@@ -3,6 +3,7 @@ import type { AppNotification } from './drive'
 import { Icon } from './Icon'
 import { locale, t } from './i18n'
 import { ResetCard } from './Role'
+import { MapsCard } from './MapBuilder'
 
 // The foot of the sidebar (asked 2026-09-26): what Tetra said, kept — a notification goes by in seconds — and Settings.
 
@@ -76,6 +77,7 @@ export function SettingsPage({ onGuide }: { onGuide: () => void }) {
         </div>
         <p className="muted">{autoplay ? t('settings.motionAutoplayOn') : t('settings.motionAutoplayOff')}</p>
       </section>
+      <MapsCard />
       <LocationCard />
       <ResetCard />
     </div>

@@ -27,6 +27,7 @@ let calls = null
 const timer = require('./timer')
 const { Maps } = require('./maps')
 const { Router } = require('./router')
+const { MapBuilder } = require('./mapbuild')
 const { Thumbs } = require('./thumbs')
 const importer = require('./importer')
 const i18n = require('./i18n')
@@ -103,6 +104,7 @@ function planReminders() {
 let timers = null, timerAlarm = null
 let maps = null // Maps (maps.js): the phone's map files in Files/Maps, read and written as they are
 let router = null // directions (router.js): GraphHopper's server on the phone's graph, started at the first route
+let mapBuilder = null // the map builder (mapbuild.js): a country's map, roads and search, made here for every device
 let dataCounter = null // Data (datacount.js): this computer's network counts, its Wi-Fi, the phone's speed test
 let thumbs = null // Files' thumbnails (thumbs.js), made when Files first asks for one
 const timerRung = new Set()
@@ -239,7 +241,7 @@ function watchMaps() {
 /** The map's style, fonts and icons: built into the app (dist/maps, the phone's assets/maps). */
 const mapsAsset = rel => [path.join(__dirname, 'dist', 'maps', rel), path.join(__dirname, 'public', 'maps', rel)].find(f => fs.existsSync(f)) ?? null
 
-/** media://maps/… — the offline map: tiles from Files/Maps/greece.pmtiles, the phone's style pointed at them. */
+/** media://maps/… — the offline maps: tiles from each Files/Maps/<id>.pmtiles, the phone's style pointed at them. */
 async function mapsResponse(key) {
   const r = await mapsBody(key)
   const headers = new Headers(r.headers)
@@ -247,9 +249,9 @@ async function mapsResponse(key) {
   return new Response(r.body, { status: r.status, headers })
 }
 async function mapsBody(key) {
-  const tile = /^tile\/(\d+)\/(\d+)\/(\d+)$/.exec(key)
+  const tile = /^tile\/([a-z0-9-]+)\/(\d+)\/(\d+)\/(\d+)$/.exec(key)
   if (tile) {
-    const data = await maps.tile(+tile[1], +tile[2], +tile[3]).catch(() => null)
+    const data = await maps.tile(tile[1], +tile[2], +tile[3], +tile[4]).catch(() => null)
     return data ? new Response(data, { headers: { 'content-type': 'application/x-protobuf', 'cache-control': 'max-age=3600' } }) : new Response(null, { status: 204 })
   }
   const style = /^style\/(light|dark)$/.exec(key)
@@ -259,7 +261,13 @@ async function mapsBody(key) {
     const s = JSON.parse(await fs.promises.readFile(file, 'utf8'))
     s.glyphs = 'media://maps/fonts/{fontstack}/{range}.pbf'
     s.sprite = `media://maps/sprites/${style[1]}`
-    s.sources.protomaps = { type: 'vector', tiles: ['media://maps/tile/{z}/{x}/{y}'], minzoom: 0, maxzoom: 15, attribution: '© OpenStreetMap, Protomaps' }
+    // one source a map; each layer drawn for every map in turn, so a border's two maps draw as one (the first keeps the
+    // phone's names, "protomaps" and the layers' own ids, which the window asks for by name)
+    const ids = await maps.ids()
+    const source = id => ({ type: 'vector', tiles: [`media://maps/tile/${id}/{z}/{x}/{y}`], minzoom: 0, maxzoom: 15, attribution: '© OpenStreetMap, Protomaps' })
+    s.sources.protomaps = source(ids[0] ?? 'none')
+    for (const id of ids.slice(1)) s.sources[`protomaps__${id}`] = source(id)
+    s.layers = s.layers.flatMap(l => l.source !== 'protomaps' ? [l] : [l, ...ids.slice(1).map(id => ({ ...l, id: `${l.id}__${id}`, source: `protomaps__${id}` }))])
     return new Response(JSON.stringify(s), { headers: { 'content-type': 'application/json' } })
   }
   const font = /^fonts\/([^/]+)\/(\d+-\d+)\.pbf$/.exec(key)
@@ -739,7 +747,27 @@ app.whenReady().then(() => {
   ipcMain.handle('maps:search', (_, q) => maps.search(q))
   ipcMain.handle('maps:describe', (_, lat, lng, road) => maps.describe(lat, lng, road))
   ipcMain.handle('maps:near', (_, lat, lng, name) => maps.near(lat, lng, name))
-  ipcMain.handle('maps:route', (_, points, mode, main) => router.route(points, mode, !!main))
+  // the roads of the map the route starts in (a route across a border needs one map of both: Maps' builder makes one region)
+  ipcMain.handle('maps:route', async (_, points, mode, main) => {
+    const m = (await maps.mapAt(points?.[0]?.lat, points?.[0]?.lng)) ?? (await maps.info()).maps[0]
+    const dir = path.join(maps.root, `${m?.id ?? 'greece'}-gh`)
+    if (router.graphDir !== dir) { router.stop(); router.graphDir = dir }
+    return router.route(points, mode, !!main)
+  })
+  // the map builder (Settings › Maps): one map at a time; its progress goes to the window, a new map to the devices
+  mapBuilder = new MapBuilder(maps.root, p => {
+    win?.webContents.send('maps-build', p)
+    if (p.state === 'done') { win?.webContents.send('maps-changed'); sync?.nudge().catch(() => {}) }
+  })
+  ipcMain.handle('maps:regions', () => mapBuilder.regions())
+  ipcMain.handle('maps:needs', (_, id) => mapBuilder.needs(id))
+  ipcMain.handle('maps:missing', () => mapBuilder.missing())
+  ipcMain.handle('maps:installSystem', (_, packages) => mapBuilder.installSystem(packages))
+  ipcMain.handle('maps:build', (_, id) => { mapBuilder.build(id).catch(e => win?.webContents.send('maps-build', { id, state: 'error', error: e.message })) })
+  ipcMain.handle('maps:cancelBuild', () => mapBuilder.cancel())
+  ipcMain.handle('maps:building', () => mapBuilder.job?.id ?? null)
+  ipcMain.handle('maps:packs', () => mapBuilder.packs())
+  ipcMain.handle('maps:removePack', async (_, id) => { router.stop(); await mapBuilder.remove(id, rel => files.trash(rel)); win?.webContents.send('maps-changed'); sync?.nudge().catch(() => {}) })
   // this computer has no GPS: the paired phone's fix — kept, since a PC rarely moves (the user, 26 Oct). The kept one is used
   // until it is older than Settings › Location says ('off': for good); Where I am asks the phone again whatever its age.
   const EVERY_MS = { '30m': 30 * 60_000, '1d': 86_400_000, '1w': 7 * 86_400_000 }
@@ -1085,7 +1113,7 @@ app.whenReady().then(() => {
 if (!process.env.DRIVE_HIDDEN && !app.requestSingleInstanceLock()) app.exit(0)
 app.on('second-instance', showWindow)
 app.on('window-all-closed', () => app.quit())
-app.on('before-quit', () => { quitting = true; calls?.quit(); dataCounter?.stop(); vault?.lock(); analyzer?.terminate(); router?.stop() })
+app.on('before-quit', () => { quitting = true; mapBuilder?.cancel(); calls?.quit(); dataCounter?.stop(); vault?.lock(); analyzer?.terminate(); router?.stop() })
 process.on('exit', () => router?.stop()) // a Tetra stopped without quitting leaves no routing server behind
 
 /** The phone's calls, newest first (at most 1000): the lines the phone writes into Phone/calls-YYYY-MM.jsonl. */
