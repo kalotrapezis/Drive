@@ -1800,6 +1800,8 @@
  "calls.soundConnecting": "Pripája sa {name} cez Bluetooth kvôli zvuku…",
  "calls.soundUnreached": "Zvuk zostáva v telefóne: {name} sa nepripojil cez Bluetooth",
  "calls.soundPhone": "Zvuk v telefóne",
+ "calls.soundSpeaker": "Zvuk v reproduktore telefónu",
+ "calls.speaker": "Reproduktor telefónu",
  "calls.calling": "Volá: {name}",
  "calls.someone": "Niekto",
  "calls.callingOn": "Na: {device} — prijmite alebo odmietnite v bubline hovoru",

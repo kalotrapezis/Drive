@@ -1626,6 +1626,8 @@
  "calls.soundConnecting": "Ansluter {name} via Bluetooth för ljudet…",
  "calls.soundUnreached": "Ljudet stannar i telefonen: {name} anslöt inte via Bluetooth",
  "calls.soundPhone": "Ljud i telefonen",
+ "calls.soundSpeaker": "Ljud i telefonens högtalare",
+ "calls.speaker": "Telefonens högtalare",
  "calls.calling": "{name} ringer",
  "calls.someone": "Någon",
  "calls.callingOn": "På {device} — svara eller avvisa i samtalsbubblan",

@@ -1626,6 +1626,8 @@
  "calls.soundConnecting": "Σύνδεση του {name} μέσω Bluetooth για τον ήχο…",
  "calls.soundUnreached": "Ο ήχος μένει στο τηλέφωνο: το {name} δεν συνδέθηκε μέσω Bluetooth",
  "calls.soundPhone": "Ήχος στο τηλέφωνο",
+ "calls.soundSpeaker": "Ήχος στο μεγάφωνο του τηλεφώνου",
+ "calls.speaker": "Μεγάφωνο τηλεφώνου",
  "calls.calling": "Καλεί: {name}",
  "calls.someone": "Κάποιος",
  "calls.callingOn": "Στο {device} — απαντήστε ή απορρίψτε στο συννεφάκι κλήσης",

@@ -1800,6 +1800,8 @@
  "calls.soundConnecting": "Jungiamas {name} per Bluetooth garsui…",
  "calls.soundUnreached": "Garsas lieka telefone: {name} nesijungė per Bluetooth",
  "calls.soundPhone": "Garsas telefone",
+ "calls.soundSpeaker": "Garsas telefono garsiakalbyje",
+ "calls.speaker": "Telefono garsiakalbis",
  "calls.calling": "{name} skambina",
  "calls.someone": "Kažkas",
  "calls.callingOn": "Įrenginyje {device} — atsiliepkite arba atmeskite skambučio burbule",

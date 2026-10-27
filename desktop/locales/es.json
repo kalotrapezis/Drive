@@ -1683,6 +1683,8 @@
  "calls.soundConnecting": "Conectando {name} por Bluetooth para el sonido…",
  "calls.soundUnreached": "El sonido se queda en el teléfono: {name} no se conectó por Bluetooth",
  "calls.soundPhone": "Sonido en el teléfono",
+ "calls.soundSpeaker": "Sonido en el altavoz del teléfono",
+ "calls.speaker": "Altavoz del teléfono",
  "calls.calling": "{name} está llamando",
  "calls.someone": "Alguien",
  "calls.callingOn": "En {device}: contesta o rechaza en la burbuja de la llamada",

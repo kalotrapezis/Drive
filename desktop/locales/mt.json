@@ -1800,6 +1800,8 @@
  "calls.soundConnecting": "Qed jiġi konness {name} bil-Bluetooth għall-ħoss…",
  "calls.soundUnreached": "Il-ħoss jibqa’ fuq it-telefon: {name} ma kkonnettjax bil-Bluetooth",
  "calls.soundPhone": "Ħoss fuq it-telefon",
+ "calls.soundSpeaker": "Ħoss fuq il-lawdspiker tat-telefon",
+ "calls.speaker": "Il-lawdspiker tat-telefon",
  "calls.calling": "{name} qed iċċempel",
  "calls.someone": "Xi ħadd",
  "calls.callingOn": "Fuq {device} — wieġeb jew ċaħad fil-bolla tas-sejħa",

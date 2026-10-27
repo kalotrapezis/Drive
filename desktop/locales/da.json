@@ -1626,6 +1626,8 @@
  "calls.soundConnecting": "Forbinder {name} via Bluetooth til lyden…",
  "calls.soundUnreached": "Lyden bliver på telefonen: {name} forbandt ikke via Bluetooth",
  "calls.soundPhone": "Lyd på telefonen",
+ "calls.soundSpeaker": "Lyd i telefonens højttaler",
+ "calls.speaker": "Telefonens højttaler",
  "calls.calling": "{name} ringer",
  "calls.someone": "Nogen",
  "calls.callingOn": "På {device} — besvar eller afvis i opkaldsboblen",

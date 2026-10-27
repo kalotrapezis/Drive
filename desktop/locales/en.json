@@ -1626,6 +1626,8 @@
  "calls.soundConnecting": "Connecting {name} by Bluetooth for the sound…",
  "calls.soundUnreached": "Sound stays on the phone: {name} did not connect by Bluetooth",
  "calls.soundPhone": "Sound on the phone",
+ "calls.soundSpeaker": "Sound on the phone's loudspeaker",
+ "calls.speaker": "Phone's loudspeaker",
  "calls.calling": "{name} is calling",
  "calls.someone": "Someone",
  "calls.callingOn": "On {device} — answer or decline in the call bubble",

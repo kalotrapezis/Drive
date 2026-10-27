@@ -212,11 +212,17 @@ test("a client computer shows the phone's calls, answers them through the server
     const me = client.pairing().id
     assert.equal(onServer[1].takenBy, me, "the server's bubble closes")
     assert.equal(onLaptop[1].takenBy, me)
-    await state({ state: 'ended' })
+    // the sound to the phone's loudspeaker from the laptop's bubble, and the route back on every computer
+    assert.deepEqual(await laptop.sync.callAction('speaker'), { ok: true })
+    assert.ok(p.asked.includes('/call/action?do=speaker'))
+    await state({ state: 'active', number: '6900000001', route: 'speaker' })
     await until(() => onLaptop.length === 3)
-    await state({ state: 'ringing', number: '6900000002' })
+    assert.deepEqual([onServer[2].route, onLaptop[2].route], ['speaker', 'speaker'])
+    await state({ state: 'ended' })
     await until(() => onLaptop.length === 4)
-    assert.equal(onLaptop[3].takenBy, null, "a new call is nobody's yet")
+    await state({ state: 'ringing', number: '6900000002' })
+    await until(() => onLaptop.length === 5)
+    assert.equal(onLaptop[4].takenBy, null, "a new call is nobody's yet")
 
     // Maps' "where I am" and a call placed from the laptop, both through the server
     const fix = await laptop.sync.phoneLocation()

@@ -51,3 +51,14 @@ test('it cannot connect: "Sound stays on the phone" before Answer', async () => 
   assert.equal(c.state.sound, 'Sound on the phone')
   c.close()
 })
+
+test("the phone's loudspeaker: the bubble says where the sound is, and recording is off", async () => {
+  fs.writeFileSync(path.join(bt, 'on'), '')
+  const c = calls()
+  c.fromPhone({ state: 'active', number: '2100000000', phoneApp: true, route: 'bluetooth' })
+  assert.equal(c.state.sound, 'Sound on the phone')
+  c.fromPhone({ state: 'active', number: '2100000000', phoneApp: true, route: 'speaker' })
+  assert.equal(c.state.sound, "Sound on the phone's loudspeaker")
+  assert.equal(c.state.canRecord, false)
+  c.close()
+})

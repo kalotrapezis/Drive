@@ -1800,6 +1800,8 @@
  "calls.soundConnecting": "Povezujem {name} prek Bluetootha zaradi zvoka…",
  "calls.soundUnreached": "Zvok ostane v telefonu: {name} se prek Bluetootha ni povezal",
  "calls.soundPhone": "Zvok v telefonu",
+ "calls.soundSpeaker": "Zvok na zvočniku telefona",
+ "calls.speaker": "Zvočnik telefona",
  "calls.calling": "{name} kliče",
  "calls.someone": "Nekdo",
  "calls.callingOn": "Na napravi {device} — sprejmite ali zavrnite v klicnem balončku",

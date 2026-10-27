@@ -1887,6 +1887,8 @@
  "calls.soundConnecting": "Ag nascadh {name} le Bluetooth don fhuaim…",
  "calls.soundUnreached": "Fanann an fhuaim ar an ngutthán: níor nasc {name} le Bluetooth",
  "calls.soundPhone": "Fuaim ar an ngutthán",
+ "calls.soundSpeaker": "Fuaim ar challaire an ghutháin",
+ "calls.speaker": "Callaire an ghutháin",
  "calls.calling": "Tá {name} ag glaoch",
  "calls.someone": "Duine éigin",
  "calls.callingOn": "Ar {device} — freagair nó diúltaigh sa burbhuille glaoch",

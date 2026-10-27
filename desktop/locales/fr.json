@@ -1713,6 +1713,8 @@
  "calls.soundConnecting": "Connexion de {name} en Bluetooth pour le son…",
  "calls.soundUnreached": "Le son reste sur le téléphone : {name} ne s’est pas connecté en Bluetooth",
  "calls.soundPhone": "Son sur le téléphone",
+ "calls.soundSpeaker": "Son sur le haut-parleur du téléphone",
+ "calls.speaker": "Haut-parleur du téléphone",
  "calls.calling": "{name} appelle",
  "calls.someone": "Quelqu’un",
  "calls.callingOn": "Sur {device} — répondez ou refusez dans la bulle d’appel",
