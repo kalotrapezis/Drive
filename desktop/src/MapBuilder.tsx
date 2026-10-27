@@ -11,7 +11,7 @@ import { locale, t } from './i18n'
  * and Add a map, which walks through the builder (mapbuild.js). Sync carries a new map to the phone and tablet.
  */
 
-const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install'] as const
+const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'borders', 'install'] as const
 /** The free projects the maps are made of, with where to give (the welcome page). */
 const CREDITS = [
   { name: 'OpenStreetMap', key: 'osm', url: 'https://donate.openstreetmap.org/', give: true },

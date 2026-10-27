@@ -11,6 +11,9 @@
  *   <id>-lanes.tsv      lane arrows (maps-tools/maps-lanes.py)
  *   <id>-phone.tsv      the country's area codes with their places, for the Phone (maps-tools/maps-phone.py, libphonenumber's data)
  *   <id>.json           {"name","region","built","bounds":[w,s,e,n],"drive":"right"|"left"}, written last: a pack without it is half there
+ *   all-gh/             the roads of every map at once, so a route crosses from one into its neighbour (the user, 27 Oct: "When we
+ *                       have both the neighbouring maps, it should be able to cross the border"); its maps.txt lists them, one id a line.
+ *                       Made whenever a map is built and another is there, from each region's .osm.pbf, kept in ~/Tetra-maps/osm.
  *
  * Greece's pack, made by Drive-Android's tools/maps-greece.sh, is "greece" (Geofabrik's id), so it updates here too.
  * Nobody opens a terminal: pmtiles and GraphHopper are fetched into ~/Tetra-maps/bin the first time; what only the system
@@ -38,7 +41,11 @@ const URLS = {
 const PACKAGES = { 'openjdk-17-jre-headless': 'java', 'python3-pyosmium': 'osmium' }
 const PYTHON = '/usr/bin/python3'
 /** The steps as the wizard shows them, in order. */
-const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install']
+const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'borders', 'install']
+/** Each region's roads and places as downloaded, kept for the next combined graph (all-gh). */
+const OSM = path.join(WORK, 'osm')
+/** The roads of every map at once. */
+const ALL = 'all-gh'
 /** Whether the internet answers: Geofabrik's front page, within 8 s (the user, 27 Oct: "maybe an internet connection check?"). */
 const online = () => fetch('https://download.geofabrik.de/', { method: 'HEAD', signal: AbortSignal.timeout(8000) }).then(() => true, () => false)
 
@@ -108,7 +115,10 @@ class MapBuilder {
     const head = await needsNet(() => fetch(r.pbf, { method: 'HEAD' }))
     const osm = +(head.headers.get('content-length') ?? 0)
     const free = await fsp.statfs(fs.existsSync(WORK) ? WORK : os.homedir()).then(f => f.bavail * f.bsize, () => Infinity)
-    return { osm, memory: Math.max(1e9, osm * 12), hasMemory: os.totalmem(), disk: osm * 7 + 5e8, hasDisk: free }
+    // the combined graph of every map (all-gh) is the biggest piece of work
+    let all = osm
+    for (const other of (await this.packs()).filter(p => p.id !== id)) all += await fsp.stat(this.kept(other.id)).then(s => s.size, () => 0)
+    return { osm, memory: Math.max(1e9, all * 12), hasMemory: os.totalmem(), disk: osm * 7 + (all - osm) * 6 + 5e8, hasDisk: free }
   }
 
   /** The packs in Files/Maps: each .pmtiles with its manifest, when there. */
@@ -128,12 +138,23 @@ class MapBuilder {
     return out.sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  /** The pack's files to Tetra's Trash (`trash(rel)`, so the removal reaches the phone and tablet). */
+  /**
+   * The pack's files to Tetra's Trash (`trash(rel)`, so the removal reaches the phone and tablet); the combined roads too when
+   * one map is left. shortcut: with two or more left, all-gh keeps the removed map's roads until the next build makes it anew.
+   */
   async remove(id, trash) {
     if (!/^[a-z0-9-]+$/.test(id)) throw new Error('Not a map.')
     for (const n of await fsp.readdir(this.root)) {
       if (n === `${id}.pmtiles` || n === `${id}.json` || n === `${id}-gh` || (n.startsWith(`${id}-`) && n.endsWith('.tsv') && /^[a-z]+\.tsv$/.test(n.slice(id.length + 1)))) await trash(`Maps/${n}`)
     }
+    if ((await this.packs()).length < 2 && fs.existsSync(path.join(this.root, ALL))) await trash(`Maps/${ALL}`)
+    await fsp.rm(path.join(OSM, `${id}.osm.pbf`), { force: true })
+  }
+
+  /** Where region `id`'s .osm.pbf is kept: the builder's, else tools/maps-greece.sh's (~/Tetra-maps/greece-latest.osm.pbf). */
+  kept(id) {
+    const own = path.join(OSM, `${id}.osm.pbf`), sh = path.join(WORK, `${id}-latest.osm.pbf`)
+    return fs.existsSync(own) || !fs.existsSync(sh) ? own : sh
   }
 
   /** The system packages missing here; the wizard asks for them before a build. */
@@ -256,14 +277,16 @@ class MapBuilder {
         await get(region.pbf, path.join(dir, 'region.osm.pbf'), md5)
       }, 2)
 
-      await stage('roads', async () => {
+      /** GraphHopper's graph of `pbf` into the work folder's `gh`. */
+      const graph = async (pbf, gh) => {
         const heap = Math.max(1, Math.floor(os.totalmem() / 1e9 * 0.6))
-        await fsp.rm(path.join(dir, `${id}-gh`), { recursive: true, force: true })
-        await fsp.writeFile(path.join(dir, 'graph.yml'), `graphhopper:\n  datareader.file: region.osm.pbf\n  graph.location: ${id}-gh\n${PROFILES}` +
+        await fsp.rm(path.join(dir, gh), { recursive: true, force: true })
+        await fsp.writeFile(path.join(dir, `${gh}.yml`), `graphhopper:\n  datareader.file: ${pbf}\n  graph.location: ${gh}\n${PROFILES}` +
           '  prepare.min_network_size: 200\n  prepare.subnetworks.threads: 4\n  prepare.ch.threads: 3\n  graph.dataaccess.default_type: RAM_STORE\n')
-        await run(findJava(), [`-Xmx${heap}g`, '-jar', path.join(BIN, JAR), 'import', 'graph.yml'])
-        await fsp.rm(path.join(dir, `${id}-gh`, 'gh.lock'), { force: true })
-      })
+        await run(findJava(), [`-Xmx${heap}g`, '-jar', path.join(BIN, JAR), 'import', `${gh}.yml`])
+        await fsp.rm(path.join(dir, gh, 'gh.lock'), { force: true })
+      }
+      await stage('roads', () => graph('region.osm.pbf', `${id}-gh`))
 
       await stage('search', async () => {
         for (const s of ['maps-places.py', 'maps-lanes.py', 'maps-phone.py']) await fsp.writeFile(path.join(dir, s), await fsp.readFile(path.join(__dirname, 'maps-tools', s)))
@@ -278,8 +301,29 @@ class MapBuilder {
         if (iso) await run(PYTHON, ['-I', 'maps-phone.py', iso, `${id}-phone.tsv`]).catch(e => { if (job.cancelled) throw e; log.write(`no phone table: ${e.message}\n`) })
       })
 
+      // the roads of this map and every other one here, joined at their borders; a map not of Geofabrik's list stays out
+      await stage('borders', async () => {
+        const regions = await this.regions()
+        const others = (await this.packs()).filter(p => p.id !== id).map(p => regions.find(r => r.id === p.region)).filter(Boolean)
+        await fsp.rm(path.join(dir, ALL), { recursive: true, force: true })
+        if (!others.length) return
+        await fsp.mkdir(OSM, { recursive: true })
+        for (const r of others) {
+          if (fs.existsSync(this.kept(r.id))) continue
+          const md5 = (await fetch(r.pbf + '.md5', { signal: job.abort.signal }).then(x => x.text())).trim().split(/\s+/)[0]
+          await get(r.pbf, this.kept(r.id), md5)
+        }
+        await fsp.writeFile(path.join(dir, 'maps-merge.py'), await fsp.readFile(path.join(__dirname, 'maps-tools', 'maps-merge.py')))
+        await run(PYTHON, ['-I', 'maps-merge.py', 'all.osm.pbf', 'region.osm.pbf', ...others.map(r => this.kept(r.id))])
+        await graph('all.osm.pbf', ALL)
+        await fsp.rm(path.join(dir, 'all.osm.pbf'), { force: true })
+        await fsp.writeFile(path.join(dir, ALL, 'maps.txt'), [id, ...others.map(r => r.id)].join('\n') + '\n')
+      }, 2)
+
       at('install')
       await this.install(region, dir, await this.regions())
+      await fsp.mkdir(OSM, { recursive: true })
+      await fsp.rename(path.join(dir, 'region.osm.pbf'), path.join(OSM, `${id}.osm.pbf`))
       await fsp.rm(dir, { recursive: true, force: true })
       step = null
       tell('done')
@@ -328,6 +372,13 @@ class MapBuilder {
     // the same names as the old graph's, so sync carries each file as changed; a file the new one lacks goes with the old
     await fsp.rm(gh, { recursive: true, force: true })
     await fsp.rename(part, gh)
+    if (fs.existsSync(path.join(dir, ALL))) {
+      const all = path.join(this.root, ALL), allPart = path.join(this.root, `.${ALL}.part`)
+      await fsp.rm(allPart, { recursive: true, force: true })
+      await fsp.cp(path.join(dir, ALL), allPart, { recursive: true })
+      await fsp.rm(all, { recursive: true, force: true })
+      await fsp.rename(allPart, all)
+    }
     const iso = isoOf(region, regions)
     const manifest = { name: region.name, region: id, built: new Date().toISOString().slice(0, 10), bounds: pmtilesBounds(path.join(this.root, `${id}.pmtiles`)),
       drive: LEFT.has(iso) ? 'left' : 'right' }
@@ -336,4 +387,4 @@ class MapBuilder {
   }
 }
 
-module.exports = { MapBuilder, STEPS, PACKAGES, polyToGeoJson, pmtilesBounds, LEFT, online }
+module.exports = { MapBuilder, STEPS, PACKAGES, ALL, polyToGeoJson, pmtilesBounds, LEFT, online }

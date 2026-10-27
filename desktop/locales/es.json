@@ -1911,6 +1911,7 @@
  "mapbuild.step.roads": "Construyendo las carreteras para las indicaciones",
  "mapbuild.step.search": "Construyendo la búsqueda y los carriles",
  "mapbuild.step.phone": "Prefijos para las llamadas",
+ "mapbuild.step.borders": "Uniendo las carreteras con los otros mapas",
  "mapbuild.step.install": "Instalándolo en Tetra",
  "mapbuild.step.send": "Enviándolo a tu teléfono y tablet",
  "mapbuild.buildNote": "Tarda desde unos minutos hasta una hora, según el país. Puedes cerrar esta ventana; Tetra sigue trabajando.",

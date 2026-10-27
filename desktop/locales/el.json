@@ -1854,6 +1854,7 @@
  "mapbuild.step.roads": "Χτίσιμο των δρόμων για τις οδηγίες",
  "mapbuild.step.search": "Χτίσιμο της αναζήτησης και των λωρίδων",
  "mapbuild.step.phone": "Κωδικοί περιοχής για τις κλήσεις",
+ "mapbuild.step.borders": "Ένωση των δρόμων με τους άλλους χάρτες",
  "mapbuild.step.install": "Εγκατάσταση στο Tetra",
  "mapbuild.step.send": "Αποστολή στο κινητό και το tablet",
  "mapbuild.buildNote": "Παίρνει από λίγα λεπτά έως μία ώρα, ανάλογα με τη χώρα. Μπορείτε να κλείσετε αυτό το παράθυρο· το Tetra συνεχίζει.",

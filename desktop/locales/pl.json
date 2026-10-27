@@ -2028,6 +2028,7 @@
  "mapbuild.step.roads": "Budowanie dróg do wskazówek dojazdu",
  "mapbuild.step.search": "Budowanie wyszukiwania i pasów ruchu",
  "mapbuild.step.phone": "Numery kierunkowe dla połączeń",
+ "mapbuild.step.borders": "Łączenie dróg z innymi mapami",
  "mapbuild.step.install": "Instalowanie w aplikacji Tetra",
  "mapbuild.step.send": "Wysyłanie na Twój telefon i tablet",
  "mapbuild.buildNote": "To trwa od kilku minut do godziny, zależnie od kraju. Możesz zamknąć to okno; Tetra działa dalej.",

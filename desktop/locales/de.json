@@ -1854,6 +1854,7 @@
  "mapbuild.step.roads": "Straßen für die Navigation werden aufgebaut",
  "mapbuild.step.search": "Suche und Fahrspuren werden aufgebaut",
  "mapbuild.step.phone": "Vorwahlen für Anrufe",
+ "mapbuild.step.borders": "Straßen mit den anderen Karten verbinden",
  "mapbuild.step.install": "Installation in Tetra",
  "mapbuild.step.send": "Senden an Ihr Smartphone und Tablet",
  "mapbuild.buildNote": "Das dauert je nach Land einige Minuten bis eine Stunde. Sie können dieses Fenster schließen; Tetra arbeitet weiter.",

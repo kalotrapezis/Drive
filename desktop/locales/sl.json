@@ -2028,6 +2028,7 @@
  "mapbuild.step.roads": "Gradnja cest za navodila za pot",
  "mapbuild.step.search": "Gradnja iskanja in voznih pasov",
  "mapbuild.step.phone": "Omrežne skupine za klice",
+ "mapbuild.step.borders": "Povezovanje cest z drugimi zemljevidi",
  "mapbuild.step.install": "Nameščanje v aplikacijo Tetra",
  "mapbuild.step.send": "Pošiljanje na vaš telefon in tablični računalnik",
  "mapbuild.buildNote": "To traja od nekaj minut do ene ure, odvisno od države. To okno lahko zaprete; Tetra dela naprej.",

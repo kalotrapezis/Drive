@@ -5,7 +5,7 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { MapBuilder, polyToGeoJson, pmtilesBounds } = require('../mapbuild')
+const { MapBuilder, STEPS, ALL, polyToGeoJson, pmtilesBounds } = require('../mapbuild')
 const { Maps } = require('../maps')
 
 /** A .pmtiles file holding only its header, with bounds west, south, east, north. */
@@ -51,4 +51,19 @@ test('two countries: each map read, routed and searched by where it is; a remove
   assert.deepStrictEqual(trashed.sort(), ['Maps/cyprus-gh', 'Maps/cyprus-places.tsv', 'Maps/cyprus.json', 'Maps/cyprus.pmtiles'])
   assert.deepStrictEqual((await maps.info()).maps.map(m => m.id), ['greece'])
   await assert.rejects(b.remove('../x', () => {}))
+})
+
+test('the roads of every map (all-gh) go with the last but one map', async () => {
+  const root = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tetra-')), 'Maps')
+  fs.mkdirSync(path.join(root, ALL), { recursive: true })
+  fs.writeFileSync(path.join(root, ALL, 'maps.txt'), 'greece\nmacedonia\ncyprus\n')
+  for (const id of ['greece', 'macedonia', 'cyprus']) pmtiles(path.join(root, `${id}.pmtiles`), 20, 40, 23, 42)
+  const trashed = []
+  const b = new MapBuilder(root)
+  const trash = async rel => { trashed.push(rel); fs.rmSync(path.join(root, '..', rel), { recursive: true }) }
+  await b.remove('cyprus', trash)
+  assert.ok(fs.existsSync(path.join(root, ALL)))
+  await b.remove('macedonia', trash)
+  assert.deepStrictEqual(trashed, ['Maps/cyprus.pmtiles', 'Maps/macedonia.pmtiles', `Maps/${ALL}`])
+  assert.ok(STEPS.indexOf('borders') > STEPS.indexOf('roads') && STEPS.indexOf('borders') < STEPS.indexOf('install'))
 })

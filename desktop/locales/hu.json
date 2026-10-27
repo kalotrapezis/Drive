@@ -1854,6 +1854,7 @@
  "mapbuild.step.roads": "Úthálózat építése az útvonaltervezéshez",
  "mapbuild.step.search": "Keresés és sávok építése",
  "mapbuild.step.phone": "Körzetszámok a hívásokhoz",
+ "mapbuild.step.borders": "Az utak összekötése a többi térképpel",
  "mapbuild.step.install": "Telepítés a Tetrába",
  "mapbuild.step.send": "Küldés a telefonodra és a táblagépedre",
  "mapbuild.buildNote": "Országtól függően néhány perctől egy óráig tart. Bezárhatod ezt az ablakot; a Tetra tovább dolgozik.",

@@ -1941,6 +1941,7 @@
  "mapbuild.step.roads": "Se construiesc drumurile pentru indicații",
  "mapbuild.step.search": "Se construiesc căutarea și benzile",
  "mapbuild.step.phone": "Prefixe pentru apeluri",
+ "mapbuild.step.borders": "Unirea drumurilor cu celelalte hărți",
  "mapbuild.step.install": "Se instalează în Tetra",
  "mapbuild.step.send": "Se trimite pe telefonul și tableta ta",
  "mapbuild.buildNote": "Durează de la câteva minute la o oră, în funcție de țară. Poți închide această fereastră; Tetra continuă să lucreze.",

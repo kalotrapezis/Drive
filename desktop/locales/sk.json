@@ -2028,6 +2028,7 @@
  "mapbuild.step.roads": "Zostavovanie ciest pre navigáciu",
  "mapbuild.step.search": "Zostavovanie vyhľadávania a jazdných pruhov",
  "mapbuild.step.phone": "Predvoľby pre hovory",
+ "mapbuild.step.borders": "Prepojenie ciest s ostatnými mapami",
  "mapbuild.step.install": "Inštalácia do aplikácie Tetra",
  "mapbuild.step.send": "Odosielanie do telefónu a tabletu",
  "mapbuild.buildNote": "Trvá to od niekoľkých minút po hodinu, podľa krajiny. Toto okno môžete zavrieť; Tetra pracuje ďalej.",

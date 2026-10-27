@@ -1854,6 +1854,7 @@
  "mapbuild.step.roads": "De wegen voor routebeschrijvingen bouwen",
  "mapbuild.step.search": "Zoeken en rijstroken bouwen",
  "mapbuild.step.phone": "Netnummers voor gesprekken",
+ "mapbuild.step.borders": "De wegen met de andere kaarten verbinden",
  "mapbuild.step.install": "Installeren in Tetra",
  "mapbuild.step.send": "Naar je telefoon en tablet sturen",
  "mapbuild.buildNote": "Dit duurt van een paar minuten tot een uur, afhankelijk van het land. Je kunt dit venster sluiten; Tetra werkt door.",
