@@ -5,7 +5,7 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { MapBuilder, STEPS, pairDir, meet, minutes, polyToGeoJson, pmtilesBounds, isOld } = require('../mapbuild')
+const { MapBuilder, STEPS, pairDir, meet, polyToGeoJson, pmtilesBounds, isOld } = require('../mapbuild')
 const { Maps, labelsIn } = require('../maps')
 
 /** A .pmtiles file holding only its header, with bounds west, south, east, north. */
@@ -77,13 +77,11 @@ test('two neighbours joined: their pair graph for a route from one into the othe
   assert.ok(STEPS.indexOf('borders') > STEPS.indexOf('install'))
 })
 
-test('neighbours by their Geofabrik borders: they overlap a little; a pair takes about its size in time', () => {
+test('neighbours by their Geofabrik borders: they overlap a little', () => {
   const box = (w, s, e, n) => ({ type: 'MultiPolygon', coordinates: [[[[w, s], [e, s], [e, n], [w, n], [w, s]]]] })
   assert.ok(meet(box(20, 39, 26, 41.1), box(20.4, 40.8, 23, 42.4)))
   assert.ok(!meet(box(20, 39, 26, 41.1), box(32, 34.5, 34.7, 35.8)))
   assert.ok(meet(box(0, 0, 10, 10), box(2, 2, 3, 3))) // one inside the other
-  assert.strictEqual(minutes(372e6, 3), 52) // as measured: 48 min with 3 threads, and the merge
-  assert.ok(minutes(372e6, 16) < 30 && minutes(1e6, 16) === 2)
 })
 
 test('a map is old 3 months after it was made (30 Nov: the last of February), Greece\'s older pack by its file date', async () => {

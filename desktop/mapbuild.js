@@ -49,13 +49,6 @@ const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install', 'bo
 const OSM = path.join(WORK, 'osm')
 /** Two neighbouring maps' joined roads: "greece_macedonia-gh" (Android's MapsFiles.pair). */
 const pairDir = (a, b) => `${[a, b].sort().join('_')}-gh`
-/**
- * About how many minutes a pair graph of `bytes` of .osm.pbf takes here: the merge, then GraphHopper's shortcuts for its four
- * profiles, as many at once as there are cores. Measured 27 Oct: Greece + North Macedonia, 372 MB, 3.5 min to merge, 48 min
- * for the graph with 3 threads (two rounds of profiles). shortcut: linear in size, one machine's numbers; good for "about".
- */
-const minutes = (bytes, cores = os.cpus().length) => Math.max(2, Math.round(bytes / 372e6 * (3.5 + 24 * Math.ceil(4 / Math.min(4, cores)))))
-
 /** Whether two regions' borders (GeoJSON MultiPolygons) meet: Geofabrik draws each a little beyond the line, so neighbours' overlap. */
 function meet(a, b) {
   const inside = ([x, y], ring) => {
@@ -151,15 +144,23 @@ class MapBuilder {
     const head = await needsNet(() => fetch(r.pbf, { method: 'HEAD' }))
     const osm = +(head.headers.get('content-length') ?? 0)
     const free = await fsp.statfs(fs.existsSync(WORK) ? WORK : os.homedir()).then(f => f.bavail * f.bsize, () => Infinity)
-    // each neighbour here makes a pair graph with it: the biggest pair is the memory, all of them the time
-    const pairs = []
-    for (const n of await this.neighbours(r)) {
-      const bytes = await fsp.stat(this.kept(n.id)).then(st => st.size, async () => +((await fetch(n.pbf, { method: 'HEAD' })).headers.get('content-length') ?? 0))
-      pairs.push({ name: n.name, bytes: osm + bytes })
+    const pairs = await this.pairs(r, osm)
+    return { osm, memory: Math.max(1e9, osm * 12), hasMemory: os.totalmem(), disk: osm * 7 + pairs.reduce((a, p) => a + (p.fits ? p.bytes * 5 : 0), 0) + 5e8, hasDisk: free, pairs }
+  }
+
+  /**
+   * Region `r` (its .osm.pbf `osm` bytes) with each neighbour here: { ...the neighbour, a, b, name, bytes, memory, fits }. A pair
+   * needs GraphHopper's memory for both files (about 12 × their size, as one map), within the 60% of this computer's the
+   * import gets; one that does not fit is left out, its border not crossed (the user, 27 Oct: "if it's some 4 GB potato").
+   */
+  async pairs(r, osm, signal) {
+    const out = []
+    for (const n of await this.neighbours(r, signal)) {
+      const size = await fsp.stat(this.kept(n.id)).then(st => st.size, async () => +((await needsNet(() => fetch(n.pbf, { method: 'HEAD', signal }))).headers.get('content-length') ?? 0))
+      const bytes = osm + size, memory = Math.max(1e9, bytes * 12)
+      out.push({ ...n, a: r.name, b: n.name, name: `${r.name} + ${n.name}`, bytes, memory, fits: memory <= os.totalmem() * 0.6 })
     }
-    const biggest = Math.max(osm, ...pairs.map(p => p.bytes))
-    return { osm, memory: Math.max(1e9, biggest * 12), hasMemory: os.totalmem(), disk: osm * 7 + pairs.reduce((a, p) => a + p.bytes * 5, 0) + 5e8, hasDisk: free,
-      borders: pairs.map(p => p.name), minutes: pairs.reduce((a, p) => a + minutes(p.bytes), 0) }
+    return out
   }
 
   /** Region `r`'s border, Geofabrik's .poly, kept in ~/Tetra-maps/osm. */
@@ -322,6 +323,13 @@ class MapBuilder {
       await fsp.writeFile(mark, new Date().toISOString())
     }
     try {
+      // the pairs it will make, known from the start so the window says what takes long (a Remake too)
+      const osm = +((await needsNet(() => fetch(region.pbf, { method: 'HEAD', signal: job.abort.signal }))).headers.get('content-length') ?? 0)
+      const near = await this.pairs(region, osm, job.abort.signal)
+      const pairs = near.map(n => ({ name: n.name, a: n.a, b: n.b, memory: n.memory,
+        state: !n.fits ? 'skipped' : fs.existsSync(path.join(dir, `.done-borders-${n.id}`)) ? 'done' : 'waiting' }))
+      extra = { pairs, hasMemory: os.totalmem() }
+
       await stage('tools', () => this.tools(get, run), 2)
 
       await stage('map', async () => {
@@ -371,10 +379,8 @@ class MapBuilder {
 
       // a pair graph with each neighbour here, one at a time, each its own mark (the user, 27 Oct: "Break it into pieces")
       at('borders')
-      const near = await this.neighbours(region, job.abort.signal)
-      const pairs = near.map(n => ({ name: `${region.name} + ${n.name}`, state: fs.existsSync(path.join(dir, `.done-borders-${n.id}`)) ? 'done' : 'waiting' }))
-      extra = { pairs }
       for (const [i, n] of near.entries()) {
+        if (pairs[i].state === 'skipped') { log.write(`${n.name}: needs ${n.memory} bytes of memory, left out\n`); continue }
         if (pairs[i].state !== 'done') pairs[i].state = 'running'
         await stage('borders', async () => {
           if (!fs.existsSync(this.kept(n.id))) {
@@ -452,4 +458,4 @@ class MapBuilder {
   }
 }
 
-module.exports = { MapBuilder, STEPS, PACKAGES, pairDir, meet, minutes, polyToGeoJson, pmtilesBounds, LEFT, online, isOld }
+module.exports = { MapBuilder, STEPS, PACKAGES, pairDir, meet, polyToGeoJson, pmtilesBounds, LEFT, online, isOld }
