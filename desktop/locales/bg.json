@@ -1626,6 +1626,8 @@
  "calls.soundConnecting": "Свързване на {name} по Bluetooth за звука…",
  "calls.soundUnreached": "Звукът остава на телефона: {name} не се свърза по Bluetooth",
  "calls.soundPhone": "Звук на телефона",
+ "calls.soundSpeaker": "Звук на високоговорителя на телефона",
+ "calls.speaker": "Високоговорител на телефона",
  "calls.calling": "{name} се обажда",
  "calls.someone": "Някой",
  "calls.callingOn": "На {device} — приемете или отхвърлете от балончето на разговора",

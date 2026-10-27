@@ -123,7 +123,9 @@ class Calls {
     return c ? { name: c.info.formatted || [c.info.given, c.info.family].filter(Boolean).join(' '), photo: c.info.photo } : null
   }
 
-  sound() {
+  /** [route]: the phone's own (Tetra the phone app); on its loudspeaker the sound is there, whatever this computer has. */
+  sound(route) {
+    if (route === 'speaker') return t('calls.soundSpeaker')
     if (this.relayStop) return `${t('calls.soundRelayed')} · ${t('release.alpha')}` // not yet tried with two computers
     const on = this.bt.phones.find(p => p.connected)
     if (on) return t('calls.soundHere', { name: on.name })
@@ -149,8 +151,8 @@ class Calls {
   outgoing(number, name, device) { this.show({ direction: 'out', state: 'calling', number, name: name || this.who(number)?.name || '', photo: this.who(number)?.photo ?? null, device, since: Date.now() }) }
 
   /** A state the phone told: ringing (with the number), active, ended. */
-  fromPhone({ state, direction, number, missed, device, muted, phoneApp, takenBy }) {
-    // calling (dialled, not answered yet) and held: only from a phone where Tetra is the phone app, as are muted and phoneApp
+  fromPhone({ state, direction, number, missed, device, muted, route, phoneApp, takenBy }) {
+    // calling (dialled, not answered yet) and held: only from a phone where Tetra is the phone app, as are muted, route and phoneApp
     if (!['ringing', 'calling', 'active', 'held', 'ended'].includes(state)) return
     // taken on another computer, "like a switch" (the user, 26 Oct): this bubble goes, and the call stays there
     if (takenBy && takenBy !== this.me()) { if (this.state) this.close(); return }
@@ -158,7 +160,7 @@ class Calls {
     if (state === 'ended' && !was) return // nothing on the screen to end
     const c = this.who(number || was?.number)
     const next = { ...was, direction: direction === 'out' ? 'out' : 'in', state, number: number || was?.number || '', name: c?.name || was?.name || '', photo: c?.photo ?? was?.photo ?? null, device: device || was?.device,
-      since: state === 'active' && !['active', 'held'].includes(was?.state) ? Date.now() : was?.since ?? Date.now(), missed: !!missed, muted: !!muted, phoneApp: !!phoneApp }
+      since: state === 'active' && !['active', 'held'].includes(was?.state) ? Date.now() : was?.since ?? Date.now(), missed: !!missed, muted: !!muted, route: route ?? null, phoneApp: !!phoneApp }
     if (state === 'ringing' && was?.state !== 'ringing') this.notify(t('calls.calling', { name: next.name || next.number || t('calls.someone') }), next.device ? t('calls.callingOn', { device: next.device }) : t('calls.callingOnPhone'))
     if (state === 'ended' && missed) this.notify(t('calls.missed', { name: next.name || next.number }), null)
     this.show(next)
@@ -169,7 +171,7 @@ class Calls {
     // a call begins (it rings, or the phone dials): its sound needs the phone on this computer's Bluetooth
     if (['ringing', 'calling'].includes(s.state) && !['ringing', 'calling', 'active', 'held'].includes(this.state?.state)) { this.unreached = null; if (this.early()) this.reconnect() }
     if (s.state === 'ended' && recorder.proc) { recorder.stop(); this.notify(t('calls.recorded'), path.basename(recorder.file || '')) }
-    this.state = { ...s, sound: this.sound(), canRecord: !!echo.module && ['active', 'held'].includes(s.state), recording: !!recorder.proc }
+    this.state = { ...s, sound: this.sound(s.route), canRecord: !!echo.module && ['active', 'held'].includes(s.state) && s.route !== 'speaker', recording: !!recorder.proc }
     if (!this.win || this.win.isDestroyed()) {
       const { workArea } = screen.getPrimaryDisplay()
       this.win = new BrowserWindow({ width: 360, height: 150, x: workArea.x + workArea.width - 376, y: workArea.y + workArea.height - 166, frame: false, resizable: false,

@@ -1626,6 +1626,8 @@
  "calls.soundConnecting": "{name} wird für den Ton per Bluetooth verbunden…",
  "calls.soundUnreached": "Ton bleibt auf dem Telefon: {name} hat sich nicht per Bluetooth verbunden",
  "calls.soundPhone": "Ton auf dem Telefon",
+ "calls.soundSpeaker": "Ton über den Lautsprecher des Telefons",
+ "calls.speaker": "Lautsprecher des Telefons",
  "calls.calling": "{name} ruft an",
  "calls.someone": "Jemand",
  "calls.callingOn": "Auf {device} — im Anrufbanner annehmen oder ablehnen",

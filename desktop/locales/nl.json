@@ -1626,6 +1626,8 @@
  "calls.soundConnecting": "{name} via Bluetooth verbinden voor het geluid…",
  "calls.soundUnreached": "Het geluid blijft op de telefoon: {name} is niet via Bluetooth verbonden",
  "calls.soundPhone": "Geluid op de telefoon",
+ "calls.soundSpeaker": "Geluid op de luidspreker van de telefoon",
+ "calls.speaker": "Luidspreker van de telefoon",
  "calls.calling": "{name} belt",
  "calls.someone": "Iemand",
  "calls.callingOn": "Op {device} — neem op of weiger in het gespreksvenster",

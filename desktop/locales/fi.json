@@ -1626,6 +1626,8 @@
  "calls.soundConnecting": "Yhdistetään {name} Bluetoothilla äänen vuoksi…",
  "calls.soundUnreached": "Ääni jää puhelimeen: {name} ei yhdistynyt Bluetoothilla",
  "calls.soundPhone": "Ääni puhelimessa",
+ "calls.soundSpeaker": "Ääni puhelimen kaiuttimessa",
+ "calls.speaker": "Puhelimen kaiutin",
  "calls.calling": "{name} soittaa",
  "calls.someone": "Joku",
  "calls.callingOn": "Laitteella {device} — vastaa tai hylkää puhelukuplassa",

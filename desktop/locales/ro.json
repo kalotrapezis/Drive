@@ -1713,6 +1713,8 @@
  "calls.soundConnecting": "Se conectează {name} prin Bluetooth pentru sunet…",
  "calls.soundUnreached": "Sunetul rămâne pe telefon: {name} nu s-a conectat prin Bluetooth",
  "calls.soundPhone": "Sunet pe telefon",
+ "calls.soundSpeaker": "Sunet pe difuzorul telefonului",
+ "calls.speaker": "Difuzorul telefonului",
  "calls.calling": "{name} sună",
  "calls.someone": "Cineva",
  "calls.callingOn": "Pe {device} – răspunzi sau refuzi din bula de apel",

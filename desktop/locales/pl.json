@@ -1800,6 +1800,8 @@
  "calls.soundConnecting": "Łączenie {name} przez Bluetooth dla dźwięku…",
  "calls.soundUnreached": "Dźwięk zostaje w telefonie: {name} nie połączył się przez Bluetooth",
  "calls.soundPhone": "Dźwięk w telefonie",
+ "calls.soundSpeaker": "Dźwięk na głośniku telefonu",
+ "calls.speaker": "Głośnik telefonu",
  "calls.calling": "{name} dzwoni",
  "calls.someone": "Ktoś",
  "calls.callingOn": "Na {device} — odbierz lub odrzuć w dymku połączenia",

@@ -1712,6 +1712,8 @@
  "calls.soundConnecting": "Povezujem {name} putem Bluetootha za zvuk…",
  "calls.soundUnreached": "Zvuk ostaje na telefonu: {name} se nije povezao putem Bluetootha",
  "calls.soundPhone": "Zvuk na telefonu",
+ "calls.soundSpeaker": "Zvuk na zvučniku telefona",
+ "calls.speaker": "Zvučnik telefona",
  "calls.calling": "{name} zove",
  "calls.someone": "Netko",
  "calls.callingOn": "Na uređaju {device} — odgovorite ili odbijte u balončiću poziva",
