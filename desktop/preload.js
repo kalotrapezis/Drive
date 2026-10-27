@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('drive', {
   dataWifi: () => ipcRenderer.invoke('data:wifi'),
   phoneRecordings: () => ipcRenderer.invoke('phone:recordings'),
   phoneSpam: () => ipcRenderer.invoke('phone:spam'),
+  phoneCountry: () => ipcRenderer.invoke('phone:country'),
   phoneSetSpam: (number, on) => ipcRenderer.invoke('phone:setSpam', number, on),
   phoneOpenRecording: name => ipcRenderer.invoke('phone:openRecording', name),
   callsBluetooth: () => ipcRenderer.invoke('calls:bluetooth'),

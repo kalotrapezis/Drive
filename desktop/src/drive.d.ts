@@ -184,6 +184,7 @@ declare global {
       dataAll(): Promise<{ plan: { kind: string; size: number; every: string; day: number; days: number; from: string; warn: number[] } | null; devices: Record<string, { deviceName?: string; d?: string; h?: string; app?: string; net?: string; mobile?: number; wifi?: number; roam?: number; hotspot?: number; via?: number; eth?: number; bytes?: number; at?: string; event?: string; secs?: number; note?: string }[]>; me: string }>
       dataWifi(): Promise<{ rssi?: number; speed?: number; mhz?: number; ssid?: string; ethernet?: { iface: string; speed: number }; error?: string }>
       phoneSpam(): Promise<{ number: string; note: string }[]>
+      phoneCountry(): Promise<string>
       phoneSetSpam(number: string, on: boolean): Promise<{ number: string; note: string }[]>
       phoneOpenRecording(name: string): Promise<string>
       contactsFacePhoto(faceId: string): Promise<{ photo: string; face: string }>
