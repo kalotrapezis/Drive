@@ -224,8 +224,8 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
     }
     // a road tapped: its name is the spot's street where no house near has a number (roadAtPoint on the phone)
     const road = m.queryRenderedFeatures([[e.point.x - 12, e.point.y - 12], [e.point.x + 12, e.point.y + 12]])
-      .find(f => f.layer.id.startsWith('roads_') && !/casing|labels|shields|oneway|rail|runway|taxiway|pier/.test(f.layer.id) && (f.properties?.['name:el'] || f.properties?.name))
-    open({ kind: 'pin', lat: e.lngLat.lat, lng: e.lngLat.lng, road: road ? String(road.properties['name:el'] || road.properties.name) : undefined }, false)
+      .find(f => f.layer.id.startsWith('roads_') && !/casing|labels|shields|oneway|rail|runway|taxiway|pier/.test(f.layer.id) && (f.properties?.[`name:${lang()}`] || f.properties?.name))
+    open({ kind: 'pin', lat: e.lngLat.lat, lng: e.lngLat.lng, road: road ? String(road.properties[`name:${lang()}`] || road.properties.name) : undefined }, false)
   }
 
   // ---- search ----

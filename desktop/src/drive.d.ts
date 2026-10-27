@@ -8,7 +8,7 @@ export interface MapStop { name: string; lat: number; lng: number }
 export interface MapTrip { id: string; name: string; stops: MapStop[] }
 /** The map builder (mapbuild.js): a region of Geofabrik's list, a map made from one, and the builder's news. */
 export interface MapRegion { id: string; name: string; parent: string | null; iso: string | null; pbf: string }
-export interface MapPack { id: string; name: string; region: string; built: string; bytes: number; roads: boolean }
+export interface MapPack { id: string; name: string; region: string; built: string; old: boolean; bytes: number; roads: boolean }
 export interface MapBuildProgress { id: string; step: 'tools' | 'map' | 'osm' | 'roads' | 'search' | 'phone' | 'install' | null; state: 'running' | 'offline' | 'needs' | 'done' | 'error' | 'cancelled'
   done?: number; total?: number; error?: string | null; packages?: string[] }
 export interface Poi { kind: string; lat: number; lng: number; name: string; nameEn: string; more: string; hours: string; phone: string; web: string; wheelchair: string; note: string }
@@ -241,6 +241,7 @@ declare global {
       setLocationEvery(v: 'off' | '30m' | '1d' | '1w'): Promise<void>
       mapsPhoneLocation(fresh?: boolean): Promise<{ lat: number; lng: number; accuracy: number; at: number; provider: string; device: string; error?: undefined } | { error: string }>
       onMapsChanged(cb: () => void): () => void
+      onOpenSettings(cb: (tab: string) => void): () => void
       onNotesChanged(cb: () => void): () => void
       notesSynced(): Promise<{ at: number; device: string } | null>
       notifications: { list(): Promise<AppNotification[]>; read(): Promise<void>; clear(): Promise<void>; onChange(cb: () => void): () => void }

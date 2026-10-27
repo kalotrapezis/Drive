@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld('drive', {
   mapsPhoneLocation: fresh => ipcRenderer.invoke('maps:phoneLocation', !!fresh),
   locationEvery: () => ipcRenderer.invoke('settings:locationEvery'),
   setLocationEvery: v => ipcRenderer.invoke('settings:setLocationEvery', v),
+  onOpenSettings: cb => { const f = (_, tab) => cb(tab); ipcRenderer.on('open-settings', f); return () => ipcRenderer.removeListener('open-settings', f) },
   onMapsChanged: cb => { const f = () => cb(); ipcRenderer.on('maps-changed', f); return () => ipcRenderer.removeListener('maps-changed', f) },
   onTimerChanged: cb => { const f = () => cb(); ipcRenderer.on('timer-changed', f); return () => ipcRenderer.removeListener('timer-changed', f) },
   calendarPickImport: () => ipcRenderer.invoke('calendar:pickImport'),

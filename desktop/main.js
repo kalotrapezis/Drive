@@ -26,7 +26,7 @@ const { Calls } = require('./calls')
 const { DataCounter } = require('./datacount')
 let calls = null
 const timer = require('./timer')
-const { Maps } = require('./maps')
+const { Maps, labelsIn } = require('./maps')
 const { Router } = require('./router')
 const { MapBuilder } = require('./mapbuild')
 const { Thumbs } = require('./thumbs')
@@ -259,7 +259,7 @@ async function mapsBody(key) {
   if (style) {
     const file = mapsAsset(`${style[1]}.json`)
     if (!file) return new Response('Not found', { status: 404 })
-    const s = JSON.parse(await fs.promises.readFile(file, 'utf8'))
+    const s = JSON.parse(labelsIn(await fs.promises.readFile(file, 'utf8'), i18n.current().lang.split('-')[0])) // names in Tetra's language
     s.glyphs = 'media://maps/fonts/{fontstack}/{range}.pbf'
     s.sprite = `media://maps/sprites/${style[1]}`
     // one source a map; each layer drawn for every map in turn, so a border's two maps draw as one (the first keeps the
@@ -760,6 +760,14 @@ app.whenReady().then(() => {
     win?.webContents.send('maps-build', p)
     if (p.state === 'done') { win?.webContents.send('maps-changed'); sync?.nudge().catch(() => {}) }
   })
+  // a map turned old: said once for each time it is due (keyed by its built date), its click opens Settings › Maps
+  const checkMapAges = async () => {
+    const due = (await mapBuilder.packs()).filter(p => p.old)
+    const said = new Set(JSON.parse(setting('mapsOldSaid') || '[]'))
+    for (const p of due) if (!said.has(`${p.id}@${p.built}`)) notify(t('main.mapOld', { name: p.name }), t('main.mapOldBody'), () => win?.webContents.send('open-settings', 'maps'))
+    setSetting('mapsOldSaid', JSON.stringify(due.map(p => `${p.id}@${p.built}`))) // the maps no longer due drop out
+  }
+  if (!process.env.DRIVE_HIDDEN) { setTimeout(() => checkMapAges().catch(e => console.warn('[maps age]', e.message)), 30_000); setInterval(() => checkMapAges().catch(() => {}), 6 * 3_600_000) }
   ipcMain.handle('maps:regions', () => mapBuilder.regions())
   ipcMain.handle('maps:needs', (_, id) => mapBuilder.needs(id))
   ipcMain.handle('maps:missing', () => mapBuilder.missing())

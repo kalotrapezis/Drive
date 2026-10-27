@@ -51,12 +51,14 @@ const TABS: SettingsTab[] = [...GENERAL, ...APPS].map(x => x.id)
  * view with categories and colours"): the pages on the left — the Guide, General, then each app with its colour, as on
  * the phone — and the page chosen on the right; one column in a narrow window.
  */
-export function SettingsPage({ onGuide }: { onGuide: () => void }) {
+/** [start]: the page a notification opens (an old map: 'maps'). */
+export function SettingsPage({ onGuide, start }: { onGuide: () => void; start?: string }) {
   const [tab, setTab] = useState<SettingsTab>(() => {
+    if (TABS.includes(start as SettingsTab)) return start as SettingsTab
     try { const v = localStorage.getItem('settingsTab') as SettingsTab; return TABS.includes(v) ? v : 'appearance' } catch { return 'appearance' }
   })
   // a narrow window shows the list or the page, as the phone does (the user, 27 Oct: "add the back button … a two-page thing")
-  const [picked, setPicked] = useState(false)
+  const [picked, setPicked] = useState(!!start)
   const open = (id: SettingsTab) => { setTab(id); setPicked(true); try { localStorage.setItem('settingsTab', id) } catch {} }
   const row = (x: { id: SettingsTab; icon: IconName; cat?: string; title: string; summary: string }) =>
     <button key={x.id} className={`settings-row ${tab === x.id ? 'on' : ''}`} onClick={() => open(x.id)}>
