@@ -22,6 +22,52 @@ const safeTitle = t => (String(t ?? '').replace(/[\/\\\0:*?"<>|]/g, ' ').replace
 const pad = n => String(n).padStart(2, '0')
 const stamp = ms => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}-${pad(d.getMinutes())}` }
 
+/**
+ * Notes as Markdown files (the user, 27 Oct: "an export function for notes into md files, categorized by folders with
+ * the tags' names"), the same as the phone's (NoteExport in Notes.kt). Notes stay JSON inside Tetra; this is a copy out.
+ * The title names the file and is its first heading, under a front matter of the labels and dates; the text is
+ * Markdown already, and a checklist becomes `- [ ]` / `- [x]` lines. Labels do not nest, so each is one folder.
+ */
+const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z')
+const quote = s => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+/** A name every file system takes; a leading dot would hide the file. */
+const safeName = (s, untitled) => safeTitle(String(s ?? '').trim() ? s : untitled).replace(/^\.+/, '') || untitled
+
+/** One note: its file's name (without .md) and its text. */
+function markdown(note, untitled = 'Untitled') {
+  const labels = note.labels ?? [], title = String(note.title ?? '').trim()
+  const front = ['---', ...(labels.length ? [`tags: [${labels.map(quote).join(', ')}]`] : []), ...(note.createdAt ? [`created: ${iso(note.createdAt)}`] : []),
+    ...(note.updatedAt ? [`updated: ${iso(note.updatedAt)}`] : []), '---', '', ''].join('\n')
+  const content = String(note.content ?? '').trimEnd()
+  const body = note.noteType === 'CHECKLIST'
+    ? [...(note.checklistItems ?? [])].sort((a, b) => Number(a.isChecked) - Number(b.isChecked) || a.order - b.order).map(i => `- [${i.isChecked ? 'x' : ' '}] ${i.text}\n`).join('')
+    : content ? content + '\n' : ''
+  const heading = `# ${title}`
+  // a note that starts with its own title as a heading keeps just that one
+  const head = !title || body.split('\n').find(l => l.trim())?.trim() === heading ? '' : heading + '\n\n'
+  return { name: safeName(note.title, untitled), text: front + head + body }
+}
+
+/**
+ * Every note but the archived and the trashed: in a folder per label (in each, if it has several), at the top without
+ * one. The same name twice in a folder (case aside, for the file systems that ignore it) becomes "Name (2)", the older
+ * note keeping the plain name, so exporting again writes over the same files.
+ */
+function markdownFiles(notes, untitled = 'Untitled') {
+  const taken = new Set(), out = []
+  for (const n of notes.filter(n => !n.trashedAt && !n.archivedAt).sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))) {
+    const { name, text } = markdown(n, untitled)
+    const dirs = [...new Set((n.labels ?? []).map(l => safeName(l, untitled) + '/'))]
+    for (const dir of dirs.length ? dirs : ['']) {
+      let file = `${dir}${name}.md`
+      for (let i = 2; taken.has(file.toLowerCase()); i++) file = `${dir}${name} (${i}).md`
+      taken.add(file.toLowerCase())
+      out.push({ path: file, text, at: n.updatedAt })
+    }
+  }
+  return out
+}
+
 class Notes {
   constructor(root, deviceId = 'desktop') {
     this.root = root
@@ -184,4 +230,4 @@ class Notes {
   }
 }
 
-module.exports = { Notes, safeTitle }
+module.exports = { Notes, safeTitle, markdown, markdownFiles }

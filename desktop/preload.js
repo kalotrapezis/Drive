@@ -100,6 +100,8 @@ contextBridge.exposeInMainWorld('drive', {
   calendarSetReminders: on => ipcRenderer.invoke('calendar:setReminders', on),
   calendarSetAutostart: on => ipcRenderer.invoke('calendar:setAutostart', on),
   notesSynced: () => ipcRenderer.invoke('notes:synced'),
+  notesExportAll: () => ipcRenderer.invoke('notes:exportAll'),
+  notesExportOne: id => ipcRenderer.invoke('notes:exportOne', id),
   notifications: {
     list: () => ipcRenderer.invoke('notifications:list'),
     read: () => ipcRenderer.invoke('notifications:read'),

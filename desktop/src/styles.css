@@ -621,6 +621,8 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 /* The drawer's labels, bigger (asked 2026-09-26). */
 .notes-drawer .chip { padding: 9px 18px; font-size: 15px; }
 .notes-drawer .chips { gap: 8px; }
+.notes-export { margin-top: 16px; display: flex; flex-direction: column; }
+.notes-export .hint { padding-left: 20px; }
 .notes-drawer h4 { font-size: 16px; }
 .editor-tools-row { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; border-top: 1px solid var(--island-2); padding-top: 4px; margin-top: 4px; }
 .note-status { font-size: 13px; color: var(--muted); padding: 0 10px; white-space: nowrap; }
