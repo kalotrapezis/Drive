@@ -9,6 +9,7 @@
  *   <id>-gh/            the roads: GraphHopper 10.2's graph for car, foot, bike and wheelchair (router.js's PROFILES)
  *   <id>-places.tsv, <id>-addresses.tsv, <id>-streets.tsv   search (maps-tools/maps-places.py)
  *   <id>-lanes.tsv      lane arrows (maps-tools/maps-lanes.py)
+ *   <id>-phone.tsv      the country's area codes with their places, for the Phone (maps-tools/maps-phone.py, libphonenumber's data)
  *   <id>.json           {"name","region","built","bounds":[w,s,e,n],"drive":"right"|"left"}, written last: a pack without it is half there
  *
  * Greece's pack, made by Drive-Android's tools/maps-greece.sh, is "greece" (Geofabrik's id), so it updates here too.
@@ -64,6 +65,13 @@ function pmtilesBounds(file) {
     if (b.toString('latin1', 0, 7) !== 'PMTiles') return null
     return [102, 106, 110, 114].map(o => b.readInt32LE(o) / 1e7)
   } finally { fs.closeSync(fd) }
+}
+
+/** A region's ISO 3166-1 code, or its parent's (Bayern has none, Germany has). */
+function isoOf(region, regions) {
+  let iso = null
+  for (let r = region; r && !iso; r = regions.find(x => x.id === r.parent)) iso = r.iso
+  return iso
 }
 
 class MapBuilder {
@@ -214,9 +222,12 @@ class MapBuilder {
       await fsp.rm(path.join(dir, `${id}-gh`, 'gh.lock'), { force: true })
 
       at('search')
-      for (const s of ['maps-places.py', 'maps-lanes.py']) await fsp.writeFile(path.join(dir, s), await fsp.readFile(path.join(__dirname, 'maps-tools', s)))
+      for (const s of ['maps-places.py', 'maps-lanes.py', 'maps-phone.py']) await fsp.writeFile(path.join(dir, s), await fsp.readFile(path.join(__dirname, 'maps-tools', s)))
       await run(PYTHON, ['-I', 'maps-places.py', 'region.osm.pbf', `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`])
       await run(PYTHON, ['-I', 'maps-lanes.py', 'region.osm.pbf', `${id}-lanes.tsv`])
+      // the Phone's places of area codes; a country libphonenumber names none for, or no GitHub, leaves the map without them
+      const iso = isoOf(region, await this.regions())
+      if (iso) await run(PYTHON, ['-I', 'maps-phone.py', iso, `${id}-phone.tsv`]).catch(e => { if (job.cancelled) throw e; log.write(`no phone table: ${e.message}\n`) })
 
       at('install')
       await this.install(region, dir, await this.regions())
@@ -256,7 +267,8 @@ class MapBuilder {
   async install(region, dir, regions) {
     const id = region.id
     await fsp.mkdir(this.root, { recursive: true })
-    for (const n of [`${id}.pmtiles`, `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`, `${id}-lanes.tsv`]) {
+    for (const n of [`${id}.pmtiles`, `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`, `${id}-lanes.tsv`, `${id}-phone.tsv`]) {
+      if (n.endsWith('-phone.tsv') && !fs.existsSync(path.join(dir, n))) continue
       const part = path.join(this.root, `.${n}.part`)
       await fsp.copyFile(path.join(dir, n), part)
       await fsp.rename(part, path.join(this.root, n))
@@ -267,8 +279,7 @@ class MapBuilder {
     // the same names as the old graph's, so sync carries each file as changed; a file the new one lacks goes with the old
     await fsp.rm(gh, { recursive: true, force: true })
     await fsp.rename(part, gh)
-    let iso = null
-    for (let r = region; r && !iso; r = regions.find(x => x.id === r.parent)) iso = r.iso
+    const iso = isoOf(region, regions)
     const manifest = { name: region.name, region: id, built: new Date().toISOString().slice(0, 10), bounds: pmtilesBounds(path.join(this.root, `${id}.pmtiles`)),
       drive: LEFT.has(iso) ? 'left' : 'right' }
     await fsp.writeFile(path.join(this.root, `.${id}.json.part`), JSON.stringify(manifest, null, 1) + '\n')
