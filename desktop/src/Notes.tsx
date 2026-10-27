@@ -76,8 +76,8 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
     if (message) say(message, undo && (() => { undo().then(reload) }))
     else if (n && !n.title.trim() && !n.content.trim() && !(n.checklistItems ?? []).some(i => i.text.trim())) call('remove', n.id).then(reload) // nothing written: no note
   }
-  // Export as Markdown (the user, 27 Oct): a folder per label, the archived and the trashed left out (notes.js).
-  const exportAll = () => { setDrawer(false); window.drive.notesExportAll().then(n => n != null && say(t('notes.exported', { n })), e => say(errorText(e))) }
+  // Export as Markdown (the user, 27 Oct): every note into a new folder in Files, a folder per label (notes.js).
+  const exportAll = () => { setDrawer(false); window.drive.notesExportAll().then(r => say(t('notes.exported', { n: r.count, folder: r.folder })), e => say(errorText(e))) }
   const emptyTrash = () => setDialog(<Confirm title={t('notes.emptyTrashTitle')} action={t('notes.deleteForGood')} danger onClose={close}
     body={t('notes.emptyTrashBody')}
     onConfirm={async () => { for (const n of shown) await call('remove', n.id); reload(); say(t('notes.trashEmptied')) }} />)

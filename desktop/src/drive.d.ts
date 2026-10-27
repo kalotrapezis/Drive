@@ -244,7 +244,7 @@ declare global {
       onOpenSettings(cb: (tab: string) => void): () => void
       onNotesChanged(cb: () => void): () => void
       notesSynced(): Promise<{ at: number; device: string } | null>
-      notesExportAll(): Promise<number | null>
+      notesExportAll(): Promise<{ count: number; folder: string }>
       notesExportOne(id: string): Promise<string | null>
       notifications: { list(): Promise<AppNotification[]>; read(): Promise<void>; clear(): Promise<void>; onChange(cb: () => void): () => void }
       imports: {

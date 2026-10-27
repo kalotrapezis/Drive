@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { Notes, markdown, markdownFiles } = require('../notes')
+const { Notes, markdown, markdownFiles, exportFolder } = require('../notes')
 
 test('notes: save keeps unknown fields, history is numbered, a version comes back as an edit', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'notes-'))
@@ -104,14 +104,17 @@ test('notes: Markdown export', () => {
   const items = [{ text: 'Bread', isChecked: true, order: 0 }, { text: 'Milk', isChecked: false, order: 1 }, { text: 'Eggs', isChecked: false, order: 0 }]
   assert.equal(body(markdown(note('Shopping', { items })).text), '# Shopping\n\n- [ ] Eggs\n- [ ] Milk\n- [x] Bread\n')
   // a title a file system refuses is made safe, and an untitled note has no heading
-  assert.equal(markdown(note('Plans/2026: week 3')).name, 'Plans 2026 week 3')
+  assert.equal(markdown(note('Ideas: week 3/4')).name, 'Ideas - week 3-4')
+  assert.equal(markdown(note('a\\b*c')).name, 'a-b c')
   assert.equal(markdown(note('.hidden')).name, 'hidden')
   const untitled = markdown(note('', { content: 'just text' }), 'Χωρίς τίτλο')
   assert.equal(untitled.name, 'Χωρίς τίτλο')
   assert.equal(body(untitled.text), 'just text\n')
   assert.equal(body(markdown(note('Same', { content: '# Same\n\nmore' })).text), '# Same\n\nmore\n')
 
-  // all: a folder per label, untagged at the top, equal titles numbered, archived and trashed left out
+  // an export's folder is named by its local time, in English
+  assert.equal(exportFolder(new Date(2026, 9, 27, 21, 5)), 'Tetra-Notes-export-2026-10-27-2105')
+  // all: a folder per label, nested by its slashes, untagged at the top, archived and trashed in their own
   const files = markdownFiles([
     note('Ideas', { content: 'two', labels: ['Work', 'Home'], created: day + 2 }),
     note('Ideas', { content: 'one', labels: ['Work'], created: day + 1 }),
@@ -119,9 +122,10 @@ test('notes: Markdown export', () => {
     note('Loose'),
     note('Old', { archived: true }),
     note('Gone', { labels: ['Work'], trashed: true }),
-    note('Half', { labels: ['a/b'] }),
+    note('Bed', { labels: ['Home/Garden', '/Work//'] }),
   ])
-  assert.deepEqual(files.map(f => f.path), ['Loose.md', 'a b/Half.md', 'Work/Ideas.md', 'Work/Ideas (2).md', 'Home/Ideas.md', 'Work/ideas (3).md'])
+  assert.deepEqual(files.map(f => f.path), ['Loose.md', 'Archive/Old.md', 'Trash/Work/Gone.md', 'Home/Garden/Bed.md', 'Work/Bed.md',
+    'Work/Ideas.md', 'Work/Ideas (2).md', 'Home/Ideas.md', 'Work/ideas (3).md'])
   assert.equal(files.find(f => f.path === 'Work/Ideas.md').text.split('# Ideas\n\n')[1], 'one\n')
   assert.equal(files.find(f => f.path === 'Home/Ideas.md').at, day + 2 + 60_000)
 })
