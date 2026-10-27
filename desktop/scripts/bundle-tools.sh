@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "$(readlink -f "$0")")/.."
 CACHE=build-tools OUT=bundled
 JDK_URL=https://api.adoptium.net/v3/binary/version/jdk-17.0.16%2B8/linux/x64/jdk/hotspot/normal/eclipse
-PY_URL=https://github.com/astral-sh/python-build-standalone/releases/download/20250918/cpython-3.12.11+20250918-x86_64-unknown-linux-gnu-install_only.tar.gz
+PY_URL=https://github.com/astral-sh/python-build-standalone/releases/download/20250918/cpython-3.12.11+20250918-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
 # GraphHopper 10.2's modules (jdeps --print-module-deps on its jar), and what logging, XML and zip need
 MODULES=java.base,java.compiler,java.desktop,java.instrument,java.naming,java.scripting,java.security.jgss,java.sql,jdk.attach,jdk.jdi,jdk.management,jdk.unsupported,java.logging,java.xml,jdk.crypto.ec,jdk.zipfs
 mkdir -p "$CACHE" "$OUT"
