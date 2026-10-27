@@ -6,6 +6,11 @@ export interface MapPlace { id: string; name: string; lat: number; lng: number; 
 export interface MapList { id: string; name: string; emoji: string }
 export interface MapStop { name: string; lat: number; lng: number }
 export interface MapTrip { id: string; name: string; stops: MapStop[] }
+/** The map builder (mapbuild.js): a region of Geofabrik's list, a map made from one, and the builder's news. */
+export interface MapRegion { id: string; name: string; parent: string | null; iso: string | null; pbf: string }
+export interface MapPack { id: string; name: string; region: string; built: string; bytes: number; roads: boolean }
+export interface MapBuildProgress { id: string; step: 'tools' | 'map' | 'osm' | 'roads' | 'search' | 'install' | null; state: 'running' | 'needs' | 'done' | 'error' | 'cancelled'
+  done?: number; total?: number; error?: string | null; packages?: string[] }
 export interface Poi { kind: string; lat: number; lng: number; name: string; nameEn: string; more: string; hours: string; phone: string; web: string; wheelchair: string; note: string }
 
 export interface DriveItem {
@@ -203,7 +208,17 @@ declare global {
         last(): Promise<number>
       }
       onTimerChanged(cb: () => void): () => void
-      mapsInfo(): Promise<{ root: string; map: { bytes: number; at: number } | null }>
+      mapsInfo(): Promise<{ root: string; map: true | null; maps: { id: string; name: string; bounds: [number, number, number, number] | null; drive: 'left' | 'right' }[] }>
+      mapsRegions(): Promise<MapRegion[]>
+      mapsNeeds(id: string): Promise<{ osm: number; memory: number; hasMemory: number; disk: number; hasDisk: number }>
+      mapsMissing(): Promise<string[]>
+      mapsInstallSystem(packages: string[]): Promise<'done' | 'refused'>
+      mapsBuild(id: string): Promise<void>
+      mapsCancelBuild(): Promise<void>
+      mapsBuilding(): Promise<string | null>
+      mapsPacks(): Promise<MapPack[]>
+      mapsRemovePack(id: string): Promise<void>
+      onMapsBuild(cb: (p: MapBuildProgress) => void): () => void
       mapsPlaces(): Promise<MapPlace[]>
       mapsLists(): Promise<MapList[]>
       mapsTrips(): Promise<MapTrip[]>

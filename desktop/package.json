@@ -67,6 +67,8 @@
       "datacount.js",
       "maps.js",
       "router.js",
+      "mapbuild.js",
+      "maps-tools/*.py",
       "history.js",
       "notes.js",
       "calendar.js",

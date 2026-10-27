@@ -65,15 +65,22 @@ const MAIN_ROADS = {
 /** The phone's car times are GraphHopper's × 1.2 (Plan.md § Maps: Άγιος Λουκάς → Χαλκίδα 30 min). */
 const CAR_TIME = 1.2
 
-const works = java => { try { return spawnSync(java, ['-version'], { timeout: 5000 }).status === 0 } catch { return false } }
+/** Where the map builder keeps its tools (mapbuild.js; tools/maps-greece.sh uses the same bin). */
+const BIN = path.join(os.homedir(), 'Tetra-maps', 'bin')
+
+/** A Java of 17 or newer, as GraphHopper 10.2 needs (the map builder asks the system for one when there is none). */
+function findJava() {
+  const major = java => { try { const r = spawnSync(java, ['-version'], { timeout: 5000, encoding: 'utf8' }); return r.status === 0 ? +(/version "(\d+)/.exec(r.stderr)?.[1] ?? 0) : 0 } catch { return 0 } }
+  return [process.env.JAVA, '/usr/lib/jvm/java-17-openjdk-amd64/bin/java', 'java'].find(j => j && major(j) >= 17) ?? null
+}
 
 class Router {
   constructor(graphDir, workDir) { this.graphDir = graphDir; this.workDir = workDir; this.proc = null; this.port = 0; this.starting = null }
 
   /** Java and the jar, or why not. */
   tools() {
-    const jar = [process.env.TETRA_GRAPHHOPPER_JAR, path.join(os.homedir(), 'Tetra-maps', 'bin', JAR)].find(f => f && fs.existsSync(f))
-    const java = [process.env.JAVA, '/usr/lib/jvm/java-17-openjdk-amd64/bin/java', 'java'].find(j => j && works(j))
+    const jar = [process.env.TETRA_GRAPHHOPPER_JAR, path.join(BIN, JAR)].find(f => f && fs.existsSync(f))
+    const java = findJava()
     if (!fs.existsSync(path.join(this.graphDir, 'properties'))) return { why: t('maps.noGraph') }
     if (!java) return { why: t('maps.needJava') }
     if (!jar) return { why: t('maps.needJar', { jar: JAR }) }
@@ -152,4 +159,4 @@ const freePort = () => new Promise((resolve, reject) => {
   s.on('error', reject)
 })
 
-module.exports = { Router, plain, MAIN_ROADS }
+module.exports = { Router, plain, MAIN_ROADS, PROFILES, JAR, BIN, findJava }

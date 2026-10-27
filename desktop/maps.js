@@ -3,8 +3,9 @@
  * Tetra's Maps on the computer (Drive-Android Plan.md § Maps; Maps.kt is the phone's twin, the same files and rules).
  * Everything is a file in ~/Tetra/Files/Maps, synced as files are, hidden from Files' lists like the Calendar and the Timer:
  *
- *   greece.pmtiles     the offline map (Protomaps' basemap cut to Greece), served to the window as tiles
- *   greece-*.tsv       the search lists (tools/maps-places.py and friends): kind, lat, lng, name, name in English, …
+ *   <id>.pmtiles       a country's offline map (Protomaps' basemap cut to it), served to the window as tiles; greece.pmtiles,
+ *                      and any the map builder made (mapbuild.js: <id>-gh/, <id>-*.tsv and <id>.json beside it)
+ *   <id>-*.tsv         the search lists (maps-tools/maps-places.py and friends): kind, lat, lng, name, name in English, …
  *   added-places.tsv   places put into the map's own data by hand
  *   Places/<id>.json   {"id":"k3f9a2","name":"Home","lat":37.97,"lng":23.72,"icon":"home","slot":1,"mode":"car","lists":["fav"]}
  *   Lists/<id>.json    {"id":"fav","name":"Favourites","emoji":"❤️"}
@@ -16,11 +17,12 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 const { t } = require('./i18n')
 
-const MAP = 'greece.pmtiles', PLACES = 'Places', LISTS = 'Lists', TRIPS = 'Trips', SLOTS = 12
+const PLACES = 'Places', LISTS = 'Lists', TRIPS = 'Trips', SLOTS = 12
 const ICONS = ['pin', 'star', 'heart', 'accessible', 'home', 'work', 'school', 'family', 'friend', 'pharmacy', 'hospital', 'doctor', 'travel',
   'hotel', 'food', 'tavern', 'cafe', 'shop', 'fuel', 'parking', 'beach', 'waterfall', 'river', 'lake', 'mountain', 'forest', 'camping']
 const MODES = ['car', 'foot', 'bike']
-const SEARCH_FILES = ['greece-places.tsv', 'greece-eopyy.tsv', 'greece-amea.tsv', 'greece-amea-diavgeia.tsv', 'added-places.tsv']
+/** Greece's own lists beside each map's places (EOPYY, the ΑμεΑ spots) and the places added by hand. */
+const EXTRA_SEARCH = ['greece-eopyy.tsv', 'greece-amea.tsv', 'greece-amea-diavgeia.tsv', 'added-places.tsv']
 const SETTLEMENTS = new Set(['city', 'town', 'village', 'suburb', 'neighbourhood', 'hamlet', 'island', 'islet', 'locality'])
 
 const newId = () => crypto.randomBytes(3).toString('hex')
@@ -105,27 +107,67 @@ class Maps {
   /** `trash(rel)` moves a file of Files into its Trash, so a deletion reaches the other devices. */
   constructor(root, trash) { this.root = root; this.trash = trash }
 
-  // ---- the map ----
+  // ---- the maps ----
 
-  /** A vector tile, unpacked; null where the map has none. The file is reopened when sync brings a new one. */
-  async tile(z, x, y) {
-    const file = path.join(this.root, MAP)
+  /** The maps here, one id each ("greece", "cyprus"), the order fixed so their layers draw the same way each time. */
+  async ids() {
+    return (await fsp.readdir(this.root).catch(() => [])).filter(n => n.endsWith('.pmtiles') && !n.startsWith('.')).map(n => n.slice(0, -8)).sort()
+  }
+
+  /** A vector tile of map `id`, unpacked; null where it has none. The file is reopened when sync brings a new one. */
+  async tile(id, z, x, y) {
+    const file = path.join(this.root, `${id}.pmtiles`)
     const stat = await fsp.stat(file).catch(() => null)
     if (!stat) return null
-    if (!this.pm || this.pmStamp !== stat.mtimeMs) {
-      this.pmSource?.close()
+    this.pm ??= new Map()
+    let pm = this.pm.get(id)
+    if (!pm || pm.stamp !== stat.mtimeMs) {
+      pm?.source.close()
       const { PMTiles } = require('pmtiles')
-      this.pmSource = new FileSource(file)
-      this.pm = new PMTiles(this.pmSource)
-      this.pmStamp = stat.mtimeMs
+      const source = new FileSource(file)
+      pm = { source, reader: new PMTiles(source), stamp: stat.mtimeMs }
+      this.pm.set(id, pm)
     }
-    const t = await this.pm.getZxy(z, x, y)
+    const t = await pm.reader.getZxy(z, x, y)
     return t ? Buffer.from(t.data) : null
   }
 
+  /** Each map with its bounds ([w, s, e, n]: its manifest's, else its own header's) and the side traffic keeps to. */
   async info() {
-    const stat = await fsp.stat(path.join(this.root, MAP)).catch(() => null)
-    return { root: this.root, map: stat ? { bytes: stat.size, at: stat.mtimeMs } : null }
+    const maps = []
+    for (const id of await this.ids()) {
+      const m = await fsp.readFile(path.join(this.root, `${id}.json`), 'utf8').then(JSON.parse, () => ({}))
+      const bounds = Array.isArray(m.bounds) && m.bounds.length === 4 ? m.bounds : await this.header(id)
+      maps.push({ id, name: typeof m.name === 'string' ? m.name : id, bounds, drive: m.drive === 'left' ? 'left' : 'right' })
+    }
+    return { root: this.root, map: maps.length ? true : null, maps }
+  }
+
+  async header(id) {
+    const { pmtilesBounds } = require('./mapbuild')
+    try { return pmtilesBounds(path.join(this.root, `${id}.pmtiles`)) } catch { return null }
+  }
+
+  /** The map whose bounds hold the point, else null. */
+  async mapAt(lat, lng) {
+    return (await this.info()).maps.find(m => m.bounds && lng >= m.bounds[0] && lat >= m.bounds[1] && lng <= m.bounds[2] && lat <= m.bounds[3]) ?? null
+  }
+
+  /** Each map's `<id>-<kind>.tsv` that is there. */
+  async tsvs(kind) {
+    const out = []
+    for (const id of await this.ids()) { const f = path.join(this.root, `${id}-${kind}.tsv`); if (fs.existsSync(f)) out.push(f) }
+    return out
+  }
+
+  /** Lines of `files`, read again only when one of them changed: { stamp, lines }. */
+  async readLines(files, cache) {
+    const stats = await Promise.all(files.map(f => fsp.stat(f).catch(() => null)))
+    const stamp = files.map((f, i) => `${f}:${stats[i]?.mtimeMs ?? 0}`).join('|')
+    if (cache?.stamp === stamp) return null
+    const lines = []
+    for (const [i, f] of files.entries()) if (stats[i]) for (const l of (await fsp.readFile(f, 'utf8')).split('\n')) lines.push(l)
+    return { stamp, lines, any: stats.some(Boolean) }
   }
 
   // ---- saved places, lists, trips ----
@@ -212,16 +254,13 @@ class Maps {
 
   // ---- search and addresses ----
 
-  /** The search lists, read once (about 130 000 places) and kept while the files are the same (MapsSearch.load). */
+  /** The search lists of every map, read once (about 130 000 places for Greece) and kept while the files are the same (MapsSearch.load). */
   async pois() {
-    const stats = await Promise.all(SEARCH_FILES.map(f => fsp.stat(path.join(this.root, f)).catch(() => null)))
-    const stamp = stats.map(s => s ? s.mtimeMs : 0).join('|')
-    if (this.poiCache?.stamp === stamp) return this.poiCache.all
+    const r = await this.readLines([...await this.tsvs('places'), ...EXTRA_SEARCH.map(f => path.join(this.root, f))], this.poiCache)
+    if (!r) return this.poiCache.all
     const all = []
-    for (const [i, f] of SEARCH_FILES.entries()) if (stats[i]) {
-      for (const line of (await fsp.readFile(path.join(this.root, f), 'utf8')).split('\n')) { const p = parsePoi(line); if (p) all.push(p) }
-    }
-    this.poiCache = { stamp, all }
+    for (const line of r.lines) { const p = parsePoi(line); if (p) all.push(p) }
+    this.poiCache = { stamp: r.stamp, all }
     return all
   }
 
@@ -234,38 +273,34 @@ class Maps {
   }
 
   async addresses() {
-    const file = path.join(this.root, 'greece-addresses.tsv')
-    const stat = await fsp.stat(file).catch(() => null)
-    if (!stat) return null
-    if (this.addrCache?.at === stat.mtimeMs) return this.addrCache
+    const r = await this.readLines(await this.tsvs('addresses'), this.addrCache)
+    if (!r) return this.addrCache.any ? this.addrCache : null
     const lat = [], lng = [], rest = []
-    for (const line of (await fsp.readFile(file, 'utf8')).split('\n')) {
+    for (const line of r.lines) {
       const c = line.split('\t')
       if (c.length < 3) continue
       const a = Number(c[0]), b = Number(c[1])
       if (!inRange(a, b) || !c[0]) continue
       lat.push(a); lng.push(b); rest.push(c.slice(2))
     }
-    this.addrCache = { at: stat.mtimeMs, lat: Float64Array.from(lat), lng: Float64Array.from(lng), rest }
-    return this.addrCache
+    this.addrCache = { stamp: r.stamp, any: r.any, lat: Float64Array.from(lat), lng: Float64Array.from(lng), rest }
+    return r.any ? this.addrCache : null
   }
 
-  /** The named roads: a name and the middle of each road piece (greece-streets.tsv), read once (MapsStreets). */
+  /** The named roads: a name and the middle of each road piece (<id>-streets.tsv), read once (MapsStreets). */
   async streets() {
-    const file = path.join(this.root, 'greece-streets.tsv')
-    const stat = await fsp.stat(file).catch(() => null)
-    if (!stat) return null
-    if (this.streetCache?.at === stat.mtimeMs) return this.streetCache
+    const r = await this.readLines(await this.tsvs('streets'), this.streetCache)
+    if (!r) return this.streetCache.any ? this.streetCache : null
     const lat = [], lng = [], name = []
-    for (const line of (await fsp.readFile(file, 'utf8')).split('\n')) {
+    for (const line of r.lines) {
       const c = line.split('\t')
       if (c.length < 3) continue
       const a = Number(c[1]), b = Number(c[2])
       if (!c[1] || !inRange(a, b)) continue
       lat.push(a); lng.push(b); name.push(c[0])
     }
-    this.streetCache = { at: stat.mtimeMs, lat: Float64Array.from(lat), lng: Float64Array.from(lng), name }
-    return this.streetCache
+    this.streetCache = { stamp: r.stamp, any: r.any, lat: Float64Array.from(lat), lng: Float64Array.from(lng), name }
+    return r.any ? this.streetCache : null
   }
 
   /**
