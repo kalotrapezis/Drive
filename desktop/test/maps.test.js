@@ -97,3 +97,10 @@ test("an address where no house has a number: the street and the village's postc
   assert.equal(await m.describe(37.27642, 22.58903), 'Οδός Παραδείγματος, 12345 Άγιος Λουκάς')
   assert.equal(await m.describe(37.27642, 22.58903, 'Πλατάνι'), 'Πλατάνι, 12345 Άγιος Λουκάς')
 })
+
+test("directions are asked in the app's language: Portugal's Portuguese for pt, the rest as they are (27 Oct)", () => {
+  const { ghLocale } = require('../router')
+  assert.equal(ghLocale('pt'), 'pt_PT')
+  assert.equal(ghLocale('de'), 'de')
+  assert.equal(ghLocale('lv'), 'lv') // GraphHopper has no Latvian: it answers in English
+})
