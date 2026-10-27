@@ -76,6 +76,8 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
     if (message) say(message, undo && (() => { undo().then(reload) }))
     else if (n && !n.title.trim() && !n.content.trim() && !(n.checklistItems ?? []).some(i => i.text.trim())) call('remove', n.id).then(reload) // nothing written: no note
   }
+  // Export as Markdown (the user, 27 Oct): every note into a new folder in Files, a folder per label (notes.js).
+  const exportAll = () => { setDrawer(false); window.drive.notesExportAll().then(r => say(t('notes.exported', { n: r.count, folder: r.folder })), e => say(errorText(e))) }
   const emptyTrash = () => setDialog(<Confirm title={t('notes.emptyTrashTitle')} action={t('notes.deleteForGood')} danger onClose={close}
     body={t('notes.emptyTrashBody')}
     onConfirm={async () => { for (const n of shown) await call('remove', n.id); reload(); say(t('notes.trashEmptied')) }} />)
@@ -91,7 +93,7 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  if (open) return <NoteEditor key={open.id} initial={open} setDialog={setDialog} onClose={closed} />
+  if (open) return <NoteEditor key={open.id} initial={open} setDialog={setDialog} say={say} onClose={closed} />
   return (
     <div className="notes">
       <header className="notes-top">
@@ -115,6 +117,10 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
         <div className="chips wrap">
           <button className={`chip ${label ? '' : 'on'}`} onClick={() => { setLabel(null); setDrawer(false) }}>{t('common.all')}</button>
           {labels.map(([l, n]) => <button key={l} className={`chip ${label === l ? 'on' : ''}`} onClick={() => { setLabel(l); setDrawer(false) }}>{l} <small>{n}</small></button>)}
+        </div>
+        <div className="notes-export">
+          <button className="text-button add-item" onClick={exportAll}><Icon name="fileText" size={18} /> {t('notes.exportMarkdown')}</button>
+          <small className="hint">{t('notes.exportHint')}</small>
         </div>
       </div>
       <div className="notes-dock">
@@ -172,8 +178,8 @@ function NoteCard({ note, small, selected, onSelect, onOpen }: { note: Note; sma
 
 interface Snap { title: string; content: string; items: Item[] }
 
-function NoteEditor({ initial, setDialog, onClose }: {
-  initial: Note; setDialog: (d: ReactNode) => void; onClose: (n: Note | null, message?: string, undo?: () => Promise<unknown>) => void
+function NoteEditor({ initial, setDialog, say, onClose }: {
+  initial: Note; setDialog: (d: ReactNode) => void; say: (text: string) => void; onClose: (n: Note | null, message?: string, undo?: () => Promise<unknown>) => void
 }) {
   const [title, setTitle] = useState(initial.title)
   const [content, setContent] = useState(initial.content ?? '')
@@ -281,6 +287,7 @@ function NoteEditor({ initial, setDialog, onClose }: {
     const on = !meta.archivedAt
     setMetaNow({ archivedAt: on ? Date.now() : undefined }).then(() => on ? leave(t('notes.noteArchived'), () => call('save', initial.id, { archivedAt: null })) : undefined)
   }
+  const exportOne = () => flush.current().then(() => window.drive.notesExportOne(initial.id)).then(f => f && say(t('notes.noteExported')), e => say(errorText(e)))
   const tool = (icon: IconName, label: string, run: () => void, on = false) => (
     <button className={`round flat ${on ? 'on' : ''}`} title={label} aria-label={label} onClick={run} disabled={trashed}><Icon name={icon} size={20} /></button>
   )
@@ -309,6 +316,7 @@ function NoteEditor({ initial, setDialog, onClose }: {
             </div>}
           </span>
           {tool('history', t('notes.history'), history)}
+          {tool('fileText', t('notes.exportMarkdown'), exportOne)}
           {!checklist && tool(reading ? 'editNote' : 'visibility', reading ? t('common.edit') : t('notes.read'), () => setReading(r => !r), reading)}
           {tool('pin', meta.isPinned ? t('notes.unpin') : t('notes.pin'), () => setMetaNow({ isPinned: !meta.isPinned }), meta.isPinned)}
           {tool(meta.archivedAt ? 'unarchive' : 'archive', meta.archivedAt ? t('notes.unarchive') : t('notes.archive'), archive)}

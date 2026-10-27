@@ -22,6 +22,59 @@ const safeTitle = t => (String(t ?? '').replace(/[\/\\\0:*?"<>|]/g, ' ').replace
 const pad = n => String(n).padStart(2, '0')
 const stamp = ms => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}-${pad(d.getMinutes())}` }
 
+/**
+ * Notes as Markdown files (the user, 27 Oct: "an export function for notes into md files, categorized by folders with
+ * the tags' names"), the same as the phone's (NoteExport in Notes.kt). Notes stay JSON inside Tetra; this is a copy out.
+ * The title names the file and is its first heading, under a front matter of the labels and dates; the text is
+ * Markdown already, and a checklist becomes `- [ ]` / `- [x]` lines. Each export is a new dated folder in Files, so
+ * nothing is written over (the user, 27 Oct); a label's "/" nests its folders, as "Home/Garden" → Home/Garden/.
+ */
+const iso = ms => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z')
+const quote = s => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+/** A name every file system takes: "/" a dash, ":" " - " (the user, 27 Oct); a leading dot would hide the file. */
+const safeName = (s, untitled) => (String(s ?? '').trim() ? String(s) : untitled).replace(/[/\\]/g, '-').replace(/\s*:\s*/g, ' - ')
+  .replace(/[\0*?"<>|]/g, ' ').replace(/\s+/g, ' ').slice(0, 80).trim().replace(/^\.+/, '') || untitled
+/** A label's folders: "Home/Garden" is Garden inside Home. */
+const folders = (label, untitled) => label.split('/').filter(p => p.trim()).map(p => safeName(p, untitled)).join('/') || untitled
+/** The export's own folder, by the local time it was made; the name is English in every language. */
+const exportFolder = d => `Tetra-Notes-export-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`
+
+/** One note: its file's name (without .md) and its text. */
+function markdown(note, untitled = 'Untitled') {
+  const labels = note.labels ?? [], title = String(note.title ?? '').trim()
+  const front = ['---', ...(labels.length ? [`tags: [${labels.map(quote).join(', ')}]`] : []), ...(note.createdAt ? [`created: ${iso(note.createdAt)}`] : []),
+    ...(note.updatedAt ? [`updated: ${iso(note.updatedAt)}`] : []), '---', '', ''].join('\n')
+  const content = String(note.content ?? '').trimEnd()
+  const body = note.noteType === 'CHECKLIST'
+    ? [...(note.checklistItems ?? [])].sort((a, b) => Number(a.isChecked) - Number(b.isChecked) || a.order - b.order).map(i => `- [${i.isChecked ? 'x' : ' '}] ${i.text}\n`).join('')
+    : content ? content + '\n' : ''
+  const heading = `# ${title}`
+  // a note that starts with its own title as a heading keeps just that one
+  const head = !title || body.split('\n').find(l => l.trim())?.trim() === heading ? '' : heading + '\n\n'
+  return { name: safeName(note.title, untitled), text: front + head + body }
+}
+
+/**
+ * Every note, in a folder per label (in each, if it has several), at the top without one; the archived the same way
+ * inside Archive, the trashed inside Trash. The same name twice in a folder (case aside, for the file systems that
+ * ignore it) becomes "Name (2)", the older note keeping the plain name.
+ */
+function markdownFiles(notes, untitled = 'Untitled') {
+  const taken = new Set(), out = []
+  for (const n of [...notes].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))) {
+    const { name, text } = markdown(n, untitled)
+    const top = n.trashedAt ? 'Trash/' : n.archivedAt ? 'Archive/' : ''
+    const dirs = [...new Set((n.labels ?? []).map(l => top + folders(l, untitled) + '/'))]
+    for (const dir of dirs.length ? dirs : [top]) {
+      let file = `${dir}${name}.md`
+      for (let i = 2; taken.has(file.toLowerCase()); i++) file = `${dir}${name} (${i}).md`
+      taken.add(file.toLowerCase())
+      out.push({ path: file, text, at: n.updatedAt })
+    }
+  }
+  return out
+}
+
 class Notes {
   constructor(root, deviceId = 'desktop') {
     this.root = root
@@ -184,4 +237,4 @@ class Notes {
   }
 }
 
-module.exports = { Notes, safeTitle }
+module.exports = { Notes, safeTitle, markdown, markdownFiles, exportFolder }

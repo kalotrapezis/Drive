@@ -18,7 +18,7 @@ const callaudio = require('./callaudio')
 const { Folders } = require('./folders')
 const { Purgatory } = require('./purgatory')
 const history = require('./history')
-const { Notes } = require('./notes')
+const { Notes, markdown, markdownFiles, exportFolder } = require('./notes')
 const { Calendar } = require('./calendar')
 const { Contacts, readImport: readContacts } = require('./contacts')
 const { linkFaces } = require('./contactfaces')
@@ -1103,6 +1103,26 @@ app.whenReady().then(() => {
       notesNudge = setTimeout(() => sync.nudge().catch(() => {}), 2500)
     }
     return result
+  })
+  // Export as Markdown (the user, 27 Oct): every note into a new folder at the top of Files, so nothing is written over,
+  // or one note where they save it; each file keeps its note's time
+  const writeMarkdown = (file, text, at) => { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text); if (at) fs.utimesSync(file, new Date(at), new Date(at)) }
+  ipcMain.handle('notes:exportAll', () => {
+    const name = exportFolder(new Date())
+    let dir = path.join(FILES_ROOT, name)
+    for (let i = 2; fs.existsSync(dir); i++) dir = path.join(FILES_ROOT, `${name} (${i})`) // two in one minute
+    const all = notes.list()
+    for (const f of markdownFiles(all, t('notes.untitled'))) writeMarkdown(path.join(dir, f.path), f.text, f.at)
+    return { count: all.length, folder: path.basename(dir) }
+  })
+  ipcMain.handle('notes:exportOne', async (_, id) => {
+    const note = notes.get(id)
+    if (!note) throw new Error(t('notes.gone'))
+    const { name, text } = markdown(note, t('notes.untitled'))
+    const r = await dialog.showSaveDialog(win, { title: t('notes.exportMarkdown'), defaultPath: path.join(app.getPath('downloads'), `${name}.md`) })
+    if (r.canceled || !r.filePath) return null
+    writeMarkdown(r.filePath, text, note.updatedAt)
+    return r.filePath
   })
   ipcMain.handle('files:open', async (_, rel) => {
     const full = files.resolve(rel)
