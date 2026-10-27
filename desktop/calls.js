@@ -151,11 +151,14 @@ class Calls {
   outgoing(number, name, device) { this.show({ direction: 'out', state: 'calling', number, name: name || this.who(number)?.name || '', photo: this.who(number)?.photo ?? null, device, since: Date.now() }) }
 
   /** A state the phone told: ringing (with the number), active, ended. */
-  fromPhone({ state, direction, number, missed, device, muted, route, phoneApp, takenBy }) {
+  fromPhone({ state, direction, number, missed, device, muted, route, phoneApp, takenBy, at }) {
     // calling (dialled, not answered yet) and held: only from a phone where Tetra is the phone app, as are muted, route and phoneApp
     if (!['ringing', 'calling', 'active', 'held', 'ended'].includes(state)) return
     // taken on another computer, "like a switch" (the user, 26 Oct): this bubble goes, and the call stays there
     if (takenBy && takenBy !== this.me()) { if (this.state) this.close(); return }
+    // the phone sends each state on its own, so one can come late: an "active" sent as the call ended, landing after the
+    // "ended", opened a bubble for a call that was over, again and again (the user, 27 Oct). Its time says which is older
+    if (Number.isSafeInteger(at)) { if (at < (this.lastAt ?? 0)) return; this.lastAt = at }
     const was = this.state
     if (state === 'ended' && !was) return // nothing on the screen to end
     const c = this.who(number || was?.number)
@@ -180,7 +183,8 @@ class Calls {
       this.win.setAlwaysOnTop(true, 'screen-saver')
       this.win.loadFile(path.join(__dirname, 'bubble.html'))
       this.win.webContents.once('did-finish-load', () => { this.win?.webContents.send('call', this.state); this.win?.show() })
-      this.win.on('closed', () => { this.win = null })
+      // closed by hand (not by close()): it stays closed until the phone says something new, not reopened by watch()
+      const w = this.win; w.on('closed', () => { if (this.win === w) { this.win = null; this.state = null } })
     } else {
       this.win.webContents.send('call', this.state)
       if (s.state === 'ringing') { this.win.show(); this.win.focus() } else this.win.showInactive()
@@ -213,7 +217,8 @@ class Calls {
       if (!relayed) await this.reconnect()
     }
     const r = await this.act(what).catch(e => ({ error: e.message }))
-    if (r?.error) { this.win?.webContents.send('said', r.error); return r }
+    // End or Decline the phone did not hear (off the Wi-Fi): the bubble still goes; the phone's next word brings it back
+    if (r?.error) { this.win?.webContents.send('said', r.error); if (what !== 'end' && what !== 'decline') return r }
     if (relayed && this.relay) {
       await echo.on() // the speaker and microphone through the echo canceller, as for Bluetooth
       this.relayStop = await this.relay().catch(e => { this.win?.webContents.send('said', e.message); return null })

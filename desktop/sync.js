@@ -1470,7 +1470,7 @@ class SyncServer {
       const b = await this.json(req, 4096)
       const s = { state: String(b.state || ''), direction: b.direction === 'out' ? 'out' : 'in', number: String(b.number || '').replace(/[^\d+*#]/g, '').slice(0, 32), missed: !!b.missed,
         muted: !!b.muted, route: ['speaker', 'bluetooth', 'wired', 'earpiece'].includes(b.route) ? b.route : null, phoneApp: !!b.phoneApp, device: device.name,
-        country: /^[A-Z]{2}$/.test(b.country) ? b.country : null } // the phone's SIM's: this computer reads numbers in it (main.js phoneCountry)
+        country: /^[A-Z]{2}$/.test(b.country) ? b.country : null, at: Number.isSafeInteger(b.at) ? b.at : null } // the phone's SIM's: this computer reads numbers in it (main.js phoneCountry)
       // which computer took it ('server' or a client's id): the other bubbles close (calls.js fromPhone)
       if (s.state === 'ringing') this.callTaken = null
       s.takenBy = this.callTaken ?? null

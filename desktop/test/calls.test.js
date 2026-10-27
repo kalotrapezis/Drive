@@ -62,3 +62,25 @@ test("the phone's loudspeaker: the bubble says where the sound is, and recording
   assert.equal(c.state.canRecord, false)
   c.close()
 })
+
+test('an "active" landing after the "ended" does not bring the call back', () => {
+  const c = calls()
+  c.fromPhone({ state: 'active', number: '2100000000', phoneApp: true, at: 1000 })
+  c.fromPhone({ state: 'ended', number: '2100000000', at: 3000 })
+  c.fromPhone({ state: 'active', number: '2100000000', phoneApp: true, at: 2000 }) // sent before the end, came after it
+  assert.equal(c.state.state, 'ended')
+  c.close()
+  c.fromPhone({ state: 'active', number: '2100000000', phoneApp: true, at: 2500 })
+  assert.equal(c.state, null, 'no bubble for a call that is over')
+  c.fromPhone({ state: 'ringing', number: '2100000001', at: 4000 }) // the next call
+  assert.equal(c.state.state, 'ringing')
+  c.close()
+})
+
+test('End the phone did not hear still ends the bubble', async () => {
+  const c = new Calls({ contacts: { all: () => [] }, act: async () => ({ error: 'Could not reach the phone' }), notify: () => {}, recordings: bt })
+  c.fromPhone({ state: 'active', number: '2100000000', phoneApp: true })
+  await c.press('end')
+  assert.equal(c.state.state, 'ended')
+  c.close()
+})
