@@ -5,8 +5,8 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { MapBuilder, STEPS, ALL, polyToGeoJson, pmtilesBounds } = require('../mapbuild')
-const { Maps } = require('../maps')
+const { MapBuilder, STEPS, ALL, polyToGeoJson, pmtilesBounds, isOld } = require('../mapbuild')
+const { Maps, labelsIn } = require('../maps')
 
 /** A .pmtiles file holding only its header, with bounds west, south, east, north. */
 function pmtiles(file, ...b) {
@@ -66,4 +66,28 @@ test('the roads of every map (all-gh) go with the last but one map', async () =>
   await b.remove('macedonia', trash)
   assert.deepStrictEqual(trashed, ['Maps/cyprus.pmtiles', 'Maps/macedonia.pmtiles', `Maps/${ALL}`])
   assert.ok(STEPS.indexOf('borders') > STEPS.indexOf('roads') && STEPS.indexOf('borders') < STEPS.indexOf('install'))
+})
+
+test('a map is old 3 months after it was made (30 Nov: the last of February), Greece\'s older pack by its file date', async () => {
+  assert.strictEqual(isOld('2026-07-27', '2026-10-26'), false)
+  assert.strictEqual(isOld('2026-07-27', '2026-10-27'), true)
+  assert.strictEqual(isOld('2026-11-30', '2027-02-27'), false)
+  assert.strictEqual(isOld('2026-11-30', '2027-02-28'), true)
+  const root = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tetra-')), 'Maps')
+  fs.mkdirSync(root, { recursive: true })
+  pmtiles(path.join(root, 'greece.pmtiles'), 18.97, 34.59, 29.66, 41.75)
+  fs.utimesSync(path.join(root, 'greece.pmtiles'), new Date('2026-01-10T12:00:00Z'), new Date('2026-01-10T12:00:00Z'))
+  pmtiles(path.join(root, 'cyprus.pmtiles'), 32.2, 34.5, 34.7, 35.8)
+  fs.writeFileSync(path.join(root, 'cyprus.json'), JSON.stringify({ name: 'Cyprus', built: new Date().toISOString().slice(0, 10), drive: 'left' }))
+  const packs = await new MapBuilder(root, () => {}).packs()
+  assert.deepStrictEqual(packs.map(p => [p.id, p.built.slice(0, 7), p.old]), [['cyprus', new Date().toISOString().slice(0, 7), false], ['greece', '2026-01', true]])
+})
+
+test('the map\'s names follow Tetra\'s language; Greek unchanged', () => {
+  const style = fs.readFileSync(path.join(__dirname, '..', 'public', 'maps', 'light.json'), 'utf8')
+  assert.strictEqual(labelsIn(style, 'el'), style)
+  const de = labelsIn(style, 'de')
+  assert.ok(!de.includes('name:el') && !de.includes('"Greek"') && de.includes('["get","name:de"]') && de.includes('"Latin"'))
+  assert.ok(labelsIn(style, 'bg').includes('"Cyrillic"'))
+  JSON.parse(de)
 })

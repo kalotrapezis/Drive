@@ -27,7 +27,7 @@ const os = require('node:os')
 const path = require('node:path')
 const crypto = require('node:crypto')
 const { spawn, spawnSync } = require('node:child_process')
-const { PROFILES, JAR, BIN, findJava } = require('./router')
+const { PROFILES, JAR, BIN, BUNDLED, findJava } = require('./router')
 const { t } = require('./i18n')
 
 const WORK = path.dirname(BIN)
@@ -39,7 +39,8 @@ const URLS = {
 }
 /** The system's packages the builder may ask for (Debian and Ubuntu names), each with why, for the wizard's page. */
 const PACKAGES = { 'openjdk-17-jre-headless': 'java', 'python3-pyosmium': 'osmium' }
-const PYTHON = '/usr/bin/python3'
+/** The AppImage's own Python with osmium (scripts/bundle-tools.sh), else the system's. */
+const PYTHON = [BUNDLED && path.join(BUNDLED, 'python', 'bin', 'python3'), '/usr/bin/python3'].find(p => p && fs.existsSync(p)) ?? '/usr/bin/python3'
 /** The steps as the wizard shows them, in order. */
 const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'borders', 'install']
 /** Each region's roads and places as downloaded, kept for the next combined graph (all-gh). */
@@ -57,6 +58,19 @@ const LEFT = new Set(('GB IE IM JE GG CY MT JP AU NZ IN PK BD LK NP BT ID MY SG 
   'JM BS BB TT GY SR AG DM GD KN LC VC VG AI MS KY TC BM FK SH FJ PG WS TO SB KI TV NR CK NU').split(' '))
 
 /** A Geofabrik .poly (rings of "lng lat", the sea round islands included) as GeoJSON, for pmtiles extract's --region. */
+/** Today on this computer's clock, "YYYY-MM-DD". */
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+
+/**
+ * A map made 3 months ago or more is old: roads, shops and hours change, and the builder remakes it from fresh downloads
+ * (the user, 27 Oct). `built` and `now` "YYYY-MM-DD"; 30 Nov is due on the last of February, as Android's MapsFiles.isOld.
+ */
+function isOld(built, now = today()) {
+  const [y, m, d] = built.split('-').map(Number)
+  const last = new Date(Date.UTC(y, m + 3, 0)).getUTCDate() // the last day of the month 3 on (m is 1-based)
+  return now >= new Date(Date.UTC(y, m + 2, Math.min(d, last))).toISOString().slice(0, 10)
+}
+
 function polyToGeoJson(text) {
   const rings = []
   let ring = null
@@ -132,7 +146,8 @@ class MapBuilder {
       const gh = await fsp.readdir(path.join(this.root, `${id}-gh`)).catch(() => [])
       let bytes = st.size
       for (const f of gh) bytes += (await fsp.stat(path.join(this.root, `${id}-gh`, f)).catch(() => ({ size: 0 }))).size
-      out.push({ id, name: typeof m.name === 'string' ? m.name : id[0].toUpperCase() + id.slice(1), region: m.region ?? id, built: m.built ?? new Date(st.mtimeMs).toISOString().slice(0, 10),
+      const built = typeof m.built === 'string' ? m.built : new Date(st.mtimeMs).toISOString().slice(0, 10)
+      out.push({ id, name: typeof m.name === 'string' ? m.name : id[0].toUpperCase() + id.slice(1), region: m.region ?? id, built, old: isOld(built),
         bytes, roads: gh.includes('properties') })
     }
     return out.sort((a, b) => a.name.localeCompare(b.name))
@@ -387,4 +402,4 @@ class MapBuilder {
   }
 }
 
-module.exports = { MapBuilder, STEPS, PACKAGES, ALL, polyToGeoJson, pmtilesBounds, LEFT, online }
+module.exports = { MapBuilder, STEPS, PACKAGES, ALL, polyToGeoJson, pmtilesBounds, LEFT, online, isOld }

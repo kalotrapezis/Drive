@@ -54,8 +54,12 @@ export function MapsCard() {
       {/* the maps in a box of their own, a line between countries (the user, 27 Oct: "a rounded box with a different colour … lines between the countries") */}
       {!!packs?.length && <div className="map-list">{packs.map(p => <div key={p.id} className="map-pack">
         <div><strong>{p.name}</strong><small className="muted">{t('mapbuild.built', { size: size(p.bytes), date: new Date(p.built).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' }) })}</small></div>
-        <button className="text-button" disabled={busy} onClick={() => update(p.region)}>{t('mapbuild.update')}</button>
-        <button className="text-button" disabled={busy} onClick={() => setRemoving(p)}>{t('mapbuild.remove')}</button>
+        {/* an old map says so beside its buttons; Remake makes it again from fresh downloads (the user, 27 Oct: "we make the maps, we don't simply update them") */}
+        <span className="map-actions">
+          {p.old && <span className="map-old" title={t('mapbuild.oldNote')}>{t('mapbuild.old')}</span>}
+          <button className={p.old ? 'filled-button secondary' : 'text-button'} disabled={busy} onClick={() => update(p.region)}>{t('mapbuild.remake')}</button>
+          <button className="text-button" disabled={busy} onClick={() => setRemoving(p)}>{t('mapbuild.remove')}</button>
+        </span>
       </div>)}</div>}
       {busy && <p className="muted map-making"><span className="spinner" />{t('mapbuild.making', { name: progress.id, step: progress.step ? t(`mapbuild.step.${progress.step}`) : '…' })}</p>}
       <div className="dialog-actions" style={{ justifyContent: 'flex-start' }}>

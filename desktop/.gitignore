@@ -2,3 +2,5 @@ node_modules/
 dist/
 release/
 release-local/
+bundled/
+build-tools/

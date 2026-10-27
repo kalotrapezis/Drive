@@ -12,7 +12,7 @@ const os = require('node:os')
 const path = require('node:path')
 const net = require('node:net')
 const { spawn, spawnSync } = require('node:child_process')
-const { t } = require('./i18n')
+const { t, current } = require('./i18n')
 
 const JAR = 'graphhopper-web-10.2.jar'
 /** The graph's profiles exactly as made (tools/maps-graph.yml): GraphHopper refuses a graph whose profiles differ. */
@@ -68,10 +68,13 @@ const CAR_TIME = 1.2
 /** Where the map builder keeps its tools (mapbuild.js; tools/maps-greece.sh uses the same bin). */
 const BIN = path.join(os.homedir(), 'Tetra-maps', 'bin')
 
-/** A Java of 17 or newer, as GraphHopper 10.2 needs (the map builder asks the system for one when there is none). */
+/** What the AppImage carries for the map builder (scripts/bundle-tools.sh): its own Java and Python, used before the system's. */
+const BUNDLED = process.resourcesPath ? path.join(process.resourcesPath, 'bundled') : null
+
+/** A Java of 17 or newer, as GraphHopper 10.2 needs: the AppImage's own, else the system's (the builder asks for one when there is none). */
 function findJava() {
   const major = java => { try { const r = spawnSync(java, ['-version'], { timeout: 5000, encoding: 'utf8' }); return r.status === 0 ? +(/version "(\d+)/.exec(r.stderr)?.[1] ?? 0) : 0 } catch { return 0 } }
-  return [process.env.JAVA, '/usr/lib/jvm/java-17-openjdk-amd64/bin/java', 'java'].find(j => j && major(j) >= 17) ?? null
+  return [process.env.JAVA, BUNDLED && path.join(BUNDLED, 'jre', 'bin', 'java'), '/usr/lib/jvm/java-17-openjdk-amd64/bin/java', 'java'].find(j => j && major(j) >= 17) ?? null
 }
 
 class Router {
@@ -119,21 +122,22 @@ class Router {
     if (!this.proc) { this.starting ??= this.start().finally(() => { this.starting = null }); await this.starting }
   }
 
-  /** From the first point through each next one: its line, metres, minutes and turns (Greek, as the phone says them). */
+  /** From the first point through each next one: its line, metres, minutes and turns (in the app's language, as the phone says them). */
   async route(points, mode = 'car', main = false) {
+    const locale = ghLocale(current().lang)
     const profile = ['car', 'foot', 'bike', 'wheelchair'].includes(mode) ? mode : 'car'
     if (!Array.isArray(points) || points.length < 2 || !points.every(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))) throw new Error(t('maps.needTwoPlaces'))
     await this.ready()
     let body
     if (main && profile === 'car') {
       const res = await fetch(`http://localhost:${this.port}/route`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ points: points.map(p => [p.lng, p.lat]), profile, locale: 'el', instructions: true, points_encoded: false, 'ch.disable': true, custom_model: MAIN_ROADS }) })
+        body: JSON.stringify({ points: points.map(p => [p.lng, p.lat]), profile, locale, instructions: true, points_encoded: false, 'ch.disable': true, custom_model: MAIN_ROADS }) })
       body = await res.json()
       if (!res.ok || !body.paths?.length) body = null // too far to search without the shortcuts: the shortest way, as the phone
     }
     if (!body) {
       const q = points.map(p => `point=${p.lat},${p.lng}`).join('&')
-      const res = await fetch(`http://localhost:${this.port}/route?${q}&profile=${profile}&locale=el&instructions=true&points_encoded=false`)
+      const res = await fetch(`http://localhost:${this.port}/route?${q}&profile=${profile}&locale=${locale}&instructions=true&points_encoded=false`)
       body = await res.json()
       if (!res.ok || !body.paths?.length) throw new Error(plain(body.message))
     }
@@ -144,6 +148,9 @@ class Router {
 
   stop() { const p = this.proc; this.proc = null; p?.kill() }
 }
+
+/** GraphHopper's word for the app's language [lang]: Portugal's Portuguese for "pt" (Tetra's); English where GraphHopper has none (it falls back by itself). */
+const ghLocale = lang => (lang === 'pt' ? 'pt_PT' : lang)
 
 /** GraphHopper's errors in plain words (the phone: "routing errors in plain words"). */
 function plain(message = '') {
@@ -159,4 +166,4 @@ const freePort = () => new Promise((resolve, reject) => {
   s.on('error', reject)
 })
 
-module.exports = { Router, plain, MAIN_ROADS, PROFILES, JAR, BIN, findJava }
+module.exports = { Router, plain, ghLocale, MAIN_ROADS, PROFILES, JAR, BIN, BUNDLED, findJava }

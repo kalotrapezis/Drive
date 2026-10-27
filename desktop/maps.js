@@ -399,4 +399,15 @@ function search(all, { query = '', kind = null, lat, lng, limit = 60, nearby = f
     .sort((a, b) => a[2] - b[2] || a[3] - b[3] || a[1] - b[1]).slice(0, limit).map(([p]) => strip(p))
 }
 
-module.exports = { Maps, fold, latin, metres, parsePoi, parsePlace, parseTrip, search, SETTLEMENTS }
+/**
+ * Protomaps' style, made for Greek (name:el, a name in another script shown under it), for `lang`: its name:<lang> and
+ * its script, as Protomaps' own style for that language is; a place without a name in it keeps its local name.
+ * The phone's labelsIn (MapsScreen.kt) does the same.
+ */
+function labelsIn(style, lang) {
+  if (lang === 'el') return style
+  const script = ['bg', 'ru', 'uk', 'sr', 'mk'].includes(lang) ? 'Cyrillic' : 'Latin'
+  return style.replaceAll('"name:el"', `"name:${lang}"`).replaceAll('"Greek"', `"${script}"`)
+}
+
+module.exports = { Maps, fold, latin, metres, parsePoi, parsePlace, parseTrip, search, SETTLEMENTS, labelsIn }
