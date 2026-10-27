@@ -1845,6 +1845,7 @@
  "mapbuild.step.osm": "Henter veje og steder",
  "mapbuild.step.roads": "Bygger vejene til rutevejledning",
  "mapbuild.step.search": "Bygger søgning og vognbaner",
+ "mapbuild.step.phone": "Områdenumre til opkald",
  "mapbuild.step.install": "Installerer det i Tetra",
  "mapbuild.step.send": "Sender det til din telefon og tablet",
  "mapbuild.buildNote": "Det tager fra få minutter til en time, afhængigt af landet. Du kan lukke dette vindue; Tetra arbejder videre.",

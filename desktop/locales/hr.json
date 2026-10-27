@@ -1931,6 +1931,7 @@
  "mapbuild.step.osm": "Preuzimanje cesta i mjesta",
  "mapbuild.step.roads": "Izgradnja cesta za navigaciju",
  "mapbuild.step.search": "Izgradnja pretraživanja i traka",
+ "mapbuild.step.phone": "Pozivni brojevi za pozive",
  "mapbuild.step.install": "Instalacija u aplikaciju Tetra",
  "mapbuild.step.send": "Slanje na vaš telefon i tablet",
  "mapbuild.buildNote": "Traje od nekoliko minuta do sat vremena, ovisno o zemlji. Možete zatvoriti ovaj prozor; Tetra nastavlja raditi.",

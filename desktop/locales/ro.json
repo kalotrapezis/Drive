@@ -1932,6 +1932,7 @@
  "mapbuild.step.osm": "Se descarcă drumurile și locurile",
  "mapbuild.step.roads": "Se construiesc drumurile pentru indicații",
  "mapbuild.step.search": "Se construiesc căutarea și benzile",
+ "mapbuild.step.phone": "Prefixe pentru apeluri",
  "mapbuild.step.install": "Se instalează în Tetra",
  "mapbuild.step.send": "Se trimite pe telefonul și tableta ta",
  "mapbuild.buildNote": "Durează de la câteva minute la o oră, în funcție de țară. Poți închide această fereastră; Tetra continuă să lucreze.",

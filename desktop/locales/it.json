@@ -1932,6 +1932,7 @@
  "mapbuild.step.osm": "Download di strade e luoghi",
  "mapbuild.step.roads": "Costruzione delle strade per le indicazioni",
  "mapbuild.step.search": "Costruzione di ricerca e corsie",
+ "mapbuild.step.phone": "Prefissi per le chiamate",
  "mapbuild.step.install": "Installazione in Tetra",
  "mapbuild.step.send": "Invio al tuo telefono e tablet",
  "mapbuild.buildNote": "Ci vogliono da pochi minuti a un'ora, a seconda del paese. Puoi chiudere questa finestra; Tetra continua a lavorare.",

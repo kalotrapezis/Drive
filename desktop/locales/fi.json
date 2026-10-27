@@ -1845,6 +1845,7 @@
  "mapbuild.step.osm": "Ladataan teitä ja paikkoja",
  "mapbuild.step.roads": "Rakennetaan teitä reittiohjeita varten",
  "mapbuild.step.search": "Rakennetaan hakua ja kaistoja",
+ "mapbuild.step.phone": "Suuntanumerot puheluille",
  "mapbuild.step.install": "Asennetaan Tetraan",
  "mapbuild.step.send": "Lähetetään puhelimeen ja tablettiin",
  "mapbuild.buildNote": "Tämä kestää muutamasta minuutista tuntiin maasta riippuen. Voit sulkea tämän ikkunan; Tetra jatkaa työtä.",

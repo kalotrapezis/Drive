@@ -1845,6 +1845,7 @@
  "mapbuild.step.osm": "Downloading the roads and places",
  "mapbuild.step.roads": "Building the roads for directions",
  "mapbuild.step.search": "Building search and lanes",
+ "mapbuild.step.phone": "Area codes for calls",
  "mapbuild.step.install": "Installing it in Tetra",
  "mapbuild.step.send": "Sending it to your phone and tablet",
  "mapbuild.buildNote": "This takes from a few minutes to an hour, depending on the country. You can close this window; Tetra keeps working.",

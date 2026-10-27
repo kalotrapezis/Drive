@@ -658,6 +658,7 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .map-steps li.now { color: var(--text); font-weight: 600; }
 .map-steps li.done { color: var(--text); }
 .map-wizard progress { width: 100%; }
+.map-making { display: flex; align-items: center; gap: 10px; }
 /* The parts of Tetra (asked 2026-09-27): colour is a label — a symbol beside a title — the same in light and dark.
    The phone's Category enum has the same five. */
 :root { --cat-photos: #3DA35D; --cat-files: #4F86E8; --cat-notes: #F2B705; --cat-scanner: #D32F2F; --cat-office: #F76002; --cat-text: #8E5BD8; }

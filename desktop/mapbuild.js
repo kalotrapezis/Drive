@@ -37,7 +37,7 @@ const URLS = {
 const PACKAGES = { 'openjdk-17-jre-headless': 'java', 'python3-pyosmium': 'osmium' }
 const PYTHON = '/usr/bin/python3'
 /** The steps as the wizard shows them, in order. */
-const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'install']
+const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install']
 /** Where traffic keeps left (ISO 3166-1); a region without a code takes its parent's (Bayern, Germany's). */
 const LEFT = new Set(('GB IE IM JE GG CY MT JP AU NZ IN PK BD LK NP BT ID MY SG BN TH TL HK MO ZA NA BW ZW ZM MW MZ LS SZ KE UG TZ MU SC ' +
   'JM BS BB TT GY SR AG DM GD KN LC VC VG AI MS KY TC BM FK SH FJ PG WS TO SB KI TV NR CK NU').split(' '))
@@ -225,6 +225,9 @@ class MapBuilder {
       for (const s of ['maps-places.py', 'maps-lanes.py', 'maps-phone.py']) await fsp.writeFile(path.join(dir, s), await fsp.readFile(path.join(__dirname, 'maps-tools', s)))
       await run(PYTHON, ['-I', 'maps-places.py', 'region.osm.pbf', `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`])
       await run(PYTHON, ['-I', 'maps-lanes.py', 'region.osm.pbf', `${id}-lanes.tsv`])
+
+      // a step of its own (the user, 27 Oct: "the call regions numbers make it part of that process")
+      at('phone')
       // the Phone's places of area codes; a country libphonenumber names none for, or no GitHub, leaves the map without them
       const iso = isoOf(region, await this.regions())
       if (iso) await run(PYTHON, ['-I', 'maps-phone.py', iso, `${id}-phone.tsv`]).catch(e => { if (job.cancelled) throw e; log.write(`no phone table: ${e.message}\n`) })

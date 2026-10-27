@@ -11,7 +11,7 @@ import { locale, t } from './i18n'
  * and Add a map, which walks through the builder (mapbuild.js). Sync carries a new map to the phone and tablet.
  */
 
-const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'install'] as const
+const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install'] as const
 /** The free projects the maps are made of, with where to give (the welcome page). */
 const CREDITS = [
   { name: 'OpenStreetMap', key: 'osm', url: 'https://donate.openstreetmap.org/', give: true },
@@ -55,7 +55,7 @@ export function MapsCard() {
         <button className="text-button" disabled={busy} onClick={() => update(p.region)}>{t('mapbuild.update')}</button>
         <button className="text-button" disabled={busy} onClick={() => setRemoving(p)}>{t('mapbuild.remove')}</button>
       </div>)}
-      {busy && <p className="muted">{t('mapbuild.making', { name: progress.id, step: progress.step ? t(`mapbuild.step.${progress.step}`) : '…' })}</p>}
+      {busy && <p className="muted map-making"><span className="spinner" />{t('mapbuild.making', { name: progress.id, step: progress.step ? t(`mapbuild.step.${progress.step}`) : '…' })}</p>}
       <div className="dialog-actions" style={{ justifyContent: 'flex-start' }}>
         {busy ? <button className="filled-button secondary" onClick={() => setWizard('build')}>{t('mapbuild.show')}</button>
           : <button className="filled-button" onClick={() => setWizard('welcome')}>{t('mapbuild.add')}</button>}
@@ -122,10 +122,11 @@ function Wizard({ page, setPage, progress, start, onClose }:
           <h3>{t('mapbuild.chooseTitle')}</h3>
           <input className="field" autoFocus placeholder={t('mapbuild.search')} value={query} onChange={e => setQuery(e.target.value)} />
           <div className="map-regions">
-            {!regions && !said && <p className="muted">…</p>}
+            {!regions && !said && <span className="spinner" />}
             {shown.map(r => <button key={r.id} className={chosen?.id === r.id ? 'on' : ''} onClick={() => choose(r)}>
               {r.name} <small className="muted">{names.get(r.parent!)}</small></button>)}
           </div>
+          {chosen && !needs && !said && <span className="spinner" />}
           {chosen && needs && <div className="map-needs">
             <p>{t('mapbuild.download', { size: size(needs.osm) })} · {t('mapbuild.memory', { need: size(needs.memory), has: size(needs.hasMemory) })}</p>
             {tooBig && <p className="error">{t('mapbuild.tooBig')}</p>}
@@ -156,7 +157,8 @@ function Wizard({ page, setPage, progress, start, onClose }:
               const at = progress?.step ? STEPS.indexOf(progress.step) : -1
               const state = progress?.state === 'done' || i < at ? 'done' : i === at ? 'now' : ''
               return <li key={s} className={state}>
-                <Icon name={state === 'done' ? 'checked' : 'unchecked'} size={18} />
+                {/* the step being done turns (the user, 27 Oct: "it takes a bit to show up, add a spinner") */}
+                {state === 'now' && progress?.state === 'running' ? <span className="spinner" /> : <Icon name={state === 'done' ? 'checked' : 'unchecked'} size={18} />}
                 <span>{t(`mapbuild.step.${s}`)}{state === 'now' && progress?.total ? ` · ${size(progress.done ?? 0)} / ${size(progress.total)}` : ''}</span>
               </li>
             })}

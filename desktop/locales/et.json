@@ -1845,6 +1845,7 @@
  "mapbuild.step.osm": "Teede ja kohtade allalaadimine",
  "mapbuild.step.roads": "Juhiste jaoks teede ehitamine",
  "mapbuild.step.search": "Otsingu ja sõidurajade ehitamine",
+ "mapbuild.step.phone": "Suunakoodid kõnede jaoks",
  "mapbuild.step.install": "Tetrasse paigaldamine",
  "mapbuild.step.send": "Telefoni ja tahvelarvutisse saatmine",
  "mapbuild.buildNote": "See võtab riigist sõltuvalt mõnest minutist tunnini. Selle akna võid sulgeda; Tetra töötab edasi.",

@@ -1932,6 +1932,7 @@
  "mapbuild.step.osm": "Tiek lejupielādēti ceļi un vietas",
  "mapbuild.step.roads": "Tiek veidoti ceļi navigācijai",
  "mapbuild.step.search": "Tiek veidota meklēšana un joslas",
+ "mapbuild.step.phone": "Reģionu kodi zvaniem",
  "mapbuild.step.install": "Instalēšana Tetra",
  "mapbuild.step.send": "Sūtīšana uz jūsu tālruni un planšetdatoru",
  "mapbuild.buildNote": "Tas aizņem no dažām minūtēm līdz stundai atkarībā no valsts. Šo logu varat aizvērt; Tetra turpina darbu.",

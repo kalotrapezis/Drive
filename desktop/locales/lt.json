@@ -2019,6 +2019,7 @@
  "mapbuild.step.osm": "Atsisiunčiami keliai ir vietos",
  "mapbuild.step.roads": "Kuriami keliai navigacijai",
  "mapbuild.step.search": "Kuriama paieška ir eismo juostos",
+ "mapbuild.step.phone": "Vietovių kodai skambučiams",
  "mapbuild.step.install": "Diegiama į Tetra",
  "mapbuild.step.send": "Siunčiama į jūsų telefoną ir planšetę",
  "mapbuild.buildNote": "Tai trunka nuo kelių minučių iki valandos, priklausomai nuo šalies. Šį langą galite uždaryti; Tetra toliau dirba.",
