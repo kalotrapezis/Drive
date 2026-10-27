@@ -1843,6 +1843,14 @@
  "settings.everyDay": "O dată pe zi",
  "settings.everyWeek": "O dată pe săptămână",
  "settings.locationNote": "Un computer se mută rar, așa că Hărți păstrează ultima locație dată de telefonul tău. Cu „Dezactivat” o păstrează până apeși „Unde sunt”, care cere mereu telefonului una nouă.",
+ "settings.general": "General",
+ "settings.apps": "Aplicații",
+ "settings.sum.guide": "Cum funcționează Tetra, pas cu pas",
+ "settings.sum.appearance": "Temă și limbă",
+ "settings.sum.computer": "Rolul acestui computer, NAS, o luare de la capăt",
+ "settings.sum.photos": "Fotografii în mișcare",
+ "settings.sum.maps": "Hărți ale țărilor, unde vă aflați",
+ "settings.sum.phone": "Sunetul apelurilor prin Bluetooth",
  "calls.soundRelayed": "Sunet aici, prin Wi-Fi",
  "role.mirror": "Arată aici fotografiile de pe {name}",
  "role.mirrorHint": "Apar în galeria ta și ca album, fără să umple acest computer: aici se păstrează doar previzualizări mici.\nO fotografie pe care o deschizi vine prin Wi-Fi. Ultimele pe care le-ai deschis rămân aici.",
@@ -1942,5 +1950,7 @@
  "mapbuild.doneBody": "Este aici, în Hărțile Tetra. Telefonul și tableta ta o primesc la următoarea sincronizare: deschide Tetra pe ele, în aceeași rețea. Este mare, așa că cel mai bine este cu Wi-Fi.",
  "mapbuild.close": "Gata",
  "mapbuild.failed": "Harta nu a putut fi făcută: {error}",
+ "mapbuild.offline": "Nu există conexiune la internet. Hărțile se descarcă, așa că conectează-te și încearcă din nou.",
+ "mapbuild.waitingNet": "Nu există conexiune la internet. Continuă singur când revine conexiunea.",
  "mapbuild.tryAgain": "Încearcă din nou"
 }

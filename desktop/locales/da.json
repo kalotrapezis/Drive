@@ -1756,6 +1756,14 @@
  "settings.everyDay": "En gang om dagen",
  "settings.everyWeek": "En gang om ugen",
  "settings.locationNote": "En computer flytter sig sjældent, så Kort beholder den seneste placering, din telefon gav. Med »Fra« beholder den den, indtil du trykker på »Hvor jeg er«, som altid spørger telefonen om en ny.",
+ "settings.general": "Generelt",
+ "settings.apps": "Apps",
+ "settings.sum.guide": "Sådan virker Tetra, trin for trin",
+ "settings.sum.appearance": "Tema og sprog",
+ "settings.sum.computer": "Computerens rolle, NAS, start forfra",
+ "settings.sum.photos": "Levende fotos",
+ "settings.sum.maps": "Kort over lande, hvor du er",
+ "settings.sum.phone": "Opkaldslyd via Bluetooth",
  "calls.soundRelayed": "Lyd her, via Wi-Fi",
  "role.mirror": "Vis fotos fra {name} her",
  "role.mirrorHint": "De vises i dit galleri og som et album uden at fylde denne computer: kun små forhåndsvisninger gemmes her.\nEt foto, du åbner, hentes over Wi-Fi. De sidste, du åbnede, bliver her.",
@@ -1855,5 +1863,7 @@
  "mapbuild.doneBody": "Det ligger i Tetras Kort her. Din telefon og tablet får det ved næste synkronisering: åbn Tetra på dem, på det samme netværk. Det er stort, så Wi-Fi er bedst.",
  "mapbuild.close": "Færdig",
  "mapbuild.failed": "Kortet kunne ikke laves: {error}",
+ "mapbuild.offline": "Ingen internetforbindelse. Kort hentes, så opret forbindelse og prøv igen.",
+ "mapbuild.waitingNet": "Ingen internetforbindelse. Det fortsætter af sig selv, når forbindelsen er tilbage.",
  "mapbuild.tryAgain": "Prøv igen"
 }

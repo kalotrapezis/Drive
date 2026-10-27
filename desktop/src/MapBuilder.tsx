@@ -43,18 +43,20 @@ export function MapsCard() {
     return off
   }, [])
   useEffect(() => window.drive.onMapsChanged(load), [])
-  const busy = progress?.state === 'running'
-  const update = (id: string) => { setProgress({ id, step: null, state: 'running' }); setWizard('build'); window.drive.mapsBuild(id) }
+  const busy = progress?.state === 'running' || progress?.state === 'offline'
+  /** A build of `id`; `resume` goes on from the step that failed (the error page's Retry). */
+  const update = (id: string, resume = false) => { setProgress(p => ({ id, step: resume ? p?.step ?? null : null, state: 'running' })); setWizard('build'); window.drive.mapsBuild(id, resume) }
   return (
     <section className="settings-card island">
       <h3><Icon name="map" size={20} />{t('mapbuild.title')}</h3>
       <p className="muted">{t('mapbuild.note')}</p>
       {packs?.length === 0 && <p>{t('mapbuild.none')}</p>}
-      {packs?.map(p => <div key={p.id} className="map-pack">
+      {/* the maps in a box of their own, a line between countries (the user, 27 Oct: "a rounded box with a different colour … lines between the countries") */}
+      {!!packs?.length && <div className="map-list">{packs.map(p => <div key={p.id} className="map-pack">
         <div><strong>{p.name}</strong><small className="muted">{t('mapbuild.built', { size: size(p.bytes), date: new Date(p.built).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' }) })}</small></div>
         <button className="text-button" disabled={busy} onClick={() => update(p.region)}>{t('mapbuild.update')}</button>
         <button className="text-button" disabled={busy} onClick={() => setRemoving(p)}>{t('mapbuild.remove')}</button>
-      </div>)}
+      </div>)}</div>}
       {busy && <p className="muted map-making"><span className="spinner" />{t('mapbuild.making', { name: progress.id, step: progress.step ? t(`mapbuild.step.${progress.step}`) : '…' })}</p>}
       <div className="dialog-actions" style={{ justifyContent: 'flex-start' }}>
         {busy ? <button className="filled-button secondary" onClick={() => setWizard('build')}>{t('mapbuild.show')}</button>
@@ -68,7 +70,7 @@ export function MapsCard() {
 }
 
 function Wizard({ page, setPage, progress, start, onClose }:
-  { page: Page; setPage: (p: Page) => void; progress: MapBuildProgress | null; start: (id: string) => void; onClose: () => void }) {
+  { page: Page; setPage: (p: Page) => void; progress: MapBuildProgress | null; start: (id: string, resume?: boolean) => void; onClose: () => void }) {
   const [regions, setRegions] = useState<MapRegion[] | null>(null)
   const [query, setQuery] = useState('')
   const [chosen, setChosen] = useState<MapRegion | null>(null)
@@ -150,38 +152,37 @@ function Wizard({ page, setPage, progress, start, onClose }:
             <button className="filled-button" autoFocus disabled={installing} onClick={install}>{t('mapbuild.install')}</button>
           </div>
         </>}
-        {page === 'build' && <>
+        {(page === 'build' || page === 'error') && <>
           <h3>{t('mapbuild.buildTitle', { name })}</h3>
           <ol className="map-steps">
             {[...STEPS, 'send' as const].map((s, i) => {
               const at = progress?.step ? STEPS.indexOf(progress.step) : -1
-              const state = progress?.state === 'done' || i < at ? 'done' : i === at ? 'now' : ''
+              const state = progress?.state === 'done' || i < at ? 'done' : i === at ? (page === 'error' ? 'failed' : 'now') : ''
               return <li key={s} className={state}>
                 {/* the step being done turns (the user, 27 Oct: "it takes a bit to show up, add a spinner") */}
-                {state === 'now' && progress?.state === 'running' ? <span className="spinner" /> : <Icon name={state === 'done' ? 'checked' : 'unchecked'} size={18} />}
+                {state === 'now' ? <span className="spinner" /> : <Icon name={state === 'done' ? 'checked' : state === 'failed' ? 'warning' : 'unchecked'} size={18} />}
                 <span>{t(`mapbuild.step.${s}`)}{state === 'now' && progress?.total ? ` · ${size(progress.done ?? 0)} / ${size(progress.total)}` : ''}</span>
               </li>
             })}
           </ol>
-          {progress?.state === 'running' && progress.total ? <progress max={progress.total} value={progress.done ?? 0} /> : null}
-          <p className="muted">{t('mapbuild.buildNote')}</p>
-          <div className="dialog-actions">
+          {page === 'build' && progress?.state === 'running' && progress.total ? <progress max={progress.total} value={progress.done ?? 0} /> : null}
+          {page === 'build' && progress?.state === 'offline' && <p className="error">{t('mapbuild.waitingNet')}</p>}
+          {page === 'build' && <p className="muted">{t('mapbuild.buildNote')}</p>}
+          {page === 'error' && <p className="error">{t('mapbuild.failed', { error: progress?.error ?? '' })}</p>}
+          {page === 'build' && <div className="dialog-actions">
             <button className="text-button" onClick={() => { window.drive.mapsCancelBuild(); onClose() }}>{t('mapbuild.stop')}</button>
             <button className="filled-button secondary" onClick={onClose}>{t('mapbuild.hide')}</button>
-          </div>
+          </div>}
+          {/* Retry goes on from the failed step; Cancel gives the build up and clears its work (the user, 27 Oct: "add a retry if a step fails") */}
+          {page === 'error' && <div className="dialog-actions">
+            <button className="text-button" onClick={() => { if (progress?.id) window.drive.mapsDiscardBuild(progress.id); onClose() }}>{t('common.cancel')}</button>
+            {progress?.id && <button className="filled-button" autoFocus onClick={() => start(progress.id, true)}>{t('mapbuild.tryAgain')}</button>}
+          </div>}
         </>}
         {page === 'done' && <>
           <h3>{t('mapbuild.doneTitle', { name })}</h3>
           <p>{t('mapbuild.doneBody')}</p>
           <div className="dialog-actions"><button className="filled-button" autoFocus onClick={onClose}>{t('mapbuild.close')}</button></div>
-        </>}
-        {page === 'error' && <>
-          <h3>{t('mapbuild.buildTitle', { name })}</h3>
-          <p className="error">{t('mapbuild.failed', { error: progress?.error ?? '' })}</p>
-          <div className="dialog-actions">
-            <button className="text-button" onClick={onClose}>{t('common.cancel')}</button>
-            {progress?.id && <button className="filled-button" onClick={() => start(progress.id)}>{t('mapbuild.tryAgain')}</button>}
-          </div>
         </>}
       </div>
     </Modal>

@@ -1756,6 +1756,14 @@
  "settings.everyDay": "Kord päevas",
  "settings.everyWeek": "Kord nädalas",
  "settings.locationNote": "Arvuti liigub harva, seega jätavad Kaardid meelde viimase asukoha, mille teie telefon andis. Valikuga „Väljas“ hoitakse seda seni, kuni vajutate „Kus ma olen“, mis küsib telefonilt alati uue.",
+ "settings.general": "Üldine",
+ "settings.apps": "Rakendused",
+ "settings.sum.guide": "Kuidas Tetra töötab, samm-sammult",
+ "settings.sum.appearance": "Teema ja keel",
+ "settings.sum.computer": "Selle arvuti roll, NAS, uuesti alustamine",
+ "settings.sum.photos": "Liikuvad fotod",
+ "settings.sum.maps": "Riikide kaardid, kus sa oled",
+ "settings.sum.phone": "Kõnede heli Bluetoothi kaudu",
  "calls.soundRelayed": "Heli siin, üle Wi-Fi",
  "role.mirror": "Näita siin arvuti {name} fotosid",
  "role.mirrorHint": "Need on näha teie galeriis ja albumina, ilma seda arvutit täitmata: siin hoitakse ainult väikseid eelvaateid.\nFoto, mille avate, tuleb üle Wi-Fi. Viimati avatud jäävad siia.",
@@ -1855,5 +1863,7 @@
  "mapbuild.doneBody": "See on siin Tetra kaartides. Sinu telefon ja tahvelarvuti saavad selle järgmisel sünkroonimisel: ava neis Tetra samas võrgus. See on suur, nii et Wi-Fi on parim.",
  "mapbuild.close": "Valmis",
  "mapbuild.failed": "Kaarti ei õnnestunud teha: {error}",
+ "mapbuild.offline": "Internetiühendus puudub. Kaardid laaditakse alla, nii et loo ühendus ja proovi uuesti.",
+ "mapbuild.waitingNet": "Internetiühendus puudub. See jätkab ise, kui ühendus taastub.",
  "mapbuild.tryAgain": "Proovi uuesti"
 }

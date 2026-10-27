@@ -1843,6 +1843,14 @@
  "settings.everyDay": "Uma vez por dia",
  "settings.everyWeek": "Uma vez por semana",
  "settings.locationNote": "Um computador raramente muda de sítio, por isso os Mapas guardam a última localização dada pelo seu telemóvel. Com «Desativado» guardam-na até carregar em «Onde estou», que pede sempre uma nova ao telemóvel.",
+ "settings.general": "Geral",
+ "settings.apps": "Aplicações",
+ "settings.sum.guide": "Como o Tetra funciona, passo a passo",
+ "settings.sum.appearance": "Tema e idioma",
+ "settings.sum.computer": "Função deste computador, NAS, recomeçar",
+ "settings.sum.photos": "Fotos em movimento",
+ "settings.sum.maps": "Mapas de países, onde está",
+ "settings.sum.phone": "Som das chamadas por Bluetooth",
  "calls.soundRelayed": "Som aqui, por Wi-Fi",
  "role.mirror": "Mostrar aqui as fotos de {name}",
  "role.mirrorHint": "Aparecem na sua galeria e como um álbum, sem encher este computador: aqui só ficam pequenas pré-visualizações.\nUma foto que abrir chega por Wi-Fi. As últimas que abriu ficam aqui.",
@@ -1942,5 +1950,7 @@
  "mapbuild.doneBody": "Está nos Mapas do Tetra, aqui. O seu telemóvel e tablet recebem-no na próxima sincronização: abra o Tetra neles, na mesma rede. É grande, por isso o melhor é usar Wi-Fi.",
  "mapbuild.close": "Concluído",
  "mapbuild.failed": "Não foi possível criar o mapa: {error}",
+ "mapbuild.offline": "Sem ligação à internet. Os mapas são transferidos, por isso ligue-se e tente de novo.",
+ "mapbuild.waitingNet": "Sem ligação à internet. Continua sozinho quando a ligação voltar.",
  "mapbuild.tryAgain": "Tentar novamente"
 }

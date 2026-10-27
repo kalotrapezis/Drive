@@ -1930,6 +1930,14 @@
  "settings.everyDay": "Raz dziennie",
  "settings.everyWeek": "Raz w tygodniu",
  "settings.locationNote": "Komputer rzadko się przemieszcza, więc Mapy zachowują ostatnią lokalizację podaną przez twój telefon. Przy „Wył.” trzymają ją, dopóki nie naciśniesz „Gdzie jestem”, co zawsze prosi telefon o nową.",
+ "settings.general": "Ogólne",
+ "settings.apps": "Aplikacje",
+ "settings.sum.guide": "Jak działa Tetra, krok po kroku",
+ "settings.sum.appearance": "Motyw i język",
+ "settings.sum.computer": "Rola tego komputera, NAS, zaczęcie od nowa",
+ "settings.sum.photos": "Zdjęcia ruchome",
+ "settings.sum.maps": "Mapy krajów, gdzie jesteś",
+ "settings.sum.phone": "Dźwięk połączeń przez Bluetooth",
  "calls.soundRelayed": "Dźwięk tutaj, przez Wi-Fi",
  "role.mirror": "Pokaż tutaj zdjęcia z {name}",
  "role.mirrorHint": "Pojawiają się w Twojej galerii i jako album, nie zapełniając tego komputera: tutaj przechowywane są tylko małe podglądy.\nZdjęcie, które otworzysz, przychodzi przez Wi-Fi. Ostatnio otwarte zostają tutaj.",
@@ -2029,5 +2037,7 @@
  "mapbuild.doneBody": "Jest tutaj, w Mapach Tetra. Twój telefon i tablet pobiorą ją przy następnej synchronizacji: otwórz na nich Tetra w tej samej sieci. Jest duża, więc najlepiej użyć Wi-Fi.",
  "mapbuild.close": "Gotowe",
  "mapbuild.failed": "Nie udało się utworzyć mapy: {error}",
+ "mapbuild.offline": "Brak połączenia z internetem. Mapy są pobierane, więc połącz się i spróbuj ponownie.",
+ "mapbuild.waitingNet": "Brak połączenia z internetem. Wznowi się samo, gdy połączenie wróci.",
  "mapbuild.tryAgain": "Spróbuj ponownie"
 }

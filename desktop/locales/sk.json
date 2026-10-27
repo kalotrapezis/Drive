@@ -1930,6 +1930,14 @@
  "settings.everyDay": "Raz denne",
  "settings.everyWeek": "Raz týždenne",
  "settings.locationNote": "Počítač sa málokedy presúva, preto si Mapy pamätajú poslednú polohu, ktorú poslal váš telefón. Pri „Vyp.“ ju držia, kým nestlačíte „Kde som“, ktoré sa telefónu vždy opýta na novú.",
+ "settings.general": "Všeobecné",
+ "settings.apps": "Aplikácie",
+ "settings.sum.guide": "Ako Tetra funguje, krok za krokom",
+ "settings.sum.appearance": "Motív a jazyk",
+ "settings.sum.computer": "Rola tohto počítača, NAS, začať odznova",
+ "settings.sum.photos": "Pohyblivé fotky",
+ "settings.sum.maps": "Mapy krajín, kde sa nachádzate",
+ "settings.sum.phone": "Zvuk hovorov cez Bluetooth",
  "calls.soundRelayed": "Zvuk tu, cez Wi-Fi",
  "role.mirror": "Zobraziť tu fotky z počítača {name}",
  "role.mirrorHint": "Zobrazia sa vo vašej galérii a ako album bez toho, aby zaplnili tento počítač: ukladajú sa tu len malé náhľady.\nFotka, ktorú otvoríte, príde cez Wi-Fi. Naposledy otvorené tu zostanú.",
@@ -2029,5 +2037,7 @@
  "mapbuild.doneBody": "Je tu, v Mapách Tetra. Telefón a tablet ju dostanú pri ďalšej synchronizácii: otvorte na nich Tetra v rovnakej sieti. Je veľká, takže najlepšie je Wi-Fi.",
  "mapbuild.close": "Hotovo",
  "mapbuild.failed": "Mapu sa nepodarilo vytvoriť: {error}",
+ "mapbuild.offline": "Nie ste pripojení k internetu. Mapy sa sťahujú, pripojte sa a skúste to znova.",
+ "mapbuild.waitingNet": "Nie ste pripojení k internetu. Pokračuje samo, keď sa pripojenie vráti.",
  "mapbuild.tryAgain": "Skúsiť znova"
 }

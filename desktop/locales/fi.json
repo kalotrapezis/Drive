@@ -1756,6 +1756,14 @@
  "settings.everyDay": "Kerran päivässä",
  "settings.everyWeek": "Kerran viikossa",
  "settings.locationNote": "Tietokone liikkuu harvoin, joten Kartat pitää puhelimesi viimeksi antaman sijainnin. Kun valinta on ”Pois”, se pidetään, kunnes painat ”Missä olen”, joka kysyy puhelimelta aina uuden.",
+ "settings.general": "Yleiset",
+ "settings.apps": "Sovellukset",
+ "settings.sum.guide": "Näin Tetra toimii, vaihe vaiheelta",
+ "settings.sum.appearance": "Teema ja kieli",
+ "settings.sum.computer": "Tämän tietokoneen rooli, NAS, aloitus alusta",
+ "settings.sum.photos": "Liikekuvat",
+ "settings.sum.maps": "Maiden kartat, missä olet",
+ "settings.sum.phone": "Puheluiden ääni Bluetoothin kautta",
  "calls.soundRelayed": "Ääni täällä, Wi-Fin kautta",
  "role.mirror": "Näytä koneen {name} kuvat täällä",
  "role.mirrorHint": "Ne näkyvät galleriassasi ja albumina täyttämättä tätä tietokonetta: tänne tallennetaan vain pienet esikatselukuvat.\nAvaamasi kuva tulee Wi-Fin kautta. Viimeksi avaamasi jäävät tänne.",
@@ -1855,5 +1863,7 @@
  "mapbuild.doneBody": "Se on täällä Tetran Kartoissa. Puhelimesi ja tablettisi saavat sen seuraavalla synkronoinnilla: avaa Tetra niissä samassa verkossa. Se on suuri, joten Wi-Fi on paras.",
  "mapbuild.close": "Valmis",
  "mapbuild.failed": "Karttaa ei voitu tehdä: {error}",
+ "mapbuild.offline": "Ei internetyhteyttä. Kartat ladataan verkosta, joten yhdistä ja yritä uudelleen.",
+ "mapbuild.waitingNet": "Ei internetyhteyttä. Jatkuu itsestään, kun yhteys palaa.",
  "mapbuild.tryAgain": "Yritä uudelleen"
 }

@@ -1756,6 +1756,14 @@
  "settings.everyDay": "Einmal am Tag",
  "settings.everyWeek": "Einmal pro Woche",
  "settings.locationNote": "Ein Computer bewegt sich selten, deshalb merkt sich Karten den letzten Standort, den dein Telefon geliefert hat. Bei „Aus“ bleibt er, bis du auf „Wo ich bin“ drückst, das das Telefon immer nach einem neuen fragt.",
+ "settings.general": "Allgemein",
+ "settings.apps": "Apps",
+ "settings.sum.guide": "So funktioniert Tetra, Schritt für Schritt",
+ "settings.sum.appearance": "Design und Sprache",
+ "settings.sum.computer": "Rolle dieses Computers, NAS, Neuanfang",
+ "settings.sum.photos": "Bewegte Fotos",
+ "settings.sum.maps": "Länderkarten, aktueller Standort",
+ "settings.sum.phone": "Ton der Anrufe über Bluetooth",
  "calls.soundRelayed": "Ton hier, über Wi-Fi",
  "role.mirror": "Fotos von {name} hier zeigen",
  "role.mirrorHint": "Sie erscheinen in deiner Galerie und als Album, ohne diesen Computer zu füllen: Hier werden nur kleine Vorschauen gespeichert.\nEin Foto, das du öffnest, kommt über Wi-Fi. Die zuletzt geöffneten bleiben hier.",
@@ -1855,5 +1863,7 @@
  "mapbuild.doneBody": "Sie befindet sich hier in den Karten von Tetra. Ihr Smartphone und Tablet erhalten sie bei der nächsten Synchronisierung: Öffnen Sie Tetra darauf, im selben Netzwerk. Sie ist groß, daher ist Wi-Fi am besten.",
  "mapbuild.close": "Fertig",
  "mapbuild.failed": "Die Karte konnte nicht erstellt werden: {error}",
+ "mapbuild.offline": "Keine Internetverbindung. Karten werden heruntergeladen, bitte verbinden und erneut versuchen.",
+ "mapbuild.waitingNet": "Keine Internetverbindung. Es geht von selbst weiter, sobald die Verbindung wieder da ist.",
  "mapbuild.tryAgain": "Erneut versuchen"
 }

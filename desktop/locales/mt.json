@@ -1930,6 +1930,14 @@
  "settings.everyDay": "Darba kuljum",
  "settings.everyWeek": "Darba fil-ġimgħa",
  "settings.locationNote": "Kompjuter rari jiċċaqlaq, għalhekk Mappi jżomm l-aħħar pożizzjoni li ta t-telefon tiegħek. B’\"Mitfi\" iżommha sakemm tagħfas \"Fejn jien\", li dejjem jistaqsi lit-telefon għal waħda ġdida.",
+ "settings.general": "Ġenerali",
+ "settings.apps": "Applikazzjonijiet",
+ "settings.sum.guide": "Kif taħdem Tetra, pass pass",
+ "settings.sum.appearance": "Tema u lingwa",
+ "settings.sum.computer": "Ir-rwol ta' dan il-kompjuter, NAS, nibdew mill-ġdid",
+ "settings.sum.photos": "Ritratti b’moviment",
+ "settings.sum.maps": "Mappi tal-pajjiżi, fejn int",
+ "settings.sum.phone": "Ħoss tas-sejħiet permezz ta’ Bluetooth",
  "calls.soundRelayed": "Ħoss hawn, fuq il-Wi-Fi",
  "role.mirror": "Uri r-ritratti ta’ {name} hawn",
  "role.mirrorHint": "Jidhru fil-galerija tiegħek u bħala album, mingħajr ma jimlew dan il-kompjuter: hawn jinżammu biss previews żgħar.\nRitratt li tiftaħ jasal bil-Wi-Fi. L-aħħar li ftaħt jibqgħu hawn.",
@@ -2029,5 +2037,7 @@
  "mapbuild.doneBody": "Hija hawn fil-Mapep ta' Tetra. It-telefon u t-tablet tiegħek jieħduha fis-sinkronizzazzjoni li jmiss: iftaħ Tetra fuqhom, fuq l-istess netwerk. Hija kbira, għalhekk l-aħjar bil-Wi-Fi.",
  "mapbuild.close": "Lest",
  "mapbuild.failed": "Ma setgħetx issir il-mappa: {error}",
+ "mapbuild.offline": "M'hemmx konnessjoni mal-internet. Il-mapep jitniżżlu, għalhekk ikkonnettja u erġa' pprova.",
+ "mapbuild.waitingNet": "M'hemmx konnessjoni mal-internet. Ikompli waħdu meta tiġi lura l-konnessjoni.",
  "mapbuild.tryAgain": "Erġa' pprova"
 }

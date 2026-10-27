@@ -1930,6 +1930,14 @@
  "settings.everyDay": "Enkrat na dan",
  "settings.everyWeek": "Enkrat na teden",
  "settings.locationNote": "Računalnik se redko premika, zato Zemljevidi obdržijo zadnjo lokacijo, ki jo je dal vaš telefon. Pri »Izklopljeno« jo obdržijo, dokler ne pritisnete »Kje sem«, ki telefon vedno vpraša za novo.",
+ "settings.general": "Splošno",
+ "settings.apps": "Aplikacije",
+ "settings.sum.guide": "Kako deluje Tetra, korak za korakom",
+ "settings.sum.appearance": "Tema in jezik",
+ "settings.sum.computer": "Vloga tega računalnika, NAS, začetek znova",
+ "settings.sum.photos": "Gibljive fotografije",
+ "settings.sum.maps": "Zemljevidi držav, kje ste",
+ "settings.sum.phone": "Zvok klicev prek Bluetootha",
  "calls.soundRelayed": "Zvok tukaj, prek Wi-Fi",
  "role.mirror": "Prikaži tukaj fotografije z računalnika {name}",
  "role.mirrorHint": "Prikažejo se v vaši galeriji in kot album, ne da bi napolnile ta računalnik: tukaj se hranijo le majhni predogledi.\nFotografija, ki jo odprete, pride prek omrežja Wi-Fi. Nazadnje odprte ostanejo tukaj.",
@@ -2029,5 +2037,7 @@
  "mapbuild.doneBody": "Je tukaj, v Zemljevidih Tetra. Vaš telefon in tablični računalnik ga prejmeta ob naslednji sinhronizaciji: odprite Tetra nanju, v istem omrežju. Velik je, zato je najbolje z Wi-Fi.",
  "mapbuild.close": "Končano",
  "mapbuild.failed": "Zemljevida ni bilo mogoče narediti: {error}",
+ "mapbuild.offline": "Ni internetne povezave. Zemljevidi se prenašajo, zato se povežite in poskusite znova.",
+ "mapbuild.waitingNet": "Ni internetne povezave. Nadaljuje se samo, ko se povezava vrne.",
  "mapbuild.tryAgain": "Poskusi znova"
 }

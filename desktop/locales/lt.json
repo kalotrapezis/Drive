@@ -1930,6 +1930,14 @@
  "settings.everyDay": "Kartą per dieną",
  "settings.everyWeek": "Kartą per savaitę",
  "settings.locationNote": "Kompiuteris retai juda, todėl Žemėlapiai išlaiko paskutinę vietą, kurią pateikė jūsų telefonas. Kai pasirinkta „Išjungta“, ji laikoma, kol paspausite „Kur esu“ – šis mygtukas visada klausia telefono naujos vietos.",
+ "settings.general": "Bendra",
+ "settings.apps": "Programėlės",
+ "settings.sum.guide": "Kaip veikia Tetra, žingsnis po žingsnio",
+ "settings.sum.appearance": "Tema ir kalba",
+ "settings.sum.computer": "Šio kompiuterio vaidmuo, NAS, pradėti iš naujo",
+ "settings.sum.photos": "Judančios nuotraukos",
+ "settings.sum.maps": "Šalių žemėlapiai, kur esate",
+ "settings.sum.phone": "Skambučių garsas per Bluetooth",
  "calls.soundRelayed": "Garsas čia, per Wi-Fi",
  "role.mirror": "Rodyti čia kompiuterio {name} nuotraukas",
  "role.mirrorHint": "Jos rodomos jūsų galerijoje ir kaip albumas, neužpildant šio kompiuterio: čia laikomos tik mažos peržiūros.\nNuotrauka, kurią atidarote, atkeliauja per Wi-Fi. Paskutinės atidarytos lieka čia.",
@@ -2029,5 +2037,7 @@
  "mapbuild.doneBody": "Jis yra čia, Tetra žemėlapiuose. Jūsų telefonas ir planšetė jį gauna per kitą sinchronizavimą: atidarykite juose Tetra, tame pačiame tinkle. Jis didelis, todėl geriausia naudoti Wi-Fi.",
  "mapbuild.close": "Baigta",
  "mapbuild.failed": "Žemėlapio sukurti nepavyko: {error}",
+ "mapbuild.offline": "Nėra interneto ryšio. Žemėlapiai atsisiunčiami, tad prisijunkite ir bandykite dar kartą.",
+ "mapbuild.waitingNet": "Nėra interneto ryšio. Tęsis savaime, kai ryšys grįš.",
  "mapbuild.tryAgain": "Bandyti dar kartą"
 }

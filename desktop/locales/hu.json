@@ -1756,6 +1756,14 @@
  "settings.everyDay": "Naponta egyszer",
  "settings.everyWeek": "Hetente egyszer",
  "settings.locationNote": "A számítógép ritkán mozdul, ezért a Térképek megtartja a telefonod által küldött utolsó helyzetet. „Ki” állásban addig tartja meg, amíg meg nem nyomod a „Hol vagyok” gombot, amely mindig újat kér a telefontól.",
+ "settings.general": "Általános",
+ "settings.apps": "Alkalmazások",
+ "settings.sum.guide": "Hogyan működik a Tetra, lépésről lépésre",
+ "settings.sum.appearance": "Téma és nyelv",
+ "settings.sum.computer": "A számítógép szerepe, NAS, újrakezdés",
+ "settings.sum.photos": "Mozgó fotók",
+ "settings.sum.maps": "Országok térképei, hol vagy",
+ "settings.sum.phone": "Hívások hangja Bluetoothon",
  "calls.soundRelayed": "Hang itt, Wi-Fi-n át",
  "role.mirror": "A(z) {name} fotóinak megjelenítése itt",
  "role.mirrorHint": "Megjelennek a galériádban és albumként is, anélkül, hogy megtöltenék ezt a számítógépet: itt csak kis előnézetek maradnak.\nA megnyitott fotó Wi-Fin érkezik. Az utoljára megnyitottak itt maradnak.",
@@ -1855,5 +1863,7 @@
  "mapbuild.doneBody": "Itt van a Tetra Térképek között. A telefonod és a táblagéped a következő szinkronizáláskor megkapja: nyisd meg rajtuk a Tetrát ugyanazon a hálózaton. Nagy méretű, ezért a legjobb a Wi-Fi.",
  "mapbuild.close": "Kész",
  "mapbuild.failed": "A térképet nem sikerült elkészíteni: {error}",
+ "mapbuild.offline": "Nincs internetkapcsolat. A térképek letöltődnek, ezért csatlakozz, és próbáld újra.",
+ "mapbuild.waitingNet": "Nincs internetkapcsolat. Magától folytatódik, amikor visszatér a kapcsolat.",
  "mapbuild.tryAgain": "Próbáld újra"
 }

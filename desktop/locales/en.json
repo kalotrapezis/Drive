@@ -1756,6 +1756,14 @@
  "settings.everyDay": "Once a day",
  "settings.everyWeek": "Once a week",
  "settings.locationNote": "A computer rarely moves, so Maps keeps the last location your phone gave. With Off it keeps it until you press Where I am, which always asks the phone for a new one.",
+ "settings.general": "General",
+ "settings.apps": "Apps",
+ "settings.sum.guide": "How Tetra works, step by step",
+ "settings.sum.appearance": "Theme and language",
+ "settings.sum.computer": "This computer's role, NAS, starting again",
+ "settings.sum.photos": "Motion photos",
+ "settings.sum.maps": "Maps of countries, where you are",
+ "settings.sum.phone": "Call sound over Bluetooth",
  "calls.soundRelayed": "Sound here, over Wi-Fi",
  "role.mirror": "Show {name}'s photos here",
  "role.mirrorHint": "They show in your gallery and as an album, without filling this computer: only small previews are kept here.\nA photo you open comes over Wi-Fi. The last ones you opened stay here.",
@@ -1855,5 +1863,7 @@
  "mapbuild.doneBody": "It is in Tetra's Maps here. Your phone and tablet get it at their next sync: open Tetra on them, on the same network. It is large, so Wi-Fi is best.",
  "mapbuild.close": "Done",
  "mapbuild.failed": "The map could not be made: {error}",
+ "mapbuild.offline": "No internet connection. Maps are downloaded, so connect and try again.",
+ "mapbuild.waitingNet": "No internet connection. It goes on by itself when the connection is back.",
  "mapbuild.tryAgain": "Try again"
 }

@@ -1756,6 +1756,14 @@
  "settings.everyDay": "Eén keer per dag",
  "settings.everyWeek": "Eén keer per week",
  "settings.locationNote": "Een computer wordt zelden verplaatst, dus Kaarten bewaart de laatste locatie die je telefoon gaf. Bij ‘Uit’ blijft die bewaard tot je op ‘Waar ik ben’ drukt, dat de telefoon altijd om een nieuwe vraagt.",
+ "settings.general": "Algemeen",
+ "settings.apps": "Apps",
+ "settings.sum.guide": "Hoe Tetra werkt, stap voor stap",
+ "settings.sum.appearance": "Thema en taal",
+ "settings.sum.computer": "Rol van deze computer, NAS, opnieuw beginnen",
+ "settings.sum.photos": "Bewegende foto's",
+ "settings.sum.maps": "Kaarten van landen, waar je bent",
+ "settings.sum.phone": "Geluid van gesprekken via Bluetooth",
  "calls.soundRelayed": "Geluid hier, via Wi-Fi",
  "role.mirror": "Foto's van {name} hier tonen",
  "role.mirrorHint": "Ze verschijnen in je galerij en als album, zonder deze computer te vullen: hier worden alleen kleine voorbeelden bewaard.\nEen foto die je opent, komt via Wi-Fi. De laatste die je opende, blijven hier.",
@@ -1855,5 +1863,7 @@
  "mapbuild.doneBody": "Hij staat hier in de Kaarten van Tetra. Je telefoon en tablet krijgen hem bij de volgende synchronisatie: open Tetra erop, op hetzelfde netwerk. Hij is groot, dus Wi-Fi is het beste.",
  "mapbuild.close": "Klaar",
  "mapbuild.failed": "De kaart kon niet worden gemaakt: {error}",
+ "mapbuild.offline": "Geen internetverbinding. Kaarten worden gedownload, dus maak verbinding en probeer het opnieuw.",
+ "mapbuild.waitingNet": "Geen internetverbinding. Het gaat vanzelf verder zodra de verbinding terug is.",
  "mapbuild.tryAgain": "Opnieuw proberen"
 }

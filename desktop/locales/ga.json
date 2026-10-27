@@ -2017,6 +2017,14 @@
  "settings.everyDay": "Uair sa lá",
  "settings.everyWeek": "Uair sa tseachtain",
  "settings.locationNote": "Is annamh a bhogann ríomhaire, mar sin coinníonn Léarscáileanna an suíomh deireanach a thug do ghuthán. Le \"As\" coinnítear é go mbrúnn tú \"Cá bhfuilim\", a iarrann suíomh nua ar an nguthán i gcónaí.",
+ "settings.general": "Ginearálta",
+ "settings.apps": "Aipeanna",
+ "settings.sum.guide": "Conas a oibríonn Tetra, céim ar chéim",
+ "settings.sum.appearance": "Téama agus teanga",
+ "settings.sum.computer": "Ról an ríomhaire seo, NAS, tosú as an nua",
+ "settings.sum.photos": "Grianghraif ghluaiseachta",
+ "settings.sum.maps": "Léarscáileanna tíortha, cá bhfuil tú",
+ "settings.sum.phone": "Fuaim glaonna thar Bluetooth",
  "calls.soundRelayed": "Fuaim anseo, thar Wi-Fi",
  "role.mirror": "Taispeáin grianghraif ó {name} anseo",
  "role.mirrorHint": "Taispeántar iad i do ghailearaí agus mar albam, gan an ríomhaire seo a líonadh: ní choinnítear anseo ach réamhamhairc bheaga.\nTagann grianghraf a osclaíonn tú thar Wi-Fi. Fanann na cinn dheireanacha a d’oscail tú anseo.",
@@ -2116,5 +2124,7 @@
  "mapbuild.doneBody": "Tá sé i Léarscáileanna Tetra anseo. Faigheann do ghuthán agus do tháibléad é ag an gcéad sioncrónú eile: oscail Tetra orthu, ar an líonra céanna. Tá sé mór, mar sin is fearr Wi-Fi.",
  "mapbuild.close": "Críochnaithe",
  "mapbuild.failed": "Níorbh fhéidir an léarscáil a dhéanamh: {error}",
+ "mapbuild.offline": "Níl ceangal idirlín ann. Íoslódáiltear na léarscáileanna, mar sin ceangail agus bain triail eile as.",
+ "mapbuild.waitingNet": "Níl ceangal idirlín ann. Leanfaidh sé ar aghaidh leis féin nuair a thiocfaidh an ceangal ar ais.",
  "mapbuild.tryAgain": "Bain triail eile as"
 }

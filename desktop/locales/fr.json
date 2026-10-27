@@ -1843,6 +1843,14 @@
  "settings.everyDay": "Une fois par jour",
  "settings.everyWeek": "Une fois par semaine",
  "settings.locationNote": "Un ordinateur bouge rarement, donc Cartes garde la dernière position donnée par votre téléphone. Sur « Désactivé », il la garde jusqu’à ce que vous appuyiez sur « Où je suis », qui demande toujours une nouvelle position au téléphone.",
+ "settings.general": "Général",
+ "settings.apps": "Applications",
+ "settings.sum.guide": "Comment fonctionne Tetra, pas à pas",
+ "settings.sum.appearance": "Thème et langue",
+ "settings.sum.computer": "Rôle de cet ordinateur, NAS, repartir de zéro",
+ "settings.sum.photos": "Photos animées",
+ "settings.sum.maps": "Cartes des pays, où vous êtes",
+ "settings.sum.phone": "Son des appels par Bluetooth",
  "calls.soundRelayed": "Son ici, via Wi-Fi",
  "role.mirror": "Afficher ici les photos de {name}",
  "role.mirrorHint": "Elles apparaissent dans votre galerie et comme un album, sans remplir cet ordinateur : seuls de petits aperçus sont gardés ici.\nUne photo que vous ouvrez arrive par Wi-Fi. Les dernières que vous avez ouvertes restent ici.",
@@ -1942,5 +1950,7 @@
  "mapbuild.doneBody": "Elle se trouve ici dans les Cartes de Tetra. Votre téléphone et votre tablette la reçoivent à la prochaine synchronisation : ouvrez Tetra dessus, sur le même réseau. Elle est volumineuse, donc le Wi-Fi est préférable.",
  "mapbuild.close": "Terminé",
  "mapbuild.failed": "La carte n'a pas pu être créée : {error}",
+ "mapbuild.offline": "Pas de connexion Internet. Les cartes se téléchargent : connectez-vous et réessayez.",
+ "mapbuild.waitingNet": "Pas de connexion Internet. Cela reprendra tout seul dès le retour de la connexion.",
  "mapbuild.tryAgain": "Réessayer"
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AppNotification } from './drive'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { locale, t } from './i18n'
 import { ResetCard } from './Role'
 import { MapsCard } from './MapBuilder'
@@ -33,10 +33,80 @@ export function NotificationsPage() {
   )
 }
 
+/** Settings' pages, as the phone's (SettingsScreen.SettingsPage): the general ones, then one an app in its colour. */
+type SettingsTab = 'appearance' | 'computer' | 'photos' | 'maps' | 'phone'
+const GENERAL: { id: SettingsTab; icon: IconName; title: string; summary: string }[] = [
+  { id: 'appearance', icon: 'palette', title: 'settings.appearance', summary: 'settings.sum.appearance' },
+  { id: 'computer', icon: 'server', title: 'reset.title', summary: 'settings.sum.computer' },
+]
+const APPS: { id: SettingsTab; icon: IconName; cat: string; title: string; summary: string }[] = [
+  { id: 'photos', icon: 'photos', cat: 'photos', title: 'app.photos', summary: 'settings.sum.photos' },
+  { id: 'maps', icon: 'map', cat: 'maps', title: 'app.maps', summary: 'settings.sum.maps' },
+  { id: 'phone', icon: 'call', cat: 'phone', title: 'app.phone', summary: 'settings.sum.phone' },
+]
+const TABS: SettingsTab[] = [...GENERAL, ...APPS].map(x => x.id)
+
+/**
+ * Settings (the user, 27 Oct: "it needs a bit restructuring, some elements overflow, and the Android now has a dual pane
+ * view with categories and colours"): the pages on the left — the Guide, General, then each app with its colour, as on
+ * the phone — and the page chosen on the right; one column in a narrow window.
+ */
 export function SettingsPage({ onGuide }: { onGuide: () => void }) {
+  const [tab, setTab] = useState<SettingsTab>(() => {
+    try { const v = localStorage.getItem('settingsTab') as SettingsTab; return TABS.includes(v) ? v : 'appearance' } catch { return 'appearance' }
+  })
+  // a narrow window shows the list or the page, as the phone does (the user, 27 Oct: "add the back button … a two-page thing")
+  const [picked, setPicked] = useState(false)
+  const open = (id: SettingsTab) => { setTab(id); setPicked(true); try { localStorage.setItem('settingsTab', id) } catch {} }
+  const row = (x: { id: SettingsTab; icon: IconName; cat?: string; title: string; summary: string }) =>
+    <button key={x.id} className={`settings-row ${tab === x.id ? 'on' : ''}`} onClick={() => open(x.id)}>
+      <span className={`settings-icon ${x.cat ?? ''}`}><Icon name={x.icon} size={20} /></span>
+      <span><strong>{t(x.title)}</strong><small>{t(x.summary)}</small></span>
+    </button>
+  return (
+    <div className="page-scroll">
+      <header className="page-head"><h1>{t('app.settings')}</h1></header>
+      <div className={`settings-split ${picked ? 'picked' : ''}`}>
+        <nav className="settings-nav">
+          <button className="settings-row" onClick={onGuide}>
+            <span className="settings-icon"><Icon name="info" size={20} /></span>
+            <span><strong>{t('guide.title')}</strong><small>{t('settings.sum.guide')}</small></span>
+          </button>
+          <h4>{t('settings.general')}</h4>
+          {GENERAL.map(row)}
+          <h4>{t('settings.apps')}</h4>
+          {APPS.map(row)}
+        </nav>
+        <div className="settings-pane">
+          <button className="text-button settings-back" onClick={() => setPicked(false)}><Icon name="back" size={20} />{t('common.back')}</button>
+          {tab === 'appearance' && <><ThemeCard /><LanguageCard /></>}
+          {tab === 'computer' && <ResetCard />}
+          {tab === 'photos' && <MotionCard />}
+          {tab === 'maps' && <><MapsCard /><LocationCard /></>}
+          {tab === 'phone' && <CallsCard />}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ThemeCard() {
   const [theme, setTheme] = useState<'system' | 'light' | 'dark' | null>(null)
   useEffect(() => { window.drive.theme().then(setTheme) }, [])
   const pick = (t: 'system' | 'light' | 'dark') => { setTheme(t); window.drive.setTheme(t) }
+  return (
+    <section className="settings-card island">
+      <h3>{t('settings.appearance')}</h3>
+      <div className="segmented">
+        {([['system', 'settings.themeAuto'], ['light', 'settings.themeLight'], ['dark', 'settings.themeDark']] as const).map(([id, name]) =>
+          <button key={id} className={theme === id ? 'on' : ''} onClick={() => pick(id)}>{t(name)}</button>)}
+      </div>
+      <p className="muted">{t('settings.themeAutoNote')}</p>
+    </section>
+  )
+}
+
+function MotionCard() {
   const [motion, setMotion] = useState<'one' | 'remove' | null>(null)
   useEffect(() => { window.drive.motionSetting().then(setMotion) }, [])
   const pickMotion = (v: 'one' | 'remove') => { setMotion(v); window.drive.setMotionSetting(v) }
@@ -44,43 +114,22 @@ export function SettingsPage({ onGuide }: { onGuide: () => void }) {
   useEffect(() => { window.drive.motionAutoplay().then(setAutoplay) }, [])
   const pickAutoplay = (on: boolean) => { setAutoplay(on); window.drive.setMotionAutoplay(on) }
   return (
-    <div className="page-scroll">
-      <header className="page-head"><h1>{t('app.settings')}</h1></header>
-      <section className="settings-card island">
-        <h3><Icon name="info" size={20} />{t('guide.title')}</h3>
-        <p className="muted">{t('guide.note')}</p>
-        <button className="filled-button secondary" onClick={onGuide}>{t('guide.open')}</button>
-      </section>
-      <section className="settings-card island">
-        <h3>{t('settings.appearance')}</h3>
-        <div className="segmented">
-          {([['system', 'settings.themeAuto'], ['light', 'settings.themeLight'], ['dark', 'settings.themeDark']] as const).map(([id, name]) =>
-            <button key={id} className={theme === id ? 'on' : ''} onClick={() => pick(id)}>{t(name)}</button>)}
-        </div>
-        <p className="muted">{t('settings.themeAutoNote')}</p>
-      </section>
-      <LanguageCard />
-      <CallsCard />
-      <section className="settings-card island">
-        <h3><span className="cat photos"><Icon name="photos" size={20} /></span>{t('settings.motionPhotos')}</h3>
-        <div className="segmented">
-          {([['one', 'settings.motionAsOne'], ['remove', 'settings.motionRemove']] as const).map(([id, name]) =>
-            <button key={id} className={motion === id ? 'on' : ''} onClick={() => pickMotion(id)}>{t(name)}</button>)}
-        </div>
-        <p className="muted">{motion === 'remove'
-          ? t('settings.motionRemoveNote')
-          : t('settings.motionAsOneNote')}</p>
-        <h4>{t('settings.motionAutoplay')}</h4>
-        <div className="segmented">
-          {([[false, 'common.off'], [true, 'common.on']] as const).map(([on, name]) =>
-            <button key={name} className={autoplay === on ? 'on' : ''} onClick={() => pickAutoplay(on)}>{t(name)}</button>)}
-        </div>
-        <p className="muted">{autoplay ? t('settings.motionAutoplayOn') : t('settings.motionAutoplayOff')}</p>
-      </section>
-      <MapsCard />
-      <LocationCard />
-      <ResetCard />
-    </div>
+    <section className="settings-card island">
+      <h3><span className="cat photos"><Icon name="photos" size={20} /></span>{t('settings.motionPhotos')}</h3>
+      <div className="segmented">
+        {([['one', 'settings.motionAsOne'], ['remove', 'settings.motionRemove']] as const).map(([id, name]) =>
+          <button key={id} className={motion === id ? 'on' : ''} onClick={() => pickMotion(id)}>{t(name)}</button>)}
+      </div>
+      <p className="muted">{motion === 'remove'
+        ? t('settings.motionRemoveNote')
+        : t('settings.motionAsOneNote')}</p>
+      <h4>{t('settings.motionAutoplay')}</h4>
+      <div className="segmented">
+        {([[false, 'common.off'], [true, 'common.on']] as const).map(([on, name]) =>
+          <button key={name} className={autoplay === on ? 'on' : ''} onClick={() => pickAutoplay(on)}>{t(name)}</button>)}
+      </div>
+      <p className="muted">{autoplay ? t('settings.motionAutoplayOn') : t('settings.motionAutoplayOff')}</p>
+    </section>
   )
 }
 

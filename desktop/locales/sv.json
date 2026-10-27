@@ -1756,6 +1756,14 @@
  "settings.everyDay": "En gång om dagen",
  "settings.everyWeek": "En gång i veckan",
  "settings.locationNote": "En dator flyttas sällan, så Kartor behåller den senaste platsen som telefonen gav. Med ”Av” behålls den tills du trycker på ”Där jag är”, som alltid frågar telefonen efter en ny.",
+ "settings.general": "Allmänt",
+ "settings.apps": "Appar",
+ "settings.sum.guide": "Så fungerar Tetra, steg för steg",
+ "settings.sum.appearance": "Tema och språk",
+ "settings.sum.computer": "Datorns roll, NAS, börja om",
+ "settings.sum.photos": "Rörliga foton",
+ "settings.sum.maps": "Kartor över länder, var du är",
+ "settings.sum.phone": "Samtalsljud via Bluetooth",
  "calls.soundRelayed": "Ljud här, via Wi-Fi",
  "role.mirror": "Visa foton från {name} här",
  "role.mirrorHint": "De syns i ditt galleri och som ett album, utan att fylla den här datorn: bara små förhandsvisningar sparas här.\nEtt foto du öppnar kommer över Wi-Fi. De senaste du öppnade stannar här.",
@@ -1855,5 +1863,7 @@
  "mapbuild.doneBody": "Den finns i Tetras Kartor här. Din telefon och surfplatta får den vid nästa synkronisering: öppna Tetra på dem, på samma nätverk. Den är stor, så Wi-Fi är bäst.",
  "mapbuild.close": "Klar",
  "mapbuild.failed": "Kartan kunde inte göras: {error}",
+ "mapbuild.offline": "Ingen internetanslutning. Kartor laddas ner, så anslut och försök igen.",
+ "mapbuild.waitingNet": "Ingen internetanslutning. Det fortsätter av sig självt när anslutningen är tillbaka.",
  "mapbuild.tryAgain": "Försök igen"
 }

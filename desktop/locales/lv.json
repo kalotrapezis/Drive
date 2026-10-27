@@ -1843,6 +1843,14 @@
  "settings.everyDay": "Reizi dienā",
  "settings.everyWeek": "Reizi nedēļā",
  "settings.locationNote": "Dators reti pārvietojas, tāpēc Kartes patur pēdējo atrašanās vietu, ko devis jūsu tālrunis. Ar „Izslēgts“ tā tiek paturēta, līdz nospiežat „Kur es esmu“, kas vienmēr jautā tālrunim jaunu.",
+ "settings.general": "Vispārīgi",
+ "settings.apps": "Lietotnes",
+ "settings.sum.guide": "Kā darbojas Tetra, soli pa solim",
+ "settings.sum.appearance": "Motīvs un valoda",
+ "settings.sum.computer": "Šī datora loma, NAS, sākt no jauna",
+ "settings.sum.photos": "Kustīgie fotoattēli",
+ "settings.sum.maps": "Valstu kartes, kur jūs atrodaties",
+ "settings.sum.phone": "Zvanu skaņa, izmantojot Bluetooth",
  "calls.soundRelayed": "Skaņa šeit, pa Wi-Fi",
  "role.mirror": "Rādīt šeit datora {name} fotoattēlus",
  "role.mirrorHint": "Tie redzami jūsu galerijā un kā albums, nepiepildot šo datoru: šeit glabājas tikai mazi priekšskatījumi.\nFotoattēls, ko atverat, nāk pa Wi-Fi. Pēdējie atvērtie paliek šeit.",
@@ -1942,5 +1950,7 @@
  "mapbuild.doneBody": "Tā ir šeit, Tetra kartēs. Jūsu tālrunis un planšetdators to saņems nākamajā sinhronizēšanā: atveriet tajos Tetra, tajā pašā tīklā. Tā ir liela, tāpēc vislabāk izmantot Wi-Fi.",
  "mapbuild.close": "Gatavs",
  "mapbuild.failed": "Karti neizdevās izveidot: {error}",
+ "mapbuild.offline": "Nav interneta savienojuma. Kartes tiek lejupielādētas, tāpēc pievienojieties un mēģiniet vēlreiz.",
+ "mapbuild.waitingNet": "Nav interneta savienojuma. Tas turpināsies pats, kad savienojums atjaunosies.",
  "mapbuild.tryAgain": "Mēģināt vēlreiz"
 }

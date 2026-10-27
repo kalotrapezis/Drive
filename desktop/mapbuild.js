@@ -25,6 +25,7 @@ const path = require('node:path')
 const crypto = require('node:crypto')
 const { spawn, spawnSync } = require('node:child_process')
 const { PROFILES, JAR, BIN, findJava } = require('./router')
+const { t } = require('./i18n')
 
 const WORK = path.dirname(BIN)
 const INDEX = 'https://download.geofabrik.de/index-v1-nogeom.json'
@@ -38,6 +39,12 @@ const PACKAGES = { 'openjdk-17-jre-headless': 'java', 'python3-pyosmium': 'osmiu
 const PYTHON = '/usr/bin/python3'
 /** The steps as the wizard shows them, in order. */
 const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install']
+/** Whether the internet answers: Geofabrik's front page, within 8 s (the user, 27 Oct: "maybe an internet connection check?"). */
+const online = () => fetch('https://download.geofabrik.de/', { method: 'HEAD', signal: AbortSignal.timeout(8000) }).then(() => true, () => false)
+
+/** `work()`, its failure told in plain words when the internet is down. */
+const needsNet = work => work().catch(async e => { throw (await online()) ? e : new Error(t('mapbuild.offline')) })
+
 /** Where traffic keeps left (ISO 3166-1); a region without a code takes its parent's (Bayern, Germany's). */
 const LEFT = new Set(('GB IE IM JE GG CY MT JP AU NZ IN PK BD LK NP BT ID MY SG BN TH TL HK MO ZA NA BW ZW ZM MW MZ LS SZ KE UG TZ MU SC ' +
   'JM BS BB TT GY SR AG DM GD KN LC VC VG AI MS KY TC BM FK SH FJ PG WS TO SB KI TV NR CK NU').split(' '))
@@ -79,7 +86,8 @@ class MapBuilder {
   constructor(root, progress = () => {}) { this.root = root; this.progress = progress; this.job = null }
 
   /** Geofabrik's regions, { id, name, parent, iso, pbf }, kept a week in ~/Tetra-maps. */
-  async regions() {
+  regions() { return needsNet(() => this.list()) }
+  async list() {
     const file = path.join(WORK, 'geofabrik-index.json')
     const stat = await fsp.stat(file).catch(() => null)
     if (!stat || Date.now() - stat.mtimeMs > 7 * 86_400_000) {
@@ -97,7 +105,7 @@ class MapBuilder {
   async needs(id) {
     const r = (await this.regions()).find(x => x.id === id)
     if (!r) throw new Error('Not a region of the list.')
-    const head = await fetch(r.pbf, { method: 'HEAD' })
+    const head = await needsNet(() => fetch(r.pbf, { method: 'HEAD' }))
     const osm = +(head.headers.get('content-length') ?? 0)
     const free = await fsp.statfs(fs.existsSync(WORK) ? WORK : os.homedir()).then(f => f.bavail * f.bsize, () => Infinity)
     return { osm, memory: Math.max(1e9, osm * 12), hasMemory: os.totalmem(), disk: osm * 7 + 5e8, hasDisk: free }
@@ -154,10 +162,20 @@ class MapBuilder {
     })
   }
 
+  /** A failed build's work folder, given up (the error page's Cancel). */
+  async discard(id) {
+    if (this.job?.id === id || !/^[a-z0-9-]+$/.test(id)) return
+    await fsp.rm(path.join(WORK, id), { recursive: true, force: true })
+  }
+
   cancel() { if (this.job) { this.job.cancelled = true; this.job.abort.abort(); this.job.child?.kill() } }
 
-  /** Builds region `id` into Files/Maps; one at a time. */
-  async build(id) {
+  /**
+   * Builds region `id` into Files/Maps; one at a time. `resume` (the error page's Retry; the user, 27 Oct: "add a retry if a
+   * step fails") goes on from the step that failed: each finished step leaves a mark in the work folder and is passed over.
+   * Otherwise the work folder starts empty, so an update never takes last month's downloads.
+   */
+  async build(id, resume = false) {
     if (this.job) throw new Error('A map is being made already.')
     const job = this.job = { id, abort: new AbortController(), child: null, cancelled: false }
     const region = (await this.regions()).find(r => r.id === id)
@@ -165,6 +183,7 @@ class MapBuilder {
     const missing = this.missing()
     if (missing.length) { this.job = null; this.progress({ id, step: 'tools', state: 'needs', packages: missing }); return }
     const dir = path.join(WORK, id)
+    if (!resume) await fsp.rm(dir, { recursive: true, force: true })
     await fsp.mkdir(dir, { recursive: true })
     const log = fs.createWriteStream(path.join(dir, 'build.log'), { flags: 'a' })
     let step = null
@@ -196,41 +215,68 @@ class MapBuilder {
       if (md5 && hash.digest('hex') !== md5) throw new Error('The download arrived damaged; try again.')
       await fsp.rename(to + '.part', to)
     }
+    /** Step `s`: passed over when a run before finished it; a download tried again once after a pause before it fails. */
+    const stage = async (s, work, tries = 1) => {
+      at(s)
+      const mark = path.join(dir, `.done-${s}`)
+      if (fs.existsSync(mark)) { log.write('done before\n'); return }
+      for (let i = 1; ; i++) {
+        try { await work(); break } catch (e) {
+          if (job.cancelled || tries === 1) throw e
+          // the internet gone: wait for it (half an hour at most), saying so, and try again without counting it
+          if (!(await online())) {
+            tell('offline'); log.write(`no internet (${e.message}); waiting\n`)
+            for (let w = 0; w < 180 && !job.cancelled && !(await online()); w++) await new Promise(r => setTimeout(r, 10_000))
+            if (job.cancelled) throw e
+            if (!(await online())) throw new Error(t('mapbuild.offline'))
+            tell('running'); i--; continue
+          }
+          if (i >= tries) throw e
+          log.write(`try ${i} failed (${e.message}); again in 10 s\n`)
+          await new Promise(r => setTimeout(r, 10_000))
+        }
+      }
+      await fsp.writeFile(mark, new Date().toISOString())
+    }
     try {
-      at('tools')
-      await this.tools(get, run)
+      await stage('tools', () => this.tools(get, run), 2)
 
-      at('map')
-      const poly = await fetch(region.pbf.replace(/-latest\.osm\.pbf$/, '.poly'), { signal: job.abort.signal }).then(r => r.ok ? r.text() : Promise.reject(new Error(`Geofabrik: ${r.status}`)))
-      await fsp.writeFile(path.join(dir, 'region.geojson'), JSON.stringify(polyToGeoJson(poly)))
-      const builds = await fetch('https://build-metadata.protomaps.dev/builds.json', { signal: job.abort.signal }).then(r => r.json())
-      await fsp.rm(path.join(dir, `${id}.pmtiles.part`), { force: true })
-      await run(path.join(BIN, 'pmtiles'), ['extract', `https://build.protomaps.com/${builds[builds.length - 1].key}`, `${id}.pmtiles.part`,
-        '--region=region.geojson', '--maxzoom=15', '--download-threads=4'])
-      await fsp.rename(path.join(dir, `${id}.pmtiles.part`), path.join(dir, `${id}.pmtiles`))
+      await stage('map', async () => {
+        const poly = await fetch(region.pbf.replace(/-latest\.osm\.pbf$/, '.poly'), { signal: job.abort.signal }).then(r => r.ok ? r.text() : Promise.reject(new Error(`Geofabrik: ${r.status}`)))
+        await fsp.writeFile(path.join(dir, 'region.geojson'), JSON.stringify(polyToGeoJson(poly)))
+        const builds = await fetch('https://build-metadata.protomaps.dev/builds.json', { signal: job.abort.signal }).then(r => r.json())
+        await fsp.rm(path.join(dir, `${id}.pmtiles.part`), { force: true })
+        await run(path.join(BIN, 'pmtiles'), ['extract', `https://build.protomaps.com/${builds[builds.length - 1].key}`, `${id}.pmtiles.part`,
+          '--region=region.geojson', '--maxzoom=15', '--download-threads=4'])
+        await fsp.rename(path.join(dir, `${id}.pmtiles.part`), path.join(dir, `${id}.pmtiles`))
+      }, 2)
 
-      at('osm')
-      const md5 = (await fetch(region.pbf + '.md5', { signal: job.abort.signal }).then(r => r.text())).trim().split(/\s+/)[0]
-      await get(region.pbf, path.join(dir, 'region.osm.pbf'), md5)
+      await stage('osm', async () => {
+        const md5 = (await fetch(region.pbf + '.md5', { signal: job.abort.signal }).then(r => r.text())).trim().split(/\s+/)[0]
+        await get(region.pbf, path.join(dir, 'region.osm.pbf'), md5)
+      }, 2)
 
-      at('roads')
-      const heap = Math.max(1, Math.floor(os.totalmem() / 1e9 * 0.6))
-      await fsp.rm(path.join(dir, `${id}-gh`), { recursive: true, force: true })
-      await fsp.writeFile(path.join(dir, 'graph.yml'), `graphhopper:\n  datareader.file: region.osm.pbf\n  graph.location: ${id}-gh\n${PROFILES}` +
-        '  prepare.min_network_size: 200\n  prepare.subnetworks.threads: 4\n  prepare.ch.threads: 3\n  graph.dataaccess.default_type: RAM_STORE\n')
-      await run(findJava(), [`-Xmx${heap}g`, '-jar', path.join(BIN, JAR), 'import', 'graph.yml'])
-      await fsp.rm(path.join(dir, `${id}-gh`, 'gh.lock'), { force: true })
+      await stage('roads', async () => {
+        const heap = Math.max(1, Math.floor(os.totalmem() / 1e9 * 0.6))
+        await fsp.rm(path.join(dir, `${id}-gh`), { recursive: true, force: true })
+        await fsp.writeFile(path.join(dir, 'graph.yml'), `graphhopper:\n  datareader.file: region.osm.pbf\n  graph.location: ${id}-gh\n${PROFILES}` +
+          '  prepare.min_network_size: 200\n  prepare.subnetworks.threads: 4\n  prepare.ch.threads: 3\n  graph.dataaccess.default_type: RAM_STORE\n')
+        await run(findJava(), [`-Xmx${heap}g`, '-jar', path.join(BIN, JAR), 'import', 'graph.yml'])
+        await fsp.rm(path.join(dir, `${id}-gh`, 'gh.lock'), { force: true })
+      })
 
-      at('search')
-      for (const s of ['maps-places.py', 'maps-lanes.py', 'maps-phone.py']) await fsp.writeFile(path.join(dir, s), await fsp.readFile(path.join(__dirname, 'maps-tools', s)))
-      await run(PYTHON, ['-I', 'maps-places.py', 'region.osm.pbf', `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`])
-      await run(PYTHON, ['-I', 'maps-lanes.py', 'region.osm.pbf', `${id}-lanes.tsv`])
+      await stage('search', async () => {
+        for (const s of ['maps-places.py', 'maps-lanes.py', 'maps-phone.py']) await fsp.writeFile(path.join(dir, s), await fsp.readFile(path.join(__dirname, 'maps-tools', s)))
+        await run(PYTHON, ['-I', 'maps-places.py', 'region.osm.pbf', `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`])
+        await run(PYTHON, ['-I', 'maps-lanes.py', 'region.osm.pbf', `${id}-lanes.tsv`])
+      })
 
       // a step of its own (the user, 27 Oct: "the call regions numbers make it part of that process")
-      at('phone')
-      // the Phone's places of area codes; a country libphonenumber names none for, or no GitHub, leaves the map without them
-      const iso = isoOf(region, await this.regions())
-      if (iso) await run(PYTHON, ['-I', 'maps-phone.py', iso, `${id}-phone.tsv`]).catch(e => { if (job.cancelled) throw e; log.write(`no phone table: ${e.message}\n`) })
+      await stage('phone', async () => {
+        // the Phone's places of area codes; a country libphonenumber names none for, or no GitHub, leaves the map without them
+        const iso = isoOf(region, await this.regions())
+        if (iso) await run(PYTHON, ['-I', 'maps-phone.py', iso, `${id}-phone.tsv`]).catch(e => { if (job.cancelled) throw e; log.write(`no phone table: ${e.message}\n`) })
+      })
 
       at('install')
       await this.install(region, dir, await this.regions())
@@ -290,4 +336,4 @@ class MapBuilder {
   }
 }
 
-module.exports = { MapBuilder, STEPS, PACKAGES, polyToGeoJson, pmtilesBounds, LEFT }
+module.exports = { MapBuilder, STEPS, PACKAGES, polyToGeoJson, pmtilesBounds, LEFT, online }

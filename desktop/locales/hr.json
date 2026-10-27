@@ -1842,6 +1842,14 @@
  "settings.everyDay": "Jednom dnevno",
  "settings.everyWeek": "Jednom tjedno",
  "settings.locationNote": "Računalo se rijetko premješta, pa Karte čuvaju posljednju lokaciju koju je dao vaš telefon. Uz „Isključeno“ čuvaju je dok ne pritisnete „Gdje sam“, što uvijek traži novu od telefona.",
+ "settings.general": "Općenito",
+ "settings.apps": "Aplikacije",
+ "settings.sum.guide": "Kako Tetra radi, korak po korak",
+ "settings.sum.appearance": "Tema i jezik",
+ "settings.sum.computer": "Uloga ovog računala, NAS, početak ispočetka",
+ "settings.sum.photos": "Fotografije s pokretom",
+ "settings.sum.maps": "Karte zemalja, gdje se nalazite",
+ "settings.sum.phone": "Zvuk poziva preko Bluetootha",
  "calls.soundRelayed": "Zvuk ovdje, preko Wi-Fi-ja",
  "role.mirror": "Prikaži ovdje fotografije s računala {name}",
  "role.mirrorHint": "Prikazuju se u vašoj galeriji i kao album, a da ne pune ovo računalo: ovdje se čuvaju samo mali pregledi.\nFotografija koju otvorite stiže preko Wi-Fi-ja. Posljednje koje ste otvorili ostaju ovdje.",
@@ -1941,5 +1949,7 @@
  "mapbuild.doneBody": "Nalazi se ovdje, u kartama aplikacije Tetra. Vaš telefon i tablet dobivaju je pri sljedećoj sinkronizaciji: otvorite Tetra na njima, na istoj mreži. Velika je, pa je najbolje Wi-Fi.",
  "mapbuild.close": "Gotovo",
  "mapbuild.failed": "Karta se nije mogla izraditi: {error}",
+ "mapbuild.offline": "Nema internetske veze. Karte se preuzimaju, stoga se povežite i pokušajte ponovno.",
+ "mapbuild.waitingNet": "Nema internetske veze. Nastavlja se samo kad se veza vrati.",
  "mapbuild.tryAgain": "Pokušaj ponovno"
 }
