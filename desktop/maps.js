@@ -21,6 +21,8 @@ const PLACES = 'Places', LISTS = 'Lists', TRIPS = 'Trips', SLOTS = 12
 const ICONS = ['pin', 'star', 'heart', 'accessible', 'home', 'work', 'school', 'family', 'friend', 'pharmacy', 'hospital', 'doctor', 'travel',
   'hotel', 'food', 'tavern', 'cafe', 'shop', 'fuel', 'parking', 'beach', 'waterfall', 'river', 'lake', 'mountain', 'forest', 'camping']
 const MODES = ['car', 'foot', 'bike']
+/** The crossings of a border tried for a route, those nearest the way, with all their points (a station's lanes): each point costs a short search on both sides. */
+const PER = 5
 /** Greece's own lists beside each map's places (EOPYY, the ΑμεΑ spots) and the places added by hand. */
 const EXTRA_SEARCH = ['greece-eopyy.tsv', 'greece-amea.tsv', 'greece-amea-diavgeia.tsv', 'added-places.tsv']
 const SETTLEMENTS = new Set(['city', 'town', 'village', 'suburb', 'neighbourhood', 'hamlet', 'island', 'islet', 'locality'])
@@ -154,30 +156,67 @@ class Maps {
     return (await this.info()).maps.find(m => m.bounds && lng >= m.bounds[0] && lat >= m.bounds[1] && lng <= m.bounds[2] && lat <= m.bounds[3]) ?? null
   }
 
+  /** Where the roads cross between maps `a` and `b` (the map builder's <a>_<b>-crossings.tsv): [{ lat, lng, name, n }], `n` the crossing a point is of. */
+  async crossings(a, b) {
+    const { crossingsFile } = require('./mapbuild')
+    const text = await fsp.readFile(path.join(this.root, crossingsFile(a, b)), 'utf8').catch(() => '')
+    return text.split('\n').map(l => l.split('\t')).filter(c => c.length >= 2 && Number.isFinite(+c[0]) && Number.isFinite(+c[1]))
+      .map((c, i) => ({ lat: +c[0], lng: +c[1], name: c[2] ?? '', n: +c[4] || -1 - i }))
+  }
+
   /**
-   * The roads a route through `points` runs on (Android's MapsFiles.graphFor; the user, 27 Oct: "When we have both the
-   * neighbouring maps, it should be able to cross the border"): the two maps' pair graph (the map builder's <a>_<b>-gh)
-   * when it goes from one into the other — `current` if it is one of them — else the first point's map's own, as before.
-   * Two maps not joined, or a third country, fail in words. shortcut: one border a route.
+   * A route from `from` to `to` in legs, each on one map's own graph: [{ dir, from, to }] (Android's MapsRouting.legs; the user,
+   * 27 Oct: "Drive to the edge and then start from the other edge", "at the border … the main road"). One leg when a map holds
+   * both, as before; else through the maps on the way, fewest borders, at the crossings where `seconds(dir, a, b)` (null: no
+   * way) finds it fastest, the PER nearest the way of each border tried. A map not joined fails in words.
    */
-  async graphFor(points, current) {
+  async legs(from, to, seconds) {
     const { maps } = await this.info()
-    const sets = points.map(p => maps.filter(m => m.bounds && p.lng >= m.bounds[0] && p.lat >= m.bounds[1] && p.lng <= m.bounds[2] && p.lat <= m.bounds[3]))
-    const own = sets[0][0] ?? maps[0]
-    const dir = id => path.join(this.root, `${id ?? 'greece'}-gh`)
-    if (sets.some(s => !s.length)) return dir(own?.id)
-    const pairs = []
-    for (const x of sets[0]) for (const y of new Set(sets.flat())) {
-      const d = path.join(this.root, `${[x.id, y.id].sort().join('_')}-gh`)
-      if (y !== x && sets.every(s => s.includes(x) || s.includes(y)) && fs.existsSync(path.join(d, 'properties'))) pairs.push(d)
+    const on = p => maps.filter(m => m.bounds && p.lng >= m.bounds[0] && p.lat >= m.bounds[1] && p.lng <= m.bounds[2] && p.lat <= m.bounds[3])
+    const dir = m => path.join(this.root, `${m?.id ?? 'greece'}-gh`)
+    const a = on(from), b = on(to), common = a.filter(m => b.includes(m))
+    if (!a.length || !b.length) return [{ dir: dir(a[0] ?? maps[0]), from, to }] // off the maps: GraphHopper says which end
+    // one map holds both ends; where the maps' bounds overlap at a border, the one whose roads reach both
+    if (common.length && a.length === 1 && b.length === 1) return [{ dir: dir(common[0]), from, to }]
+    for (const m of common) if (await seconds(dir(m), from, to) != null) return [{ dir: dir(m), from, to }]
+    const ends = b.filter(m => !a.includes(m))
+    if (!ends.length) return [{ dir: dir(common[0] ?? a[0]), from, to }] // no other map: GraphHopper says why not
+    const { crossingsFile } = require('./mapbuild')
+    const joined = (x, y) => fs.existsSync(path.join(this.root, crossingsFile(x.id, y.id)))
+    const back = new Map(a.map(m => [m, null])), queue = [...a]
+    while (queue.length && !ends.some(m => back.has(m))) {
+      const x = queue.shift()
+      for (const y of maps) if (!back.has(y) && joined(x, y)) { back.set(y, x); queue.push(y) }
     }
-    if (pairs.length) return pairs.includes(current) ? current : pairs[0]
-    // named in the words: a map not joined with the start's, else (a third country) the first one away from it
-    const joined = m => m === own || fs.existsSync(path.join(this.root, `${[own.id, m.id].sort().join('_')}-gh`, 'properties'))
-    const away = sets.find(s => !s.some(joined)) ?? sets.find(s => !s.includes(own))
+    const last = ends.find(m => back.has(m))
     const name = m => m.name[0].toUpperCase() + m.name.slice(1) // a map without a manifest is named by its id
-    if (away) throw new Error(t('maps.notJoined', { a: name(own), b: name(away[0]) }))
-    return dir(own.id)
+    if (!last) throw new Error(t('maps.notJoined', { a: name(a[0]), b: name(ends[0] ?? b[0]) }))
+    const chain = [last]
+    while (back.get(chain[0])) chain.unshift(back.get(chain[0]))
+    // the fastest crossings, border by border: each crossing's best time from the start and the one it came through
+    const km = (p, q) => Math.hypot(p.lat - q.lat, (p.lng - q.lng) * Math.cos(p.lat * Math.PI / 180)) * 111
+    let at = [{ p: from, t: 0, prev: null }]
+    for (let i = 0; i < chain.length; i++) {
+      let next = [to]
+      if (i + 1 < chain.length) {
+        const all = (await this.crossings(chain[i].id, chain[i + 1].id)).sort((x, y) => km(from, x) + km(x, to) - km(from, y) - km(y, to))
+        const near = [...new Set(all.map(c => c.n))].slice(0, chain.length > 2 ? 3 : PER) // fewer through a third country: its searches multiply
+        next = all.filter(c => near.includes(c.n))
+      }
+      at = await Promise.all(next.map(async q => {
+        let best = { p: q, t: Infinity, prev: null }
+        for (const o of at) {
+          if (o.t === Infinity) continue
+          const s = await seconds(dir(chain[i]), o.p, q)
+          if (s != null && o.t + s < best.t) best = { p: q, t: o.t + s, prev: o }
+        }
+        return best
+      }))
+    }
+    if (at[0].t === Infinity) throw new Error(t('maps.noWay'))
+    const out = []
+    for (let o = at[0], i = chain.length - 1; o.prev; o = o.prev, i--) out.unshift({ dir: dir(chain[i]), from: o.prev.p, to: o.p })
+    return out
   }
 
   /** Each map's `<id>-<kind>.tsv` that is there. */

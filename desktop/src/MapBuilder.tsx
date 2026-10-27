@@ -141,10 +141,6 @@ function Wizard({ page, setPage, progress, start, onClose }:
             <p>{t('mapbuild.download', { size: size(needs.osm) })} · {t('mapbuild.memory', { need: size(needs.memory), has: size(needs.hasMemory) })}</p>
             {tooBig && <p className="error">{t('mapbuild.tooBig')}</p>}
             {tooBig && <div className="map-parts">{parts.map(r => <button key={r.id} className="text-button" onClick={() => choose(r)}>{r.name}</button>)}</div>}
-            {/* joining it with the maps next to it is what takes hours: said before it starts (the user, 27 Oct: "please be patient") */}
-            {needs.pairs.some(p => p.fits) && <p className="muted">{t('mapbuild.bordersNote', { name: chosen.name, maps: needs.pairs.filter(p => p.fits).map(p => p.b).join(', '),
-              memory: size(Math.max(...needs.pairs.filter(p => p.fits).map(p => p.memory))) })}</p>}
-            {needs.pairs.filter(p => !p.fits).map(p => <p key={p.id} className="muted">{t('mapbuild.pairTooBig', { a: p.a, b: p.b, need: size(p.memory), has: size(needs.hasMemory) })}</p>)}
             {noRoom && <p className="error">{t('mapbuild.noRoom', { need: size(needs.disk), has: size(needs.hasDisk) })}</p>}
           </div>}
           {said && <p className="error">{said}</p>}
@@ -174,18 +170,12 @@ function Wizard({ page, setPage, progress, start, onClose }:
                 {/* the step being done turns (the user, 27 Oct: "it takes a bit to show up, add a spinner") */}
                 {state === 'now' ? <span className="spinner" /> : <Icon name={state === 'done' ? 'checked' : state === 'failed' ? 'warning' : 'unchecked'} size={18} />}
                 <span>{t(`mapbuild.step.${s}`)}{state === 'now' && progress?.total ? ` · ${size(progress.done ?? 0)} / ${size(progress.total)}` : ''}</span>
-                {/* a line for each pair of neighbouring maps being joined */}
-                {s === 'borders' && !!progress?.pairs?.length && <ul className="map-pairs">{progress.pairs.map(p => <li key={p.name} className={p.state}>
-                  {p.state === 'running' && state !== 'failed' ? <span className="spinner" /> : <Icon name={p.state === 'done' ? 'checked' : p.state === 'skipped' ? 'warning' : 'unchecked'} size={16} />}
-                  <span>{p.state === 'skipped' ? t('mapbuild.pairTooBig', { a: p.a, b: p.b, need: size(p.memory), has: size(progress.hasMemory ?? 0) }) : p.name}</span>
-                </li>)}</ul>}
               </li>
             })}
           </ol>
           {page === 'build' && progress?.state === 'running' && progress.total ? <progress max={progress.total} value={progress.done ?? 0} /> : null}
           {page === 'build' && progress?.state === 'offline' && <p className="error">{t('mapbuild.waitingNet')}</p>}
           {page === 'build' && <p className="muted">{t('mapbuild.buildNote')}</p>}
-          {page === 'build' && progress?.pairs?.some(p => p.state !== 'skipped') && <p className="muted">{t('mapbuild.bordersBusy')}</p>}
           {page === 'error' && <p className="error">{t('mapbuild.failed', { error: progress?.error ?? '' })}</p>}
           {page === 'build' && <div className="dialog-actions">
             <button className="text-button" onClick={() => { window.drive.mapsCancelBuild(); onClose() }}>{t('mapbuild.stop')}</button>

@@ -27,7 +27,7 @@ const { DataCounter } = require('./datacount')
 let calls = null
 const timer = require('./timer')
 const { Maps, labelsIn } = require('./maps')
-const { Router } = require('./router')
+const { Router, join } = require('./router')
 const { MapBuilder } = require('./mapbuild')
 const { Thumbs } = require('./thumbs')
 const importer = require('./importer')
@@ -104,7 +104,15 @@ function planReminders() {
 // The files are read again at each end and every 30 s (the user: "sync check every 30 sec"), and at once when one lands.
 let timers = null, timerAlarm = null
 let maps = null // Maps (maps.js): the phone's map files in Files/Maps, read and written as they are
-let router = null // directions (router.js): GraphHopper's server on the phone's graph, started at the first route
+/** Directions (router.js): GraphHopper's server on a map's graph, one a graph, started at its first route; the last three used kept. */
+const routers = new Map()
+function routerFor(dir) {
+  const r = routers.get(dir) ?? new Router(dir, path.join(DATA_DIR, 'routing', path.basename(dir)))
+  routers.delete(dir); routers.set(dir, r)
+  for (const [d, old] of routers) if (routers.size > 3) { old.stop(); routers.delete(d) }
+  return r
+}
+const stopRouters = () => { for (const r of routers.values()) r.stop(); routers.clear() }
 let mapBuilder = null // the map builder (mapbuild.js): a country's map, roads and search, made here for every device
 let dataCounter = null // Data (datacount.js): this computer's network counts, its Wi-Fi, the phone's speed test
 let thumbs = null // Files' thumbnails (thumbs.js), made when Files first asks for one
@@ -478,7 +486,6 @@ app.whenReady().then(() => {
   try { const n = timers.clean(); if (n) console.log(`Timer: cleared ${n} old copies`) } catch {}
   // Maps: deleting a place goes to Files' Trash, so the deletion reaches the phone (as the Calendar's)
   maps = new Maps(path.join(FILES_ROOT, 'Maps'), rel => files.trash(rel))
-  router = new Router(path.join(FILES_ROOT, 'Maps', 'greece-gh'), path.join(DATA_DIR, 'routing'))
   watchMaps()
   dataCounter = new DataCounter(path.join(FILES_ROOT, 'Data'), os.hostname())
   dataCounter.start()
@@ -748,12 +755,20 @@ app.whenReady().then(() => {
   ipcMain.handle('maps:search', (_, q) => maps.search(q))
   ipcMain.handle('maps:describe', (_, lat, lng, road) => maps.describe(lat, lng, road))
   ipcMain.handle('maps:near', (_, lat, lng, name) => maps.near(lat, lng, name))
-  // the roads of the map the route starts in, or of two neighbours joined when it crosses from one into the other
+  // on the maps' own graphs: from stop to stop, each leg across a border driven to a crossing and on from there (maps.legs)
   ipcMain.handle('maps:route', async (_, points, mode, main) => {
-    const dir = Array.isArray(points) && points.length && points.every(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))
-      ? await maps.graphFor(points, router.graphDir) : path.join(maps.root, 'greece-gh') // router.route says what is wrong
-    if (router.graphDir !== dir) { router.stop(); router.graphDir = dir }
-    return router.route(points, mode, !!main)
+    if (!Array.isArray(points) || points.length < 2 || !points.every(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))) return routerFor(path.join(maps.root, 'greece-gh')).route(points, mode, !!main)
+    const seconds = (dir, a, b) => routerFor(dir).seconds(a, b, mode)
+    const legs = [], stops = []
+    for (let i = 1; i < points.length; i++) {
+      const these = await maps.legs(points[i - 1], points[i], seconds)
+      legs.push(...these); stops.push(...these.map((_, k) => k === these.length - 1))
+    }
+    // all on one graph, as before: one search through every stop
+    if (legs.every(l => l.dir === legs[0].dir)) return routerFor(legs[0].dir).route(points, mode, !!main)
+    const parts = []
+    for (const l of legs) parts.push(await routerFor(l.dir).route([l.from, l.to], mode, !!main))
+    return join(parts, stops)
   })
   // the map builder (Settings › Maps): one map at a time; its progress goes to the window, a new map to the devices
   mapBuilder = new MapBuilder(maps.root, p => {
@@ -777,7 +792,7 @@ app.whenReady().then(() => {
   ipcMain.handle('maps:cancelBuild', () => mapBuilder.cancel())
   ipcMain.handle('maps:building', () => mapBuilder.job?.id ?? null)
   ipcMain.handle('maps:packs', () => mapBuilder.packs())
-  ipcMain.handle('maps:removePack', async (_, id) => { router.stop(); await mapBuilder.remove(id, rel => files.trash(rel)); win?.webContents.send('maps-changed'); sync?.nudge().catch(() => {}) })
+  ipcMain.handle('maps:removePack', async (_, id) => { stopRouters(); await mapBuilder.remove(id, rel => files.trash(rel)); win?.webContents.send('maps-changed'); sync?.nudge().catch(() => {}) })
   // this computer has no GPS: the paired phone's fix — kept, since a PC rarely moves (the user, 26 Oct). The kept one is used
   // until it is older than Settings › Location says ('off': for good); Where I am asks the phone again whatever its age.
   const EVERY_MS = { '30m': 30 * 60_000, '1d': 86_400_000, '1w': 7 * 86_400_000 }
@@ -1124,8 +1139,8 @@ app.whenReady().then(() => {
 if (!process.env.DRIVE_HIDDEN && !app.requestSingleInstanceLock()) app.exit(0)
 app.on('second-instance', showWindow)
 app.on('window-all-closed', () => app.quit())
-app.on('before-quit', () => { quitting = true; mapBuilder?.cancel(); calls?.quit(); dataCounter?.stop(); vault?.lock(); analyzer?.terminate(); router?.stop() })
-process.on('exit', () => router?.stop()) // a Tetra stopped without quitting leaves no routing server behind
+app.on('before-quit', () => { quitting = true; mapBuilder?.cancel(); calls?.quit(); dataCounter?.stop(); vault?.lock(); analyzer?.terminate(); stopRouters() })
+process.on('exit', stopRouters) // a Tetra stopped without quitting leaves no routing server behind
 
 /** The phone's calls, newest first (at most 1000): the lines the phone writes into Phone/calls-YYYY-MM.jsonl. */
 function phoneHistory() {

@@ -11,11 +11,10 @@
  *   <id>-lanes.tsv      lane arrows (maps-tools/maps-lanes.py)
  *   <id>-phone.tsv      the country's area codes with their places, for the Phone (maps-tools/maps-phone.py, libphonenumber's data)
  *   <id>.json           {"name","region","built","bounds":[w,s,e,n],"drive":"right"|"left"}, written last: a pack without it is half there
- *   <a>_<b>-gh/         two neighbouring maps' roads joined at their border (ids sorted: greece_macedonia-gh), so a route crosses
- *                       from one into the other (the user, 27 Oct: "When we have both the neighbouring maps, it should be able to cross
- *                       the border"); one graph a pair, not one of every map, so the memory stays two countries' however many maps
- *                       there are ("Break it into pieces"). Made after the map is installed, one pair at a time, from each region's
- *                       .osm.pbf kept in ~/Tetra-maps/osm; Retry goes on at the pair it stopped at.
+ *   <a>_<b>-crossings.tsv   where the roads cross between two neighbouring maps (ids sorted: greece_macedonia-crossings.tsv;
+ *                       maps-tools/maps-crossings.py): a route drives on one country's graph to a crossing and goes on from there on the
+ *                       next one's (the user, 27 Oct: "Drive to the edge and then start from the other edge"), so no graph of two
+ *                       countries is ever made. Written after the map is installed, from each region's .osm.pbf kept in ~/Tetra-maps/osm.
  *
  * Greece's pack, made by Drive-Android's tools/maps-greece.sh, is "greece" (Geofabrik's id), so it updates here too.
  * Nobody opens a terminal: pmtiles and GraphHopper are fetched into ~/Tetra-maps/bin the first time; what only the system
@@ -45,10 +44,10 @@ const PACKAGES = { 'openjdk-17-jre-headless': 'java', 'python3-pyosmium': 'osmiu
 const PYTHON = [BUNDLED && path.join(BUNDLED, 'python', 'bin', 'python3'), '/usr/bin/python3'].find(p => p && fs.existsSync(p)) ?? '/usr/bin/python3'
 /** The steps as the wizard shows them, in order. */
 const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install', 'borders']
-/** Each region's roads and places as downloaded, and its .poly border, kept for its neighbours' pair graphs. */
+/** Each region's roads and places as downloaded, and its .poly border, kept for its neighbours' crossings. */
 const OSM = path.join(WORK, 'osm')
-/** Two neighbouring maps' joined roads: "greece_macedonia-gh" (Android's MapsFiles.pair). */
-const pairDir = (a, b) => `${[a, b].sort().join('_')}-gh`
+/** Where the roads cross between two neighbouring maps: "greece_macedonia-crossings.tsv" (Android's MapsFiles.crossings). */
+const crossingsFile = (a, b) => `${[a, b].sort().join('_')}-crossings.tsv`
 /** Whether two regions' borders (GeoJSON MultiPolygons) meet: Geofabrik draws each a little beyond the line, so neighbours' overlap. */
 function meet(a, b) {
   const inside = ([x, y], ring) => {
@@ -144,23 +143,7 @@ class MapBuilder {
     const head = await needsNet(() => fetch(r.pbf, { method: 'HEAD' }))
     const osm = +(head.headers.get('content-length') ?? 0)
     const free = await fsp.statfs(fs.existsSync(WORK) ? WORK : os.homedir()).then(f => f.bavail * f.bsize, () => Infinity)
-    const pairs = await this.pairs(r, osm)
-    return { osm, memory: Math.max(1e9, osm * 12), hasMemory: os.totalmem(), disk: osm * 7 + pairs.reduce((a, p) => a + (p.fits ? p.bytes * 5 : 0), 0) + 5e8, hasDisk: free, pairs }
-  }
-
-  /**
-   * Region `r` (its .osm.pbf `osm` bytes) with each neighbour here: { ...the neighbour, a, b, name, bytes, memory, fits }. A pair
-   * needs GraphHopper's memory for both files (about 12 × their size, as one map), within the 60% of this computer's the
-   * import gets; one that does not fit is left out, its border not crossed (the user, 27 Oct: "if it's some 4 GB potato").
-   */
-  async pairs(r, osm, signal) {
-    const out = []
-    for (const n of await this.neighbours(r, signal)) {
-      const size = await fsp.stat(this.kept(n.id)).then(st => st.size, async () => +((await needsNet(() => fetch(n.pbf, { method: 'HEAD', signal }))).headers.get('content-length') ?? 0))
-      const bytes = osm + size, memory = Math.max(1e9, bytes * 12)
-      out.push({ ...n, a: r.name, b: n.name, name: `${r.name} + ${n.name}`, bytes, memory, fits: memory <= os.totalmem() * 0.6 })
-    }
-    return out
+    return { osm, memory: Math.max(1e9, osm * 12), hasMemory: os.totalmem(), disk: osm * 7 + 5e8, hasDisk: free }
   }
 
   /** Region `r`'s border, Geofabrik's .poly, kept in ~/Tetra-maps/osm. */
@@ -203,12 +186,12 @@ class MapBuilder {
     return out.sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  /** The pack's files and its pair graphs to Tetra's Trash (`trash(rel)`, so the removal reaches the phone and tablet). */
+  /** The pack's files and its crossings to Tetra's Trash (`trash(rel)`, so the removal reaches the phone and tablet); a pair graph of an earlier builder too. */
   async remove(id, trash) {
     if (!/^[a-z0-9-]+$/.test(id)) throw new Error('Not a map.')
     for (const n of await fsp.readdir(this.root)) {
       if (n === `${id}.pmtiles` || n === `${id}.json` || n === `${id}-gh` || (n.startsWith(`${id}-`) && n.endsWith('.tsv') && /^[a-z]+\.tsv$/.test(n.slice(id.length + 1))) ||
-        (/^[a-z0-9-]+_[a-z0-9-]+-gh$/.test(n) && n.slice(0, -3).split('_').includes(id))) await trash(`Maps/${n}`)
+        (/^[a-z0-9-]+_[a-z0-9-]+-(gh|crossings\.tsv)$/.test(n) && n.replace(/-(gh|crossings\.tsv)$/, '').split('_').includes(id))) await trash(`Maps/${n}`)
     }
     await fsp.rm(path.join(OSM, `${id}.osm.pbf`), { force: true })
   }
@@ -270,8 +253,7 @@ class MapBuilder {
     await fsp.mkdir(dir, { recursive: true })
     const log = fs.createWriteStream(path.join(dir, 'build.log'), { flags: 'a' })
     let step = null
-    let extra = {}
-    const tell = (state, more = {}) => this.progress({ id, step, state, ...extra, ...more })
+    const tell = (state, more = {}) => this.progress({ id, step, state, ...more })
     const at = s => { step = s; tell('running'); log.write(`\n== ${s} ${new Date().toISOString()}\n`) }
     const run = (cmd, args, opts = {}) => new Promise((resolve, reject) => {
       if (job.cancelled) return reject(new Error('cancelled'))
@@ -299,10 +281,10 @@ class MapBuilder {
       if (md5 && hash.digest('hex') !== md5) throw new Error('The download arrived damaged; try again.')
       await fsp.rename(to + '.part', to)
     }
-    /** Step `s` (its part `part`): passed over when a run before finished it; a download tried again once after a pause before it fails. */
-    const stage = async (s, work, tries = 1, part = s) => {
+    /** Step `s`: passed over when a run before finished it; a download tried again once after a pause before it fails. */
+    const stage = async (s, work, tries = 1) => {
       at(s)
-      const mark = path.join(dir, `.done-${part}`)
+      const mark = path.join(dir, `.done-${s}`)
       if (fs.existsSync(mark)) { log.write('done before\n'); return }
       for (let i = 1; ; i++) {
         try { await work(); break } catch (e) {
@@ -323,13 +305,6 @@ class MapBuilder {
       await fsp.writeFile(mark, new Date().toISOString())
     }
     try {
-      // the pairs it will make, known from the start so the window says what takes long (a Remake too)
-      const osm = +((await needsNet(() => fetch(region.pbf, { method: 'HEAD', signal: job.abort.signal }))).headers.get('content-length') ?? 0)
-      const near = await this.pairs(region, osm, job.abort.signal)
-      const pairs = near.map(n => ({ name: n.name, a: n.a, b: n.b, memory: n.memory,
-        state: !n.fits ? 'skipped' : fs.existsSync(path.join(dir, `.done-borders-${n.id}`)) ? 'done' : 'waiting' }))
-      extra = { pairs, hasMemory: os.totalmem() }
-
       await stage('tools', () => this.tools(get, run), 2)
 
       await stage('map', async () => {
@@ -377,26 +352,29 @@ class MapBuilder {
         await fsp.rename(path.join(dir, 'region.osm.pbf'), path.join(OSM, `${id}.osm.pbf`))
       })
 
-      // a pair graph with each neighbour here, one at a time, each its own mark (the user, 27 Oct: "Break it into pieces")
-      at('borders')
-      for (const [i, n] of near.entries()) {
-        if (pairs[i].state === 'skipped') { log.write(`${n.name}: needs ${n.memory} bytes of memory, left out\n`); continue }
-        if (pairs[i].state !== 'done') pairs[i].state = 'running'
-        await stage('borders', async () => {
-          if (!fs.existsSync(this.kept(n.id))) {
-            const md5 = (await fetch(n.pbf + '.md5', { signal: job.abort.signal }).then(x => x.text())).trim().split(/\s+/)[0]
-            await get(n.pbf, this.kept(n.id), md5)
+      // the crossings with each neighbour here, made again, and between any two maps here that have none yet (so one Remake joins
+      // maps made before), from both regions' .osm.pbf (downloaded again when not kept): seconds each
+      await stage('borders', async () => {
+        await fsp.writeFile(path.join(dir, 'maps-crossings.py'), await fsp.readFile(path.join(__dirname, 'maps-tools', 'maps-crossings.py')))
+        const regions = await this.regions(), signal = job.abort.signal
+        const todo = (await this.neighbours(region, signal)).map(n => [region, n])
+        for (const p of await this.packs()) {
+          const r = regions.find(x => x.id === p.id)
+          if (r && r.id !== id) for (const n of await this.neighbours(r, signal)) {
+            if (n.id !== id && r.id < n.id && !fs.existsSync(path.join(this.root, crossingsFile(r.id, n.id)))) todo.push([r, n])
           }
-          await fsp.writeFile(path.join(dir, 'maps-merge.py'), await fsp.readFile(path.join(__dirname, 'maps-tools', 'maps-merge.py')))
-          await run(PYTHON, ['-I', 'maps-merge.py', 'pair.osm.pbf', this.kept(id), this.kept(n.id)])
-          const gh = pairDir(id, n.id)
-          await graph('pair.osm.pbf', gh)
-          await fsp.rm(path.join(dir, 'pair.osm.pbf'), { force: true })
-          await this.swapIn(path.join(dir, gh), gh)
-          await fsp.rm(path.join(dir, gh), { recursive: true, force: true })
-        }, 2, `borders-${n.id}`)
-        pairs[i].state = 'done'
-      }
+        }
+        for (const [a, b] of todo) {
+          for (const r of [a, b]) if (!fs.existsSync(this.kept(r.id))) {
+            const md5 = (await fetch(r.pbf + '.md5', { signal }).then(x => x.text())).trim().split(/\s+/)[0]
+            await get(r.pbf, this.kept(r.id), md5)
+          }
+          const f = crossingsFile(a.id, b.id)
+          await run(PYTHON, ['-I', 'maps-crossings.py', this.kept(a.id), this.kept(b.id), f])
+          await fsp.copyFile(path.join(dir, f), path.join(this.root, `.${f}.part`))
+          await fsp.rename(path.join(this.root, `.${f}.part`), path.join(this.root, f))
+        }
+      }, 2)
       await fsp.rm(dir, { recursive: true, force: true })
       step = null
       tell('done')
@@ -458,4 +436,4 @@ class MapBuilder {
   }
 }
 
-module.exports = { MapBuilder, STEPS, PACKAGES, pairDir, meet, polyToGeoJson, pmtilesBounds, LEFT, online, isOld }
+module.exports = { MapBuilder, STEPS, PACKAGES, crossingsFile, meet, polyToGeoJson, pmtilesBounds, LEFT, online, isOld }

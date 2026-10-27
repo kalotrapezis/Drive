@@ -122,6 +122,15 @@ class Router {
     if (!this.proc) { this.starting ??= this.start().finally(() => { this.starting = null }); await this.starting }
   }
 
+  /** Only how long from `a` to `b` in seconds, GraphHopper's (no line, no turns), or null when there is no way: to choose a border crossing. */
+  async seconds(a, b, mode = 'car') {
+    const profile = ['car', 'foot', 'bike', 'wheelchair'].includes(mode) ? mode : 'car'
+    await this.ready()
+    const res = await fetch(`http://localhost:${this.port}/route?point=${a.lat},${a.lng}&point=${b.lat},${b.lng}&profile=${profile}&instructions=false&calc_points=false`)
+    const body = await res.json().catch(() => ({}))
+    return res.ok && body.paths?.length ? body.paths[0].time / 1000 : null
+  }
+
   /** From the first point through each next one: its line, metres, minutes and turns (in the app's language, as the phone says them). */
   async route(points, mode = 'car', main = false) {
     const locale = ghLocale(current().lang)
@@ -152,6 +161,18 @@ class Router {
 /** GraphHopper's word for the app's language [lang]: Portugal's Portuguese for "pt" (Tetra's); English where GraphHopper has none (it falls back by itself). */
 const ghLocale = lang => (lang === 'pt' ? 'pt_PT' : lang)
 
+/**
+ * Routes one after the other as one (maps:route's legs across borders, or between stops): metres and times added, the lines
+ * joined at their shared point, the arrival of each but the last said only where a stop of the user's is (`stops[i]`).
+ */
+function join(parts, stops = []) {
+  return {
+    metres: parts.reduce((a, p) => a + p.metres, 0), seconds: parts.reduce((a, p) => a + p.seconds, 0),
+    line: parts.flatMap((p, i) => (i ? p.line.slice(1) : p.line)),
+    steps: parts.flatMap((p, i) => (i < parts.length - 1 && !stops[i] ? p.steps.filter(s => s.sign !== 4) : p.steps)),
+  }
+}
+
 /** GraphHopper's errors in plain words (the phone: "routing errors in plain words"). */
 function plain(message = '') {
   if (/Cannot find point|PointNotFound/i.test(message)) return t('maps.noRoadNear')
@@ -166,4 +187,4 @@ const freePort = () => new Promise((resolve, reject) => {
   s.on('error', reject)
 })
 
-module.exports = { Router, plain, ghLocale, MAIN_ROADS, PROFILES, JAR, BIN, BUNDLED, findJava }
+module.exports = { Router, join, plain, ghLocale, MAIN_ROADS, PROFILES, JAR, BIN, BUNDLED, findJava }

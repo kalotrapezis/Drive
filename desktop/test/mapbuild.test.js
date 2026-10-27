@@ -5,8 +5,9 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { MapBuilder, STEPS, pairDir, meet, polyToGeoJson, pmtilesBounds, isOld } = require('../mapbuild')
+const { MapBuilder, STEPS, crossingsFile, meet, polyToGeoJson, pmtilesBounds, isOld } = require('../mapbuild')
 const { Maps, labelsIn } = require('../maps')
+const { join } = require('../router')
 
 /** A .pmtiles file holding only its header, with bounds west, south, east, north. */
 function pmtiles(file, ...b) {
@@ -53,28 +54,45 @@ test('two countries: each map read, routed and searched by where it is; a remove
   await assert.rejects(b.remove('../x', () => {}))
 })
 
-test('two neighbours joined: their pair graph for a route from one into the other, their own within one; Remove takes the pair', async () => {
+test('across borders: each map\'s own roads to a crossing and on from there, the fastest crossing; Remove takes its crossings', async () => {
   const root = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tetra-')), 'Maps')
   fs.mkdirSync(root, { recursive: true })
   pmtiles(path.join(root, 'greece.pmtiles'), 18.97, 34.59, 29.66, 41.75)
   pmtiles(path.join(root, 'macedonia.pmtiles'), 20.45, 40.85, 23.04, 42.37)
+  pmtiles(path.join(root, 'serbia.pmtiles'), 18.8, 42.2, 23.0, 46.2)
   pmtiles(path.join(root, 'cyprus.pmtiles'), 31, 34, 35, 36)
   fs.writeFileSync(path.join(root, 'macedonia.json'), JSON.stringify({ name: 'North Macedonia', bounds: [20.45, 40.85, 23.04, 42.37] }))
-  const pair = path.join(root, pairDir('macedonia', 'greece'))
-  assert.strictEqual(path.basename(pair), 'greece_macedonia-gh')
+  assert.strictEqual(crossingsFile('macedonia', 'greece'), 'greece_macedonia-crossings.tsv')
   const maps = new Maps(root, async () => {})
-  const thess = { lat: 40.64, lng: 22.94 }, skopje = { lat: 41.99, lng: 21.43 }, athens = { lat: 37.98, lng: 23.73 }
-  await assert.rejects(maps.graphFor([thess, skopje]), /North Macedonia/) // not joined yet
-  fs.mkdirSync(pair); fs.writeFileSync(path.join(pair, 'properties'), 'x')
-  assert.strictEqual(await maps.graphFor([thess, skopje]), pair)
-  assert.strictEqual(await maps.graphFor([skopje, athens]), pair)
-  assert.strictEqual(await maps.graphFor([thess, athens]), path.join(root, 'greece-gh')) // as before
-  await assert.rejects(maps.graphFor([thess, { lat: 35.17, lng: 33.36 }]), /cyprus/i)
-  await assert.rejects(maps.graphFor([skopje, thess, { lat: 35.17, lng: 33.36 }]), /cyprus/i) // a third country
+  const gh = id => path.join(root, `${id}-gh`)
+  // made-up times: a straight line at 1 km a minute, a slow crossing at Niki, nothing across the sea
+  const km = (p, q) => Math.hypot(p.lat - q.lat, (p.lng - q.lng) * Math.cos(p.lat * Math.PI / 180)) * 111
+  const asked = []
+  const seconds = async (dir, a, b) => { asked.push(path.basename(dir)); return b.lat > 35.5 && b.lat < 35.6 ? null : km(a, b) * 60 + (Math.abs(b.lng - 21.418) < 0.01 ? 3600 : 0) }
+  const thess = { lat: 40.64, lng: 22.94 }, skopje = { lat: 41.99, lng: 21.43 }, athens = { lat: 37.98, lng: 23.73 }, belgrade = { lat: 44.79, lng: 20.45 }
+  assert.deepStrictEqual(await maps.legs(thess, athens, seconds), [{ dir: gh('greece'), from: thess, to: athens }]) // as before
+  assert.deepStrictEqual(asked, [])
+  await assert.rejects(maps.legs(thess, skopje, seconds), /Tetra knows no way from Greece to North Macedonia/) // no crossings yet
+  fs.writeFileSync(path.join(root, 'greece_macedonia-crossings.tsv'), '41.133893\t22.548533\t\tmotorway\n40.916274\t21.418159\t\ttrunk\n41.170555\t22.745243\t\tsecondary\n')
+  const evzonoi = { lat: 41.133893, lng: 22.548533, name: '', n: -1 }
+  assert.deepStrictEqual(await maps.legs(thess, skopje, seconds), [{ dir: gh('greece'), from: thess, to: evzonoi }, { dir: gh('macedonia'), from: evzonoi, to: skopje }])
+  // three countries: Thessaloniki to Belgrade through North Macedonia
+  await assert.rejects(maps.legs(thess, belgrade, seconds), /Greece to Serbia/)
+  fs.writeFileSync(path.join(root, 'macedonia_serbia-crossings.tsv'), '42.234902\t21.703802\t\tmotorway\n42.326463\t22.331514\tГолеш\ttertiary\n')
+  const legs = await maps.legs(thess, belgrade, seconds)
+  assert.deepStrictEqual(legs.map(l => [path.basename(l.dir), l.to.lat]), [['greece-gh', 41.133893], ['macedonia-gh', 42.234902], ['serbia-gh', 44.79]])
+  await assert.rejects(maps.legs(thess, { lat: 35.17, lng: 33.36 }, seconds), /Cyprus/)
   const trashed = []
   await new MapBuilder(root).remove('macedonia', async rel => { trashed.push(rel); fs.rmSync(path.join(root, '..', rel), { recursive: true }) })
-  assert.deepStrictEqual(trashed.sort(), ['Maps/greece_macedonia-gh', 'Maps/macedonia.json', 'Maps/macedonia.pmtiles'])
+  assert.deepStrictEqual(trashed.sort(), ['Maps/greece_macedonia-crossings.tsv', 'Maps/macedonia.json', 'Maps/macedonia.pmtiles', 'Maps/macedonia_serbia-crossings.tsv'])
   assert.ok(STEPS.indexOf('borders') > STEPS.indexOf('install'))
+})
+
+test('legs joined into one route: the crossing said once, a stop kept', () => {
+  const leg = (m, n) => ({ metres: m, seconds: m / 10, line: [[0, n], [1, n + 1]], steps: [{ text: 'go', metres: m, seconds: m / 10, sign: 0 }, { text: 'arrive', metres: 0, seconds: 0, sign: 4 }] })
+  const r = join([leg(100, 0), leg(50, 1), leg(20, 2)], [false, true, true])
+  assert.deepStrictEqual([r.metres, r.seconds, r.line.length], [170, 17, 4])
+  assert.deepStrictEqual(r.steps.map(s => s.sign), [0, 0, 4, 0, 4])
 })
 
 test('neighbours by their Geofabrik borders: they overlap a little', () => {

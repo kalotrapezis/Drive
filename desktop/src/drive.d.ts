@@ -10,7 +10,7 @@ export interface MapTrip { id: string; name: string; stops: MapStop[] }
 export interface MapRegion { id: string; name: string; parent: string | null; iso: string | null; pbf: string }
 export interface MapPack { id: string; name: string; region: string; built: string; old: boolean; bytes: number; roads: boolean }
 export interface MapBuildProgress { id: string; step: 'tools' | 'map' | 'osm' | 'roads' | 'search' | 'phone' | 'install' | 'borders' | null; state: 'running' | 'offline' | 'needs' | 'done' | 'error' | 'cancelled'
-  done?: number; total?: number; error?: string | null; packages?: string[]; pairs?: { name: string; a: string; b: string; memory: number; state: 'waiting' | 'running' | 'done' | 'skipped' }[]; hasMemory?: number }
+  done?: number; total?: number; error?: string | null; packages?: string[] }
 export interface Poi { kind: string; lat: number; lng: number; name: string; nameEn: string; more: string; hours: string; phone: string; web: string; wheelchair: string; note: string }
 
 export interface DriveItem {
@@ -211,7 +211,7 @@ declare global {
       onTimerChanged(cb: () => void): () => void
       mapsInfo(): Promise<{ root: string; map: true | null; maps: { id: string; name: string; bounds: [number, number, number, number] | null; drive: 'left' | 'right' }[] }>
       mapsRegions(): Promise<MapRegion[]>
-      mapsNeeds(id: string): Promise<{ osm: number; memory: number; hasMemory: number; disk: number; hasDisk: number; pairs: { id: string; a: string; b: string; memory: number; fits: boolean }[] }>
+      mapsNeeds(id: string): Promise<{ osm: number; memory: number; hasMemory: number; disk: number; hasDisk: number }>
       mapsMissing(): Promise<string[]>
       mapsInstallSystem(packages: string[]): Promise<'done' | 'refused'>
       mapsBuild(id: string, resume?: boolean): Promise<void>
