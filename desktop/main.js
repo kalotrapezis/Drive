@@ -3,6 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
 const { pathToFileURL } = require('node:url')
+const { AsYouType } = require('libphonenumber-js')
 const library = require('./library')
 const { Files } = require('./files')
 const faces = require('./faces')
@@ -505,7 +506,7 @@ app.whenReady().then(() => {
       const d = await callaudio.bluez()
       if (!d.source || !d.sink) throw new Error('The phone\'s call sound is not on this computer\'s Bluetooth.')
       return callaudio.bridge(received, send, d)
-    }, onCall: s => calls?.fromPhone(s), onReceived: () => {
+    }, onCall: s => { if (s.country && s.country !== setting('phoneCountry')) setSetting('phoneCountry', s.country); calls?.fromPhone(s) }, onReceived: () => {
     clearTimeout(rescanTimer)
     rescanTimer = setTimeout(() => { startScan(); win?.webContents.send('sync-received') }, 3000)
   }, onSent: ({ device, paths }) => { // Send to computer: the phone's share menu, into Files › From phone
@@ -986,6 +987,7 @@ app.whenReady().then(() => {
   ipcMain.handle('data:wifi', () => dataCounter.wifi())
   ipcMain.handle('phone:recordings', () => phoneRecordings())
   ipcMain.handle('phone:spam', () => phoneSpam())
+  ipcMain.handle('phone:country', () => phoneCountry())
   ipcMain.handle('phone:setSpam', (_, number, on) => setPhoneSpam(number, !!on))
   ipcMain.handle('phone:openRecording', (_, name) => {
     if (!phoneRecordings().some(r => r.name === name)) throw new Error('No such recording.')
@@ -1147,9 +1149,11 @@ const SPAM_HEAD = '# Spam and unwanted (Tetra Phone): one number a line, a note 
 const spamFile = () => path.join(FILES_ROOT, 'Phone', 'spam.txt')
 const spamParse = text => text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
   .map(l => ({ number: l.split('#')[0].trim().replace(/ /g, ''), note: l.includes('#') ? l.slice(l.indexOf('#') + 1).trim() : '' })).filter(e => /\d/.test(e.number))
-const spamNational = n => { const t = String(n).trim(), d = t.replace(/\D/g, ''); return t.startsWith('+30') ? d.slice(2) : t.startsWith('0030') ? d.slice(4) : t.startsWith('+') ? '+' + d : t.startsWith('00') ? '+' + d.slice(2) : d }
+// a number or a range's start as + its country code and the rest, a national one read in the phone's country (src/phonecountry.ts)
+const phoneCountry = () => setting('phoneCountry') || app.getLocaleCountryCode() || ''
+const spamInternational = n => { const a = new AsYouType(phoneCountry() || undefined); a.input(String(n).trim()); return a.getNumberValue() || String(n).replace(/\D/g, '') }
 const spamSame = (a, b) => { const k = s => String(s).replace(/\D/g, '').slice(-9); return k(a).length >= 5 && k(a) === k(b) }
-const spamMatch = (list, n) => list.find(e => e.number.endsWith('*') ? (p => (p.replace(/\D/g, '').length >= 2 && spamNational(n).startsWith(p)))(spamNational(e.number.slice(0, -1))) : spamSame(e.number, n))
+const spamMatch = (list, n) => list.find(e => e.number.endsWith('*') ? (p => (e.number.replace(/\D/g, '').length >= 2 && spamInternational(n).startsWith(p)))(spamInternational(e.number.slice(0, -1))) : spamSame(e.number, n))
 function phoneSpam() { try { return spamParse(fs.readFileSync(spamFile(), 'utf8')) } catch { return [] } }
 function setPhoneSpam(number, on) {
   const n = String(number || '').replace(/[^\d+*]/g, '')

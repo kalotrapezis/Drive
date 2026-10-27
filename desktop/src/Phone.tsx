@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './Icon'
 import type { Contact } from './Contacts'
 import { lang, t } from './i18n'
+import { international } from './phonecountry'
 
 // The Phone on the computer (Drive-Android Plan.md § Phone): the phone's call history as it sends it (Phone/calls-*.jsonl,
 // written while Tetra is the phone's phone app), the contacts with a number, the recordings, and a keypad — a call is
@@ -63,12 +64,14 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
   const [number, setNumber] = useState('')
   const [filter, setFilter] = useState<'all' | 'missed' | 'spam'>('all')
   const [spam, setSpam] = useState<{ number: string; note: string }[]>([])
+  const [country, setCountry] = useState('') // the paired phone's, else this computer's (main.js phoneCountry)
   const [adding, setAdding] = useState('')
   useEffect(() => {
     const look = () => {
       window.drive.phoneHistory().then(setCalls, () => setCalls([]))
       window.drive.phoneRecordings().then(setRecordings, () => {})
       window.drive.phoneSpam().then(setSpam, () => {})
+      window.drive.phoneCountry().then(setCountry, () => {})
       window.drive.contacts<Contact[]>('list', false).then(setContacts, () => {})
     }
     look()
@@ -86,12 +89,12 @@ export function PhonePage({ say }: { say: (text: string) => void }) {
   const shownCalls = (calls || []).filter(l => (filter !== 'missed' || l.dir === 'missed') && matches(who(l.number)?.name || l.name, [l.number]))
   const [firstCalls, moreCalls] = useFirst(shownCalls)
   // the same rule as the phone's (PhoneSpam.matches): the last nine digits, or a range's start
-  const national = (n: string) => { const t = n.trim(), d = t.replace(/\D/g, ''); return t.startsWith('+30') ? d.slice(2) : t.startsWith('0030') ? d.slice(4) : t.startsWith('+') ? '+' + d : t.startsWith('00') ? '+' + d.slice(2) : d }
+  const national = (n: string) => international(n, country)
   const isSpam = (n: string) => spam.some(e => e.number.endsWith('*') ? national(n).startsWith(national(e.number.slice(0, -1))) && e.number.replace(/\D/g, '').length >= 2 : key(e.number).length >= 5 && key(e.number) === key(n))
   // a number caught by a range (69800*): the range's line is changed in the Spam list, not from the number
   const inRange = (n: string) => spam.some(e => e.number.endsWith('*') && national(n).startsWith(national(e.number.slice(0, -1))) && e.number.replace(/\D/g, '').length >= 2)
   const markSpam = (n: string, on: boolean) => window.drive.phoneSetSpam(n, on).then(l => { setSpam(l); say(on ? t('phone.spamOn') : t('phone.spamOff')) }, e => say(errorText(e)))
-  const lookUp = (n: string) => { const d = national(n); return d.length === 10 && !d.startsWith('+') ? `https://www.callinsider.gr/gr/${d}` : null }
+  const lookUp = (n: string) => { const d = national(n); return d.startsWith('+30') && d.length === 13 ? `https://www.callinsider.gr/gr/${d.slice(3)}` : null }
   const people = contacts.filter(c => c.phones.length && (tab !== 'favourites' || c.favourite) && matches(c.name, c.phones.map(p => p.value)))
   const typed = number.replace(/[^\d+*#]/g, '')
   const found = typed.replace(/\D/g, '').length >= 3 ? contacts.filter(c => c.phones.some(p => p.value.replace(/\D/g, '').includes(typed.replace(/\D/g, '')))).slice(0, 4) : []
