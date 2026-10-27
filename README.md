@@ -5,7 +5,7 @@ Photos, files, notes, calendar, timers, maps, contacts, calls and data on Linux,
 
 <p align="center">
   <a href="https://github.com/kalotrapezis/Drive/releases/download/desktop-v0.6.0-beta.23/Tetra-0.6.0-beta.23.AppImage"><img src="Assets/buttons/download-appimage.png" alt="Download the AppImage" width="420"></a>
-  <a href="https://github.com/kalotrapezis/Drive/releases/download/desktop-v0.6.0-beta.23/local-drive-desktop_0.6.0-beta.28_amd64.deb"><img src="Assets/buttons/download-deb.png" alt="Download the .deb" width="420"></a>
+  <a href="https://github.com/kalotrapezis/Drive/releases/download/desktop-v0.6.0-beta.23/local-drive-desktop_0.6.0-beta.23_amd64.deb"><img src="Assets/buttons/download-deb.png" alt="Download the .deb" width="420"></a>
 </p>
 <p align="center">
   <a href="https://github.com/kalotrapezis/Drive-Android"><img src="Assets/buttons/get-android.png" alt="Tetra for Android" width="420"></a>
@@ -24,8 +24,13 @@ your own backups. Screenshots use invented sample data.
 
 - **Files to and from your phone in a second.** *Send to phone* in Files or from the tray, and *Send to computer* in
   the phone's share menu. Over your own Wi-Fi: no cable, no cloud. They land in `From phone` and `From computer`.
-- **Call from your computer.** Click a number in Contacts and your phone dials it; a call bubble answers, holds, mutes
-  and hangs up here, and the phone's Recents and Recordings are here too.
+- **Call from your computer.** Click a number in Contacts and your phone dials it; a call bubble answers, holds, mutes,
+  hangs up and moves the sound to the phone's loudspeaker, and the phone's Recents and Recordings are here too.
+- **Maps of any country, made here.** Settings › Maps › Add a map: pick a country or a region, and this computer makes
+  its map, search and routes from OpenStreetMap, then sync sends them to your phone and tablet. Routes cross borders at
+  the real crossings, with directions in your language. The AppImage carries the Java and Python the builder needs.
+- **In your language, with a guide.** All 24 official languages of the EU. A guide beside the page, on first start and
+  in Settings › Guide, shows where to click and why.
 - **Your data plan, watched.** The phone's and the tablet's usage beside this computer's; the phone notifies you at 50 %,
   80 % and 100 % of your plan, or at any steps you choose.
 - **Calendar and timers, with AI.** Your calendars and timers are plain files in `~/Tetra/Files`, and Tetra comes with
@@ -39,14 +44,16 @@ your own backups. Screenshots use invented sample data.
   older photos onto it so the computer's own disk stays as empty as possible.
 - **More than one copy, no subscription.** Tetra shows how many places hold each file, the phone, the tablet, the
   computer or a USB drive, and what still lives in only one. Your own backups, with no cloud plan to pay for.
-- **Maps that work offline\*.** Search Greece, save places, lists and trips, and plan routes by car, on foot or by bike.
+- **Maps that work offline.** Search, save places, lists and trips, and plan routes by car, on foot or by bike.
 
-<sub>\* Maps and finding photos by place cover Greece only for now; other countries will follow.</sub>
+<sub>\* Finding photos by place covers Greece only for now.</sub>
 
 ## The applets
 
 ![Photos](Assets/cards/card-photos.jpg)
 ![Calendar and Timer](Assets/cards/card-calendar.jpg)
+![Maps of any country, made by your computer](Assets/cards/card-builder.jpg)
+![Maps across borders](Assets/cards/card-borders.jpg)
 ![Maps and calls on the computer](Assets/cards/desktop-maps.jpg)
 ![Contacts and Phone](Assets/cards/card-people.jpg)
 ![Calls on your computer: the call bubble](Assets/cards/card-bubble.jpg)
@@ -54,6 +61,8 @@ your own backups. Screenshots use invented sample data.
 ![More than one copy, no subscription](Assets/cards/card-safety.jpg)
 ![Files](Assets/cards/card-files.jpg)
 ![Files both ways: Send to computer on the phone, Send to phone on the computer](Assets/cards/card-send.jpg)
+![A guide that shows you](Assets/cards/card-guide.jpg)
+![In your language](Assets/cards/card-languages.jpg)
 
 Also here: **Devices**, to pair a phone or tablet by QR code with rules per device (send, both ways, or Move);
 **storage drives**, a USB disk as a verified backup or as storage that still shows in the library; and a Trash that
@@ -84,7 +93,7 @@ address, so it is found again after a network change. Every rule and its reason 
 On Debian, Ubuntu or Mint:
 
 ```bash
-sudo apt install ./local-drive-desktop_0.6.0-beta.28_amd64.deb
+sudo apt install ./local-drive-desktop_0.6.0-beta.23_amd64.deb
 ```
 
 Or make the AppImage executable and run it (`chmod +x Tetra-0.6.0-beta.23.AppImage`); it needs `libfuse2` on
