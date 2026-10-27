@@ -153,6 +153,32 @@ class Maps {
     return (await this.info()).maps.find(m => m.bounds && lng >= m.bounds[0] && lat >= m.bounds[1] && lng <= m.bounds[2] && lat <= m.bounds[3]) ?? null
   }
 
+  /**
+   * The roads a route through `points` runs on (Android's MapsFiles.graphFor; the user, 27 Oct: "When we have both the
+   * neighbouring maps, it should be able to cross the border"): the two maps' pair graph (the map builder's <a>_<b>-gh)
+   * when it goes from one into the other — `current` if it is one of them — else the first point's map's own, as before.
+   * Two maps not joined, or a third country, fail in words. shortcut: one border a route.
+   */
+  async graphFor(points, current) {
+    const { maps } = await this.info()
+    const sets = points.map(p => maps.filter(m => m.bounds && p.lng >= m.bounds[0] && p.lat >= m.bounds[1] && p.lng <= m.bounds[2] && p.lat <= m.bounds[3]))
+    const own = sets[0][0] ?? maps[0]
+    const dir = id => path.join(this.root, `${id ?? 'greece'}-gh`)
+    if (sets.some(s => !s.length)) return dir(own?.id)
+    const pairs = []
+    for (const x of sets[0]) for (const y of new Set(sets.flat())) {
+      const d = path.join(this.root, `${[x.id, y.id].sort().join('_')}-gh`)
+      if (y !== x && sets.every(s => s.includes(x) || s.includes(y)) && fs.existsSync(path.join(d, 'properties'))) pairs.push(d)
+    }
+    if (pairs.length) return pairs.includes(current) ? current : pairs[0]
+    // named in the words: a map not joined with the start's, else (a third country) the first one away from it
+    const joined = m => m === own || fs.existsSync(path.join(this.root, `${[own.id, m.id].sort().join('_')}-gh`, 'properties'))
+    const away = sets.find(s => !s.some(joined)) ?? sets.find(s => !s.includes(own))
+    const name = m => m.name[0].toUpperCase() + m.name.slice(1) // a map without a manifest is named by its id
+    if (away) throw new Error(t('maps.notJoined', { a: name(own), b: name(away[0]) }))
+    return dir(own.id)
+  }
+
   /** Each map's `<id>-<kind>.tsv` that is there. */
   async tsvs(kind) {
     const out = []

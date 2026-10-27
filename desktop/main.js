@@ -28,7 +28,7 @@ let calls = null
 const timer = require('./timer')
 const { Maps, labelsIn } = require('./maps')
 const { Router } = require('./router')
-const { MapBuilder, ALL } = require('./mapbuild')
+const { MapBuilder } = require('./mapbuild')
 const { Thumbs } = require('./thumbs')
 const importer = require('./importer')
 const i18n = require('./i18n')
@@ -748,11 +748,10 @@ app.whenReady().then(() => {
   ipcMain.handle('maps:search', (_, q) => maps.search(q))
   ipcMain.handle('maps:describe', (_, lat, lng, road) => maps.describe(lat, lng, road))
   ipcMain.handle('maps:near', (_, lat, lng, name) => maps.near(lat, lng, name))
-  // the roads of every map (all-gh, so a route crosses a border) when they hold the map the route starts in, else that map's own
+  // the roads of the map the route starts in, or of two neighbours joined when it crosses from one into the other
   ipcMain.handle('maps:route', async (_, points, mode, main) => {
-    const m = (await maps.mapAt(points?.[0]?.lat, points?.[0]?.lng)) ?? (await maps.info()).maps[0]
-    const joined = fs.existsSync(path.join(maps.root, ALL, 'properties')) ? await fs.promises.readFile(path.join(maps.root, ALL, 'maps.txt'), 'utf8').then(t => t.split('\n'), () => []) : []
-    const dir = path.join(maps.root, m && joined.includes(m.id) ? ALL : `${m?.id ?? 'greece'}-gh`)
+    const dir = Array.isArray(points) && points.length && points.every(p => Number.isFinite(p?.lat) && Number.isFinite(p?.lng))
+      ? await maps.graphFor(points, router.graphDir) : path.join(maps.root, 'greece-gh') // router.route says what is wrong
     if (router.graphDir !== dir) { router.stop(); router.graphDir = dir }
     return router.route(points, mode, !!main)
   })

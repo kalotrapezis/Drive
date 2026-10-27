@@ -11,9 +11,11 @@
  *   <id>-lanes.tsv      lane arrows (maps-tools/maps-lanes.py)
  *   <id>-phone.tsv      the country's area codes with their places, for the Phone (maps-tools/maps-phone.py, libphonenumber's data)
  *   <id>.json           {"name","region","built","bounds":[w,s,e,n],"drive":"right"|"left"}, written last: a pack without it is half there
- *   all-gh/             the roads of every map at once, so a route crosses from one into its neighbour (the user, 27 Oct: "When we
- *                       have both the neighbouring maps, it should be able to cross the border"); its maps.txt lists them, one id a line.
- *                       Made whenever a map is built and another is there, from each region's .osm.pbf, kept in ~/Tetra-maps/osm.
+ *   <a>_<b>-gh/         two neighbouring maps' roads joined at their border (ids sorted: greece_macedonia-gh), so a route crosses
+ *                       from one into the other (the user, 27 Oct: "When we have both the neighbouring maps, it should be able to cross
+ *                       the border"); one graph a pair, not one of every map, so the memory stays two countries' however many maps
+ *                       there are ("Break it into pieces"). Made after the map is installed, one pair at a time, from each region's
+ *                       .osm.pbf kept in ~/Tetra-maps/osm; Retry goes on at the pair it stopped at.
  *
  * Greece's pack, made by Drive-Android's tools/maps-greece.sh, is "greece" (Geofabrik's id), so it updates here too.
  * Nobody opens a terminal: pmtiles and GraphHopper are fetched into ~/Tetra-maps/bin the first time; what only the system
@@ -42,11 +44,31 @@ const PACKAGES = { 'openjdk-17-jre-headless': 'java', 'python3-pyosmium': 'osmiu
 /** The AppImage's own Python with osmium (scripts/bundle-tools.sh), else the system's. */
 const PYTHON = [BUNDLED && path.join(BUNDLED, 'python', 'bin', 'python3'), '/usr/bin/python3'].find(p => p && fs.existsSync(p)) ?? '/usr/bin/python3'
 /** The steps as the wizard shows them, in order. */
-const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'borders', 'install']
-/** Each region's roads and places as downloaded, kept for the next combined graph (all-gh). */
+const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install', 'borders']
+/** Each region's roads and places as downloaded, and its .poly border, kept for its neighbours' pair graphs. */
 const OSM = path.join(WORK, 'osm')
-/** The roads of every map at once. */
-const ALL = 'all-gh'
+/** Two neighbouring maps' joined roads: "greece_macedonia-gh" (Android's MapsFiles.pair). */
+const pairDir = (a, b) => `${[a, b].sort().join('_')}-gh`
+/**
+ * About how many minutes a pair graph of `bytes` of .osm.pbf takes here: the merge, then GraphHopper's shortcuts for its four
+ * profiles, as many at once as there are cores. Measured 27 Oct: Greece + North Macedonia, 372 MB, 3.5 min to merge, 48 min
+ * for the graph with 3 threads (two rounds of profiles). shortcut: linear in size, one machine's numbers; good for "about".
+ */
+const minutes = (bytes, cores = os.cpus().length) => Math.max(2, Math.round(bytes / 372e6 * (3.5 + 24 * Math.ceil(4 / Math.min(4, cores)))))
+
+/** Whether two regions' borders (GeoJSON MultiPolygons) meet: Geofabrik draws each a little beyond the line, so neighbours' overlap. */
+function meet(a, b) {
+  const inside = ([x, y], ring) => {
+    let c = false
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j]
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c
+    }
+    return c
+  }
+  const rings = g => g.coordinates.map(p => p[0])
+  return rings(a).some(ra => rings(b).some(rb => ra.some(p => inside(p, rb)) || rb.some(p => inside(p, ra))))
+}
 /** Whether the internet answers: Geofabrik's front page, within 8 s (the user, 27 Oct: "maybe an internet connection check?"). */
 const online = () => fetch('https://download.geofabrik.de/', { method: 'HEAD', signal: AbortSignal.timeout(8000) }).then(() => true, () => false)
 
@@ -129,10 +151,37 @@ class MapBuilder {
     const head = await needsNet(() => fetch(r.pbf, { method: 'HEAD' }))
     const osm = +(head.headers.get('content-length') ?? 0)
     const free = await fsp.statfs(fs.existsSync(WORK) ? WORK : os.homedir()).then(f => f.bavail * f.bsize, () => Infinity)
-    // the combined graph of every map (all-gh) is the biggest piece of work
-    let all = osm
-    for (const other of (await this.packs()).filter(p => p.id !== id)) all += await fsp.stat(this.kept(other.id)).then(s => s.size, () => 0)
-    return { osm, memory: Math.max(1e9, all * 12), hasMemory: os.totalmem(), disk: osm * 7 + (all - osm) * 6 + 5e8, hasDisk: free }
+    // each neighbour here makes a pair graph with it: the biggest pair is the memory, all of them the time
+    const pairs = []
+    for (const n of await this.neighbours(r)) {
+      const bytes = await fsp.stat(this.kept(n.id)).then(st => st.size, async () => +((await fetch(n.pbf, { method: 'HEAD' })).headers.get('content-length') ?? 0))
+      pairs.push({ name: n.name, bytes: osm + bytes })
+    }
+    const biggest = Math.max(osm, ...pairs.map(p => p.bytes))
+    return { osm, memory: Math.max(1e9, biggest * 12), hasMemory: os.totalmem(), disk: osm * 7 + pairs.reduce((a, p) => a + p.bytes * 5, 0) + 5e8, hasDisk: free,
+      borders: pairs.map(p => p.name), minutes: pairs.reduce((a, p) => a + minutes(p.bytes), 0) }
+  }
+
+  /** Region `r`'s border, Geofabrik's .poly, kept in ~/Tetra-maps/osm. */
+  async poly(r, signal) {
+    const f = path.join(OSM, `${r.id}.poly`)
+    if (!fs.existsSync(f)) {
+      const res = await needsNet(() => fetch(r.pbf.replace(/-latest\.osm\.pbf$/, '.poly'), { signal }))
+      if (!res.ok) throw new Error(`Geofabrik: ${res.status}`)
+      await fsp.mkdir(OSM, { recursive: true })
+      await fsp.writeFile(f, await res.text())
+    }
+    return polyToGeoJson(await fsp.readFile(f, 'utf8'))
+  }
+
+  /** The maps here whose region's border meets region `r`'s, as regions of the list with the map's name. */
+  async neighbours(r, signal) {
+    const regions = await this.regions(), mine = await this.poly(r, signal), out = []
+    for (const p of await this.packs()) {
+      const n = regions.find(x => x.id === p.id)
+      if (n && n.id !== r.id && meet(mine, await this.poly(n, signal))) out.push({ ...n, name: p.name })
+    }
+    return out
   }
 
   /** The packs in Files/Maps: each .pmtiles with its manifest, when there. */
@@ -153,16 +202,13 @@ class MapBuilder {
     return out.sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  /**
-   * The pack's files to Tetra's Trash (`trash(rel)`, so the removal reaches the phone and tablet); the combined roads too when
-   * one map is left. shortcut: with two or more left, all-gh keeps the removed map's roads until the next build makes it anew.
-   */
+  /** The pack's files and its pair graphs to Tetra's Trash (`trash(rel)`, so the removal reaches the phone and tablet). */
   async remove(id, trash) {
     if (!/^[a-z0-9-]+$/.test(id)) throw new Error('Not a map.')
     for (const n of await fsp.readdir(this.root)) {
-      if (n === `${id}.pmtiles` || n === `${id}.json` || n === `${id}-gh` || (n.startsWith(`${id}-`) && n.endsWith('.tsv') && /^[a-z]+\.tsv$/.test(n.slice(id.length + 1)))) await trash(`Maps/${n}`)
+      if (n === `${id}.pmtiles` || n === `${id}.json` || n === `${id}-gh` || (n.startsWith(`${id}-`) && n.endsWith('.tsv') && /^[a-z]+\.tsv$/.test(n.slice(id.length + 1))) ||
+        (/^[a-z0-9-]+_[a-z0-9-]+-gh$/.test(n) && n.slice(0, -3).split('_').includes(id))) await trash(`Maps/${n}`)
     }
-    if ((await this.packs()).length < 2 && fs.existsSync(path.join(this.root, ALL))) await trash(`Maps/${ALL}`)
     await fsp.rm(path.join(OSM, `${id}.osm.pbf`), { force: true })
   }
 
@@ -223,7 +269,8 @@ class MapBuilder {
     await fsp.mkdir(dir, { recursive: true })
     const log = fs.createWriteStream(path.join(dir, 'build.log'), { flags: 'a' })
     let step = null
-    const tell = (state, more = {}) => this.progress({ id, step, state, ...more })
+    let extra = {}
+    const tell = (state, more = {}) => this.progress({ id, step, state, ...extra, ...more })
     const at = s => { step = s; tell('running'); log.write(`\n== ${s} ${new Date().toISOString()}\n`) }
     const run = (cmd, args, opts = {}) => new Promise((resolve, reject) => {
       if (job.cancelled) return reject(new Error('cancelled'))
@@ -251,10 +298,10 @@ class MapBuilder {
       if (md5 && hash.digest('hex') !== md5) throw new Error('The download arrived damaged; try again.')
       await fsp.rename(to + '.part', to)
     }
-    /** Step `s`: passed over when a run before finished it; a download tried again once after a pause before it fails. */
-    const stage = async (s, work, tries = 1) => {
+    /** Step `s` (its part `part`): passed over when a run before finished it; a download tried again once after a pause before it fails. */
+    const stage = async (s, work, tries = 1, part = s) => {
       at(s)
-      const mark = path.join(dir, `.done-${s}`)
+      const mark = path.join(dir, `.done-${part}`)
       if (fs.existsSync(mark)) { log.write('done before\n'); return }
       for (let i = 1; ; i++) {
         try { await work(); break } catch (e) {
@@ -294,10 +341,10 @@ class MapBuilder {
 
       /** GraphHopper's graph of `pbf` into the work folder's `gh`. */
       const graph = async (pbf, gh) => {
-        const heap = Math.max(1, Math.floor(os.totalmem() / 1e9 * 0.6))
+        const heap = Math.max(1, Math.floor(os.totalmem() / 1e9 * 0.6)), cores = os.cpus().length // every core (the user, 27 Oct)
         await fsp.rm(path.join(dir, gh), { recursive: true, force: true })
         await fsp.writeFile(path.join(dir, `${gh}.yml`), `graphhopper:\n  datareader.file: ${pbf}\n  graph.location: ${gh}\n${PROFILES}` +
-          '  prepare.min_network_size: 200\n  prepare.subnetworks.threads: 4\n  prepare.ch.threads: 3\n  graph.dataaccess.default_type: RAM_STORE\n')
+          `  prepare.min_network_size: 200\n  prepare.subnetworks.threads: ${cores}\n  prepare.ch.threads: ${cores}\n  graph.dataaccess.default_type: RAM_STORE\n`)
         await run(findJava(), [`-Xmx${heap}g`, '-jar', path.join(BIN, JAR), 'import', `${gh}.yml`])
         await fsp.rm(path.join(dir, gh, 'gh.lock'), { force: true })
       }
@@ -316,29 +363,34 @@ class MapBuilder {
         if (iso) await run(PYTHON, ['-I', 'maps-phone.py', iso, `${id}-phone.tsv`]).catch(e => { if (job.cancelled) throw e; log.write(`no phone table: ${e.message}\n`) })
       })
 
-      // the roads of this map and every other one here, joined at their borders; a map not of Geofabrik's list stays out
-      await stage('borders', async () => {
-        const regions = await this.regions()
-        const others = (await this.packs()).filter(p => p.id !== id).map(p => regions.find(r => r.id === p.region)).filter(Boolean)
-        await fsp.rm(path.join(dir, ALL), { recursive: true, force: true })
-        if (!others.length) return
+      await stage('install', async () => {
+        await this.install(region, dir, await this.regions())
         await fsp.mkdir(OSM, { recursive: true })
-        for (const r of others) {
-          if (fs.existsSync(this.kept(r.id))) continue
-          const md5 = (await fetch(r.pbf + '.md5', { signal: job.abort.signal }).then(x => x.text())).trim().split(/\s+/)[0]
-          await get(r.pbf, this.kept(r.id), md5)
-        }
-        await fsp.writeFile(path.join(dir, 'maps-merge.py'), await fsp.readFile(path.join(__dirname, 'maps-tools', 'maps-merge.py')))
-        await run(PYTHON, ['-I', 'maps-merge.py', 'all.osm.pbf', 'region.osm.pbf', ...others.map(r => this.kept(r.id))])
-        await graph('all.osm.pbf', ALL)
-        await fsp.rm(path.join(dir, 'all.osm.pbf'), { force: true })
-        await fsp.writeFile(path.join(dir, ALL, 'maps.txt'), [id, ...others.map(r => r.id)].join('\n') + '\n')
-      }, 2)
+        await fsp.rename(path.join(dir, 'region.osm.pbf'), path.join(OSM, `${id}.osm.pbf`))
+      })
 
-      at('install')
-      await this.install(region, dir, await this.regions())
-      await fsp.mkdir(OSM, { recursive: true })
-      await fsp.rename(path.join(dir, 'region.osm.pbf'), path.join(OSM, `${id}.osm.pbf`))
+      // a pair graph with each neighbour here, one at a time, each its own mark (the user, 27 Oct: "Break it into pieces")
+      at('borders')
+      const near = await this.neighbours(region, job.abort.signal)
+      const pairs = near.map(n => ({ name: `${region.name} + ${n.name}`, state: fs.existsSync(path.join(dir, `.done-borders-${n.id}`)) ? 'done' : 'waiting' }))
+      extra = { pairs }
+      for (const [i, n] of near.entries()) {
+        if (pairs[i].state !== 'done') pairs[i].state = 'running'
+        await stage('borders', async () => {
+          if (!fs.existsSync(this.kept(n.id))) {
+            const md5 = (await fetch(n.pbf + '.md5', { signal: job.abort.signal }).then(x => x.text())).trim().split(/\s+/)[0]
+            await get(n.pbf, this.kept(n.id), md5)
+          }
+          await fsp.writeFile(path.join(dir, 'maps-merge.py'), await fsp.readFile(path.join(__dirname, 'maps-tools', 'maps-merge.py')))
+          await run(PYTHON, ['-I', 'maps-merge.py', 'pair.osm.pbf', this.kept(id), this.kept(n.id)])
+          const gh = pairDir(id, n.id)
+          await graph('pair.osm.pbf', gh)
+          await fsp.rm(path.join(dir, 'pair.osm.pbf'), { force: true })
+          await this.swapIn(path.join(dir, gh), gh)
+          await fsp.rm(path.join(dir, gh), { recursive: true, force: true })
+        }, 2, `borders-${n.id}`)
+        pairs[i].state = 'done'
+      }
       await fsp.rm(dir, { recursive: true, force: true })
       step = null
       tell('done')
@@ -371,6 +423,16 @@ class MapBuilder {
     if (!fs.existsSync(path.join(BIN, JAR))) await get(URLS.jar, path.join(BIN, JAR))
   }
 
+  /** Graph folder `from` into Files/Maps as `name`: copied beside the old one, then swapped in. */
+  async swapIn(from, name) {
+    const gh = path.join(this.root, name), part = path.join(this.root, `.${name}.part`)
+    await fsp.rm(part, { recursive: true, force: true })
+    await fsp.cp(from, part, { recursive: true })
+    // the same names as the old graph's, so sync carries each file as changed; a file the new one lacks goes with the old
+    await fsp.rm(gh, { recursive: true, force: true })
+    await fsp.rename(part, gh)
+  }
+
   /** Into Files/Maps: each file beside its old one and renamed over it, the roads as a folder swapped in, the manifest last. */
   async install(region, dir, regions) {
     const id = region.id
@@ -381,19 +443,7 @@ class MapBuilder {
       await fsp.copyFile(path.join(dir, n), part)
       await fsp.rename(part, path.join(this.root, n))
     }
-    const gh = path.join(this.root, `${id}-gh`), part = path.join(this.root, `.${id}-gh.part`)
-    await fsp.rm(part, { recursive: true, force: true })
-    await fsp.cp(path.join(dir, `${id}-gh`), part, { recursive: true })
-    // the same names as the old graph's, so sync carries each file as changed; a file the new one lacks goes with the old
-    await fsp.rm(gh, { recursive: true, force: true })
-    await fsp.rename(part, gh)
-    if (fs.existsSync(path.join(dir, ALL))) {
-      const all = path.join(this.root, ALL), allPart = path.join(this.root, `.${ALL}.part`)
-      await fsp.rm(allPart, { recursive: true, force: true })
-      await fsp.cp(path.join(dir, ALL), allPart, { recursive: true })
-      await fsp.rm(all, { recursive: true, force: true })
-      await fsp.rename(allPart, all)
-    }
+    await this.swapIn(path.join(dir, `${id}-gh`), `${id}-gh`)
     const iso = isoOf(region, regions)
     const manifest = { name: region.name, region: id, built: new Date().toISOString().slice(0, 10), bounds: pmtilesBounds(path.join(this.root, `${id}.pmtiles`)),
       drive: LEFT.has(iso) ? 'left' : 'right' }
@@ -402,4 +452,4 @@ class MapBuilder {
   }
 }
 
-module.exports = { MapBuilder, STEPS, PACKAGES, ALL, polyToGeoJson, pmtilesBounds, LEFT, online, isOld }
+module.exports = { MapBuilder, STEPS, PACKAGES, pairDir, meet, minutes, polyToGeoJson, pmtilesBounds, LEFT, online, isOld }

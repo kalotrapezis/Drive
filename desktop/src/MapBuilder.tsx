@@ -11,7 +11,7 @@ import { locale, t } from './i18n'
  * and Add a map, which walks through the builder (mapbuild.js). Sync carries a new map to the phone and tablet.
  */
 
-const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'borders', 'install'] as const
+const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install', 'borders'] as const
 /** The free projects the maps are made of, with where to give (the welcome page). */
 const CREDITS = [
   { name: 'OpenStreetMap', key: 'osm', url: 'https://donate.openstreetmap.org/', give: true },
@@ -137,6 +137,8 @@ function Wizard({ page, setPage, progress, start, onClose }:
             <p>{t('mapbuild.download', { size: size(needs.osm) })} · {t('mapbuild.memory', { need: size(needs.memory), has: size(needs.hasMemory) })}</p>
             {tooBig && <p className="error">{t('mapbuild.tooBig')}</p>}
             {tooBig && <div className="map-parts">{parts.map(r => <button key={r.id} className="text-button" onClick={() => choose(r)}>{r.name}</button>)}</div>}
+            {/* the pair graphs with the maps next to it take long: said before it starts (the user, 27 Oct) */}
+            {!!needs.borders.length && <p className="muted">{t('mapbuild.bordersNote', { maps: needs.borders.join(', '), minutes: needs.minutes })}</p>}
             {noRoom && <p className="error">{t('mapbuild.noRoom', { need: size(needs.disk), has: size(needs.hasDisk) })}</p>}
           </div>}
           {said && <p className="error">{said}</p>}
@@ -166,6 +168,10 @@ function Wizard({ page, setPage, progress, start, onClose }:
                 {/* the step being done turns (the user, 27 Oct: "it takes a bit to show up, add a spinner") */}
                 {state === 'now' ? <span className="spinner" /> : <Icon name={state === 'done' ? 'checked' : state === 'failed' ? 'warning' : 'unchecked'} size={18} />}
                 <span>{t(`mapbuild.step.${s}`)}{state === 'now' && progress?.total ? ` · ${size(progress.done ?? 0)} / ${size(progress.total)}` : ''}</span>
+                {/* a line for each pair of neighbouring maps being joined */}
+                {s === 'borders' && !!progress?.pairs?.length && <ul className="map-pairs">{progress.pairs.map(p => <li key={p.name} className={p.state}>
+                  {p.state === 'running' && state !== 'failed' ? <span className="spinner" /> : <Icon name={p.state === 'done' ? 'checked' : 'unchecked'} size={16} />}<span>{p.name}</span>
+                </li>)}</ul>}
               </li>
             })}
           </ol>

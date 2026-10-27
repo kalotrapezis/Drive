@@ -5,7 +5,7 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { MapBuilder, STEPS, ALL, polyToGeoJson, pmtilesBounds, isOld } = require('../mapbuild')
+const { MapBuilder, STEPS, pairDir, meet, minutes, polyToGeoJson, pmtilesBounds, isOld } = require('../mapbuild')
 const { Maps, labelsIn } = require('../maps')
 
 /** A .pmtiles file holding only its header, with bounds west, south, east, north. */
@@ -53,19 +53,37 @@ test('two countries: each map read, routed and searched by where it is; a remove
   await assert.rejects(b.remove('../x', () => {}))
 })
 
-test('the roads of every map (all-gh) go with the last but one map', async () => {
+test('two neighbours joined: their pair graph for a route from one into the other, their own within one; Remove takes the pair', async () => {
   const root = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tetra-')), 'Maps')
-  fs.mkdirSync(path.join(root, ALL), { recursive: true })
-  fs.writeFileSync(path.join(root, ALL, 'maps.txt'), 'greece\nmacedonia\ncyprus\n')
-  for (const id of ['greece', 'macedonia', 'cyprus']) pmtiles(path.join(root, `${id}.pmtiles`), 20, 40, 23, 42)
+  fs.mkdirSync(root, { recursive: true })
+  pmtiles(path.join(root, 'greece.pmtiles'), 18.97, 34.59, 29.66, 41.75)
+  pmtiles(path.join(root, 'macedonia.pmtiles'), 20.45, 40.85, 23.04, 42.37)
+  pmtiles(path.join(root, 'cyprus.pmtiles'), 31, 34, 35, 36)
+  fs.writeFileSync(path.join(root, 'macedonia.json'), JSON.stringify({ name: 'North Macedonia', bounds: [20.45, 40.85, 23.04, 42.37] }))
+  const pair = path.join(root, pairDir('macedonia', 'greece'))
+  assert.strictEqual(path.basename(pair), 'greece_macedonia-gh')
+  const maps = new Maps(root, async () => {})
+  const thess = { lat: 40.64, lng: 22.94 }, skopje = { lat: 41.99, lng: 21.43 }, athens = { lat: 37.98, lng: 23.73 }
+  await assert.rejects(maps.graphFor([thess, skopje]), /North Macedonia/) // not joined yet
+  fs.mkdirSync(pair); fs.writeFileSync(path.join(pair, 'properties'), 'x')
+  assert.strictEqual(await maps.graphFor([thess, skopje]), pair)
+  assert.strictEqual(await maps.graphFor([skopje, athens]), pair)
+  assert.strictEqual(await maps.graphFor([thess, athens]), path.join(root, 'greece-gh')) // as before
+  await assert.rejects(maps.graphFor([thess, { lat: 35.17, lng: 33.36 }]), /cyprus/i)
+  await assert.rejects(maps.graphFor([skopje, thess, { lat: 35.17, lng: 33.36 }]), /cyprus/i) // a third country
   const trashed = []
-  const b = new MapBuilder(root)
-  const trash = async rel => { trashed.push(rel); fs.rmSync(path.join(root, '..', rel), { recursive: true }) }
-  await b.remove('cyprus', trash)
-  assert.ok(fs.existsSync(path.join(root, ALL)))
-  await b.remove('macedonia', trash)
-  assert.deepStrictEqual(trashed, ['Maps/cyprus.pmtiles', 'Maps/macedonia.pmtiles', `Maps/${ALL}`])
-  assert.ok(STEPS.indexOf('borders') > STEPS.indexOf('roads') && STEPS.indexOf('borders') < STEPS.indexOf('install'))
+  await new MapBuilder(root).remove('macedonia', async rel => { trashed.push(rel); fs.rmSync(path.join(root, '..', rel), { recursive: true }) })
+  assert.deepStrictEqual(trashed.sort(), ['Maps/greece_macedonia-gh', 'Maps/macedonia.json', 'Maps/macedonia.pmtiles'])
+  assert.ok(STEPS.indexOf('borders') > STEPS.indexOf('install'))
+})
+
+test('neighbours by their Geofabrik borders: they overlap a little; a pair takes about its size in time', () => {
+  const box = (w, s, e, n) => ({ type: 'MultiPolygon', coordinates: [[[[w, s], [e, s], [e, n], [w, n], [w, s]]]] })
+  assert.ok(meet(box(20, 39, 26, 41.1), box(20.4, 40.8, 23, 42.4)))
+  assert.ok(!meet(box(20, 39, 26, 41.1), box(32, 34.5, 34.7, 35.8)))
+  assert.ok(meet(box(0, 0, 10, 10), box(2, 2, 3, 3))) // one inside the other
+  assert.strictEqual(minutes(372e6, 3), 52) // as measured: 48 min with 3 threads, and the merge
+  assert.ok(minutes(372e6, 16) < 30 && minutes(1e6, 16) === 2)
 })
 
 test('a map is old 3 months after it was made (30 Nov: the last of February), Greece\'s older pack by its file date', async () => {
