@@ -859,7 +859,6 @@
  "maps.whereIAm": "Unde sunt (întreabă telefonul)",
  "maps.waitingPhone": "Se așteaptă locația telefonului…",
  "maps.waitingPhoneHint": "Tetra este în fundal acolo? Atinge notificarea ei.",
- "maps.missing": "Harta nu este încă pe acest computer: {file} vine de la {tool} sau de pe telefon prin sincronizare.",
  "maps.searchPlaceholder": "Caută locuri, adrese, orașe",
  "maps.fewer": "Mai puține",
  "maps.more": "Mai multe… ({n})",
@@ -1952,7 +1951,7 @@
  "mapbuild.pairTooBig": "Unirea {a} și {b} cere aproximativ {need} de memorie; acest computer are {has}. Ambele hărți funcționează, dar traseele nu vor trece acea graniță.",
  "mapbuild.step.install": "Se instalează în Tetra",
  "mapbuild.step.send": "Se trimite pe telefonul și tableta ta",
- "mapbuild.buildNote": "Durează de la câteva minute la o oră, în funcție de țară. Poți închide această fereastră; Tetra continuă să lucreze.",
+ "mapbuild.buildNote": "Durează de la câteva minute la o oră sau mai mult, în funcție de țară. Ține computerul pornit și conectat la priză. Poți închide această fereastră; Tetra continuă să lucreze.",
  "mapbuild.stop": "Oprește",
  "mapbuild.hide": "Închide",
  "mapbuild.doneTitle": "Harta este gata: {name}",
@@ -1961,5 +1960,8 @@
  "mapbuild.failed": "Harta nu a putut fi făcută: {error}",
  "mapbuild.offline": "Nu există conexiune la internet. Hărțile se descarcă, așa că conectează-te și încearcă din nou.",
  "mapbuild.waitingNet": "Nu există conexiune la internet. Continuă singur când revine conexiunea.",
- "mapbuild.tryAgain": "Încearcă din nou"
+ "mapbuild.tryAgain": "Încearcă din nou",
+ "maps.welcome": "Bun venit în Hărți",
+ "maps.welcomeBody": "Tetra vine fără hartă, ca fiecare să aibă harta pe care o vrea, offline și a lui. Fă-ți-o pe a ta aici: alege-ți țara, ține computerul pornit și conectat la priză cât timp se face (câteva minute pentru o țară mică, o oră sau mai mult pentru una mare), iar ea ajunge singură pe telefonul și pe tableta ta.",
+ "maps.welcomeMake": "Fă o hartă…"
 }

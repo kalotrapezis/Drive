@@ -827,7 +827,6 @@
  "maps.whereIAm": "Hol vagyok (lekérdezi a telefont)",
  "maps.waitingPhone": "Várakozás a telefon helyzetére…",
  "maps.waitingPhoneHint": "A Tetra fut a háttérben azon a telefonon? Koppints az értesítésére.",
- "maps.missing": "A térkép még nincs ezen a számítógépen: a(z) {file} a(z) {tool} eszközből vagy a telefonról, szinkronizálással érkezik.",
  "maps.searchPlaceholder": "Helyek, címek, városok keresése",
  "maps.fewer": "Kevesebb",
  "maps.more": "Több… ({n})",
@@ -1865,7 +1864,7 @@
  "mapbuild.pairTooBig": "{a} és {b} összekötéséhez kb. {need} memória kell; ennek a számítógépnek {has} van. Mindkét térkép működik, de az útvonalak nem lépik át ezt a határt.",
  "mapbuild.step.install": "Telepítés a Tetrába",
  "mapbuild.step.send": "Küldés a telefonodra és a táblagépedre",
- "mapbuild.buildNote": "Országtól függően néhány perctől egy óráig tart. Bezárhatod ezt az ablakot; a Tetra tovább dolgozik.",
+ "mapbuild.buildNote": "Országtól függően néhány perctől egy óráig vagy tovább tart. Tartsd bekapcsolva és hálózatra csatlakoztatva a számítógépet. Bezárhatod ezt az ablakot; a Tetra tovább dolgozik.",
  "mapbuild.stop": "Leállítás",
  "mapbuild.hide": "Bezárás",
  "mapbuild.doneTitle": "Kész a térkép: {name}",
@@ -1874,5 +1873,8 @@
  "mapbuild.failed": "A térképet nem sikerült elkészíteni: {error}",
  "mapbuild.offline": "Nincs internetkapcsolat. A térképek letöltődnek, ezért csatlakozz, és próbáld újra.",
  "mapbuild.waitingNet": "Nincs internetkapcsolat. Magától folytatódik, amikor visszatér a kapcsolat.",
- "mapbuild.tryAgain": "Próbáld újra"
+ "mapbuild.tryAgain": "Próbáld újra",
+ "maps.welcome": "Üdvözlünk a Térképekben",
+ "maps.welcomeBody": "A Tetra térkép nélkül érkezik, hogy mindenki azt a térképet kapja, amit szeretne, offline és a sajátja. Készítsd el a tiédet itt: válaszd ki az országodat, tartsd bekapcsolva és hálózatra csatlakoztatva a számítógépet, amíg készül (pár perc egy kis országnál, egy óra vagy több egy nagynál), és magától megy a telefonodra és a táblagépedre.",
+ "maps.welcomeMake": "Térkép készítése…"
 }

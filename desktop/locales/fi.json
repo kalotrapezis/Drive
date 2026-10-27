@@ -827,7 +827,6 @@
  "maps.whereIAm": "Missä olen (kysyy puhelimelta)",
  "maps.waitingPhone": "Odotetaan puhelimen sijaintia…",
  "maps.waitingPhoneHint": "Onko Tetra taustalla siellä? Napauta sen ilmoitusta.",
- "maps.missing": "Karttaa ei ole vielä tässä tietokoneessa: {file} tulee työkalusta {tool} tai puhelimesta synkronoinnilla.",
  "maps.searchPlaceholder": "Hae paikkoja, osoitteita, kaupunkeja",
  "maps.fewer": "Vähemmän",
  "maps.more": "Lisää… ({n})",
@@ -1865,7 +1864,7 @@
  "mapbuild.pairTooBig": "{a} ja {b} yhdistäminen vaatii noin {need} muistia; tässä tietokoneessa on {has}. Molemmat kartat toimivat, mutta reitit eivät ylitä tätä rajaa.",
  "mapbuild.step.install": "Asennetaan Tetraan",
  "mapbuild.step.send": "Lähetetään puhelimeen ja tablettiin",
- "mapbuild.buildNote": "Tämä kestää muutamasta minuutista tuntiin maasta riippuen. Voit sulkea tämän ikkunan; Tetra jatkaa työtä.",
+ "mapbuild.buildNote": "Tämä kestää muutamasta minuutista tuntiin tai pidempäänkin maasta riippuen. Pidä tietokone päällä ja kiinni virtalähteessä. Voit sulkea tämän ikkunan; Tetra jatkaa työtä.",
  "mapbuild.stop": "Pysäytä",
  "mapbuild.hide": "Sulje",
  "mapbuild.doneTitle": "Kartta on valmis: {name}",
@@ -1874,5 +1873,8 @@
  "mapbuild.failed": "Karttaa ei voitu tehdä: {error}",
  "mapbuild.offline": "Ei internetyhteyttä. Kartat ladataan verkosta, joten yhdistä ja yritä uudelleen.",
  "mapbuild.waitingNet": "Ei internetyhteyttä. Jatkuu itsestään, kun yhteys palaa.",
- "mapbuild.tryAgain": "Yritä uudelleen"
+ "mapbuild.tryAgain": "Yritä uudelleen",
+ "maps.welcome": "Tervetuloa Karttoihin",
+ "maps.welcomeBody": "Tetra tulee ilman karttaa, jotta jokainen saa juuri haluamansa kartan, offline-tilassa ja omanaan. Tee omasi tässä: valitse maasi, pidä tietokone päällä ja kiinni virtalähteessä, kun karttaa tehdään (muutama minuutti pienelle maalle, tunti tai enemmän isolle), ja se siirtyy itsestään puhelimeesi ja tablettiisi.",
+ "maps.welcomeMake": "Tee kartta…"
 }

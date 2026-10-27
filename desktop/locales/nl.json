@@ -827,7 +827,6 @@
  "maps.whereIAm": "Waar ik ben (vraagt de telefoon)",
  "maps.waitingPhone": "Wachten op de locatie van de telefoon…",
  "maps.waitingPhoneHint": "Draait Tetra daar op de achtergrond? Tik op de melding.",
- "maps.missing": "De kaart staat nog niet op deze computer: {file} komt van {tool} of van de telefoon via sync.",
  "maps.searchPlaceholder": "Plaatsen, adressen, steden zoeken",
  "maps.fewer": "Minder",
  "maps.more": "Meer… ({n})",
@@ -1865,7 +1864,7 @@
  "mapbuild.pairTooBig": "{a} en {b} verbinden vraagt ongeveer {need} geheugen; deze computer heeft {has}. Beide kaarten werken, maar routes gaan niet over die grens.",
  "mapbuild.step.install": "Installeren in Tetra",
  "mapbuild.step.send": "Naar je telefoon en tablet sturen",
- "mapbuild.buildNote": "Dit duurt van een paar minuten tot een uur, afhankelijk van het land. Je kunt dit venster sluiten; Tetra werkt door.",
+ "mapbuild.buildNote": "Dit duurt van een paar minuten tot een uur of langer, afhankelijk van het land. Laat de computer aan en op het stopcontact aangesloten. Je kunt dit venster sluiten; Tetra werkt door.",
  "mapbuild.stop": "Stoppen",
  "mapbuild.hide": "Sluiten",
  "mapbuild.doneTitle": "De kaart van {name} is klaar",
@@ -1874,5 +1873,8 @@
  "mapbuild.failed": "De kaart kon niet worden gemaakt: {error}",
  "mapbuild.offline": "Geen internetverbinding. Kaarten worden gedownload, dus maak verbinding en probeer het opnieuw.",
  "mapbuild.waitingNet": "Geen internetverbinding. Het gaat vanzelf verder zodra de verbinding terug is.",
- "mapbuild.tryAgain": "Opnieuw proberen"
+ "mapbuild.tryAgain": "Opnieuw proberen",
+ "maps.welcome": "Welkom bij Kaarten",
+ "maps.welcomeBody": "Tetra wordt zonder kaart geleverd, zodat iedereen de kaart krijgt die hij wil, offline en helemaal eigen. Maak hier de jouwe: kies je land, laat de computer aan en op het stopcontact aangesloten terwijl de kaart wordt gemaakt (een paar minuten voor een klein land, een uur of langer voor een groot land), en hij gaat vanzelf naar je telefoon en tablet.",
+ "maps.welcomeMake": "Kaart maken…"
 }

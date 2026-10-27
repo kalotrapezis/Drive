@@ -307,7 +307,11 @@ export function App() {
   else if (page.kind === 'notes') content = <NotesPage setDialog={setDialog} say={say} />
   else if (page.kind === 'calendar') content = <CalendarPage setDialog={setDialog} say={say} />
   else if (page.kind === 'timer') content = <TimerPage say={say} />
-  else if (page.kind === 'maps') content = <MapsPage say={say} />
+  // Maps with no map: Settings › Maps with the builder open
+  else if (page.kind === 'maps') content = <MapsPage say={say} onMakeMap={() => {
+    try { localStorage.setItem('settingsTab', 'maps'); sessionStorage.setItem('openMapBuilder', '1') } catch {}
+    setPage({ kind: 'settings' })
+  }} />
   else if (page.kind === 'phone') content = <PhonePage say={say} />
   else if (page.kind === 'data') content = <DataPage />
   else if (page.kind === 'contacts') content = <ContactsPage setDialog={setDialog} say={say} openPerson={(id, name) => setPage({ kind: 'person', id, name })} />

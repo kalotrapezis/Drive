@@ -974,7 +974,9 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .maps-here { position: absolute; right: 10px; bottom: 160px; z-index: 2; box-shadow: 0 1px 4px #0005; }
 .maps-waiting { position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%); padding: 10px 18px; z-index: 3; }
 .maps-waiting small { display: block; opacity: .7; margin-top: 2px; }
-.maps-missing { position: absolute; top: 12px; left: 404px; right: 12px; padding: 12px 16px; z-index: 2; }
+.maps-missing { position: absolute; top: 12px; left: 404px; right: 12px; padding: 16px 20px; z-index: 2; max-width: 560px; }
+.maps-missing h3 { margin: 0 0 8px; }
+.maps-missing p { margin: 0 0 12px; color: var(--muted); }
 .maps-page .maplibregl-ctrl-bottom-left { left: 400px; }
 /* A narrow window: one column, the panel a sheet over the map's bottom as on the phone, the map's buttons at the top
    (the user, 24 Oct: "when the window gets narrow … one column") */

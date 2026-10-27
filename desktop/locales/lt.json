@@ -891,7 +891,6 @@
  "maps.whereIAm": "Kur esu (klausia telefono)",
  "maps.waitingPhone": "Laukiama telefono vietos…",
  "maps.waitingPhoneHint": "Tetra veikia fone? Bakstelėkite jos pranešimą.",
- "maps.missing": "Žemėlapio dar nėra šiame kompiuteryje: {file} ateina iš {tool} arba iš telefono per sinchronizavimą.",
  "maps.searchPlaceholder": "Ieškoti vietų, adresų, miestų",
  "maps.fewer": "Mažiau",
  "maps.more": "Daugiau… ({n})",
@@ -2039,7 +2038,7 @@
  "mapbuild.pairTooBig": "{a} ir {b} sujungimui reikia maždaug {need} atminties; šis kompiuteris turi {has}. Abu žemėlapiai veikia, bet maršrutai šios sienos nekirs.",
  "mapbuild.step.install": "Diegiama į Tetra",
  "mapbuild.step.send": "Siunčiama į jūsų telefoną ir planšetę",
- "mapbuild.buildNote": "Tai trunka nuo kelių minučių iki valandos, priklausomai nuo šalies. Šį langą galite uždaryti; Tetra toliau dirba.",
+ "mapbuild.buildNote": "Tai trunka nuo kelių minučių iki valandos ar ilgiau, priklausomai nuo šalies. Laikykite kompiuterį įjungtą ir prijungtą prie elektros tinklo. Šį langą galite uždaryti; Tetra toliau dirba.",
  "mapbuild.stop": "Sustabdyti",
  "mapbuild.hide": "Uždaryti",
  "mapbuild.doneTitle": "Žemėlapis paruoštas: {name}",
@@ -2048,5 +2047,8 @@
  "mapbuild.failed": "Žemėlapio sukurti nepavyko: {error}",
  "mapbuild.offline": "Nėra interneto ryšio. Žemėlapiai atsisiunčiami, tad prisijunkite ir bandykite dar kartą.",
  "mapbuild.waitingNet": "Nėra interneto ryšio. Tęsis savaime, kai ryšys grįš.",
- "mapbuild.tryAgain": "Bandyti dar kartą"
+ "mapbuild.tryAgain": "Bandyti dar kartą",
+ "maps.welcome": "Sveiki atvykę į Žemėlapius",
+ "maps.welcomeBody": "Tetra pateikiama be žemėlapio, kad kiekvienas gautų norimą žemėlapį, veikiantį be interneto ir tik savo. Susikurkite savo čia: pasirinkite savo šalį, laikykite kompiuterį įjungtą ir prijungtą prie elektros tinklo, kol jis kuriamas (kelios minutės mažai šaliai, valanda ar ilgiau didelei), ir jis pats nukeliauja į jūsų telefoną ir planšetę.",
+ "maps.welcomeMake": "Sukurti žemėlapį…"
 }

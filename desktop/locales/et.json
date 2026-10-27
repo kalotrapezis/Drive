@@ -827,7 +827,6 @@
  "maps.whereIAm": "Kus ma olen (küsib telefonilt)",
  "maps.waitingPhone": "Ootan telefoni asukohta…",
  "maps.waitingPhoneHint": "Kas Tetra töötab seal taustal? Puudutage selle märguannet.",
- "maps.missing": "Kaarti pole selles arvutis veel: {file} tuleb {tool} kaudu või telefonist sünkroonimisega.",
  "maps.searchPlaceholder": "Otsi kohti, aadresse, linnu",
  "maps.fewer": "Vähem",
  "maps.more": "Rohkem… ({n})",
@@ -1865,7 +1864,7 @@
  "mapbuild.pairTooBig": "{a} ja {b} ühendamiseks on vaja umbes {need} mälu; selles arvutis on {has}. Mõlemad kaardid töötavad, kuid marsruudid seda piiri ei ületa.",
  "mapbuild.step.install": "Tetrasse paigaldamine",
  "mapbuild.step.send": "Telefoni ja tahvelarvutisse saatmine",
- "mapbuild.buildNote": "See võtab riigist sõltuvalt mõnest minutist tunnini. Selle akna võid sulgeda; Tetra töötab edasi.",
+ "mapbuild.buildNote": "See võtab riigist sõltuvalt mõnest minutist tunnini või kauemgi. Hoia arvuti sisse lülitatud ja vooluvõrku ühendatud. Selle akna võid sulgeda; Tetra töötab edasi.",
  "mapbuild.stop": "Peata",
  "mapbuild.hide": "Sulge",
  "mapbuild.doneTitle": "Kaart on valmis: {name}",
@@ -1874,5 +1873,8 @@
  "mapbuild.failed": "Kaarti ei õnnestunud teha: {error}",
  "mapbuild.offline": "Internetiühendus puudub. Kaardid laaditakse alla, nii et loo ühendus ja proovi uuesti.",
  "mapbuild.waitingNet": "Internetiühendus puudub. See jätkab ise, kui ühendus taastub.",
- "mapbuild.tryAgain": "Proovi uuesti"
+ "mapbuild.tryAgain": "Proovi uuesti",
+ "maps.welcome": "Tere tulemast Kaartidesse",
+ "maps.welcomeBody": "Tetra tuleb ilma kaardita, et igaüks saaks just selle kaardi, mida soovib, võrguühenduseta ja omaenda. Tee enda oma siin: vali oma riik, hoia arvuti sisse lülitatud ja vooluvõrku ühendatud, kuni kaarti tehakse (väikese riigi puhul paar minutit, suure puhul tund või rohkem), ja see jõuab ise sinu telefoni ja tahvelarvutisse.",
+ "maps.welcomeMake": "Tee kaart…"
 }

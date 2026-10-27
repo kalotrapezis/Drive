@@ -827,7 +827,6 @@
  "maps.whereIAm": "Hvor jeg er (spørger telefonen)",
  "maps.waitingPhone": "Venter på telefonens placering…",
  "maps.waitingPhoneHint": "Tetra i baggrunden dér? Tryk på dens notifikation.",
- "maps.missing": "Kortet er ikke på denne computer endnu: {file} kommer fra {tool} eller fra telefonen via synk.",
  "maps.searchPlaceholder": "Søg efter steder, adresser, byer",
  "maps.fewer": "Færre",
  "maps.more": "Mere… ({n})",
@@ -1865,7 +1864,7 @@
  "mapbuild.pairTooBig": "At forbinde {a} og {b} kræver omkring {need} hukommelse; denne computer har {has}. Begge kort virker, men ruter krydser ikke den grænse.",
  "mapbuild.step.install": "Installerer det i Tetra",
  "mapbuild.step.send": "Sender det til din telefon og tablet",
- "mapbuild.buildNote": "Det tager fra få minutter til en time, afhængigt af landet. Du kan lukke dette vindue; Tetra arbejder videre.",
+ "mapbuild.buildNote": "Det tager fra få minutter til en time eller mere, afhængigt af landet. Lad computeren være tændt og sat i stikkontakten. Du kan lukke dette vindue; Tetra arbejder videre.",
  "mapbuild.stop": "Stop",
  "mapbuild.hide": "Luk",
  "mapbuild.doneTitle": "Kortet over {name} er klar",
@@ -1874,5 +1873,8 @@
  "mapbuild.failed": "Kortet kunne ikke laves: {error}",
  "mapbuild.offline": "Ingen internetforbindelse. Kort hentes, så opret forbindelse og prøv igen.",
  "mapbuild.waitingNet": "Ingen internetforbindelse. Det fortsætter af sig selv, når forbindelsen er tilbage.",
- "mapbuild.tryAgain": "Prøv igen"
+ "mapbuild.tryAgain": "Prøv igen",
+ "maps.welcome": "Velkommen til Kort",
+ "maps.welcomeBody": "Tetra kommer uden kort, så alle får det kort, de vil have, offline og deres eget. Lav dit her: vælg dit land, lad computeren være tændt og sat i stikkontakten, mens det laves (nogle få minutter for et lille land, en time eller mere for et stort), og det går af sig selv til din telefon og tablet.",
+ "maps.welcomeMake": "Lav et kort…"
 }

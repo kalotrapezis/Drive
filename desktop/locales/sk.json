@@ -891,7 +891,6 @@
  "maps.whereIAm": "Kde som (opýta sa telefón)",
  "maps.waitingPhone": "Čaká sa na polohu telefónu…",
  "maps.waitingPhoneHint": "Beží tam Tetra na pozadí? Ťuknite na jej oznámenie.",
- "maps.missing": "Mapa ešte nie je na tomto počítači: {file} prichádza z {tool} alebo z telefónu pri synchronizácii.",
  "maps.searchPlaceholder": "Hľadať miesta, adresy, mestá",
  "maps.fewer": "Menej",
  "maps.more": "Viac… ({n})",
@@ -2039,7 +2038,7 @@
  "mapbuild.pairTooBig": "Prepojenie {a} a {b} potrebuje asi {need} pamäte; tento počítač má {has}. Obe mapy fungujú, ale trasy cez túto hranicu neprejdú.",
  "mapbuild.step.install": "Inštalácia do aplikácie Tetra",
  "mapbuild.step.send": "Odosielanie do telefónu a tabletu",
- "mapbuild.buildNote": "Trvá to od niekoľkých minút po hodinu, podľa krajiny. Toto okno môžete zavrieť; Tetra pracuje ďalej.",
+ "mapbuild.buildNote": "Trvá to od niekoľkých minút po hodinu alebo dlhšie, podľa krajiny. Nechajte počítač zapnutý a pripojený do zásuvky. Toto okno môžete zavrieť; Tetra pracuje ďalej.",
  "mapbuild.stop": "Zastaviť",
  "mapbuild.hide": "Zavrieť",
  "mapbuild.doneTitle": "Mapa je hotová: {name}",
@@ -2048,5 +2047,8 @@
  "mapbuild.failed": "Mapu sa nepodarilo vytvoriť: {error}",
  "mapbuild.offline": "Nie ste pripojení k internetu. Mapy sa sťahujú, pripojte sa a skúste to znova.",
  "mapbuild.waitingNet": "Nie ste pripojení k internetu. Pokračuje samo, keď sa pripojenie vráti.",
- "mapbuild.tryAgain": "Skúsiť znova"
+ "mapbuild.tryAgain": "Skúsiť znova",
+ "maps.welcome": "Vitajte v Mapách",
+ "maps.welcomeBody": "Tetra sa dodáva bez mapy, aby každý mal mapu, akú chce, offline a vlastnú. Vytvorte si tu svoju: vyberte svoju krajinu, nechajte počítač zapnutý a pripojený do zásuvky, kým sa vytvára (niekoľko minút pri malej krajine, hodinu alebo dlhšie pri veľkej), a sama sa dostane do telefónu a tabletu.",
+ "maps.welcomeMake": "Vytvoriť mapu…"
 }

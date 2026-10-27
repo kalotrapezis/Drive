@@ -104,3 +104,10 @@ test("directions are asked in the app's language: Portugal's Portuguese for pt, 
   assert.equal(ghLocale('de'), 'de')
   assert.equal(ghLocale('lv'), 'lv') // GraphHopper has no Latvian: it answers in English
 })
+
+test('a place is found by its name in another of Tetra\'s languages (Νευροκόπι is Гоце Делчев)', () => {
+  const p = parsePoi('town\t41.567\t23.729\tГоце Делчев\tGotse Delchev\t2900\t\t\t\t\t\tel=Νευροκόπι|de=Goze Deltschew')
+  assert.equal(p.names, 'el=Νευροκόπι|de=Goze Deltschew')
+  assert.deepEqual(search([p], { query: 'νευροκοπι', lat: 41.5, lng: 23.7 }).map(x => x.name), ['Гоце Делчев'])
+  assert.equal(parsePoi('town\t41\t23\tΣέρρες\tSerres').names, '')
+})

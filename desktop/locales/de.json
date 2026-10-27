@@ -827,7 +827,6 @@
  "maps.whereIAm": "Wo ich bin (fragt das Telefon)",
  "maps.waitingPhone": "Warte auf den Standort des Telefons…",
  "maps.waitingPhoneHint": "Läuft Tetra dort im Hintergrund? Tippe auf dessen Benachrichtigung.",
- "maps.missing": "Die Karte ist auf diesem Computer noch nicht vorhanden: {file} kommt von {tool} oder über die Synchronisierung vom Telefon.",
  "maps.searchPlaceholder": "Orte, Adressen, Städte suchen",
  "maps.fewer": "Weniger",
  "maps.more": "Mehr… ({n})",
@@ -1865,7 +1864,7 @@
  "mapbuild.pairTooBig": "{a} und {b} zu verbinden braucht etwa {need} Arbeitsspeicher; dieser Computer hat {has}. Beide Karten funktionieren, aber Routen überqueren diese Grenze nicht.",
  "mapbuild.step.install": "Installation in Tetra",
  "mapbuild.step.send": "Senden an Ihr Smartphone und Tablet",
- "mapbuild.buildNote": "Das dauert je nach Land einige Minuten bis eine Stunde. Sie können dieses Fenster schließen; Tetra arbeitet weiter.",
+ "mapbuild.buildNote": "Das dauert je nach Land einige Minuten bis eine Stunde oder länger. Lassen Sie den Computer eingeschaltet und am Strom angeschlossen. Sie können dieses Fenster schließen; Tetra arbeitet weiter.",
  "mapbuild.stop": "Stopp",
  "mapbuild.hide": "Schließen",
  "mapbuild.doneTitle": "Die Karte von {name} ist fertig",
@@ -1874,5 +1873,8 @@
  "mapbuild.failed": "Die Karte konnte nicht erstellt werden: {error}",
  "mapbuild.offline": "Keine Internetverbindung. Karten werden heruntergeladen, bitte verbinden und erneut versuchen.",
  "mapbuild.waitingNet": "Keine Internetverbindung. Es geht von selbst weiter, sobald die Verbindung wieder da ist.",
- "mapbuild.tryAgain": "Erneut versuchen"
+ "mapbuild.tryAgain": "Erneut versuchen",
+ "maps.welcome": "Willkommen bei Karten",
+ "maps.welcomeBody": "Tetra kommt ohne Karte, damit jeder die Karte bekommt, die er möchte, offline und ganz seine eigene. Erstellen Sie Ihre hier: Wählen Sie Ihr Land, lassen Sie den Computer eingeschaltet und am Strom angeschlossen, während sie erstellt wird (ein paar Minuten für ein kleines Land, eine Stunde oder mehr für ein großes), und sie gelangt von selbst auf Ihr Telefon und Ihr Tablet.",
+ "maps.welcomeMake": "Karte erstellen …"
 }

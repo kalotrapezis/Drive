@@ -58,7 +58,7 @@ const stopName = (name: string) => name === ME ? t('maps.myLocation') : name
 type Draft = { id?: string; name: string; stops: MapStop[] }
 const cardSpot = (c: Card) => c.kind === 'poi' ? c.poi : c.kind === 'place' ? c.place : c
 
-export function MapsPage({ say }: { say: (message: string) => void }) {
+export function MapsPage({ say, onMakeMap }: { say: (message: string) => void; onMakeMap: () => void }) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<maplibregl.Map | null>(null)
   const markers = useRef<maplibregl.Marker[]>([])
@@ -337,7 +337,12 @@ export function MapsPage({ say }: { say: (message: string) => void }) {
       <div ref={box} className="maps-canvas" />
       <button className="round maps-here" title={t('maps.whereIAm')} disabled={asking} onClick={showMe}><Icon name="myLocation" size={22} /></button>
       {asking && <div className="island maps-waiting">{t('maps.waitingPhone')}<small>{t('maps.waitingPhoneHint')}</small></div>}
-      {missing && <div className="island maps-missing">{tr('maps.missing', { file: <code>Files/Maps/greece.pmtiles</code>, tool: <code>tools/maps-greece.sh</code> })}</div>}
+      {/* no map yet: Tetra comes without one, each makes theirs (the user, 27 Oct: "welcome the user … take them by the hand") */}
+      {missing && <div className="island maps-missing">
+        <h3>{t('maps.welcome')}</h3>
+        <p>{t('maps.welcomeBody')}</p>
+        <button className="filled-button" onClick={onMakeMap}>{t('maps.welcomeMake')}</button>
+      </div>}
       <aside className="island maps-panel">
         <div className="maps-search">
           <Icon name="search" size={20} />
