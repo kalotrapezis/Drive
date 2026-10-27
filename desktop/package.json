@@ -1,6 +1,6 @@
 {
   "name": "local-drive-desktop",
-  "version": "0.6.0-beta.23",
+  "version": "0.6.0-beta.25",
   "description": "Tetra desktop app",
   "main": "main.js",
   "scripts": {
@@ -67,6 +67,9 @@
       "datacount.js",
       "maps.js",
       "router.js",
+      "client.js",
+      "reset.js",
+      "callaudio.js",
       "mapbuild.js",
       "maps-tools/*.py",
       "history.js",

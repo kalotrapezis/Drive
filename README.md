@@ -5,7 +5,7 @@ Photos, files, notes, calendar, timers, maps, contacts, calls and data on Linux,
 
 <p align="center">
   <a href="https://github.com/kalotrapezis/Drive/releases/download/desktop-v0.6.0-beta.23/Tetra-0.6.0-beta.23.AppImage"><img src="Assets/buttons/download-appimage.png" alt="Download the AppImage" width="420"></a>
-  <a href="https://github.com/kalotrapezis/Drive/releases/download/desktop-v0.6.0-beta.23/local-drive-desktop_0.6.0-beta.23_amd64.deb"><img src="Assets/buttons/download-deb.png" alt="Download the .deb" width="420"></a>
+  <a href="https://github.com/kalotrapezis/Drive/releases/download/desktop-v0.6.0-beta.23/local-drive-desktop_0.6.0-beta.25_amd64.deb"><img src="Assets/buttons/download-deb.png" alt="Download the .deb" width="420"></a>
 </p>
 <p align="center">
   <a href="https://github.com/kalotrapezis/Drive-Android"><img src="Assets/buttons/get-android.png" alt="Tetra for Android" width="420"></a>
@@ -84,7 +84,7 @@ address, so it is found again after a network change. Every rule and its reason 
 On Debian, Ubuntu or Mint:
 
 ```bash
-sudo apt install ./local-drive-desktop_0.6.0-beta.23_amd64.deb
+sudo apt install ./local-drive-desktop_0.6.0-beta.25_amd64.deb
 ```
 
 Or make the AppImage executable and run it (`chmod +x Tetra-0.6.0-beta.23.AppImage`); it needs `libfuse2` on
