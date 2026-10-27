@@ -2,17 +2,17 @@
 /**
  * Directions on the computer (Drive-Android Plan.md § Maps): the phone's own routing graph, Files/Maps/greece-gh
  * (GraphHopper 10.2, made here by tools/maps-greece.sh), answered by GraphHopper's server on this computer. It needs what
- * made the graph: Java 17 or newer and graphhopper-web-10.2.jar (tools/maps-greece.sh keeps it in ~/Tetra-maps/bin).
+ * made the graph: Java 17 or newer and graphhopper-web-10.2.jar (the map builder and tools/maps-greece.sh keep it in ~/Tetra/.System/Maps/Tools).
  *
  * The graph folder is synced, so the server never writes there: it reads it memory-mapped and read-only through a folder of
  * links in the app's own data (GraphHopper's lock file lands there, never on the phone).
  */
 const fs = require('node:fs')
-const os = require('node:os')
 const path = require('node:path')
 const net = require('node:net')
 const { spawn, spawnSync } = require('node:child_process')
 const { t, current } = require('./i18n')
+const system = require('./system')
 
 const JAR = 'graphhopper-web-10.2.jar'
 /** The graph's profiles exactly as made (tools/maps-graph.yml): GraphHopper refuses a graph whose profiles differ. */
@@ -65,8 +65,8 @@ const MAIN_ROADS = {
 /** The phone's car times are GraphHopper's × 1.2 (Plan.md § Maps: Άγιος Λουκάς → Χαλκίδα 30 min). */
 const CAR_TIME = 1.2
 
-/** Where the map builder keeps its tools (mapbuild.js; tools/maps-greece.sh uses the same bin). */
-const BIN = path.join(os.homedir(), 'Tetra-maps', 'bin')
+/** Where the map builder keeps its tools (mapbuild.js; tools/maps-greece.sh uses the same folder). */
+const BIN = system.dir('Maps', 'Tools')
 
 /** What the AppImage carries for the map builder (scripts/bundle-tools.sh): its own Java and Python, used before the system's. */
 const BUNDLED = process.resourcesPath ? path.join(process.resourcesPath, 'bundled') : null

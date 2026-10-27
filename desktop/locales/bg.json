@@ -1076,7 +1076,7 @@
  "contacts.labelManager": "Мениджър",
  "maps.noGraph": "Графът за маршрути още не е на този компютър (Files/Maps/greece-gh).",
  "maps.needJava": "Упътванията на компютъра изискват Java 17 или по-нова.",
- "maps.needJar": "Упътванията на компютъра изискват {jar} в ~/Tetra-maps/bin (tools/maps-greece.sh го поставя там).",
+ "maps.needJar": "Упътванията на компютъра изискват {jar} в ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh го поставя там).",
  "maps.routerStopped": "Сървърът за маршрути спря; вижте graphhopper.log в данните на приложението.",
  "maps.routerSlow": "Сървърът за маршрути не стартира за минута.",
  "maps.needTwoPlaces": "Упътванията изискват две места.",

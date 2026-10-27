@@ -1076,7 +1076,7 @@
  "contacts.labelManager": "Προϊστάμενος",
  "maps.noGraph": "Ο χάρτης διαδρομών δεν είναι ακόμα σε αυτόν τον υπολογιστή (Files/Maps/greece-gh).",
  "maps.needJava": "Οι οδηγίες στον υπολογιστή χρειάζονται Java 17 ή νεότερη.",
- "maps.needJar": "Οι οδηγίες στον υπολογιστή χρειάζονται το {jar} στο ~/Tetra-maps/bin (το βάζει εκεί το tools/maps-greece.sh).",
+ "maps.needJar": "Οι οδηγίες στον υπολογιστή χρειάζονται το {jar} στο ~/Tetra/.System/Maps/Tools (το βάζει εκεί το tools/maps-greece.sh).",
  "maps.routerStopped": "Ο διακομιστής διαδρομών σταμάτησε· δείτε το graphhopper.log στα δεδομένα της εφαρμογής.",
  "maps.routerSlow": "Ο διακομιστής διαδρομών δεν ξεκίνησε μέσα σε ένα λεπτό.",
  "maps.needTwoPlaces": "Οι οδηγίες χρειάζονται δύο μέρη.",

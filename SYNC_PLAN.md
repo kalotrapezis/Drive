@@ -549,6 +549,8 @@ storage layer hard-assumes exactly one active pairing:
 - A preview or sync never deletes anything by itself.
 - Test with disposable files and a copy of the databases, never the real
   library.
+- `Tetra/.System` (Tetra's own tools, caches and work; desktop/SYSTEM.md) never syncs, never goes into a
+  backup of the library, and is never shown in Files.
 
 ### 6i. Two-way: bringing the bytes back (designed 2026-09-23)
 

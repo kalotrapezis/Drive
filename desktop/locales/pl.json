@@ -1160,7 +1160,7 @@
  "contacts.labelManager": "Kierownik",
  "maps.noGraph": "Grafu tras nie ma jeszcze na tym komputerze (Files/Maps/greece-gh).",
  "maps.needJava": "Wskazówki na komputerze wymagają Javy 17 lub nowszej.",
- "maps.needJar": "Wskazówki na komputerze wymagają {jar} w ~/Tetra-maps/bin (tools/maps-greece.sh umieszcza go tam).",
+ "maps.needJar": "Wskazówki na komputerze wymagają {jar} w ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh umieszcza go tam).",
  "maps.routerStopped": "Serwer tras się zatrzymał; zobacz graphhopper.log w danych aplikacji.",
  "maps.routerSlow": "Serwer tras nie uruchomił się w ciągu minuty.",
  "maps.needTwoPlaces": "Wskazówki wymagają dwóch miejsc.",

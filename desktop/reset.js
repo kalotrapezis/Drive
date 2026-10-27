@@ -1,10 +1,13 @@
 // Settings › Reset (the user, 26 Oct): server or client is chosen at the first start, and only a reset changes it —
 // after a forced backup, or two acknowledgements of deleting the whole Tetra folder, the second actionable only after
 // 10 seconds. The window shows the wait; main.js keeps the time it was armed and refuses an earlier delete as well.
+// The Tetra folder's .System (system.js) is Tetra's own tools and safety copies, not the library: a reset neither counts,
+// copies nor deletes it, as it never touched ~/Tetra-maps and ~/Tetra-backups before they moved in there (SYSTEM.md).
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const os = require('node:os')
+const { NAME: SYSTEM } = require('./system')
 
 const WAIT_MS = 10_000
 
@@ -13,11 +16,12 @@ const mayDelete = (armedAt, now = Date.now()) => Number.isFinite(armedAt) && arm
 
 const inside = (child, parent) => { const r = path.relative(parent, child); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)) }
 
-/** Every regular file under `dir`, relative path → size. Links are not followed (cp copies them as links). */
+/** Every regular file under `dir`, relative path → size; not its .System. Links are not followed (cp copies them as links). */
 async function sizes(dir, rel = '', out = new Map()) {
   let entries
   try { entries = await fsp.readdir(path.join(dir, rel), { withFileTypes: true }) } catch (e) { if (e.code === 'ENOENT') return out; throw e }
   for (const e of entries) {
+    if (rel === '' && e.name === SYSTEM) continue
     const child = path.join(rel, e.name)
     if (e.isDirectory()) await sizes(dir, child, out)
     else if (e.isFile()) out.set(child, (await fsp.stat(path.join(dir, child))).size)
@@ -50,7 +54,8 @@ async function backUp(sources, dest, now = new Date()) {
   for (const s of sources) {
     if (!fs.existsSync(s.from)) continue
     const target = path.join(to, s.name)
-    await fsp.cp(s.from, target, { recursive: true, errorOnExist: true, force: false, preserveTimestamps: true, verbatimSymlinks: true })
+    await fsp.cp(s.from, target, { recursive: true, errorOnExist: true, force: false, preserveTimestamps: true, verbatimSymlinks: true,
+      filter: src => src !== path.join(s.from, SYSTEM) })
     const want = await sizes(s.from), got = await sizes(target)
     for (const [rel, size] of want) if (got.get(rel) !== size) throw new Error(`Not backed up whole: ${path.join(s.name, rel)}`)
     files += want.size
@@ -58,13 +63,16 @@ async function backUp(sources, dest, now = new Date()) {
   return { to, files, bytes }
 }
 
-/** Deletes the Tetra folder and the app's data. Never the home folder, a folder above it, or the root. */
+/** Deletes the Tetra folder (all but its .System) and the app's data. Never the home folder, a folder above it, or the root. */
 function wipe(paths, home = os.homedir()) {
   for (const p of paths) {
     const full = path.resolve(p)
     if (full === path.parse(full).root || inside(home, full)) throw new Error(`Refusing to delete ${full}.`)
   }
-  for (const p of paths) fs.rmSync(p, { recursive: true, force: true })
+  for (const p of paths) {
+    if (!fs.existsSync(path.join(p, SYSTEM))) { fs.rmSync(p, { recursive: true, force: true }); continue }
+    for (const n of fs.readdirSync(p)) if (n !== SYSTEM) fs.rmSync(path.join(p, n), { recursive: true, force: true })
+  }
 }
 
 module.exports = { WAIT_MS, mayDelete, measure, backUp, wipe }

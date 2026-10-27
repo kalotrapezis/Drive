@@ -14,13 +14,14 @@
  *   <a>_<b>-crossings.tsv   where the roads cross between two neighbouring maps (ids sorted: greece_macedonia-crossings.tsv;
  *                       maps-tools/maps-crossings.py): a route drives on one country's graph to a crossing and goes on from there on the
  *                       next one's (the user, 27 Oct: "Drive to the edge and then start from the other edge"), so no graph of two
- *                       countries is ever made. Written after the map is installed, from each region's .osm.pbf kept in ~/Tetra-maps/osm.
+ *                       countries is ever made. Written after the map is installed, from each region's .osm.pbf kept in .System/Maps/Data/osm.
  *
  * Greece's pack, made by Drive-Android's tools/maps-greece.sh, is "greece" (Geofabrik's id), so it updates here too.
- * Nobody opens a terminal: pmtiles and GraphHopper are fetched into ~/Tetra-maps/bin the first time; what only the system
- * can install (Java 17, Python's osmium) the wizard explains and asks for with the system's own password window (pkexec;
- * the user, 27 Oct: "Please type your password … and a "I dont want" button"). The work is done in ~/Tetra-maps/<id> and
- * removed once the pack is installed.
+ * Nobody opens a terminal: pmtiles and GraphHopper are fetched into ~/Tetra/.System/Maps/Tools the first time; what only the
+ * system can install (Java 17, Python's osmium) the wizard explains and asks for with the system's own password window (pkexec;
+ * the user, 27 Oct: "Please type your password … and a "I dont want" button"). The work is done in .System/Maps/Temp/<id>,
+ * and every build cleans up after itself the same way, made, failed or cancelled (the user, 27 Oct: "When the builder is
+ * done, have it clean up after itself, every time the same way"): only Tools and the downloads kept in Data stay (SYSTEM.md).
  */
 const fs = require('node:fs')
 const fsp = fs.promises
@@ -30,8 +31,14 @@ const crypto = require('node:crypto')
 const { spawn, spawnSync } = require('node:child_process')
 const { PROFILES, JAR, BIN, BUNDLED, findJava } = require('./router')
 const { t } = require('./i18n')
+const system = require('./system')
 
-const WORK = path.dirname(BIN)
+/** Each region's .osm.pbf and .poly as downloaded, kept for its neighbours' crossings; tools/maps-greece.sh's files beside them. */
+const DATA = system.dir('Maps', 'Data')
+/** Geofabrik's list of regions, and each region's last build log. */
+const CACHE = system.dir('Maps', 'Cache')
+/** A build's work folder, <id>/, gone when the build ends. */
+const TEMP = system.dir('Maps', 'Temp')
 const INDEX = 'https://download.geofabrik.de/index-v1-nogeom.json'
 const PMTILES = '1.31.2'
 const URLS = {
@@ -44,8 +51,14 @@ const PACKAGES = { 'openjdk-17-jre-headless': 'java', 'python3-pyosmium': 'osmiu
 const PYTHON = [BUNDLED && path.join(BUNDLED, 'python', 'bin', 'python3'), '/usr/bin/python3'].find(p => p && fs.existsSync(p)) ?? '/usr/bin/python3'
 /** The steps as the wizard shows them, in order. */
 const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install', 'borders']
-/** Each region's roads and places as downloaded, and its .poly border, kept for its neighbours' crossings. */
-const OSM = path.join(WORK, 'osm')
+const OSM = path.join(DATA, 'osm')
+/** What a pack is in Files/Maps besides its graph and manifest; -phone.tsv only where libphonenumber names area codes. */
+const packFiles = id => [`${id}.pmtiles`, `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`, `${id}-lanes.tsv`, `${id}-phone.tsv`]
+/** File `f`'s MD5, or null when there is none. */
+const md5Of = f => new Promise(resolve => {
+  const h = crypto.createHash('md5')
+  fs.createReadStream(f).on('error', () => resolve(null)).on('data', d => h.update(d)).on('end', () => resolve(h.digest('hex')))
+})
 /** Where the roads cross between two neighbouring maps: "greece_macedonia-crossings.tsv" (Android's MapsFiles.crossings). */
 const crossingsFile = (a, b) => `${[a, b].sort().join('_')}-crossings.tsv`
 /** Whether two regions' borders (GeoJSON MultiPolygons) meet: Geofabrik draws each a little beyond the line, so neighbours' overlap. */
@@ -120,13 +133,13 @@ class MapBuilder {
   /** `root` is Files/Maps; `progress({ id, step, state, done, total, error })` is told of each change. */
   constructor(root, progress = () => {}) { this.root = root; this.progress = progress; this.job = null }
 
-  /** Geofabrik's regions, { id, name, parent, iso, pbf }, kept a week in ~/Tetra-maps. */
+  /** Geofabrik's regions, { id, name, parent, iso, pbf }, kept a week in Maps/Cache. */
   regions() { return needsNet(() => this.list()) }
   async list() {
-    const file = path.join(WORK, 'geofabrik-index.json')
+    const file = path.join(CACHE, 'geofabrik-index.json')
     const stat = await fsp.stat(file).catch(() => null)
     if (!stat || Date.now() - stat.mtimeMs > 7 * 86_400_000) {
-      await fsp.mkdir(WORK, { recursive: true })
+      await fsp.mkdir(CACHE, { recursive: true })
       const res = await fetch(INDEX)
       if (!res.ok) throw new Error(`Geofabrik: ${res.status}`)
       await fsp.writeFile(file, await res.text())
@@ -142,11 +155,11 @@ class MapBuilder {
     if (!r) throw new Error('Not a region of the list.')
     const head = await needsNet(() => fetch(r.pbf, { method: 'HEAD' }))
     const osm = +(head.headers.get('content-length') ?? 0)
-    const free = await fsp.statfs(fs.existsSync(WORK) ? WORK : os.homedir()).then(f => f.bavail * f.bsize, () => Infinity)
+    const free = await fsp.statfs(fs.existsSync(DATA) ? DATA : os.homedir()).then(f => f.bavail * f.bsize, () => Infinity)
     return { osm, memory: Math.max(1e9, osm * 12), hasMemory: os.totalmem(), disk: osm * 7 + 5e8, hasDisk: free }
   }
 
-  /** Region `r`'s border, Geofabrik's .poly, kept in ~/Tetra-maps/osm. */
+  /** Region `r`'s border, Geofabrik's .poly, kept in Maps/Data/osm. */
   async poly(r, signal) {
     const f = path.join(OSM, `${r.id}.poly`)
     if (!fs.existsSync(f)) {
@@ -196,9 +209,9 @@ class MapBuilder {
     await fsp.rm(path.join(OSM, `${id}.osm.pbf`), { force: true })
   }
 
-  /** Where region `id`'s .osm.pbf is kept: the builder's, else tools/maps-greece.sh's (~/Tetra-maps/greece-latest.osm.pbf). */
+  /** Where region `id`'s .osm.pbf is kept: the builder's, else tools/maps-greece.sh's (Maps/Data/greece-latest.osm.pbf). */
   kept(id) {
-    const own = path.join(OSM, `${id}.osm.pbf`), sh = path.join(WORK, `${id}-latest.osm.pbf`)
+    const own = path.join(OSM, `${id}.osm.pbf`), sh = path.join(DATA, `${id}-latest.osm.pbf`)
     return fs.existsSync(own) || !fs.existsSync(sh) ? own : sh
   }
 
@@ -228,30 +241,46 @@ class MapBuilder {
     })
   }
 
-  /** A failed build's work folder, given up (the error page's Cancel). */
+  /** The error page's Cancel: a build cleans up after itself (cleanUp), so this only makes sure. */
   async discard(id) {
     if (this.job?.id === id || !/^[a-z0-9-]+$/.test(id)) return
-    await fsp.rm(path.join(WORK, id), { recursive: true, force: true })
+    await this.cleanUp(id)
+  }
+
+  /**
+   * What a build leaves, gone the same way whether it was made, failed or was cancelled: its work folder in Maps/Temp and a
+   * half-copied file of its own in Files/Maps (a crash in the middle of install). Only the builder's own names: a sync's
+   * .part there carries a random id and is never one of them. Tools and Data stay.
+   */
+  async cleanUp(id) {
+    await fsp.rm(path.join(TEMP, id), { recursive: true, force: true })
+    const ours = new Set([...packFiles(id), `${id}-gh`, `${id}.json`].map(n => `.${n}.part`))
+    for (const n of await fsp.readdir(this.root).catch(() => [])) {
+      const crossing = /^\.([a-z0-9-]+_[a-z0-9-]+)-crossings\.tsv\.part$/.exec(n)?.[1].split('_').includes(id)
+      if (ours.has(n) || crossing) await fsp.rm(path.join(this.root, n), { recursive: true, force: true })
+    }
   }
 
   cancel() { if (this.job) { this.job.cancelled = true; this.job.abort.abort(); this.job.child?.kill() } }
 
   /**
-   * Builds region `id` into Files/Maps; one at a time. `resume` (the error page's Retry; the user, 27 Oct: "add a retry if a
-   * step fails") goes on from the step that failed: each finished step leaves a mark in the work folder and is passed over.
-   * Otherwise the work folder starts empty, so an update never takes last month's downloads.
+   * Builds region `id` into Files/Maps; one at a time. The work folder starts empty and is gone at the end, however the
+   * build ended (cleanUp). The error page's Retry (the user, 27 Oct: "add a retry if a step fails") builds again; the
+   * region's download is kept in Maps/Data and fetched again only when Geofabrik's MD5 says it changed, so an update never
+   * takes last month's roads and a retry does not download the country twice.
    */
-  async build(id, resume = false) {
+  async build(id) {
     if (this.job) throw new Error('A map is being made already.')
     const job = this.job = { id, abort: new AbortController(), child: null, cancelled: false }
     const region = (await this.regions()).find(r => r.id === id)
     if (!region) { this.job = null; throw new Error('Not a region of the list.') }
     const missing = this.missing()
     if (missing.length) { this.job = null; this.progress({ id, step: 'tools', state: 'needs', packages: missing }); return }
-    const dir = path.join(WORK, id)
-    if (!resume) await fsp.rm(dir, { recursive: true, force: true })
+    const dir = path.join(TEMP, id)
+    await this.cleanUp(id)
     await fsp.mkdir(dir, { recursive: true })
-    const log = fs.createWriteStream(path.join(dir, 'build.log'), { flags: 'a' })
+    await fsp.mkdir(CACHE, { recursive: true })
+    const log = fs.createWriteStream(path.join(CACHE, `build-${id}.log`))
     let step = null
     const tell = (state, more = {}) => this.progress({ id, step, state, ...more })
     const at = s => { step = s; tell('running'); log.write(`\n== ${s} ${new Date().toISOString()}\n`) }
@@ -269,7 +298,9 @@ class MapBuilder {
       const res = await fetch(url, { signal: job.abort.signal, redirect: 'follow' })
       if (!res.ok) throw new Error(`${new URL(url).host}: ${res.status}`)
       const total = +(res.headers.get('content-length') ?? 0)
-      const out = fs.createWriteStream(to + '.part')
+      // half a download is the work folder's, so the cleanup takes it; renamed into Tools or Data (the same disk) when whole
+      const part = path.join(dir, `${path.basename(to)}.part`)
+      const out = fs.createWriteStream(part)
       const hash = crypto.createHash('md5')
       let done = 0, told = 0
       for await (const chunk of res.body) {
@@ -279,13 +310,12 @@ class MapBuilder {
       }
       await new Promise((r, e) => out.end(err => err ? e(err) : r()))
       if (md5 && hash.digest('hex') !== md5) throw new Error('The download arrived damaged; try again.')
-      await fsp.rename(to + '.part', to)
+      await fsp.mkdir(path.dirname(to), { recursive: true })
+      await fsp.rename(part, to)
     }
-    /** Step `s`: passed over when a run before finished it; a download tried again once after a pause before it fails. */
+    /** Step `s`; a download tried again once after a pause before it fails. */
     const stage = async (s, work, tries = 1) => {
       at(s)
-      const mark = path.join(dir, `.done-${s}`)
-      if (fs.existsSync(mark)) { log.write('done before\n'); return }
       for (let i = 1; ; i++) {
         try { await work(); break } catch (e) {
           if (job.cancelled || tries === 1) throw e
@@ -302,10 +332,10 @@ class MapBuilder {
           await new Promise(r => setTimeout(r, 10_000))
         }
       }
-      await fsp.writeFile(mark, new Date().toISOString())
     }
+    const pbf = path.join(OSM, `${id}.osm.pbf`)
     try {
-      await stage('tools', () => this.tools(get, run), 2)
+      await stage('tools', () => this.tools(get, run, dir), 2)
 
       await stage('map', async () => {
         const poly = await fetch(region.pbf.replace(/-latest\.osm\.pbf$/, '.poly'), { signal: job.abort.signal }).then(r => r.ok ? r.text() : Promise.reject(new Error(`Geofabrik: ${r.status}`)))
@@ -319,24 +349,24 @@ class MapBuilder {
 
       await stage('osm', async () => {
         const md5 = (await fetch(region.pbf + '.md5', { signal: job.abort.signal }).then(r => r.text())).trim().split(/\s+/)[0]
-        await get(region.pbf, path.join(dir, 'region.osm.pbf'), md5)
+        if (await md5Of(pbf) !== md5) await get(region.pbf, pbf, md5)
       }, 2)
 
       /** GraphHopper's graph of `pbf` into the work folder's `gh`. */
       const graph = async (pbf, gh) => {
         const heap = Math.max(1, Math.floor(os.totalmem() / 1e9 * 0.6)), cores = os.cpus().length // every core (the user, 27 Oct)
         await fsp.rm(path.join(dir, gh), { recursive: true, force: true })
-        await fsp.writeFile(path.join(dir, `${gh}.yml`), `graphhopper:\n  datareader.file: ${pbf}\n  graph.location: ${gh}\n${PROFILES}` +
+        await fsp.writeFile(path.join(dir, `${gh}.yml`), `graphhopper:\n  datareader.file: ${JSON.stringify(pbf)}\n  graph.location: ${gh}\n${PROFILES}` +
           `  prepare.min_network_size: 200\n  prepare.subnetworks.threads: ${cores}\n  prepare.ch.threads: ${cores}\n  graph.dataaccess.default_type: RAM_STORE\n`)
         await run(findJava(), [`-Xmx${heap}g`, '-jar', path.join(BIN, JAR), 'import', `${gh}.yml`])
         await fsp.rm(path.join(dir, gh, 'gh.lock'), { force: true })
       }
-      await stage('roads', () => graph('region.osm.pbf', `${id}-gh`))
+      await stage('roads', () => graph(pbf, `${id}-gh`))
 
       await stage('search', async () => {
         for (const s of ['maps-places.py', 'maps-lanes.py', 'maps-phone.py']) await fsp.writeFile(path.join(dir, s), await fsp.readFile(path.join(__dirname, 'maps-tools', s)))
-        await run(PYTHON, ['-I', 'maps-places.py', 'region.osm.pbf', `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`])
-        await run(PYTHON, ['-I', 'maps-lanes.py', 'region.osm.pbf', `${id}-lanes.tsv`])
+        await run(PYTHON, ['-I', 'maps-places.py', pbf, `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`])
+        await run(PYTHON, ['-I', 'maps-lanes.py', pbf, `${id}-lanes.tsv`])
       })
 
       // a step of its own (the user, 27 Oct: "the call regions numbers make it part of that process")
@@ -346,11 +376,7 @@ class MapBuilder {
         if (iso) await run(PYTHON, ['-I', 'maps-phone.py', iso, `${id}-phone.tsv`]).catch(e => { if (job.cancelled) throw e; log.write(`no phone table: ${e.message}\n`) })
       })
 
-      await stage('install', async () => {
-        await this.install(region, dir, await this.regions())
-        await fsp.mkdir(OSM, { recursive: true })
-        await fsp.rename(path.join(dir, 'region.osm.pbf'), path.join(OSM, `${id}.osm.pbf`))
-      })
+      await stage('install', async () => this.install(region, dir, await this.regions()))
 
       // the crossings with each neighbour here, made again, and between any two maps here that have none yet (so one Remake joins
       // maps made before), from both regions' .osm.pbf (downloaded again when not kept): seconds each
@@ -375,34 +401,25 @@ class MapBuilder {
           await fsp.rename(path.join(this.root, `.${f}.part`), path.join(this.root, f))
         }
       }, 2)
-      await fsp.rm(dir, { recursive: true, force: true })
       step = null
       tell('done')
     } catch (e) {
       log.write(`\n!! ${e.stack ?? e}\n`)
       tell(job.cancelled ? 'cancelled' : 'error', { error: job.cancelled ? null : String(e.message ?? e) })
-      if (job.cancelled) await fsp.rm(dir, { recursive: true, force: true }).catch(() => {})
     } finally {
       log.end()
+      await this.cleanUp(id).catch(e => console.warn('[mapbuild] cleanup', e.message))
       this.job = null
     }
   }
 
-  /** pmtiles and GraphHopper, each fetched once into ~/Tetra-maps/bin (Java and osmium are the system's: [missing]). */
-  async tools(get, run) {
-    await fsp.mkdir(BIN, { recursive: true })
-    const unpack = async (url, into, strip) => {
-      const tgz = path.join(BIN, `${path.basename(into)}.tar.gz`)
-      await get(url, tgz)
-      await fsp.rm(into + '.part', { recursive: true, force: true })
-      await fsp.mkdir(into + '.part', { recursive: true })
-      await run('tar', ['xzf', tgz, '-C', into + '.part', ...(strip ? ['--strip-components=1'] : [])])
-      await fsp.rm(tgz, { force: true })
-    }
+  /** pmtiles and GraphHopper, each fetched once into Maps/Tools (Java and osmium are the system's: [missing]); unpacked in the work folder `dir`. */
+  async tools(get, run, dir) {
     if (!fs.existsSync(path.join(BIN, 'pmtiles'))) {
-      await unpack(URLS.pmtiles, path.join(BIN, 'pmtiles-dir'), false)
-      await fsp.rename(path.join(BIN, 'pmtiles-dir.part', 'pmtiles'), path.join(BIN, 'pmtiles'))
-      await fsp.rm(path.join(BIN, 'pmtiles-dir.part'), { recursive: true, force: true })
+      await get(URLS.pmtiles, path.join(dir, 'pmtiles.tar.gz'))
+      await run('tar', ['xzf', 'pmtiles.tar.gz', 'pmtiles'])
+      await fsp.mkdir(BIN, { recursive: true })
+      await fsp.rename(path.join(dir, 'pmtiles'), path.join(BIN, 'pmtiles'))
     }
     if (!fs.existsSync(path.join(BIN, JAR))) await get(URLS.jar, path.join(BIN, JAR))
   }
@@ -421,7 +438,7 @@ class MapBuilder {
   async install(region, dir, regions) {
     const id = region.id
     await fsp.mkdir(this.root, { recursive: true })
-    for (const n of [`${id}.pmtiles`, `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`, `${id}-lanes.tsv`, `${id}-phone.tsv`]) {
+    for (const n of packFiles(id)) {
       if (n.endsWith('-phone.tsv') && !fs.existsSync(path.join(dir, n))) continue
       const part = path.join(this.root, `.${n}.part`)
       await fsp.copyFile(path.join(dir, n), part)

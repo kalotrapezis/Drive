@@ -91,7 +91,7 @@ test('two devices put a place into one slot while apart: the newer keeps it, the
 })
 
 test("an address where no house has a number: the street and the village's postcode (made-up places, skipped)", { skip: 'its places were made up before publishing' }, async t => {
-  const root = path.join(os.homedir(), 'Tetra-maps')
+  const root = require('../system').dir('Maps', 'Data')
   if (!fs.existsSync(path.join(root, 'greece-streets.tsv'))) return t.skip('no map files on this computer')
   const m = new Maps(root, async () => {})
   assert.equal(await m.describe(37.27642, 22.58903), 'Οδός Παραδείγματος, 12345 Άγιος Λουκάς')

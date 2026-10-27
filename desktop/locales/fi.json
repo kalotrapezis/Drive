@@ -1076,7 +1076,7 @@
  "contacts.labelManager": "Esimies",
  "maps.noGraph": "Reittiverkkoa ei ole vielä tässä tietokoneessa (Files/Maps/greece-gh).",
  "maps.needJava": "Reittiohjeet tietokoneella vaativat Javan version 17 tai uudemman.",
- "maps.needJar": "Reittiohjeet tietokoneella vaativat tiedoston {jar} kansiossa ~/Tetra-maps/bin (tools/maps-greece.sh asettaa sen sinne).",
+ "maps.needJar": "Reittiohjeet tietokoneella vaativat tiedoston {jar} kansiossa ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh asettaa sen sinne).",
  "maps.routerStopped": "Reittipalvelin pysähtyi; katso graphhopper.log sovelluksen tiedoista.",
  "maps.routerSlow": "Reittipalvelin ei käynnistynyt minuutissa.",
  "maps.needTwoPlaces": "Reittiohjeet tarvitsevat kaksi paikkaa.",

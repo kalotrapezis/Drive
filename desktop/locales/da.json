@@ -1076,7 +1076,7 @@
  "contacts.labelManager": "Chef",
  "maps.noGraph": "Rutegrafen er ikke på denne computer endnu (Files/Maps/greece-gh).",
  "maps.needJava": "Rutevejledning på computeren kræver Java 17 eller nyere.",
- "maps.needJar": "Rutevejledning på computeren kræver {jar} i ~/Tetra-maps/bin (tools/maps-greece.sh lægger den dér).",
+ "maps.needJar": "Rutevejledning på computeren kræver {jar} i ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh lægger den dér).",
  "maps.routerStopped": "Ruteserveren stoppede; se graphhopper.log i appdataene.",
  "maps.routerSlow": "Ruteserveren startede ikke inden for et minut.",
  "maps.needTwoPlaces": "Rutevejledning kræver to steder.",

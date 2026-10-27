@@ -1160,7 +1160,7 @@
  "contacts.labelManager": "Vadovas",
  "maps.noGraph": "Maršrutų grafo šiame kompiuteryje dar nėra (Files/Maps/greece-gh).",
  "maps.needJava": "Maršrutams kompiuteryje reikia Java 17 ar naujesnės versijos.",
- "maps.needJar": "Maršrutams kompiuteryje reikia {jar} aplanke ~/Tetra-maps/bin (tools/maps-greece.sh jį ten įdeda).",
+ "maps.needJar": "Maršrutams kompiuteryje reikia {jar} aplanke ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh jį ten įdeda).",
  "maps.routerStopped": "Maršrutų serveris sustojo; žr. graphhopper.log programos duomenyse.",
  "maps.routerSlow": "Maršrutų serveris per minutę nepradėjo veikti.",
  "maps.needTwoPlaces": "Maršrutams reikia dviejų vietų.",

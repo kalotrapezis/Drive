@@ -42,6 +42,8 @@ test('a ~/Drive holding anything else is left alone and still used', () => {
   assert.match(r.note, /Someone else/)
   assert.equal(r.photos, path.join(home, 'Drive', 'Photos'))
   assert.ok(fs.existsSync(path.join(home, 'Drive', 'Someone else')))
+  fs.mkdirSync(path.join(home, 'Tetra', '.System', 'Maps'), { recursive: true }) // made by system.js's move of ~/Tetra-maps
+  assert.equal(roots(home).photos, path.join(home, 'Drive', 'Photos'), 'a ~/Tetra of only .System changes nothing')
   fs.rmSync(home, { recursive: true })
 })
 

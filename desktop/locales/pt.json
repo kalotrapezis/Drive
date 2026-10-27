@@ -1118,7 +1118,7 @@
  "contacts.labelManager": "Gestor(a)",
  "maps.noGraph": "Os dados de rotas ainda não estão neste computador (Files/Maps/greece-gh).",
  "maps.needJava": "As indicações no computador precisam de Java 17 ou mais recente.",
- "maps.needJar": "As indicações no computador precisam de {jar} em ~/Tetra-maps/bin (tools/maps-greece.sh coloca-o lá).",
+ "maps.needJar": "As indicações no computador precisam de {jar} em ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh coloca-o lá).",
  "maps.routerStopped": "O servidor de rotas parou; veja graphhopper.log nos dados da aplicação.",
  "maps.routerSlow": "O servidor de rotas não arrancou em um minuto.",
  "maps.needTwoPlaces": "As indicações precisam de dois locais.",

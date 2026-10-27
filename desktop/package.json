@@ -61,6 +61,7 @@
       "folders.js",
       "drives.js",
       "home.js",
+      "system.js",
       "thumbs.js",
       "file-kinds.json",
       "purgatory.js",

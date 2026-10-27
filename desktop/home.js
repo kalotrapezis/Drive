@@ -24,7 +24,8 @@ function roots(home, { migrate = true } = {}) {
   if (migrate && fs.existsSync(path.join(root, 'Drive')) && !fs.existsSync(path.join(root, 'Files'))) {
     fs.renameSync(path.join(root, 'Drive'), path.join(root, 'Files')); moved.push(`${path.join(root, 'Drive')} → ${path.join(root, 'Files')}`)
   }
-  const useOld = !fs.existsSync(root) && fs.existsSync(old)
+  // a ~/Tetra holding only .System (system.js) is not the library: a ~/Drive left where it was is still used
+  const useOld = fs.existsSync(old) && !['Photos', 'Files', 'Drive'].some(n => fs.existsSync(path.join(root, n)))
   return {
     root: useOld ? old : root,
     photos: useOld ? path.join(old, 'Photos') : path.join(root, 'Photos'),

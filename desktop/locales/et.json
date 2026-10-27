@@ -1076,7 +1076,7 @@
  "contacts.labelManager": "Juhataja",
  "maps.noGraph": "Marsruudigraafik pole selles arvutis veel (Files/Maps/greece-gh).",
  "maps.needJava": "Juhised arvutis vajavad Java 17 või uuemat versiooni.",
- "maps.needJar": "Juhised arvutis vajavad faili {jar} kaustas ~/Tetra-maps/bin (tools/maps-greece.sh paigutab selle sinna).",
+ "maps.needJar": "Juhised arvutis vajavad faili {jar} kaustas ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh paigutab selle sinna).",
  "maps.routerStopped": "Marsruutimisserver peatus; vaadake rakenduse andmetes faili graphhopper.log.",
  "maps.routerSlow": "Marsruutimisserver ei käivitunud ühe minutiga.",
  "maps.needTwoPlaces": "Juhised vajavad kahte kohta.",

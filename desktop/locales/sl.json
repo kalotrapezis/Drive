@@ -1160,7 +1160,7 @@
  "contacts.labelManager": "Vodja",
  "maps.noGraph": "Graf poti še ni na tem računalniku (Files/Maps/greece-gh).",
  "maps.needJava": "Navodila na računalniku potrebujejo Javo 17 ali novejšo.",
- "maps.needJar": "Navodila na računalniku potrebujejo {jar} v ~/Tetra-maps/bin (tools/maps-greece.sh ga tja postavi).",
+ "maps.needJar": "Navodila na računalniku potrebujejo {jar} v ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh ga tja postavi).",
  "maps.routerStopped": "Strežnik poti se je ustavil; glejte graphhopper.log v podatkih aplikacije.",
  "maps.routerSlow": "Strežnik poti se v eni minuti ni zagnal.",
  "maps.needTwoPlaces": "Navodila potrebujejo dva kraja.",

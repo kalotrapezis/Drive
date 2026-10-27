@@ -1076,7 +1076,7 @@
  "contacts.labelManager": "Chef",
  "maps.noGraph": "Vägnätet finns inte på den här datorn än (Files/Maps/greece-gh).",
  "maps.needJava": "Vägbeskrivning på datorn kräver Java 17 eller nyare.",
- "maps.needJar": "Vägbeskrivning på datorn kräver {jar} i ~/Tetra-maps/bin (tools/maps-greece.sh lägger den där).",
+ "maps.needJar": "Vägbeskrivning på datorn kräver {jar} i ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh lägger den där).",
  "maps.routerStopped": "Vägvalsservern stoppades; se graphhopper.log i appdata.",
  "maps.routerSlow": "Vägvalsservern startade inte inom en minut.",
  "maps.needTwoPlaces": "Vägbeskrivning kräver två platser.",

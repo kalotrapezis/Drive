@@ -38,6 +38,7 @@ const DATA_DIR = process.env.DRIVE_DATA || path.join(process.env.XDG_DATA_HOME |
 // ~/Tetra/Photos and ~/Tetra/Files, moved from ~/Drive once (home.js). Never from a hidden QA copy (scripts/shot.js),
 // which must not rename the real folders. Both can be overridden for testing with disposable files.
 const home = require('./home')
+const system = require('./system')
 const HOME = home.roots(os.homedir(), { migrate: !process.env.DRIVE_HIDDEN })
 if (HOME.moved.length) {
   console.log('[home] moved', HOME.moved.join('; '))
@@ -455,6 +456,14 @@ function analyzeLibrary(rescan = null) {
 }
 
 app.whenReady().then(() => {
+  // ~/Tetra/.System (system.js, SYSTEM.md): the old folders beside ~/Tetra moved in once, and every app's Temp emptied, as no
+  // job runs yet. Never from a hidden QA copy, which must not touch the real folders (nor a running Tetra's work).
+  if (!process.env.DRIVE_HIDDEN) {
+    const { moved, failed } = system.migrate()
+    if (moved.length) console.log('[system] moved', moved.join('; '))
+    for (const f of failed) console.warn('[system] not moved:', f)
+    try { system.cleanTemp() } catch (e) { console.warn('[system] Temp not emptied:', e.message) }
+  }
   db = library.open(DATA_DIR)
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)') // read below (Contacts) before the line that made it; a new computer's first start failed
   // Server or client is asked at the first start (Setup.tsx). A Tetra that ran before the question was the server, and
@@ -788,7 +797,7 @@ app.whenReady().then(() => {
   ipcMain.handle('maps:missing', () => mapBuilder.missing())
   ipcMain.handle('maps:installSystem', (_, packages) => mapBuilder.installSystem(packages))
   ipcMain.handle('maps:discardBuild', (_, id) => mapBuilder.discard(id))
-  ipcMain.handle('maps:build', (_, id, resume) => { mapBuilder.build(id, !!resume).catch(e => win?.webContents.send('maps-build', { id, state: 'error', error: e.message })) })
+  ipcMain.handle('maps:build', (_, id) => { mapBuilder.build(id).catch(e => win?.webContents.send('maps-build', { id, state: 'error', error: e.message })) })
   ipcMain.handle('maps:cancelBuild', () => mapBuilder.cancel())
   ipcMain.handle('maps:building', () => mapBuilder.job?.id ?? null)
   ipcMain.handle('maps:packs', () => mapBuilder.packs())

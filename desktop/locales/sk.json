@@ -1160,7 +1160,7 @@
  "contacts.labelManager": "Nadriadený",
  "maps.noGraph": "Mapa trás ešte nie je na tomto počítači (Files/Maps/greece-gh).",
  "maps.needJava": "Navigácia na počítači potrebuje Javu 17 alebo novšiu.",
- "maps.needJar": "Navigácia na počítači potrebuje {jar} v ~/Tetra-maps/bin (tools/maps-greece.sh ho tam umiestni).",
+ "maps.needJar": "Navigácia na počítači potrebuje {jar} v ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh ho tam umiestni).",
  "maps.routerStopped": "Smerovací server sa zastavil; pozrite si graphhopper.log v údajoch aplikácie.",
  "maps.routerSlow": "Smerovací server sa nespustil do minúty.",
  "maps.needTwoPlaces": "Navigácia potrebuje dve miesta.",

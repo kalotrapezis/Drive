@@ -1118,7 +1118,7 @@
  "contacts.labelManager": "Responsabile",
  "maps.noGraph": "Il grafo di percorso non è ancora su questo computer (Files/Maps/greece-gh).",
  "maps.needJava": "Le indicazioni sul computer richiedono Java 17 o successivo.",
- "maps.needJar": "Le indicazioni sul computer richiedono {jar} in ~/Tetra-maps/bin (lo mette lì tools/maps-greece.sh).",
+ "maps.needJar": "Le indicazioni sul computer richiedono {jar} in ~/Tetra/.System/Maps/Tools (lo mette lì tools/maps-greece.sh).",
  "maps.routerStopped": "Il server dei percorsi si è fermato; vedi graphhopper.log nei dati dell'app.",
  "maps.routerSlow": "Il server dei percorsi non si è avviato entro un minuto.",
  "maps.needTwoPlaces": "Le indicazioni richiedono due luoghi.",

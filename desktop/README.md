@@ -7,6 +7,7 @@ The C++/Qt code in the parent folder is reference only.
   which uses the system Trash (restore from the file manager).
 - Files: `~/Tetra/Files/` (like the phone's `/sdcard/Tetra/`); its Trash is `Files/Trash/`, notes are in `Files/.notes/`.
 - App data (SQLite `library.db`, thumbnails): `~/.local/share/local-drive-desktop/`
+- Tetra's own tools and work (the map builder's GraphHopper and downloads, developer backups): `~/Tetra/.System/`, never synced; see [SYSTEM.md](SYSTEM.md)
 - Override for testing with disposable files: `DRIVE_PHOTOS=… DRIVE_FILES=… DRIVE_DATA=…`
 
 ```sh
