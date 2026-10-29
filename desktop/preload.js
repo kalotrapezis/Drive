@@ -222,6 +222,30 @@ contextBridge.exposeInMainWorld('drive', {
     answer: (faceId, personId, answer) => ipcRenderer.invoke('people:answer', faceId, personId, answer),
     onProgress: fn => { const l = (_, p) => fn(p); ipcRenderer.on('people-progress', l); return () => ipcRenderer.off('people-progress', l) },
   },
+  // AI Assist (assistant.js): Mistral and the tools in main, the key never here
+  assistant: {
+    ask: (text, aloud) => ipcRenderer.invoke('assistant:ask', text, aloud),
+    transcribe: pcm => ipcRenderer.invoke('assistant:transcribe', pcm),
+    hush: () => ipcRenderer.invoke('assistant:hush'),
+    clear: () => ipcRenderer.invoke('assistant:clear'),
+    youtube: q => ipcRenderer.invoke('assistant:youtube', q),
+    hide: () => ipcRenderer.invoke('assistant:hide'),
+    liveStart: () => ipcRenderer.invoke('assistant:liveStart'),
+    liveAudio: bytes => ipcRenderer.send('assistant:liveAudio', bytes),
+    liveMute: on => ipcRenderer.invoke('assistant:liveMute', on),
+    liveEnd: () => ipcRenderer.invoke('assistant:liveEnd'),
+    settings: () => ipcRenderer.invoke('assistant:settings'),
+    set: changes => ipcRenderer.invoke('assistant:set', changes),
+    setKey: key => ipcRenderer.invoke('assistant:setKey', key),
+    voices: () => ipcRenderer.invoke('assistant:voices'),
+    sample: voice => ipcRenderer.invoke('assistant:sample', voice),
+    resetMeter: () => ipcRenderer.invoke('assistant:resetMeter'),
+    onWords: fn => { const l = (_, w) => fn(w); ipcRenderer.on('assistant-words', l); return () => ipcRenderer.off('assistant-words', l) },
+    onAudio: fn => { const l = (_, pcm) => fn(pcm); ipcRenderer.on('assistant-audio', l); return () => ipcRenderer.off('assistant-audio', l) },
+    onSay: fn => { const l = (_, s) => fn(s); ipcRenderer.on('assistant-say', l); return () => ipcRenderer.off('assistant-say', l) },
+    onLive: fn => { const l = (_, e) => fn(e); ipcRenderer.on('assistant-live', l); return () => ipcRenderer.off('assistant-live', l) },
+    onCommand: fn => { const l = (_, what) => fn(what); ipcRenderer.on('assistant-command', l); return () => ipcRenderer.off('assistant-command', l) },
+  },
   onScanProgress: fn => {
     const listener = (_, p) => fn(p)
     ipcRenderer.on('scan-progress', listener)

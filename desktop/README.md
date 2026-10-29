@@ -44,3 +44,4 @@ Video thumbnails use the system `ffmpeg`. HEIC goes through libheif (`heic-decod
 | `models/` | ONNX models and their licences (`models/NOTICES.md`) |
 | `src/Viewer.tsx` | Viewer: zoom/pan, keys, details, filmstrip |
 | `src/timeline.ts` | Grouping and formatting |
+| `assistant.js`, `src/Assistant.tsx`, `src/assist.ts` | AI Assist (the phone's Assistant.kt, ported): Mistral chat with Tetra's tools on Files, Voxtral speech in and live, Mistral's voice or `spd-say`; key in `safeStorage`; shortcuts through the GlobalShortcuts portal and `--assistant` / `--talk` / `--live` |

@@ -85,6 +85,7 @@
       "bubble-preload.js",
       "skills/**",
       "importer.js",
+      "assistant.js",
       "models/*.onnx",
       "models/tessdata/*.traineddata",
       "dist/**",
