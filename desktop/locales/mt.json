@@ -1808,6 +1808,8 @@
  "calls.soundPhone": "Ħoss fuq it-telefon",
  "calls.soundSpeaker": "Ħoss fuq il-lawdspiker tat-telefon",
  "calls.speaker": "Il-lawdspiker tat-telefon",
+ "calls.toPhone": "Għat-telefon",
+ "calls.toComputer": "Għal dan il-kompjuter",
  "calls.calling": "{name} qed iċċempel",
  "calls.someone": "Xi ħadd",
  "calls.callingOn": "Fuq {device} — wieġeb jew ċaħad fil-bolla tas-sejħa",

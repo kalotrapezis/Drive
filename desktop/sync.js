@@ -841,8 +841,8 @@ class SyncServer {
   /** The call bubble's Answer, Decline or End, done by the phone (SyncServer.kt /call/action). { ok } or { error }. */
   async callAction(what, by = 'server') {
     if (this.role() === 'client') return this.client.relay(`/call/act?do=${encodeURIComponent(what)}`, 15_000)
-    // hold, unhold, mute, unmute, speaker, unspeaker and the keypad's tones only while Tetra is the phone's phone app (Drive-Android PhoneCalls.act)
-    if (!/^(answer|decline|end|hold|unhold|mute|unmute|speaker|unspeaker|dtmf[0-9*#])$/.test(what)) return { error: 'Unknown action.' }
+    // hold, unhold, mute, unmute, speaker, unspeaker, phone, computer and the keypad's tones only while Tetra is the phone's phone app (Drive-Android PhoneCalls.act)
+    if (!/^(answer|decline|end|hold|unhold|mute|unmute|speaker|unspeaker|phone|computer|dtmf[0-9*#])$/.test(what)) return { error: 'Unknown action.' }
     const phones = this.db.prepare(`SELECT id, name, kind, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices
       WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL AND volume_uuid IS NULL AND kind NOT IN ('tablet', 'computer')`).all()
     let said = null
@@ -1469,7 +1469,7 @@ class SyncServer {
     if (req.method === 'POST' && url.pathname === '/call/state') {
       const b = await this.json(req, 4096)
       const s = { state: String(b.state || ''), direction: b.direction === 'out' ? 'out' : 'in', number: String(b.number || '').replace(/[^\d+*#]/g, '').slice(0, 32), missed: !!b.missed,
-        muted: !!b.muted, route: ['speaker', 'bluetooth', 'wired', 'earpiece'].includes(b.route) ? b.route : null, phoneApp: !!b.phoneApp, device: device.name,
+        muted: !!b.muted, route: ['speaker', 'bluetooth', 'wired', 'earpiece', 'computer'].includes(b.route) ? b.route : null, phoneApp: !!b.phoneApp, device: device.name,
         country: /^[A-Z]{2}$/.test(b.country) ? b.country : null, at: Number.isSafeInteger(b.at) ? b.at : null } // the phone's SIM's: this computer reads numbers in it (main.js phoneCountry)
       // which computer took it ('server' or a client's id): the other bubbles close (calls.js fromPhone)
       if (s.state === 'ringing') this.callTaken = null

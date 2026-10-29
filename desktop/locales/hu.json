@@ -1634,6 +1634,8 @@
  "calls.soundPhone": "Hang a telefonon",
  "calls.soundSpeaker": "Hang a telefon hangszóróján",
  "calls.speaker": "A telefon hangszórója",
+ "calls.toPhone": "A telefonra",
+ "calls.toComputer": "Erre a számítógépre",
  "calls.calling": "{name} hív",
  "calls.someone": "Valaki",
  "calls.callingOn": "Ezen: {device}. A hívásbuborékban fogadd vagy utasítsd el.",

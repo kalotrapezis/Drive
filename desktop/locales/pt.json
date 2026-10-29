@@ -1721,6 +1721,8 @@
  "calls.soundPhone": "Som no telemóvel",
  "calls.soundSpeaker": "Som no altifalante do telemóvel",
  "calls.speaker": "Altifalante do telemóvel",
+ "calls.toPhone": "Para o telemóvel",
+ "calls.toComputer": "Para este computador",
  "calls.calling": "{name} está a ligar",
  "calls.someone": "Alguém",
  "calls.callingOn": "Em {device}: atenda ou recuse na janela da chamada",

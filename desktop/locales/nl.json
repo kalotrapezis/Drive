@@ -1634,6 +1634,8 @@
  "calls.soundPhone": "Geluid op de telefoon",
  "calls.soundSpeaker": "Geluid op de luidspreker van de telefoon",
  "calls.speaker": "Luidspreker van de telefoon",
+ "calls.toPhone": "Naar de telefoon",
+ "calls.toComputer": "Naar deze computer",
  "calls.calling": "{name} belt",
  "calls.someone": "Iemand",
  "calls.callingOn": "Op {device} — neem op of weiger in het gespreksvenster",

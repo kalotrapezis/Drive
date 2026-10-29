@@ -1895,6 +1895,8 @@
  "calls.soundPhone": "Fuaim ar an ngutthán",
  "calls.soundSpeaker": "Fuaim ar challaire an ghutháin",
  "calls.speaker": "Callaire an ghutháin",
+ "calls.toPhone": "Chuig an bhfón",
+ "calls.toComputer": "Chuig an ríomhaire seo",
  "calls.calling": "Tá {name} ag glaoch",
  "calls.someone": "Duine éigin",
  "calls.callingOn": "Ar {device} — freagair nó diúltaigh sa burbhuille glaoch",

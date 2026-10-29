@@ -1634,6 +1634,8 @@
  "calls.soundPhone": "Ton auf dem Telefon",
  "calls.soundSpeaker": "Ton über den Lautsprecher des Telefons",
  "calls.speaker": "Lautsprecher des Telefons",
+ "calls.toPhone": "Zum Handy",
+ "calls.toComputer": "Zu diesem Computer",
  "calls.calling": "{name} ruft an",
  "calls.someone": "Jemand",
  "calls.callingOn": "Auf {device} — im Anrufbanner annehmen oder ablehnen",

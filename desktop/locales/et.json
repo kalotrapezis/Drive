@@ -1634,6 +1634,8 @@
  "calls.soundPhone": "Heli telefonis",
  "calls.soundSpeaker": "Heli telefoni valjuhääldis",
  "calls.speaker": "Telefoni valjuhääldi",
+ "calls.toPhone": "Telefoni",
+ "calls.toComputer": "Sellesse arvutisse",
  "calls.calling": "{name} helistab",
  "calls.someone": "Keegi",
  "calls.callingOn": "Seadmel {device} — vastake või lükake tagasi kõnemullis",

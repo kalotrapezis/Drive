@@ -1691,6 +1691,8 @@
  "calls.soundPhone": "Sonido en el teléfono",
  "calls.soundSpeaker": "Sonido en el altavoz del teléfono",
  "calls.speaker": "Altavoz del teléfono",
+ "calls.toPhone": "Al teléfono",
+ "calls.toComputer": "A este ordenador",
  "calls.calling": "{name} está llamando",
  "calls.someone": "Alguien",
  "calls.callingOn": "En {device}: contesta o rechaza en la burbuja de la llamada",

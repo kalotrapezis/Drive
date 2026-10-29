@@ -15,6 +15,10 @@ const { t } = require('./i18n')
 
 const run = (args, timeout = 4000) => new Promise(r => execFile('bluetoothctl', args, { timeout }, (e, out) => r(e ? null : String(out))))
 const pactl = args => new Promise(r => execFile('pactl', args, { timeout: 4000 }, (e, out) => r(e ? null : String(out).trim())))
+// The phone's A2DP Audio Source: on this computer's Bluetooth the phone took it for a speaker too and sent all its sound
+// here, music and videos as well (the user, 29 Oct). Only the calls' half (Handsfree) is kept: the media half is dropped.
+const MEDIA = '0000110a-0000-1000-8000-00805f9b34fb'
+const dropMedia = mac => run(['disconnect', mac, MEDIA])
 
 /**
  * Echo cancellation while a call's sound is on this computer (the user, 24 Oct: "the other side hears their voice two
@@ -123,12 +127,19 @@ class Calls {
     return c ? { name: c.info.formatted || [c.info.given, c.info.family].filter(Boolean).join(' '), photo: c.info.photo } : null
   }
 
+  /**
+   * The call's sound on this computer: the phone (Tetra the phone app) says 'computer' when it is on a computer's Bluetooth;
+   * earpiece, wired, bluetooth (earbuds, the car) and speaker are the phone's. A phone that says no route: here while connected.
+   */
+  here(route) { return (route === 'computer' || route == null) && this.bt.phones.some(p => p.connected) }
+
   /** [route]: the phone's own (Tetra the phone app); on its loudspeaker the sound is there, whatever this computer has. */
   sound(route) {
     if (route === 'speaker') return t('calls.soundSpeaker')
     if (this.relayStop) return `${t('calls.soundRelayed')} · ${t('release.alpha')}` // not yet tried with two computers
     const on = this.bt.phones.find(p => p.connected)
-    if (on) return t('calls.soundHere', { name: on.name })
+    if (on && this.here(route)) return t('calls.soundHere', { name: on.name })
+    if (on) return t('calls.soundPhone')
     if (this.connecting) return t('calls.soundConnecting', { name: this.connecting })
     return this.unreached ? t('calls.soundUnreached', { name: this.unreached }) : t('calls.soundPhone')
   }
@@ -174,7 +185,9 @@ class Calls {
     // a call begins (it rings, or the phone dials): its sound needs the phone on this computer's Bluetooth
     if (['ringing', 'calling'].includes(s.state) && !['ringing', 'calling', 'active', 'held'].includes(this.state?.state)) { this.unreached = null; if (this.early()) this.reconnect() }
     if (s.state === 'ended' && recorder.proc) { recorder.stop(); this.notify(t('calls.recorded'), path.basename(recorder.file || '')) }
-    this.state = { ...s, sound: this.sound(s.route), canRecord: !!echo.module && ['active', 'held'].includes(s.state) && s.route !== 'speaker', recording: !!recorder.proc }
+    // the bubble's "To the phone" / "To this computer" (the user, 29 Oct): the phone moves its call's sound (PhoneCalls.moveTo)
+    const here = this.here(s.route) || !!this.relayStop
+    this.state = { ...s, sound: this.sound(s.route), move: !s.phoneApp ? null : here ? 'phone' : this.bt.phones.some(p => p.connected) ? 'computer' : null, canRecord: !!echo.module && ['active', 'held'].includes(s.state) && s.route !== 'speaker', recording: !!recorder.proc }
     if (!this.win || this.win.isDestroyed()) {
       const { workArea } = screen.getPrimaryDisplay()
       this.win = new BrowserWindow({ width: 360, height: 150, x: workArea.x + workArea.width - 376, y: workArea.y + workArea.height - 166, frame: false, resizable: false,
@@ -190,7 +203,7 @@ class Calls {
       if (s.state === 'ringing') { this.win.show(); this.win.focus() } else this.win.showInactive()
     }
     if (s.state === 'ended') { this.relayStop?.(); this.relayStop = null; echo.off(); this.closer = setTimeout(() => this.close(), 6000) }
-    else if (['calling', 'active', 'held'].includes(s.state) && this.bt.phones.some(p => p.connected)) echo.on()
+    else if (['calling', 'active', 'held'].includes(s.state)) here ? echo.on() : echo.off() // the call's sound left: the speakers as they were
   }
 
   /** The bubble's keypad open or shut: its window grows to hold it. */
@@ -234,6 +247,7 @@ class Calls {
       const before = this.bt.phones.find(p => p.connected)?.mac
       this.bt = await bluetooth().catch(() => this.bt)
       const now = this.bt.phones.find(p => p.connected)
+      if (now) dropMedia(now.mac) // each look: the phone brings its media half back when it reconnects
       if (before !== undefined && before !== now?.mac) this.notify(now ? t('calls.btConnected', { name: now.name }) : t('calls.btDropped'), now ? t('calls.btConnectedBody') : t('calls.btDroppedBody'))
       if (this.state) this.show(this.state)
     }
@@ -248,6 +262,7 @@ class Calls {
     const out = await run(['connect', mac], 15_000) // a phone takes a few seconds to answer
     this.bt = await bluetooth()
     if (!this.bt.phones.find(p => p.mac === mac)?.connected) throw new Error(out?.match(/Failed to connect: (.+)/)?.[1] || t('calls.errNoConnect'))
+    await dropMedia(mac)
     return this.bt
   }
 

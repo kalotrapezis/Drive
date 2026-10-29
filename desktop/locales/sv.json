@@ -1634,6 +1634,8 @@
  "calls.soundPhone": "Ljud i telefonen",
  "calls.soundSpeaker": "Ljud i telefonens högtalare",
  "calls.speaker": "Telefonens högtalare",
+ "calls.toPhone": "Till telefonen",
+ "calls.toComputer": "Till den här datorn",
  "calls.calling": "{name} ringer",
  "calls.someone": "Någon",
  "calls.callingOn": "På {device} — svara eller avvisa i samtalsbubblan",

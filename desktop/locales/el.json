@@ -1634,6 +1634,8 @@
  "calls.soundPhone": "Ήχος στο τηλέφωνο",
  "calls.soundSpeaker": "Ήχος στο μεγάφωνο του τηλεφώνου",
  "calls.speaker": "Μεγάφωνο τηλεφώνου",
+ "calls.toPhone": "Στο κινητό",
+ "calls.toComputer": "Σε αυτόν τον υπολογιστή",
  "calls.calling": "Καλεί: {name}",
  "calls.someone": "Κάποιος",
  "calls.callingOn": "Στο {device} — απαντήστε ή απορρίψτε στο συννεφάκι κλήσης",

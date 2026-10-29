@@ -1634,6 +1634,8 @@
  "calls.soundPhone": "Sound on the phone",
  "calls.soundSpeaker": "Sound on the phone's loudspeaker",
  "calls.speaker": "Phone's loudspeaker",
+ "calls.toPhone": "To the phone",
+ "calls.toComputer": "To this computer",
  "calls.calling": "{name} is calling",
  "calls.someone": "Someone",
  "calls.callingOn": "On {device} — answer or decline in the call bubble",

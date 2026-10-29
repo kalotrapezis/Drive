@@ -65,6 +65,15 @@
         add(`soft icon ${loud ? 'on' : ''}`, '', loud ? 'unspeaker' : 'speaker')
         Object.assign(b.lastChild, { title: t('calls.speaker'), innerHTML: '<svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor"><path d="M560-131v-82q90-26 145-100t55-168q0-94-55-168T560-749v-82q124 28 202 125.5T840-481q0 127-78 224.5T560-131ZM120-360v-240h160l200-200v640L280-360H120Zm440 40v-322q47 22 73.5 66t26.5 96q0 51-26.5 94.5T560-320Z"/></svg>' })
         b.lastChild.setAttribute('aria-label', t('calls.speaker')); b.lastChild.setAttribute('aria-pressed', String(loud))
+        // the call's sound to the phone, or onto this computer's Bluetooth (the user, 29 Oct: "where I answer, the sound goes there")
+        if (s.move) {
+          const label = t(s.move === 'phone' ? 'calls.toPhone' : 'calls.toComputer')
+          add('soft icon', '', s.move)
+          Object.assign(b.lastChild, { title: label, innerHTML: s.move === 'phone'
+            ? '<svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor"><path d="M280-40q-33 0-56.5-23.5T200-120v-720q0-33 23.5-56.5T280-920h400q33 0 56.5 23.5T760-840v720q0 33-23.5 56.5T680-40H280Zm0-200v120h400v-120H280Zm200 100q17 0 28.5-11.5T520-180q0-17-11.5-28.5T480-220q-17 0-28.5 11.5T440-180q0 17 11.5 28.5T480-140Z"/></svg>'
+            : '<svg width="18" height="18" viewBox="0 -960 960 960" fill="currentColor"><path d="M40-120v-80h880v80H40Zm120-120q-33 0-56.5-23.5T80-320v-440q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v440q0 33-23.5 56.5T800-240H160Z"/></svg>' })
+          b.lastChild.setAttribute('aria-label', label)
+        }
         const k = document.createElement('button'); k.className = `soft ${keys ? 'on' : ''}`; k.textContent = t('calls.keys'); k.onclick = () => { keys = !keys; draw() }; b.appendChild(k)
       }
       if (s.recording) add('soft on', t('calls.stopRec'), 'stoprec')

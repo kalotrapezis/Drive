@@ -1721,6 +1721,8 @@
  "calls.soundPhone": "Sunet pe telefon",
  "calls.soundSpeaker": "Sunet pe difuzorul telefonului",
  "calls.speaker": "Difuzorul telefonului",
+ "calls.toPhone": "Pe telefon",
+ "calls.toComputer": "Pe acest calculator",
  "calls.calling": "{name} sună",
  "calls.someone": "Cineva",
  "calls.callingOn": "Pe {device} – răspunzi sau refuzi din bula de apel",

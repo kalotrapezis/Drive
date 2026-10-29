@@ -1720,6 +1720,8 @@
  "calls.soundPhone": "Zvuk na telefonu",
  "calls.soundSpeaker": "Zvuk na zvučniku telefona",
  "calls.speaker": "Zvučnik telefona",
+ "calls.toPhone": "Na telefon",
+ "calls.toComputer": "Na ovo računalo",
  "calls.calling": "{name} zove",
  "calls.someone": "Netko",
  "calls.callingOn": "Na uređaju {device} — odgovorite ili odbijte u balončiću poziva",

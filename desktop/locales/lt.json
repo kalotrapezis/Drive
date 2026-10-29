@@ -1808,6 +1808,8 @@
  "calls.soundPhone": "Garsas telefone",
  "calls.soundSpeaker": "Garsas telefono garsiakalbyje",
  "calls.speaker": "Telefono garsiakalbis",
+ "calls.toPhone": "Į telefoną",
+ "calls.toComputer": "Į šį kompiuterį",
  "calls.calling": "{name} skambina",
  "calls.someone": "Kažkas",
  "calls.callingOn": "Įrenginyje {device} — atsiliepkite arba atmeskite skambučio burbule",

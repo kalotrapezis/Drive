@@ -20,6 +20,7 @@ case "$1" in
   devices) echo "Device AA:BB:CC:DD:EE:FF Test Phone" ;;
   info) echo "\tUUID: Handsfree Audio Gateway (0000111f-0000-1000-8000-00805f9b34fb)"; [ -e "${bt}/on" ] && echo "\tConnected: yes" || echo "\tConnected: no" ;;
   connect) if [ -e "${bt}/reachable" ]; then touch "${bt}/on"; echo "Connection successful"; else echo "Failed to connect: org.bluez.Error.Failed"; fi ;;
+  disconnect) echo "$2 $3" >> "${bt}/dropped" ;;
 esac
 `, { mode: 0o755 })
 process.env.PATH = `${bt}:${process.env.PATH}`
@@ -83,4 +84,24 @@ test('End the phone did not hear still ends the bubble', async () => {
   await c.press('end')
   assert.equal(c.state.state, 'ended')
   c.close()
+})
+
+test('the sound where the call was taken: the bubble says where, and offers to move it', async () => {
+  fs.writeFileSync(path.join(bt, 'on'), '')
+  const c = calls()
+  await c.reconnect() // the phone on this computer's Bluetooth
+  c.fromPhone({ state: 'active', number: '2100000000', phoneApp: true, route: 'computer' })
+  assert.equal(c.state.sound, 'Sound on this computer (Bluetooth, Test Phone)')
+  assert.equal(c.state.move, 'phone')
+  c.fromPhone({ state: 'active', number: '2100000000', phoneApp: true, route: 'earpiece' }) // answered on the phone
+  assert.equal(c.state.sound, 'Sound on the phone')
+  assert.equal(c.state.move, 'computer')
+  c.close()
+})
+
+test("connecting the phone keeps only its calls' half: its media (A2DP) is dropped", async () => {
+  fs.rmSync(path.join(bt, 'on'), { force: true }); fs.rmSync(path.join(bt, 'dropped'), { force: true }); fs.writeFileSync(path.join(bt, 'reachable'), '')
+  const c = calls()
+  await c.connect('AA:BB:CC:DD:EE:FF')
+  assert.equal(fs.readFileSync(path.join(bt, 'dropped'), 'utf8'), 'AA:BB:CC:DD:EE:FF 0000110a-0000-1000-8000-00805f9b34fb\n')
 })

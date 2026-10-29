@@ -1808,6 +1808,8 @@
  "calls.soundPhone": "Zvok v telefonu",
  "calls.soundSpeaker": "Zvok na zvočniku telefona",
  "calls.speaker": "Zvočnik telefona",
+ "calls.toPhone": "Na telefon",
+ "calls.toComputer": "Na ta računalnik",
  "calls.calling": "{name} kliče",
  "calls.someone": "Nekdo",
  "calls.callingOn": "Na napravi {device} — sprejmite ali zavrnite v klicnem balončku",

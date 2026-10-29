@@ -1721,6 +1721,8 @@
  "calls.soundPhone": "Skaņa tālrunī",
  "calls.soundSpeaker": "Skaņa tālruņa skaļrunī",
  "calls.speaker": "Tālruņa skaļrunis",
+ "calls.toPhone": "Uz tālruni",
+ "calls.toComputer": "Uz šo datoru",
  "calls.calling": "{name} zvana",
  "calls.someone": "Kāds",
  "calls.callingOn": "Ierīcē {device} — atbildiet vai noraidiet zvana burbulī",

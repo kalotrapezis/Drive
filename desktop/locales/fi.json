@@ -1634,6 +1634,8 @@
  "calls.soundPhone": "Ääni puhelimessa",
  "calls.soundSpeaker": "Ääni puhelimen kaiuttimessa",
  "calls.speaker": "Puhelimen kaiutin",
+ "calls.toPhone": "Puhelimeen",
+ "calls.toComputer": "Tälle tietokoneelle",
  "calls.calling": "{name} soittaa",
  "calls.someone": "Joku",
  "calls.callingOn": "Laitteella {device} — vastaa tai hylkää puhelukuplassa",

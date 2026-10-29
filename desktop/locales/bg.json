@@ -1634,6 +1634,8 @@
  "calls.soundPhone": "Звук на телефона",
  "calls.soundSpeaker": "Звук на високоговорителя на телефона",
  "calls.speaker": "Високоговорител на телефона",
+ "calls.toPhone": "Към телефона",
+ "calls.toComputer": "Към този компютър",
  "calls.calling": "{name} се обажда",
  "calls.someone": "Някой",
  "calls.callingOn": "На {device} — приемете или отхвърлете от балончето на разговора",

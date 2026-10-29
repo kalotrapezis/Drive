@@ -1808,6 +1808,8 @@
  "calls.soundPhone": "Zvuk v telefonu",
  "calls.soundSpeaker": "Zvuk v reproduktoru telefonu",
  "calls.speaker": "Reproduktor telefonu",
+ "calls.toPhone": "Do telefonu",
+ "calls.toComputer": "Do tohoto počítače",
  "calls.calling": "Volá: {name}",
  "calls.someone": "Někdo",
  "calls.callingOn": "Na {device} — přijměte nebo odmítněte v bublině hovoru",

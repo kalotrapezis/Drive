@@ -1808,6 +1808,8 @@
  "calls.soundPhone": "Dźwięk w telefonie",
  "calls.soundSpeaker": "Dźwięk na głośniku telefonu",
  "calls.speaker": "Głośnik telefonu",
+ "calls.toPhone": "Na telefon",
+ "calls.toComputer": "Na ten komputer",
  "calls.calling": "{name} dzwoni",
  "calls.someone": "Ktoś",
  "calls.callingOn": "Na {device} — odbierz lub odrzuć w dymku połączenia",
