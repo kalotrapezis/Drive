@@ -58,7 +58,8 @@ const stopName = (name: string) => name === ME ? t('maps.myLocation') : name
 type Draft = { id?: string; name: string; stops: MapStop[] }
 const cardSpot = (c: Card) => c.kind === 'poi' ? c.poi : c.kind === 'place' ? c.place : c
 
-export function MapsPage({ say, onMakeMap }: { say: (message: string) => void; onMakeMap: () => void }) {
+/** [initial]: a search to show at once (AI Assist's "πάμε στη Θεσσαλονίκη"). */
+export function MapsPage({ say, onMakeMap, initial }: { say: (message: string) => void; onMakeMap: () => void; initial?: string }) {
   const box = useRef<HTMLDivElement>(null)
   const map = useRef<maplibregl.Map | null>(null)
   const markers = useRef<maplibregl.Marker[]>([])
@@ -72,7 +73,7 @@ export function MapsPage({ say, onMakeMap }: { say: (message: string) => void; o
   const [lists, setLists] = useState<MapList[]>([])
   const [trips, setTrips] = useState<MapTrip[]>([])
   const [tab, setTab] = useState<'saved' | 'trips'>('saved')
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initial ?? '')
   const [kind, setKind] = useState<string | null>(null)
   const [allPills, setAllPills] = useState(false)
   const [results, setResults] = useState<Poi[] | null>(null)

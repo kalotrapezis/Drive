@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { AppNotification, CleanItem } from './drive'
+import type { AppNotification, AssistSettings, AssistShortcuts, CleanItem } from './drive'
+import { accelerator, money } from './assist'
 import { Icon, type IconName } from './Icon'
 import { locale, t } from './i18n'
 import { ResetCard } from './Role'
@@ -36,7 +37,7 @@ export function NotificationsPage() {
 }
 
 /** Settings' pages, as the phone's (SettingsScreen.SettingsPage): the general ones, then one an app in its colour. */
-type SettingsTab = 'appearance' | 'computer' | 'cleanUp' | 'photos' | 'maps' | 'phone'
+type SettingsTab = 'appearance' | 'computer' | 'cleanUp' | 'photos' | 'maps' | 'phone' | 'assistant'
 const GENERAL: { id: SettingsTab; icon: IconName; title: string; summary: string }[] = [
   { id: 'appearance', icon: 'palette', title: 'settings.appearance', summary: 'settings.sum.appearance' },
   { id: 'computer', icon: 'server', title: 'reset.title', summary: 'settings.sum.computer' },
@@ -46,6 +47,7 @@ const APPS: { id: SettingsTab; icon: IconName; cat: string; title: string; summa
   { id: 'photos', icon: 'photos', cat: 'photos', title: 'app.photos', summary: 'settings.sum.photos' },
   { id: 'maps', icon: 'map', cat: 'maps', title: 'app.maps', summary: 'settings.sum.maps' },
   { id: 'phone', icon: 'call', cat: 'phone', title: 'app.phone', summary: 'settings.sum.phone' },
+  { id: 'assistant', icon: 'sparkle', cat: 'assistant', title: 'app.assistant', summary: 'settings.sum.assistant' },
 ]
 const TABS: SettingsTab[] = [...GENERAL, ...APPS].map(x => x.id)
 
@@ -90,6 +92,7 @@ export function SettingsPage({ onGuide, start }: { onGuide: () => void; start?: 
           {tab === 'photos' && <MotionCard />}
           {tab === 'maps' && <><MapsCard /><LocationCard /></>}
           {tab === 'phone' && <CallsCard />}
+          {tab === 'assistant' && <AssistCard />}
         </div>
       </div>
     </div>
@@ -252,6 +255,126 @@ function CleanCard() {
       <h4>{t('clean.byItself')}</h4>
       <p className="muted">{t('clean.lastStart', { when: when(now?.last.start) })}<br />{t('clean.lastBuild', { when: when(now?.last.build) })}<br />
         {t('clean.lastHistory', { when: when(now?.last.history) })}<br />{t('clean.lastManual', { when: when(now?.last.manual) })}</p>
+    </section>
+  )
+}
+
+/**
+ * Settings › AI Assist (the phone's AssistantSettings): the Mistral key, My words, the voice, the pause time, what it has
+ * cost, and the shortcuts (below).
+ */
+function AssistCard() {
+  const [s, setS] = useState<AssistSettings | null>(null)
+  const [key, setKey] = useState('')
+  const [said, setSaid] = useState('')
+  const [voices, setVoices] = useState<{ id: string; name: string }[] | null>(null)
+  const [resetting, setResetting] = useState(false)
+  const load = () => window.drive.assistant.settings().then(setS)
+  useEffect(() => { load() }, [])
+  useEffect(() => { if (s?.hasKey && !voices) window.drive.assistant.voices().then(setVoices, e => setSaid(errorText(e))) }, [s?.hasKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!s) return null
+  const set = (changes: Parameters<typeof window.drive.assistant.set>[0]) => { setS({ ...s, ...changes } as AssistSettings); window.drive.assistant.set(changes) }
+  const saveKey = async () => {
+    try { await window.drive.assistant.setKey(key); setKey(''); setSaid(''); setVoices(null); load() } catch (e) { setSaid(errorText(e)) }
+  }
+  const pickVoice = (id: string) => {
+    const name = id === 'system' ? '' : voices?.find(v => v.id === id)?.name ?? ''
+    set({ voice: id, voiceName: name })
+    window.drive.assistant.sample(id).catch(e => setSaid(errorText(e))) // a choice plays a sample
+  }
+  const day = (at: number) => new Date(at).toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' })
+  const m = s.meter
+  return <>
+    <section className="settings-card island">
+      <h3><Icon name="key" size={20} />{t('assistant.key')}</h3>
+      <p><strong>{s.hasKey ? t('assistant.keySaved') : t('assistant.keyMissing')}</strong></p>
+      <input className="field" type="password" placeholder={t('assistant.keyHint')} value={key} onChange={e => setKey(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveKey()} />
+      <div className="reset-actions">
+        <button className="filled-button" disabled={!key.trim()} onClick={saveKey}>{t('common.save')}</button>
+        {s.hasKey && <button className="text-button" onClick={() => window.drive.assistant.setKey('').then(load)}>{t('assistant.keyRemove')}</button>}
+      </div>
+      <p className="muted">{t('assistant.keyNote')}</p>
+      {!s.keyring && <p className="muted">{t('assistant.noKeyring')}</p>}
+      {said && <p className="muted">{said}</p>}
+    </section>
+    <section className="settings-card island">
+      <h3>{t('assistant.words')}</h3>
+      <textarea className="field" rows={3} defaultValue={s.words} onBlur={e => set({ words: e.target.value })} />
+      <p className="muted">{t('assistant.wordsNote')}</p>
+      <label className="cal-switch"><input type="checkbox" checked={s.contactWords} onChange={e => set({ contactWords: e.target.checked })} />
+        <span><strong>{t('assistant.contactWords')}</strong><br />{t('assistant.contactWordsNote')}</span></label>
+    </section>
+    <section className="settings-card island">
+      <h3><Icon name="volumeUp" size={20} />{t('assistant.voice')}</h3>
+      <select className="field" value={s.voice || (voices?.[0]?.id ?? '')} onChange={e => pickVoice(e.target.value)}>
+        {!voices && !s.voice && <option value="">{t('assistant.voiceFirst')}</option>}
+        {s.voice && s.voice !== 'system' && !voices?.some(v => v.id === s.voice) && <option value={s.voice}>{s.voiceName || s.voice}</option>}
+        {voices?.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+        <option value="system">{t('assistant.voiceSystem')}</option>
+      </select>
+      <div className="reset-actions"><button className="text-button" onClick={() => window.drive.assistant.sample(s.voice || voices?.[0]?.id || 'system').catch(e => setSaid(errorText(e)))}>{t('assistant.voiceTry')}</button></div>
+      <p className="muted">{t('assistant.voiceNote')}</p>
+    </section>
+    <section className="settings-card island">
+      <h3>{t('assistant.pause')}</h3>
+      <label className="assist-range"><input type="range" min={1000} max={6000} step={500} value={s.pause} onChange={e => set({ pause: Number(e.target.value) })} />
+        <span>{t('assistant.pauseValue', { n: (s.pause / 1000).toLocaleString(locale()) })}</span></label>
+      <p className="muted">{t('assistant.pauseNote')}</p>
+    </section>
+    <section className="settings-card island">
+      <h3>{t('assistant.spent')}</h3>
+      <div className="clean-list">
+        <div className="clean-row"><span><strong>{t('assistant.spentSince', { date: day(m.since) })}</strong></span><span className="clean-size">{money(m.trip)}</span>
+          <button className="text-button" onClick={() => setResetting(true)}>{t('assistant.spentReset')}</button></div>
+        {resetting && <div className="clean-row"><span>{t('assistant.spentResetAsk')}</span><span />
+          <button className="text-button" onClick={() => window.drive.assistant.resetMeter().then(meter => { setS({ ...s, meter }); setResetting(false) })}>{t('common.ok')}</button></div>}
+        <div className="clean-row"><span><strong>{t('assistant.spentTotal')}</strong></span><span className="clean-size">{money(m.total)}</span><span /></div>
+        {m.past.map((p, i) => <div key={i} className="clean-row"><span className="muted">{day(p.from)} → {day(p.to)}</span><span className="clean-size">{money(p.usd)}</span><span /></div>)}
+      </div>
+      <p className="muted">{t('assistant.spentNote')}</p>
+    </section>
+    <ShortcutsCard s={s} reload={load} />
+  </>
+}
+
+/**
+ * Settings › AI Assist › Shortcuts (the user: "configurable keyboard shortcuts"): open or close AI Assist, talk, live — from
+ * anywhere, through the desktop's GlobalShortcuts portal on Wayland (KDE asks once to allow them). Where the desktop says no,
+ * the same three are commands its own keyboard settings can run.
+ */
+function ShortcutsCard({ s, reload }: { s: AssistSettings; reload: () => void }) {
+  const [recording, setRecording] = useState<keyof AssistShortcuts | null>(null)
+  const [copied, setCopied] = useState('')
+  useEffect(() => {
+    if (!recording) return
+    const down = (e: KeyboardEvent) => {
+      e.preventDefault(); e.stopPropagation()
+      if (e.key === 'Escape') { setRecording(null); return }
+      const acc = accelerator(e)
+      if (!acc) return
+      window.drive.assistant.set({ shortcuts: { [recording]: acc } }).then(reload)
+      setRecording(null)
+    }
+    window.addEventListener('keydown', down, true)
+    return () => window.removeEventListener('keydown', down, true)
+  }, [recording]) // eslint-disable-line react-hooks/exhaustive-deps
+  const ROWS: [keyof AssistShortcuts, string, string][] = [['toggle', 'assistant.scToggle', '--assistant'], ['talk', 'assistant.scTalk', '--talk'], ['live', 'assistant.scLive', '--live']]
+  const kde = /kde/i.test(s.desktop), gnome = /gnome/i.test(s.desktop)
+  return (
+    <section className="settings-card island">
+      <h3>{t('assistant.shortcuts')}</h3>
+      <div className="clean-list">
+        {ROWS.map(([id, name, arg]) => <div key={id} className="clean-row">
+          <span><strong>{t(name)}</strong>{s.shortcuts[id] && s.registered[id] === false && <small>{t('assistant.scRefused')}</small>}
+            <button className="text-button copy" title={`${s.command} ${arg}`} onClick={() => navigator.clipboard.writeText(`${s.command} ${arg}`).then(() => setCopied(id))}>
+              {copied === id ? t('assistant.scCopied') : t('assistant.scCopy', { arg })}</button></span>
+          <button className="outline-button" onClick={() => setRecording(id)}>{recording === id ? t('assistant.scPress') : s.shortcuts[id] || t('assistant.scNone')}</button>
+          <button className="text-button" disabled={!s.shortcuts[id]} onClick={() => window.drive.assistant.set({ shortcuts: { [id]: '' } }).then(reload)}>{t('assistant.scOff')}</button>
+        </div>)}
+      </div>
+      <p className="muted">{t('assistant.scInWindow')}</p>
+      <p className="muted">{s.session === 'wayland' ? t('assistant.scWayland') : t('assistant.scX11')}</p>
+      <p className="muted">{kde ? t('assistant.scKde') : gnome ? t('assistant.scGnome') : t('assistant.scOther')}</p>
     </section>
   )
 }

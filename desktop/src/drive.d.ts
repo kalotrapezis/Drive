@@ -1,6 +1,18 @@
 /// <reference types="vite/client" />
 import type { Media } from './timeline'
 
+/** AI Assist (assistant.js): an answer, and what its tools left for the screen. */
+export interface AssistCall { name: string; number: string }
+export interface AssistChoice { label: string; call?: AssistCall; open?: string; go?: AssistGo }
+export type AssistGo = { note?: string; maps?: string; youtube?: string }
+export interface AssistReply { text: string; choices: AssistChoice[]; call: AssistCall | null; images: string[]; open: string | null; go: AssistGo | null; spent: number }
+export interface AssistShortcuts { toggle: string; talk: string; live: string }
+export interface AssistSettings {
+  hasKey: boolean; keyring: boolean; words: string; contactWords: boolean; voice: string; voiceName: string; pause: number; aloud: boolean; cassette: boolean
+  meter: { total: number; trip: number; since: number; past: { from: number; to: number; usd: number }[] }; spent: number; perMinute: number
+  meName: string; shortcuts: AssistShortcuts; registered: Partial<Record<keyof AssistShortcuts, boolean>>; command: string; session: string; desktop: string
+}
+
 /** Maps (maps.js): the phone's files in Files/Maps. */
 export interface MapPlace { id: string; name: string; lat: number; lng: number; icon: string; slot: number; mode: 'car' | 'foot' | 'bike'; lists: string[]; label: string }
 export interface MapList { id: string; name: string; emoji: string }
@@ -211,6 +223,29 @@ declare global {
         last(): Promise<number>
       }
       onTimerChanged(cb: () => void): () => void
+      assistant: {
+        ask(text: string, aloud: boolean): Promise<AssistReply>
+        transcribe(pcm: Int16Array): Promise<{ text: string; spent: number }>
+        hush(): Promise<void>
+        clear(): Promise<void>
+        youtube(q: string): Promise<void>
+        hide(): Promise<void>
+        liveStart(): Promise<void>
+        liveAudio(bytes: Uint8Array): void
+        liveMute(on: boolean): Promise<void>
+        liveEnd(): Promise<number>
+        settings(): Promise<AssistSettings>
+        set(changes: Partial<{ words: string; contactWords: boolean; voice: string; voiceName: string; pause: number; aloud: boolean; cassette: boolean; shortcuts: Partial<AssistShortcuts> }>): Promise<void>
+        setKey(key: string): Promise<boolean>
+        voices(): Promise<{ id: string; name: string }[]>
+        sample(voice: string): Promise<void>
+        resetMeter(): Promise<AssistSettings['meter']>
+        onWords(fn: (w: string) => void): () => void
+        onAudio(fn: (pcm: Float32Array) => void): () => void
+        onSay(fn: (sentence: string) => void): () => void
+        onLive(fn: (e: { type: 'heard' | 'turn' | 'error'; text?: string; message?: string }) => void): () => void
+        onCommand(fn: (what: 'open' | 'toggle' | 'talk' | 'live') => void): () => void
+      }
       mapsInfo(): Promise<{ root: string; map: true | null; maps: { id: string; name: string; bounds: [number, number, number, number] | null; drive: 'left' | 'right' }[] }>
       mapsRegions(): Promise<MapRegion[]>
       mapsNeeds(id: string): Promise<{ osm: number; memory: number; hasMemory: number; disk: number; hasDisk: number }>

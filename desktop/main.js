@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification, nativeTheme, dialog, powerMonitor } = require('electron')
+const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification, nativeTheme, dialog, powerMonitor, safeStorage, globalShortcut } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
@@ -31,6 +31,7 @@ const { Router, join } = require('./router')
 const { MapBuilder } = require('./mapbuild')
 const { Thumbs } = require('./thumbs')
 const importer = require('./importer')
+const assistant = require('./assistant')
 const i18n = require('./i18n')
 const { t } = i18n
 
@@ -49,6 +50,9 @@ if (HOME.note) console.warn('[home]', HOME.note)
 const PHOTOS_ROOT = process.env.DRIVE_PHOTOS || HOME.photos
 const FILES_ROOT = process.env.DRIVE_FILES || HOME.files
 
+// AI Assist's shortcuts from anywhere: on Wayland only through the desktop's GlobalShortcuts portal (KDE, GNOME 48+), which
+// Chromium uses when asked; X11 needs nothing
+if (process.env.XDG_SESSION_TYPE === 'wayland') app.commandLine.appendSwitch('enable-features', 'GlobalShortcutsPortal')
 protocol.registerSchemesAsPrivileged([{ scheme: 'media', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true, corsEnabled: true } }])
 
 let importing = null, importStop = null
@@ -194,9 +198,11 @@ function watchCalendar() {
 }
 // Start at login (Linux autostart): Tetra in the tray, so reminders ring and the phone can sync whenever the computer is on.
 const AUTOSTART = path.join(os.homedir(), '.config', 'autostart', 'tetra.desktop')
+/** The command that starts this Tetra (the AppImage, the installed one, or this source): autostart's, and AI Assist's --assistant. */
+const launchCommand = () => process.env.APPIMAGE ? `"${process.env.APPIMAGE}"` : app.isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`
 function setAutostart(on) {
   if (!on) { try { fs.unlinkSync(AUTOSTART) } catch {} return }
-  const exec = process.env.APPIMAGE ? `"${process.env.APPIMAGE}"` : app.isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`
+  const exec = launchCommand()
   fs.mkdirSync(path.dirname(AUTOSTART), { recursive: true })
   fs.writeFileSync(AUTOSTART, `[Desktop Entry]\nType=Application\nName=Tetra\nComment=Tetra in the tray: sync and calendar reminders\nExec=${exec} --hidden\nIcon=${app.isPackaged ? 'local-drive-desktop' : path.join(__dirname, 'public', 'icon.png')}\nX-GNOME-Autostart-enabled=true\n`)
 }
@@ -1137,6 +1143,145 @@ app.whenReady().then(() => {
     if (row) sync.locate(row).then(at => at.file && shell.showItemInFolder(at.file))
   })
 
+  // AI Assist (assistant.js): Mistral and Tetra's tools here, the microphone, the voice and the record in the window. The key
+  // is kept encrypted by the system's keyring (safeStorage) and never goes to the window.
+  const assistKey = () => { try { const s = setting('assistantKey'); return s ? safeStorage.decryptString(Buffer.from(s, 'base64')) : null } catch { return null } }
+  const meterAdd = x => { const m = assistant.Meter.of(setting('assistantMeter')); m.add(x); setSetting('assistantMeter', m.json()) }
+  const assistWords = () => setting('assistantWords') ?? 'Καλοτραπέζης, Θεολόγος, Tetra, ΥΠΕΧΩΔΕ'
+  const assistBias = () => assistant.terms(assistWords(), setting('assistantContactWords') === '1' ? contacts.list().filter(c => c.favourite).map(c => c.name).slice(0, 50) : [])
+  const assistPause = () => Math.min(6000, Math.max(1000, Number(setting('assistantPause')) || 2500))
+  const api = new assistant.Mistral({ key: assistKey, bill: new assistant.Bill(meterAdd) })
+  /** The voice that reads: 'system' (this computer's own, free) or a Mistral voice's id, Mistral's first when none was picked. */
+  const assistVoice = async () => {
+    const v = setting('assistantVoice')
+    if (v) return v
+    const first = (await api.voices())[0]
+    if (!first) return 'system'
+    setSetting('assistantVoice', first.id); setSetting('assistantVoiceName', first.name)
+    return first.id
+  }
+  const assistTools = new assistant.Tools({ calendar, timers, notes, files, contacts, maps,
+    // the Calendar's, Timer's and Contacts' folders are watched (shown, the devices told); Notes' is not
+    changed: what => { if (what === 'notes') { win?.webContents.send('notes-changed'); sync?.nudge().catch(() => {}) } },
+    search: async q => { const r = await api.conversation(q, 'web_search', 'Search the web and answer briefly with the facts found.'); return r.text + (r.sources.length ? '\nSources: ' + r.sources.slice(0, 3).join('; ') : '') },
+    // pictures go to Files › Assistant, a folder like any other, so they reach the phone
+    image: async prompt => {
+      const id = (await api.conversation(prompt, 'image_generation', 'Draw the picture asked for.')).files[0]
+      if (!id) throw new Error('No picture came back.')
+      const full = path.join(FILES_ROOT, 'Assistant', `image-${Date.now()}.png`)
+      fs.mkdirSync(path.dirname(full), { recursive: true }); fs.writeFileSync(full, await api.download(id))
+      return { name: path.basename(full), full }
+    },
+    // shortcut: which card is the user's is kept on this computer only (Contacts has no "me" mark yet); into the card once the devices need it
+    me: () => setting('assistantMe') || null, setMe: uid => setSetting('assistantMe', uid) })
+  const chat = new assistant.Chat(api, assistTools)
+  let voiceStop = null // the answer being read aloud
+  /** This computer's own voice, the free one: speech-dispatcher (Chromium's speechSynthesis finds no voices in Electron here). */
+  const spdSay = (text, signal) => new Promise(resolve => {
+    if (signal.aborted) return resolve()
+    const p = require('node:child_process').spawn('spd-say', ['-w', '-l', /[\u0370-\u03ff]/.test(text) ? 'el' : 'en', '--', text], { stdio: 'ignore' })
+    p.on('error', e => { console.warn('[assistant] spd-say', e.message); resolve() }); p.on('exit', resolve)
+    signal.addEventListener('abort', () => { p.kill(); require('node:child_process').spawn('spd-say', ['-C'], { stdio: 'ignore' }).on('error', () => {}) }, { once: true })
+  })
+  const hush = () => { voiceStop?.abort(); voiceStop = null }
+  /** [text] cut into sentences and read, each as soon as it ends, by [voice]; the next made while one plays (the window queues the sound). */
+  function reader(sender, voice) {
+    const stop = voiceStop = new AbortController()
+    const send = (ch, x) => { if (!sender.isDestroyed()) sender.send(ch, x) }
+    let queue = Promise.resolve()
+    const say = s => {
+      if (!s || stop.signal.aborted) return
+      queue = queue.then(() => stop.signal.aborted ? null : voice === 'system' ? (send('assistant-say', s), spdSay(s, stop.signal))
+        : api.speech(voice, s, pcm => send('assistant-audio', pcm), stop.signal))
+        .catch(e => { if (e.name !== 'AbortError') { console.warn('[assistant] voice', e.message); stop.abort() } })
+    }
+    return { say, done: () => queue }
+  }
+  ipcMain.handle('assistant:ask', async (e, text, aloud) => {
+    hush()
+    const voice = aloud ? await assistVoice().catch(() => 'system') : null
+    const read = voice && reader(e.sender, voice), cut = new assistant.Sentences()
+    const r = await chat.ask(String(text), w => { if (!e.sender.isDestroyed()) e.sender.send('assistant-words', w); if (read) cut.push(w).forEach(read.say) })
+    if (read) { read.say(cut.rest()); await read.done() }
+    return { ...r, images: r.images.map(f => 'data:image/png;base64,' + fs.readFileSync(f.full).toString('base64')), spent: chat.bill.usd }
+  })
+  ipcMain.handle('assistant:transcribe', async (_, pcm) => ({ text: await api.transcribe(Int16Array.from(pcm), assistBias()), spent: chat.bill.usd }))
+  ipcMain.handle('assistant:hush', () => hush())
+  ipcMain.handle('assistant:clear', () => { hush(); chat.clear(); assistTools.lists = { contacts: [], files: [], notes: [], timers: [] } })
+  ipcMain.handle('assistant:youtube', (_, q) => shell.openExternal('https://www.youtube.com/results?search_query=' + encodeURIComponent(String(q).slice(0, 200))))
+  ipcMain.handle('assistant:hide', () => { win?.hide(); vault?.lock() })
+  // Live (the waveform button): the window's microphone to Voxtral realtime, its turns back to the window, which asks as above
+  let live = null
+  ipcMain.handle('assistant:liveStart', e => {
+    live?.end()
+    const key = assistKey()
+    if (!key) throw new Error(t('assistant.noKey'))
+    const send = x => { if (!e.sender.isDestroyed()) e.sender.send('assistant-live', x) }
+    live = new assistant.Live({ key, bias: assistBias(), pauseMs: assistPause(),
+      heard: text => send({ type: 'heard', text }), turn: text => send({ type: 'turn', text }), failed: err => send({ type: 'error', message: err.message }) })
+    live.started = Date.now()
+  })
+  ipcMain.on('assistant:liveAudio', (_, bytes) => live?.audio(bytes))
+  ipcMain.handle('assistant:liveMute', (_, on) => live?.mute(on))
+  // paid by the minute: billed when it ends
+  ipcMain.handle('assistant:liveEnd', () => {
+    if (live) { live.end(); if (live.ready) chat.bill.minutes(assistant.REALTIME, (Date.now() - live.started) / 1000); live = null } // a refused connection costs nothing
+    return chat.bill.usd
+  })
+  // Settings › AI Assist
+  const SHORTCUTS = { toggle: 'Ctrl+Alt+A', talk: 'Ctrl+Alt+M', live: 'Ctrl+Alt+V' }
+  const shortcuts = () => { try { return { ...SHORTCUTS, ...JSON.parse(setting('assistantShortcuts')) } } catch { return { ...SHORTCUTS } } }
+  let shortcutsOn = {}
+  function registerShortcuts() {
+    globalShortcut.unregisterAll()
+    shortcutsOn = {}
+    if (process.env.DRIVE_HIDDEN) return
+    for (const [what, acc] of Object.entries(shortcuts())) {
+      if (!acc) continue
+      try { shortcutsOn[what] = globalShortcut.register(acc, () => assistantCommand(what)) } catch (e) { console.warn('[assistant] shortcut', acc, e.message); shortcutsOn[what] = false }
+    }
+  }
+  registerShortcuts()
+  const meterNow = () => { const m = assistant.Meter.of(setting('assistantMeter')); return { total: m.total, trip: m.trip, since: m.since, past: m.past } }
+  ipcMain.handle('assistant:settings', () => ({
+    hasKey: !!assistKey(), keyring: safeStorage.isEncryptionAvailable(), words: assistWords(), contactWords: setting('assistantContactWords') === '1',
+    voice: setting('assistantVoice') || '', voiceName: setting('assistantVoiceName') || '', pause: assistPause(), aloud: setting('assistantAloud') !== '0',
+    cassette: setting('assistantCassette') === '1', meter: meterNow(), spent: chat.bill.usd, perMinute: assistant.PER_MINUTE[assistant.REALTIME],
+    // the live captions' "Theologos: …": the user's own card, once AI Assist knows it (my_card)
+    meName: (c => c ? c.info.given || c.info.formatted : '')(contacts.all().find(c => c.info.uid === setting('assistantMe'))),
+    shortcuts: shortcuts(), registered: shortcutsOn, command: launchCommand(), session: process.env.XDG_SESSION_TYPE || '', desktop: process.env.XDG_CURRENT_DESKTOP || '',
+  }))
+  ipcMain.handle('assistant:setKey', (_, key) => {
+    const k = String(key || '').trim()
+    if (!k) { db.prepare('DELETE FROM settings WHERE key = ?').run('assistantKey'); return false }
+    if (!safeStorage.isEncryptionAvailable()) throw new Error(t('assistant.noKeyring'))
+    setSetting('assistantKey', safeStorage.encryptString(k).toString('base64'))
+    return true
+  })
+  ipcMain.handle('assistant:set', (_, changes) => {
+    const c = changes ?? {}
+    if (typeof c.words === 'string') setSetting('assistantWords', c.words.slice(0, 4000))
+    if (typeof c.contactWords === 'boolean') setSetting('assistantContactWords', c.contactWords ? '1' : '0')
+    if (typeof c.voice === 'string') { setSetting('assistantVoice', c.voice.slice(0, 200)); setSetting('assistantVoiceName', String(c.voiceName ?? '').slice(0, 200)) }
+    if (Number.isFinite(c.pause)) setSetting('assistantPause', String(Math.min(6000, Math.max(1000, Math.round(c.pause)))))
+    if (typeof c.aloud === 'boolean') setSetting('assistantAloud', c.aloud ? '1' : '0')
+    if (typeof c.cassette === 'boolean') setSetting('assistantCassette', c.cassette ? '1' : '0')
+    if (c.shortcuts && typeof c.shortcuts === 'object') {
+      const next = shortcuts()
+      for (const k of Object.keys(SHORTCUTS)) if (typeof c.shortcuts[k] === 'string') next[k] = c.shortcuts[k].slice(0, 60)
+      setSetting('assistantShortcuts', JSON.stringify(next))
+      registerShortcuts()
+    }
+  })
+  ipcMain.handle('assistant:voices', () => api.voices())
+  ipcMain.handle('assistant:sample', async (e, voice) => {
+    hush()
+    const read = reader(e.sender, String(voice || 'system'))
+    read.say(t('assistant.voiceSample'))
+    await read.done()
+  })
+  ipcMain.handle('assistant:resetMeter', () => { const m = assistant.Meter.of(setting('assistantMeter')); m.reset(); setSetting('assistantMeter', m.json()); return meterNow() })
+
   if (!process.env.DRIVE_HIDDEN && HOME.root.endsWith('Tetra')) home.markFolder(HOME.root, path.join(__dirname, 'public', 'icon.png'), DATA_DIR)
   nativeTheme.themeSource = setting('theme') || 'system'
   win = new BrowserWindow({
@@ -1167,6 +1312,8 @@ app.whenReady().then(() => {
   powerMonitor.on('resume', planReminders) // a timer does not run while the computer sleeps
   if (process.env.VITE_DEV_URL) win.loadURL(process.env.VITE_DEV_URL)
   else win.loadFile(path.join(__dirname, 'dist', 'index.html'))
+  // started as `tetra --assistant` (or --talk, --live): once the window listens
+  if (argCommand(process.argv)) win.webContents.once('did-finish-load', () => setTimeout(() => assistantCommand(argCommand(process.argv)), 1500))
   if (!process.env.DRIVE_HIDDEN) {
     tray = new Tray(path.join(__dirname, 'public', 'icon.png'))
     tray.on('click', showWindow)
@@ -1185,7 +1332,19 @@ app.whenReady().then(() => {
 // One Tetra at a time: opening it again brings back the window that is already running in the tray. (Visual QA
 // renders a hidden second copy on purpose, and is left alone.)
 if (!process.env.DRIVE_HIDDEN && !app.requestSingleInstanceLock()) app.exit(0)
-app.on('second-instance', showWindow)
+// `tetra --assistant` / `--talk` / `--live` (AI Assist): what the desktop's own shortcut settings can run where Tetra's own
+// shortcuts cannot reach (Settings › AI Assist › Shortcuts)
+const ARGS = { '--assistant': 'toggle', '--talk': 'talk', '--live': 'live' }
+const argCommand = argv => Object.entries(ARGS).find(([a]) => argv.includes(a))?.[1] ?? null
+app.on('second-instance', (_, argv) => { const what = argCommand(argv); if (what) assistantCommand(what); else showWindow() })
+/** A shortcut or `tetra --assistant`: open (or, when it is already in front, close) AI Assist, talk, or live. */
+function assistantCommand(what) {
+  if (!win) return
+  if (what === 'toggle' && win.isVisible() && win.isFocused()) { win.webContents.send('assistant-command', 'toggle'); return }
+  showWindow()
+  win.webContents.send('assistant-command', what === 'toggle' ? 'open' : what)
+}
+app.on('will-quit', () => globalShortcut.unregisterAll())
 app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => { quitting = true; mapBuilder?.cancel(); calls?.quit(); dataCounter?.stop(); vault?.lock(); analyzer?.terminate(); stopRouters() })
 process.on('exit', stopRouters) // a Tetra stopped without quitting leaves no routing server behind

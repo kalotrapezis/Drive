@@ -22,12 +22,13 @@ import { PhonePage } from './Phone'
 import { DataPage } from './Data'
 import { NotificationsPage, SettingsPage } from './Settings'
 import { ImportDialog } from './Import'
+import { AssistantPage } from './Assistant'
 import { GuidePanel, guideFirstTime, type GuideGo } from './Guide'
 import { shownName } from './People'
 import { t, tr } from './i18n'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
-  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes' } | { kind: 'calendar' } | { kind: 'timer' } | { kind: 'maps' } | { kind: 'contacts' } | { kind: 'phone' } | { kind: 'data' } | { kind: 'notifications' } | { kind: 'settings'; start?: string; at?: number }
+  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes'; open?: string } | { kind: 'calendar' } | { kind: 'timer' } | { kind: 'maps'; query?: string; at?: number } | { kind: 'assistant' } | { kind: 'contacts' } | { kind: 'phone' } | { kind: 'data' } | { kind: 'notifications' } | { kind: 'settings'; start?: string; at?: number }
 
 const SYSTEM: { id: string; key: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', key: 'files.favorites', icon: 'heart', test: m => !!m.favorite },
@@ -124,6 +125,15 @@ export function App() {
   useEffect(() => window.drive.files.onOpenFolder(folder => setPage({ kind: 'files', mode: 'browse', folder })), [])
   // "The map of Cyprus is over 3 months old": its click opens Settings › Maps
   useEffect(() => window.drive.onOpenSettings(start => setPage({ kind: 'settings', start, at: Date.now() })), [])
+  // AI Assist from anywhere: a shortcut or `tetra --assistant` (main assistantCommand); talk and live go to the page
+  const [assistCommand, setAssistCommand] = useState<{ what: string; at: number } | null>(null)
+  const pageKind = useRef(page.kind)
+  pageKind.current = page.kind
+  useEffect(() => window.drive.assistant.onCommand(what => {
+    if (what === 'toggle' && pageKind.current === 'assistant') { window.drive.assistant.hide(); return }
+    setPage({ kind: 'assistant' })
+    if (what === 'talk' || what === 'live') setAssistCommand({ what, at: Date.now() })
+  }), [])
   useEffect(() => window.drive.sync.onOffer(id => setDialog(<OffloadDialog deviceId={id} onClose={() => setDialog(null)} />)), [])
   useEffect(() => { window.drive.viewSettings().then(v => { setHideScreenshots(v.hideScreenshots); setHideDocuments(v.hideDocuments) }) }, [])
   useEffect(() => { window.drive.trashList().then(t => setTrashCount(t.length)).catch(() => {}) }, [page])
@@ -304,11 +314,13 @@ export function App() {
   // Pages that do not depend on the photo library come first: an empty library must not hide Devices, Files or Hidden.
   if (page.kind === 'files') content = <Files mode={page.mode} folder={page.folder} go={(mode, folder) => setPage({ kind: 'files', mode, folder })} setDialog={setDialog} say={say} dock={dock} />
   else if (page.kind === 'sync') content = <SyncPage setDialog={setDialog} />
-  else if (page.kind === 'notes') content = <NotesPage setDialog={setDialog} say={say} />
+  else if (page.kind === 'notes') content = <NotesPage key={page.open} openId={page.open} setDialog={setDialog} say={say} />
+  else if (page.kind === 'assistant') content = <AssistantPage command={assistCommand}
+    go={g => setPage(g.note ? { kind: 'notes', open: g.note } : { kind: 'maps', query: g.maps, at: Date.now() })} />
   else if (page.kind === 'calendar') content = <CalendarPage setDialog={setDialog} say={say} />
   else if (page.kind === 'timer') content = <TimerPage say={say} />
   // Maps with no map: Settings › Maps with the builder open
-  else if (page.kind === 'maps') content = <MapsPage say={say} onMakeMap={() => {
+  else if (page.kind === 'maps') content = <MapsPage key={page.at} initial={page.query} say={say} onMakeMap={() => {
     try { localStorage.setItem('settingsTab', 'maps'); sessionStorage.setItem('openMapBuilder', '1') } catch {}
     setPage({ kind: 'settings' })
   }} />
@@ -402,6 +414,7 @@ export function App() {
         {nav({ kind: 'maps' }, page.kind === 'maps', 'map', t('app.maps'))}
         {nav({ kind: 'contacts' }, page.kind === 'contacts', 'person', t('app.contacts'))}
         {nav({ kind: 'phone' }, page.kind === 'phone', 'call', t('app.phone'))}
+        {nav({ kind: 'assistant' }, page.kind === 'assistant', 'sparkle', t('app.assistant'))}
         {nav({ kind: 'data' }, page.kind === 'data', 'dataUsage', t('app.data'))}
         {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', t('app.devices'))}
         {/* A drive is a device: its photos sit under Devices (asked 2026-09-26). */}

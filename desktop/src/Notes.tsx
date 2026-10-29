@@ -24,7 +24,8 @@ const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCas
 const inView = (n: Note, v: View) => v === 'trash' ? !!n.trashedAt : !n.trashedAt && (v === 'archived' ? !!n.archivedAt : !n.archivedAt)
 const newItem = (order: number): Item => ({ id: crypto.randomUUID(), text: '', isChecked: false, order, originalOrder: order, createdAt: Date.now(), indentationLevel: 0 })
 
-export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => void; say: (text: string, undo?: () => void) => void }) {
+/** [openId]: a note to open at once (AI Assist's "άνοιξε την πρώτη"). */
+export function NotesPage({ setDialog, say, openId }: { setDialog: (d: ReactNode) => void; say: (text: string, undo?: () => void) => void; openId?: string }) {
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [view, setView] = useState<View>('home')
   const [label, setLabel] = useState<string | null>(null)
@@ -33,7 +34,7 @@ export function NotesPage({ setDialog, say }: { setDialog: (d: ReactNode) => voi
   const [drawer, setDrawer] = useState(false)
   useEffect(() => setSelected(new Set()), [view, label])
   const reload = () => call<Note[]>('list').then(setNotes)
-  useEffect(() => { reload() }, [])
+  useEffect(() => { call<Note[]>('list').then(l => { setNotes(l); const n = openId && l.find(x => x.id === openId); if (n) setOpen(n) }) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => window.drive.onNotesChanged(reload), []) // a device's change, shown as it lands
   const close = () => setDialog(null)
   // A page of its own: the search and the label, which look everywhere, give way to it.
