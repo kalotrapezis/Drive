@@ -570,6 +570,68 @@ test('a file only the phone writes, rewritten between syncs, is never sent back 
   }
 })
 
+test('a device that missed one download still takes the newer version in place, and a call log both changed is merged (29 Oct)', async () => {
+  // The tablet: "calls-2026-10 (2)…(8).jsonl" on the computer, each the phone's previous version kept beside on the tablet.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-missed-'))
+  const root = path.join(tmp, 'Drive')
+  fs.mkdirSync(root, { recursive: true })
+  const db = library.open(path.join(tmp, 'data'))
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files: new Files(db, root),
+    dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex')
+  const rel = 'Phone/calls-2026-10.jsonl'
+  const line = (at, name) => JSON.stringify({ at: `2026-10-${at}+02:00`, number: `+30${at.replace(/\D/g, '')}`, dir: 'in', secs: 1, ...(name ? { name } : {}) }) + '\n'
+  const log = (...lines) => Buffer.from(lines.join(''))
+  try {
+    const pair = async name => {
+      const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name } })).body
+      server.setConnection(paired.deviceId, 'files', { direction: 'both', keep: 'everything' })
+      return paired.token
+    }
+    const phone = await pair('Xiaomi 15'), tablet = await pair('Tablet')
+    const manifest = (token, b) => call('POST', '/files/manifest', { token, json: { files: b ? [{ path: rel, sha256: sha(b), size: b.length }] : [] } })
+    const put = (token, b) => call('PUT', `/file/${sha(b)}?path=${encodeURIComponent(rel)}`, { token, body: b })
+    const fetch = (token, b) => call('GET', `/file/${sha(b)}?path=${encodeURIComponent(rel)}`, { token, raw: true })
+    const phoneWrites = async b => { assert.deepEqual((await manifest(phone, b)).body.want, [rel]); assert.equal((await put(phone, b)).body.path, rel) }
+    const v1 = log(line('01T10:00:00')), v2 = log(line('01T10:00:00'), line('02T10:00:00')), v3 = log(line('01T10:00:00'), line('02T10:00:00'), line('03T10:00:00'))
+
+    await phoneWrites(v1)
+    assert.deepEqual((await manifest(tablet)).body.have.map(h => h.path), [rel])
+    await fetch(tablet, v1)
+    await manifest(tablet, v1)
+    await phoneWrites(v2)
+    assert.deepEqual((await manifest(tablet, v1)).body.have.map(h => [h.sha256, h.replaces]), [[sha(v2), sha(v1)]])
+    // …the tablet never fetches v2, and the phone writes v3: still the tablet's untouched v1 is replaced, not given a copy.
+    await phoneWrites(v3)
+    let r = await manifest(tablet, v1)
+    assert.deepEqual(r.body.have.map(h => [h.sha256, h.replaces]), [[sha(v3), sha(v1)]])
+    assert.deepEqual(r.body.want, [], 'its older copy is not asked for')
+
+    // Both changed it (a contact named on the computer, a new call on the phone): one log, every call once, the newer line.
+    fs.writeFileSync(path.join(root, rel), log(line('01T10:00:00'), line('02T10:00:00', 'Here'), line('03T10:00:00')))
+    const v4 = log(line('01T10:00:00'), line('02T10:00:00', 'Phone'), line('03T10:00:00'), line('04T10:00:00'))
+    r = await manifest(phone, v4)
+    assert.deepEqual(r.body.want, [rel])
+    assert.deepEqual(r.body.have, [], 'the computer\'s version is not sent as a copy: the phone\'s is merged here')
+    assert.equal((await put(phone, v4)).body.path, rel)
+    const merged = log(line('01T10:00:00'), line('02T10:00:00', 'Phone'), line('03T10:00:00'), line('04T10:00:00'))
+    assert.equal(fs.readFileSync(path.join(root, rel), 'utf8'), merged.toString())
+    assert.deepEqual(fs.readdirSync(path.join(root, 'Phone')), ['calls-2026-10.jsonl'])
+    // a line only the computer had is kept
+    fs.writeFileSync(path.join(root, rel), log(line('00T09:00:00'), merged))
+    const v5 = log(merged, line('05T10:00:00'))
+    assert.deepEqual((await manifest(phone, v5)).body.want, [rel])
+    await put(phone, v5)
+    assert.equal(fs.readFileSync(path.join(root, rel), 'utf8'), log(line('00T09:00:00'), v5).toString())
+    // the merged log goes back to the phone in place of its own
+    assert.deepEqual((await manifest(phone, v5)).body.have.map(h => h.replaces), [sha(v5)])
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
 test('the same size and the same date are not the same file; a device moving on from its own version is an edit (25 Oct, evening)', async () => {
   // The phone's storage keeps a rewritten file's first date (every version of Data's month said 09:11:59.373), and a
   // month's counts mostly change digits, not length: a hash cached by size and date said the computer still held the old one.

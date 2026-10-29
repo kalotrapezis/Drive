@@ -12,6 +12,7 @@ const crypto = require('node:crypto')
 const library = require('./library')
 const drives = require('./drives')
 const history = require('./history')
+const { isCallLog, mergeCallLog } = require('./files')
 const { t } = require('./i18n')
 
 const PORT = 43180
@@ -1675,15 +1676,23 @@ class SyncServer {
       const replaces = this.files.pendingUpdate(device.id, rel, expected) ?? await this.files.agreed(device.id, rel)
       // Those very bytes are already at that path (two syncs asked at once): nothing to add. 330 of Personal's 334
       // "(2)" events were byte for byte their original (23 Oct).
-      const same = fs.existsSync(target) && await this.files.hash(rel) === expected
+      const here = fs.existsSync(target) ? await this.files.hash(rel) : null
+      const same = here === expected
+      // Both changed a month's call log (29 Oct): one log with both's calls, never a copy beside it.
+      const merge = !same && here !== null && here !== replaces && isCallLog(rel)
+      let sha = expected
       if (same) await fsp.rm(part)
-      else if (replaces && fs.existsSync(target) && await this.files.hash(rel) === replaces) {
+      else if (here !== null && (here === replaces || merge)) {
         const old = path.join(this.dataDir, 'Files history', String(Date.now()), ...rel.split('/'))
         await fsp.mkdir(path.dirname(old), { recursive: true })
         await fsp.copyFile(target, old)
+        if (merge) {
+          await fsp.writeFile(part, mergeCallLog(await fsp.readFile(target, 'utf8'), await fsp.readFile(part, 'utf8')))
+          sha = await library.sha256(part)
+        }
         await fsp.rename(part, target)
         this.files.updated(device.id, rel)
-        history.record(this.db, { action: 'updated', kind: 'file', name: rel, sha256: expected, device: device.id, detail: `was ${replaces}` })
+        history.record(this.db, { action: 'updated', kind: 'file', name: rel, sha256: sha, device: device.id, detail: merge ? `merged with ${here}` : `was ${replaces}` })
       } else {
         const { dir, name, ext } = path.parse(target)
         for (let n = 2; fs.existsSync(kept); n++) kept = path.join(dir, `${name} (${n})${ext}`)
@@ -1693,7 +1702,7 @@ class SyncServer {
       const modified = Number(params.get('modified'))
       if (!same && Number.isFinite(modified) && modified > 0) await fsp.utimes(kept, new Date(), new Date(modified))
       const relKept = this.files.rel(kept)
-      await this.files.remember(relKept, expected)
+      await this.files.remember(relKept, sha)
       this.files.received(device.id, relKept, expected, rel)
       history.record(this.db, { action: 'received', kind: 'file', name: relKept, sha256: expected, device: device.id })
       this.db.prepare(`INSERT OR IGNORE INTO sync_receipts(device_id, sha256, path, size, received_at, kind) VALUES(?,?,?,?,?,'file')`)
