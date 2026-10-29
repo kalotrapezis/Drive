@@ -1163,7 +1163,7 @@
  "contacts.labelFriend": "Prijatelj",
  "contacts.labelAssistant": "Pomočnik",
  "contacts.labelManager": "Vodja",
- "maps.noGraph": "Graf poti še ni na tem računalniku (Files/Maps/greece-gh).",
+ "maps.noGraph": "Graf poti še ni na tem računalniku (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Navodila na računalniku potrebujejo Javo 17 ali novejšo.",
  "maps.needJar": "Navodila na računalniku potrebujejo {jar} v ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh ga tja postavi).",
  "maps.routerStopped": "Strežnik poti se je ustavil; glejte graphhopper.log v podatkih aplikacije.",

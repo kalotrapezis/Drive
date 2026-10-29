@@ -1163,7 +1163,7 @@
  "contacts.labelFriend": "Priateľ",
  "contacts.labelAssistant": "Asistent",
  "contacts.labelManager": "Nadriadený",
- "maps.noGraph": "Mapa trás ešte nie je na tomto počítači (Files/Maps/greece-gh).",
+ "maps.noGraph": "Mapa trás ešte nie je na tomto počítači (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Navigácia na počítači potrebuje Javu 17 alebo novšiu.",
  "maps.needJar": "Navigácia na počítači potrebuje {jar} v ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh ho tam umiestni).",
  "maps.routerStopped": "Smerovací server sa zastavil; pozrite si graphhopper.log v údajoch aplikácie.",

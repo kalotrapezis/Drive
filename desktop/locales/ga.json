@@ -1205,7 +1205,7 @@
  "contacts.labelFriend": "Cara",
  "contacts.labelAssistant": "Cúntóir",
  "contacts.labelManager": "Bainisteoir",
- "maps.noGraph": "Níl an graf bealaí ar an ríomhaire seo fós (Files/Maps/greece-gh).",
+ "maps.noGraph": "Níl an graf bealaí ar an ríomhaire seo fós (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Teastaíonn Java 17 nó níos nuaí le treoracha ar an ríomhaire.",
  "maps.needJar": "Teastaíonn {jar} i ~/Tetra/.System/Maps/Tools le treoracha ar an ríomhaire (cuireann tools/maps-greece.sh ann é).",
  "maps.routerStopped": "Stop an freastalaí bealaí; féach graphhopper.log i sonraí na haipe.",

@@ -1121,7 +1121,7 @@
  "contacts.labelFriend": "Amigo",
  "contacts.labelAssistant": "Asistente",
  "contacts.labelManager": "Jefe",
- "maps.noGraph": "Los datos de rutas aún no están en este ordenador (Files/Maps/greece-gh).",
+ "maps.noGraph": "Los datos de rutas aún no están en este ordenador (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Las indicaciones en el ordenador necesitan Java 17 o una versión más reciente.",
  "maps.needJar": "Las indicaciones en el ordenador necesitan {jar} en ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh lo pone allí).",
  "maps.routerStopped": "El servidor de rutas se detuvo; mira graphhopper.log en los datos de la aplicación.",

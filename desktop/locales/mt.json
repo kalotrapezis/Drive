@@ -1163,7 +1163,7 @@
  "contacts.labelFriend": "Ħabib",
  "contacts.labelAssistant": "Assistent",
  "contacts.labelManager": "Maniġer",
- "maps.noGraph": "Il-graff tal-instradar mhux fuq dan il-kompjuter għadu (Files/Maps/greece-gh).",
+ "maps.noGraph": "Il-graff tal-instradar mhux fuq dan il-kompjuter għadu (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Direzzjonijiet fuq il-kompjuter jeħtieġu Java 17 jew aktar ġdid.",
  "maps.needJar": "Direzzjonijiet fuq il-kompjuter jeħtieġu {jar} f’~/Tetra/.System/Maps/Tools (tools/maps-greece.sh jqegħduh hemm).",
  "maps.routerStopped": "Is-server tal-instradar waqaf; ara graphhopper.log fid-dejta tal-applikazzjoni.",

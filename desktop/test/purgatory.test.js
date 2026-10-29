@@ -33,8 +33,8 @@ test('Trash → purgatory after its days, purgatory → gone after its own, neve
     put('old.jpg', 'old.jpg', now - 40 * DAY)
     put('new.jpg', 'new.jpg', now - 1 * DAY)
     // A Files item in Files/Trash/, a whole folder of it.
-    fs.mkdirSync(path.join(tmp, 'Files', 'Trash', 'Taxes'), { recursive: true })
-    fs.writeFileSync(path.join(tmp, 'Files', 'Trash', 'Taxes', '2019.pdf'), 'tax')
+    fs.mkdirSync(path.join(files.disk('Trash'), 'Taxes'), { recursive: true })
+    fs.writeFileSync(path.join(files.disk('Trash'), 'Taxes', '2019.pdf'), 'tax')
 
     // The Files item was trashed just now, so seen from 40 days on it is past its days too.
     const r = await purgatory.sweep('t7', mount, now + 40 * DAY - 39 * DAY)

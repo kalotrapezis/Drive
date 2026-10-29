@@ -414,7 +414,7 @@ test('drive files: the computer asks only for what it lacks, and follows a move 
     // The phone moved it to Trash: that reaches here as a move into Trash, not as a second copy.
     r = await manifest({ files: [{ path: 'Trash/receipt-2026.pdf', sha256: pdfHash, size: pdf.length }] })
     assert.deepEqual(r.body.moved, [{ from: 'Notes/receipt-2026.pdf', to: 'Trash/receipt-2026.pdf' }])
-    assert.equal(fs.existsSync(path.join(root, 'Trash/receipt-2026.pdf')), true)
+    assert.equal(fs.existsSync(files.disk('Trash/receipt-2026.pdf')), true)
 
     // A file only this computer has is left alone: sync copies, it never deletes.
     fs.writeFileSync(path.join(root, 'Notes/mine.txt'), 'desktop only')
@@ -445,7 +445,7 @@ test('an edited file replaces the older version on the other side; only a real c
     dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
   const sha = b => crypto.createHash('sha256').update(b).digest('hex')
-  const read = rel => fs.readFileSync(path.join(root, rel), 'utf8')
+  const read = rel => fs.readFileSync(files.disk(rel), 'utf8')
   try {
     const pair = async name => {
       const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name } })).body
@@ -529,7 +529,8 @@ test('a file only the phone writes, rewritten between syncs, is never sent back 
   const root = path.join(tmp, 'Drive')
   fs.mkdirSync(root, { recursive: true })
   const db = library.open(path.join(tmp, 'data'))
-  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files: new Files(db, root),
+  const files = new Files(db, root)
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
     dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
   const sha = b => crypto.createHash('sha256').update(b).digest('hex')
@@ -543,7 +544,7 @@ test('a file only the phone writes, rewritten between syncs, is never sent back 
     const part = b => call('POST', '/files/manifest/scoped', { token, json: { scope: 'timer', files: list(b) } })
     const put = b => call('PUT', `/file/${sha(b)}?path=${encodeURIComponent(rel)}`, { token, body: b })
     const v = n => Buffer.from(`{"month":"2026-10","rx":${n}}`)
-    const noCopies = () => assert.deepEqual(fs.readdirSync(path.join(root, 'Timer')), ['2026-10.phone.json'])
+    const noCopies = () => assert.deepEqual(fs.readdirSync(path.join(files.disk('Timer'))), ['2026-10.phone.json'])
 
     await whole(v(1)); await put(v(1))
     // Rewritten: the part's sync asks for it, and before that upload lands the whole sync (the file rewritten again) asks too.
@@ -553,7 +554,7 @@ test('a file only the phone writes, rewritten between syncs, is never sent back 
     assert.deepEqual(r.body.have, [], 'the computer\'s older copy is not offered back')
     assert.equal((await put(v(2))).body.path, rel, 'the late upload replaces, no "(2)"')
     assert.equal((await put(v(3))).body.path, rel)
-    assert.equal(fs.readFileSync(path.join(root, rel), 'utf8'), v(3).toString())
+    assert.equal(fs.readFileSync(files.disk(rel), 'utf8'), v(3).toString())
     noCopies()
 
     // An upload that never came (the file changed on the way, refused): the next sync is still an edit, not a conflict.
@@ -576,7 +577,8 @@ test('a device that missed one download still takes the newer version in place, 
   const root = path.join(tmp, 'Drive')
   fs.mkdirSync(root, { recursive: true })
   const db = library.open(path.join(tmp, 'data'))
-  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files: new Files(db, root),
+  const files = new Files(db, root)
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
     dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
   const sha = b => crypto.createHash('sha256').update(b).digest('hex')
@@ -609,21 +611,21 @@ test('a device that missed one download still takes the newer version in place, 
     assert.deepEqual(r.body.want, [], 'its older copy is not asked for')
 
     // Both changed it (a contact named on the computer, a new call on the phone): one log, every call once, the newer line.
-    fs.writeFileSync(path.join(root, rel), log(line('01T10:00:00'), line('02T10:00:00', 'Here'), line('03T10:00:00')))
+    fs.writeFileSync(files.disk(rel), log(line('01T10:00:00'), line('02T10:00:00', 'Here'), line('03T10:00:00')))
     const v4 = log(line('01T10:00:00'), line('02T10:00:00', 'Phone'), line('03T10:00:00'), line('04T10:00:00'))
     r = await manifest(phone, v4)
     assert.deepEqual(r.body.want, [rel])
     assert.deepEqual(r.body.have, [], 'the computer\'s version is not sent as a copy: the phone\'s is merged here')
     assert.equal((await put(phone, v4)).body.path, rel)
     const merged = log(line('01T10:00:00'), line('02T10:00:00', 'Phone'), line('03T10:00:00'), line('04T10:00:00'))
-    assert.equal(fs.readFileSync(path.join(root, rel), 'utf8'), merged.toString())
-    assert.deepEqual(fs.readdirSync(path.join(root, 'Phone')), ['calls-2026-10.jsonl'])
+    assert.equal(fs.readFileSync(files.disk(rel), 'utf8'), merged.toString())
+    assert.deepEqual(fs.readdirSync(path.join(files.disk('Phone'))), ['calls-2026-10.jsonl'])
     // a line only the computer had is kept
-    fs.writeFileSync(path.join(root, rel), log(line('00T09:00:00'), merged))
+    fs.writeFileSync(files.disk(rel), log(line('00T09:00:00'), merged))
     const v5 = log(merged, line('05T10:00:00'))
     assert.deepEqual((await manifest(phone, v5)).body.want, [rel])
     await put(phone, v5)
-    assert.equal(fs.readFileSync(path.join(root, rel), 'utf8'), log(line('00T09:00:00'), v5).toString())
+    assert.equal(fs.readFileSync(files.disk(rel), 'utf8'), log(line('00T09:00:00'), v5).toString())
     // the merged log goes back to the phone in place of its own
     assert.deepEqual((await manifest(phone, v5)).body.have.map(h => h.replaces), [sha(v5)])
   } finally {
@@ -639,7 +641,8 @@ test('the same size and the same date are not the same file; a device moving on 
   const root = path.join(tmp, 'Drive')
   fs.mkdirSync(root, { recursive: true })
   const db = library.open(path.join(tmp, 'data'))
-  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files: new Files(db, root),
+  const files = new Files(db, root)
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
     dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
   const sha = b => crypto.createHash('sha256').update(b).digest('hex')
@@ -651,7 +654,7 @@ test('the same size and the same date are not the same file; a device moving on 
     const whole = b => call('POST', '/files/manifest', { token, json: { files: [{ path: rel, sha256: sha(b), size: b.length, modified: stuck }] } })
     const put = b => call('PUT', `/file/${sha(b)}?path=${encodeURIComponent(rel)}&modified=${stuck}`, { token, body: b })
     const v = n => Buffer.from(`{"month":"2026-10","rx":${n}}`) // 1000…9999: one length
-    const noCopies = () => assert.deepEqual(fs.readdirSync(path.join(root, 'Timer')), ['2026-10.phone.json'])
+    const noCopies = () => assert.deepEqual(fs.readdirSync(path.join(files.disk('Timer'))), ['2026-10.phone.json'])
 
     for (const n of [1001, 1002, 1003]) {
       assert.deepEqual((await whole(v(n))).body.want, [rel])
@@ -667,7 +670,7 @@ test('the same size and the same date are not the same file; a device moving on 
     assert.deepEqual(r.body.want, [rel])
     assert.deepEqual(r.body.have, [])
     assert.equal((await put(v(1004))).body.path, rel)
-    assert.equal(fs.readFileSync(path.join(root, rel), 'utf8'), v(1004).toString())
+    assert.equal(fs.readFileSync(files.disk(rel), 'utf8'), v(1004).toString())
     noCopies()
   } finally {
     await server.stop()
@@ -1463,11 +1466,11 @@ test('editor tabs: the newer open or close of each file wins, and nothing unsafe
 test('the Calendar travels on its own (scope "calendar"): a new event is asked for, one made here is offered, the rest untouched', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-calendar-'))
   const root = path.join(tmp, 'Drive')
-  fs.mkdirSync(path.join(root, 'Calendar', 'Work'), { recursive: true })
   fs.mkdirSync(path.join(root, 'Docs'), { recursive: true })
   fs.writeFileSync(path.join(root, 'Docs', 'big.pdf'), 'a document the phone does not have')
   const db = library.open(path.join(tmp, 'data'))
   const files = new Files(db, root)
+  fs.mkdirSync(path.join(files.disk('Calendar'), 'Work'), { recursive: true })
   const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
     dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
@@ -1478,12 +1481,19 @@ test('the Calendar travels on its own (scope "calendar"): a new event is asked f
     server.setConnection(paired.deviceId, 'files', { direction: 'both', keep: 'everything' }) // both ways, as the user sets them
     const ev = Buffer.from('BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n')
     // the skill made an event here: offered to the tablet at once, and nothing outside the Calendar is
-    fs.writeFileSync(path.join(root, 'Calendar', 'Work', 'skill.ics'), 'BEGIN:VCALENDAR from Claude')
+    fs.writeFileSync(path.join(files.disk('Calendar'), 'Work', 'skill.ics'), 'BEGIN:VCALENDAR from Claude')
     let r = await call('POST', '/files/manifest/scoped', { token, json: { scope: 'calendar', files: [{ path: 'Calendar/Work/tab.ics', sha256: sha(ev), size: ev.length }] } })
     assert.deepEqual(r.body.want, ['Calendar/Work/tab.ics'])
     assert.deepEqual(r.body.have.map(h => h.path), ['Calendar/Work/skill.ics'])
     assert.ok(!JSON.stringify(r.body).includes('big.pdf'))
     assert.equal((await call('PUT', `/file/${sha(ev)}?path=Calendar/Work/tab.ics`, { token, body: ev })).body.verified, true)
+    // a device of any version names it "Calendar/…"; here it lands in .System (29 Oct), and no Files/Calendar is made again
+    assert.equal(fs.readFileSync(path.join(tmp, '.System', 'Calendar', 'Shared', 'Work', 'tab.ics'), 'utf8'), ev.toString())
+    assert.ok(!fs.existsSync(path.join(root, 'Calendar')))
+    // a Files/Calendar an older version left (its move failed) is neither offered nor written into
+    fs.mkdirSync(path.join(root, 'Calendar', 'Work'), { recursive: true }); fs.writeFileSync(path.join(root, 'Calendar', 'Work', 'old.ics'), 'stale')
+    r = await call('POST', '/files/manifest/scoped', { token, json: { scope: 'calendar', files: [{ path: 'Calendar/Work/tab.ics', sha256: sha(ev), size: ev.length }] } })
+    assert.deepEqual(r.body.want, []); assert.deepEqual(r.body.have.map(h => h.path), ['Calendar/Work/skill.ics'])
     // an unknown scope is refused, not taken as the whole Drive
     r = await call('POST', '/files/manifest/scoped', { token, json: { scope: 'everything', files: [] } })
     assert.equal(r.status, 400)

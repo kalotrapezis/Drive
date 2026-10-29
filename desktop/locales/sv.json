@@ -1079,7 +1079,7 @@
  "contacts.labelFriend": "Vän",
  "contacts.labelAssistant": "Assistent",
  "contacts.labelManager": "Chef",
- "maps.noGraph": "Vägnätet finns inte på den här datorn än (Files/Maps/greece-gh).",
+ "maps.noGraph": "Vägnätet finns inte på den här datorn än (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Vägbeskrivning på datorn kräver Java 17 eller nyare.",
  "maps.needJar": "Vägbeskrivning på datorn kräver {jar} i ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh lägger den där).",
  "maps.routerStopped": "Vägvalsservern stoppades; se graphhopper.log i appdata.",

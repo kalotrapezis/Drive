@@ -39,7 +39,7 @@ const list = dir => fsp.readdir(dir).catch(() => [])
 
 class Cleaner {
   /**
-   * `db` the library; `dataDir` the app's data; `base` .System; `mapsRoot` Files/Maps; `isServer()`; `scanned()` true once a library scan
+   * `db` the library; `dataDir` the app's data; `base` .System; `mapsRoot` .System/Maps/Shared; `isServer()`; `scanned()` true once a library scan
    * has finished and none runs; `busy(app)` true while that app's job uses its Temp; `routing()` the graph folders in use.
    */
   constructor({ db = null, dataDir, base = system.root(), mapsRoot, isServer = () => false, scanned = () => false, busy = () => false, routing = () => [] }) {

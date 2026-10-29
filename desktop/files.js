@@ -6,6 +6,7 @@ const path = require('node:path')
 const { sha256 } = require('./library')
 const thumbs = require('./thumbs')
 const { t } = require('./i18n')
+const system = require('./system')
 
 const TRASH = 'Trash'
 /**
@@ -92,8 +93,9 @@ class Files {
     this.db = db
     fs.mkdirSync(root, { recursive: true }) // created only when absent, like the phone
     this.root = fs.realpathSync(root)
+    this.system = system.beside(this.root) // the apps' folders (system.SHARED) live there; their paths stay "Calendar/…"
     openMeta(db)
-    for (const f of this.systemFolders()) fs.mkdirSync(path.join(this.root, f), { recursive: true })
+    for (const f of this.systemFolders()) fs.mkdirSync(this.disk(f), { recursive: true })
   }
 
   systemFolders() { return [...REQUIRED_FOLDERS, ...this.chosenFolders()] }
@@ -142,16 +144,28 @@ class Files {
       ON CONFLICT(name) DO UPDATE SET chosen = excluded.chosen, updated_at = excluded.updated_at`).run(name, chosen ? 1 : 0, at)
   }
 
-  /** Absolute path for a relative one, after resolving symlinks, refusing anything outside the root. */
+  /** Where a path of Files is on disk: an app's folder ("Calendar/…", system.SHARED) in .System/<App>/Shared, the rest under the root. */
+  disk(rel) {
+    const top = rel.split('/')[0], app = system.SHARED[top]
+    return app ? path.join(system.dir(app, 'Shared', this.system), rel.slice(top.length + 1)) : path.join(this.root, rel)
+  }
+  /** Absolute path for a relative one, after resolving symlinks, refusing anything outside the root (or its app folder in .System). */
   resolve(rel, mustExist = true) {
     if (!isSafeRel(rel)) fail(t('files.errInvalidItem'))
-    const full = path.join(this.root, rel)
+    const full = this.disk(rel), app = system.SHARED[rel.split('/')[0]]
+    const base = app ? system.dir(app, 'Shared', this.system) : this.root
+    if (app) fs.mkdirSync(path.dirname(base), { recursive: true }) // .System/<App>, so the first file of an app has a parent
     let real
     try { real = fs.realpathSync(full) } catch { if (mustExist) fail(t('files.errGone')); real = path.join(fs.realpathSync(path.dirname(full)), path.basename(full)) }
-    if (real !== this.root && !real.startsWith(this.root + path.sep)) fail(t('files.errOutside'))
+    if (real !== base && !real.startsWith(base + path.sep)) fail(t('files.errOutside'))
     return real
   }
-  rel(full) { return path.relative(this.root, full).split(path.sep).join('/') }
+  /** The path of Files for an absolute one: the reverse of disk(). */
+  rel(full) {
+    const inSystem = path.relative(this.system, full).split(path.sep)
+    const top = inSystem[1] === 'Shared' && Object.keys(system.SHARED).find(k => system.SHARED[k] === inSystem[0])
+    return top ? [top, ...inSystem.slice(2)].join('/') : path.relative(this.root, full).split(path.sep).join('/')
+  }
 
   item(full, st) {
     const rel = this.rel(full)
@@ -260,7 +274,7 @@ class Files {
     const src = this.resolve(rel)
     if (src === this.root) fail(t('files.errMoveRoot'))
     if (this.isSystem(rel)) systemFail(rel)
-    await fsp.mkdir(path.join(this.root, TRASH), { recursive: true })
+    await fsp.mkdir(this.disk(TRASH), { recursive: true })
     return this.moveTo(src, this.freeTarget(this.resolve(TRASH), path.basename(src)))
   }
 
@@ -274,7 +288,7 @@ class Files {
 
   /** The only permanent delete; the UI confirms first. */
   async emptyTrash() {
-    const trash = path.join(this.root, TRASH)
+    const trash = this.disk(TRASH)
     if (!fs.existsSync(trash)) return 0
     const names = await fsp.readdir(trash)
     for (const n of names) await fsp.rm(path.join(trash, n), { recursive: true })
@@ -447,7 +461,7 @@ class Files {
       // The phone kept these bytes here last time and does not any more: it moved them, so follow.
       const elsewhere = (mine.get(sha) ?? []).find(other => before.get(other) === sha && !offered.has(other))
       if (elsewhere) {
-        const target = path.join(this.root, rel)
+        const target = this.disk(rel)
         if (fs.existsSync(target)) continue // something else is already there; keep both, ask for nothing
         await fsp.mkdir(path.dirname(target), { recursive: true })
         await this.moveTo(this.resolve(elsewhere), target)
@@ -584,16 +598,18 @@ class Files {
   pendingUpdate(deviceId, rel, sha) { this.updatesTable(); return this.db.prepare('SELECT replaces FROM file_updates WHERE device_id = ? AND path = ? AND sha256 = ?').get(deviceId, rel, sha)?.replaces ?? null }
   updated(deviceId, rel) { this.updatesTable(); this.db.prepare('DELETE FROM file_updates WHERE device_id = ? AND path = ?').run(deviceId, rel) }
 
-  async sizeOf(rel) { return (await fsp.stat(path.join(this.root, rel)).catch(() => null))?.size ?? 0 }
-  async mtimeOf(rel) { return Math.round((await fsp.stat(path.join(this.root, rel)).catch(() => null))?.mtimeMs ?? 0) }
+  async sizeOf(rel) { return (await fsp.stat(this.disk(rel)).catch(() => null))?.size ?? 0 }
+  async mtimeOf(rel) { return Math.round((await fsp.stat(this.disk(rel)).catch(() => null))?.mtimeMs ?? 0) }
 
-  /** Every file under Drive, as Drive-relative paths. Dotfiles and links are skipped, as everywhere else. */
+  /** Every file under Drive, as Drive-relative paths, the apps' folders in .System among them. Dotfiles and links are skipped, as everywhere else. */
   async walk(rel) {
     const out = []
+    // the apps' folders are walked where they are: one of those names left in Files (a move that failed) is not theirs
+    if (!rel) for (const top of Object.keys(system.SHARED)) out.push(...await this.walk(top))
     let entries
-    try { entries = await fsp.readdir(path.join(this.root, rel), { withFileTypes: true }) } catch { return out }
+    try { entries = await fsp.readdir(this.disk(rel), { withFileTypes: true }) } catch { return out }
     for (const e of entries) {
-      if (e.isSymbolicLink() || e.name.startsWith('.')) continue
+      if (e.isSymbolicLink() || e.name.startsWith('.') || (!rel && system.SHARED[e.name])) continue
       const child = rel ? `${rel}/${e.name}` : e.name
       if (e.isDirectory()) out.push(...await this.walk(child))
       else if (e.isFile()) out.push(child)
@@ -608,18 +624,18 @@ class Files {
    */
   async remember(rel, sha) {
     this.db.exec('CREATE TABLE IF NOT EXISTS file_hashes (path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime INTEGER NOT NULL, sha256 TEXT NOT NULL)')
-    const st = await fsp.stat(path.join(this.root, rel))
+    const st = await fsp.stat(this.disk(rel))
     this.db.prepare('INSERT OR REPLACE INTO file_hashes(path, size, mtime, sha256) VALUES(?,?,?,?)').run(rel, st.size, Math.trunc(st.mtimeMs), sha)
   }
 
   async hash(rel) {
     this.db.exec('CREATE TABLE IF NOT EXISTS file_hashes (path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime INTEGER NOT NULL, sha256 TEXT NOT NULL)')
     let st
-    try { st = await fsp.stat(path.join(this.root, rel)) } catch { return null }
+    try { st = await fsp.stat(this.disk(rel)) } catch { return null }
     const size = st.size, mtime = Math.trunc(st.mtimeMs)
     const cached = this.db.prepare('SELECT sha256 FROM file_hashes WHERE path = ? AND size = ? AND mtime = ?').get(rel, size, mtime)
     if (cached) return cached.sha256
-    const sha = await sha256(path.join(this.root, rel))
+    const sha = await sha256(this.disk(rel))
     this.db.prepare(`INSERT INTO file_hashes(path, size, mtime, sha256) VALUES(?,?,?,?)
       ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime = excluded.mtime, sha256 = excluded.sha256`).run(rel, size, mtime, sha)
     return sha

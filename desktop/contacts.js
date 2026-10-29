@@ -1,8 +1,8 @@
 'use strict'
 // Tetra's Contacts on the computer (Drive-Android Plan.md § Contacts). One contact is one vCard 3.0 file in
-// Files/Contacts, the phone's Contacts.kt rules line for line: read forgiving (2.1's QUOTED-PRINTABLE and CHARSET, 3.0,
+// .System/Contacts/Shared, the phone's Contacts.kt rules line for line: read forgiving (2.1's QUOTED-PRINTABLE and CHARSET, 3.0,
 // 4.0), written strict (CRLF, folded at 75 octets), a line Tetra does not read kept as it was, an edit changing only the
-// lines of what changed; UID and REV; delete = a move into Files/Trash; sync's "(2)" copies shown as one. Birthdays and
+// lines of what changed; UID and REV; delete = a move into .System/Trash/Shared; sync's "(2)" copies shown as one. Birthdays and
 // dates go into the chosen calendar as yearly events carrying X-TETRA-CONTACT (ContactsBirthdays on the phone).
 const fs = require('node:fs')
 const path = require('node:path')
@@ -285,7 +285,7 @@ function sameOne(a, b) {
 const slug = (name, uid) => `${(name || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '') || 'contact'}-${crypto.createHash('sha1').update(uid).digest('hex').slice(0, 6)}.vcf`
 
 class Contacts {
-  /** [root]: Files/Contacts; [trash]: Files/Trash; [calendar]: the Calendar, for birthdays. */
+  /** [root]: .System/Contacts/Shared; [trash]: .System/Trash/Shared; [calendar]: the Calendar, for birthdays. */
   constructor(root, trash, calendar = null) { this.root = root; this.trashDir = trash; this.calendar = calendar; this.cache = new Map() }
 
   names() { try { return fs.readdirSync(this.root).filter(n => n.toLowerCase().endsWith('.vcf') && !n.startsWith('.')) } catch { return [] } }
@@ -340,7 +340,7 @@ class Contacts {
     this.dates(i)
     return i.uid
   }
-  /** Into Files/Trash (sync never deletes; a move crosses as a move), its "(2)" copies and its events with it. */
+  /** Into .System/Trash/Shared (sync never deletes; a move crosses as a move), its "(2)" copies and its events with it. */
   trash(uid) {
     const c = this.byUid(uid)
     for (const n of this.names()) { const f = path.join(this.root, n); if (f === c.file || this.read(f)?.info.uid === uid) this.toTrash(f) }

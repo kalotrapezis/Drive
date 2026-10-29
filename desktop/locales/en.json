@@ -1079,7 +1079,7 @@
  "contacts.labelFriend": "Friend",
  "contacts.labelAssistant": "Assistant",
  "contacts.labelManager": "Manager",
- "maps.noGraph": "The routing graph is not on this computer yet (Files/Maps/greece-gh).",
+ "maps.noGraph": "The routing graph is not on this computer yet (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Directions on the computer need Java 17 or newer.",
  "maps.needJar": "Directions on the computer need {jar} in ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh puts it there).",
  "maps.routerStopped": "The routing server stopped; see graphhopper.log in the app data.",

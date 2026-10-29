@@ -1079,7 +1079,7 @@
  "contacts.labelFriend": "Barát",
  "contacts.labelAssistant": "Asszisztens",
  "contacts.labelManager": "Vezető",
- "maps.noGraph": "Az útvonaltervező gráf még nincs ezen a számítógépen (Files/Maps/greece-gh).",
+ "maps.noGraph": "Az útvonaltervező gráf még nincs ezen a számítógépen (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "A számítógépes útbaigazításhoz a Java 17 vagy újabb verziója kell.",
  "maps.needJar": "A számítógépes útbaigazításhoz a(z) {jar} kell a ~/Tetra/.System/Maps/Tools mappában (a tools/maps-greece.sh oda teszi).",
  "maps.routerStopped": "Az útvonaltervező szerver leállt; lásd a graphhopper.log fájlt az alkalmazás adatai között.",

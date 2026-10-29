@@ -1079,7 +1079,7 @@
  "contacts.labelFriend": "Φίλος",
  "contacts.labelAssistant": "Βοηθός",
  "contacts.labelManager": "Προϊστάμενος",
- "maps.noGraph": "Ο χάρτης διαδρομών δεν είναι ακόμα σε αυτόν τον υπολογιστή (Files/Maps/greece-gh).",
+ "maps.noGraph": "Ο χάρτης διαδρομών δεν είναι ακόμα σε αυτόν τον υπολογιστή (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Οι οδηγίες στον υπολογιστή χρειάζονται Java 17 ή νεότερη.",
  "maps.needJar": "Οι οδηγίες στον υπολογιστή χρειάζονται το {jar} στο ~/Tetra/.System/Maps/Tools (το βάζει εκεί το tools/maps-greece.sh).",
  "maps.routerStopped": "Ο διακομιστής διαδρομών σταμάτησε· δείτε το graphhopper.log στα δεδομένα της εφαρμογής.",

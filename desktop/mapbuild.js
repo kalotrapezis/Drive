@@ -2,7 +2,7 @@
 /**
  * The map builder (desktop Settings › Maps; Drive-Android Plan.md § Maps, the user, 27 Oct: "a map builder that downloads the
  * map, does the roads stuff and installs it in the app and then uploads to the android devices … not force anyone to write
- * code"). One region of Geofabrik's list — a country, or a part of a big one — becomes a pack in Files/Maps, which sync
+ * code"). One region of Geofabrik's list — a country, or a part of a big one — becomes a pack in .System/Maps/Shared, which sync
  * carries to the phone and tablet:
  *
  *   <id>.pmtiles        the map: Protomaps' newest world build, cut to the region's border
@@ -52,7 +52,7 @@ const PYTHON = [BUNDLED && path.join(BUNDLED, 'python', 'bin', 'python3'), '/usr
 /** The steps as the wizard shows them, in order. */
 const STEPS = ['tools', 'map', 'osm', 'roads', 'search', 'phone', 'install', 'borders']
 const OSM = path.join(DATA, 'osm')
-/** What a pack is in Files/Maps besides its graph and manifest; -phone.tsv only where libphonenumber names area codes. */
+/** What a pack is in .System/Maps/Shared besides its graph and manifest; -phone.tsv only where libphonenumber names area codes. */
 const packFiles = id => [`${id}.pmtiles`, `${id}-places.tsv`, `${id}-addresses.tsv`, `${id}-streets.tsv`, `${id}-lanes.tsv`, `${id}-phone.tsv`]
 /** File `f`'s MD5, or null when there is none. */
 const md5Of = f => new Promise(resolve => {
@@ -130,7 +130,7 @@ function isoOf(region, regions) {
 }
 
 class MapBuilder {
-  /** `root` is Files/Maps; `progress({ id, step, state, done, total, error })` is told of each change. */
+  /** `root` is .System/Maps/Shared; `progress({ id, step, state, done, total, error })` is told of each change. */
   constructor(root, progress = () => {}) { this.root = root; this.progress = progress; this.job = null }
 
   /** Geofabrik's regions, { id, name, parent, iso, pbf }, kept a week in Maps/Cache. */
@@ -181,7 +181,7 @@ class MapBuilder {
     return out
   }
 
-  /** The packs in Files/Maps: each .pmtiles with its manifest, when there. */
+  /** The packs in .System/Maps/Shared: each .pmtiles with its manifest, when there. */
   async packs() {
     const out = []
     for (const n of await fsp.readdir(this.root).catch(() => [])) {
@@ -249,7 +249,7 @@ class MapBuilder {
 
   /**
    * What a build leaves, gone the same way whether it was made, failed or was cancelled: its work folder in Maps/Temp and a
-   * half-copied file of its own in Files/Maps (a crash in the middle of install). Only the builder's own names: a sync's
+   * half-copied file of its own in .System/Maps/Shared (a crash in the middle of install). Only the builder's own names: a sync's
    * .part there carries a random id and is never one of them. Tools and Data stay.
    */
   async cleanUp(id) {
@@ -264,7 +264,7 @@ class MapBuilder {
   cancel() { if (this.job) { this.job.cancelled = true; this.job.abort.abort(); this.job.child?.kill() } }
 
   /**
-   * Builds region `id` into Files/Maps; one at a time. The work folder starts empty and is gone at the end, however the
+   * Builds region `id` into .System/Maps/Shared; one at a time. The work folder starts empty and is gone at the end, however the
    * build ended (cleanUp). The error page's Retry (the user, 27 Oct: "add a retry if a step fails") builds again; the
    * region's download is kept in Maps/Data and fetched again only when Geofabrik's MD5 says it changed, so an update never
    * takes last month's roads and a retry does not download the country twice.
@@ -424,7 +424,7 @@ class MapBuilder {
     if (!fs.existsSync(path.join(BIN, JAR))) await get(URLS.jar, path.join(BIN, JAR))
   }
 
-  /** Graph folder `from` into Files/Maps as `name`: copied beside the old one, then swapped in. */
+  /** Graph folder `from` into .System/Maps/Shared as `name`: copied beside the old one, then swapped in. */
   async swapIn(from, name) {
     const gh = path.join(this.root, name), part = path.join(this.root, `.${name}.part`)
     await fsp.rm(part, { recursive: true, force: true })
@@ -434,7 +434,7 @@ class MapBuilder {
     await fsp.rename(part, gh)
   }
 
-  /** Into Files/Maps: each file beside its old one and renamed over it, the roads as a folder swapped in, the manifest last. */
+  /** Into .System/Maps/Shared: each file beside its old one and renamed over it, the roads as a folder swapped in, the manifest last. */
   async install(region, dir, regions) {
     const id = region.id
     await fsp.mkdir(this.root, { recursive: true })

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tetra's calendar from the command line (standard library only).
 
-The calendars are folders in ~/Tetra/Files/Calendar; each event is one iCalendar (.ics) file in its calendar's folder.
+The calendars are folders in ~/Tetra/.System/Calendar/Shared (~/Tetra/Files/Calendar before 29 Oct 2026); each event is one iCalendar (.ics) file in its calendar's folder.
     tetra_calendar.py list                              the calendars, their colours and how many events
     tetra_calendar.py agenda [FROM] [TO]                events between two dates (repeats worked out); default: the next 7 days
     tetra_calendar.py find TEXT                         events whose title, place or notes contain TEXT, with their files
@@ -16,7 +16,13 @@ The calendars are folders in ~/Tetra/Files/Calendar; each event is one iCalendar
 import argparse, datetime as dt, hashlib, os, re, shutil, sys, uuid
 from zoneinfo import ZoneInfo
 
-ROOT = os.environ.get("TETRA_CALENDAR", os.path.expanduser("~/Tetra/Files/Calendar"))
+
+def default_root(app):
+    """Tetra's .System/<app>/Shared (since 29 Oct 2026); Files/<app> on a computer whose Tetra has not moved it there yet."""
+    new, old = os.path.expanduser(f"~/Tetra/.System/{app}/Shared"), os.path.expanduser(f"~/Tetra/Files/{app}")
+    return new if os.path.isdir(new) or not os.path.isdir(old) else old
+
+ROOT = os.environ.get("TETRA_CALENDAR", default_root("Calendar"))
 PALETTE = ["#E91E63", "#D50000", "#E67C73", "#F4511E", "#F6BF26", "#33B679", "#0B8043", "#039BE5", "#3F51B5", "#7986CB", "#8E24AA", "#616161"]
 DAYS = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
 
@@ -359,10 +365,11 @@ def cmd_add(a, root):
 
 def cmd_trash(a, root):
     path = os.path.abspath(a.file)
-    tetra = os.path.dirname(os.path.abspath(root))
     if not path.startswith(os.path.abspath(root) + os.sep):
         sys.exit("Only events and calendars inside Tetra's Calendar folder.")
-    trash = os.path.join(tetra, "Trash")
+    # .System/Calendar/Shared → .System/Trash/Shared; an older Files/Calendar → Files/Trash
+    up = os.path.dirname(os.path.abspath(root))
+    trash = os.path.join(os.path.dirname(up), "Trash", "Shared") if os.path.basename(os.path.abspath(root)) == "Shared" else os.path.join(up, "Trash")
     os.makedirs(trash, exist_ok=True)
     base, ext = os.path.splitext(os.path.basename(path.rstrip("/")))
     target, n = os.path.join(trash, base + ext), 2

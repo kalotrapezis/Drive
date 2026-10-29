@@ -1,6 +1,6 @@
 'use strict'
 /**
- * Directions on the computer (Drive-Android Plan.md § Maps): the phone's own routing graph, Files/Maps/greece-gh
+ * Directions on the computer (Drive-Android Plan.md § Maps): the phone's own routing graph, .System/Maps/Shared/greece-gh
  * (GraphHopper 10.2, made here by tools/maps-greece.sh), answered by GraphHopper's server on this computer. It needs what
  * made the graph: Java 17 or newer and graphhopper-web-10.2.jar (the map builder and tools/maps-greece.sh keep it in ~/Tetra/.System/Maps/Tools).
  *

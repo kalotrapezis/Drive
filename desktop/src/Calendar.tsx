@@ -5,7 +5,7 @@ import { lang, t } from './i18n'
 
 // Tetra's Calendar on the computer (Drive-Android Plan.md § Calendar): Google Calendar on the web — a side panel with
 // Create, a small month and the calendars' coloured boxes; a day, week, month or agenda view. The events are the .ics
-// files in Files/Calendar (calendar.js); a change made there by Claude, another app or a sync shows as it lands.
+// files in .System/Calendar/Shared (calendar.js); a change made there by Claude, another app or a sync shows as it lands.
 
 type Cal = { id: string; name: string; color: string }
 type Alarm = { days: number; seconds: number; repeat?: number; every?: number; fromEnd?: boolean; at?: number }

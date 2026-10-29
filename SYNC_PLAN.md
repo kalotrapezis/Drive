@@ -2621,3 +2621,25 @@ and speaker); 159 desktop tests; the screens on two hidden instances. **Not with
   its yes). Not on Android.
 - **Beta and Alpha** (the user: "everything that has to do with a second PC gets an Alpha label"). The first start opens
   with what they mean; `<Alpha />` (Role.tsx) beside every such thing; the pill by "Tetra" says which this computer is.
+
+### 6av. The apps' folders in .System; sync's names unchanged (built 2026-10-29, branches `system-userspace` / `claude/system-userspace`)
+
+- **Why** (the user: "Make Tetra process everything from the system folder; Files and Photos to be userspace only"). The
+  Calendar, Contacts, Data, Phone, Timer, Maps (with Places/Lists/Trips) and Files' Trash leave Files for
+  `.System/<App>/Shared` (desktop `~/Tetra/.System`, phone `/sdcard/Tetra/.System`); Notes for `.System/Notes/Shared`, the
+  phone's `.templates` for `.System/Office/Data`. The table is in Drive's `desktop/SYSTEM.md`.
+- **The wire did not change.** Sync still names those files `Calendar/…`, `Trash/…`, `Maps/…`; each device maps the name to
+  its own disk (`files.disk()` / `system.SHARED` on the computer, `TetraSystem.onDisk()` / `TetraSystem.SHARED` on Android;
+  the same list). The scopes (`calendar`, `timer`, `contacts`, `phone`, `data`), the manifests, the moves into Trash and every
+  memory keyed by path stay as they were. So a device on an older version syncs with a newer one as before, in any order:
+  the older one keeps the folders in its Files, the newer one in .System, and neither makes the other's again.
+- **The move**, once on each device: by renaming (one disk; nothing copied or deleted; a file already at the target is left,
+  both kept, logged; the next start finishes). Desktop: `system.migrateFiles` at start; Android: `TetraSystem.migrateOnce`
+  from `TetraFolder.root`, before anything reads those folders. Ids and names unchanged, dates kept: sync sees no change.
+- **"(n)" copies** of the 23–29 Oct bug (not in the Trash, whose "(2)"s are its own), once after the move: one with the same bytes as the file beside it goes to
+  `.System/Backups/Data/Sync copies/<date>/<sync path>`, the others stay and are listed in `List.txt` there.
+- A name of those left at the top of Files (a move that failed) is neither offered nor written into.
+
+**Checked:** `desktop/test/system.test.js`, `files.test.js`, `sync.test.js` (a device naming `Calendar/…` lands in .System,
+no Files/Calendar made, a leftover one not offered), `client.test.js` (reset); Android `TetraSystemTest`. Not yet on the
+real devices.

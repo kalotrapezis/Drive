@@ -83,8 +83,8 @@ test('a desktop client joins by the phrase, and syncs files, photos and notes bo
     for (const c of ['photos', 'files']) server.sync.setConnection(device.id, c, { direction: 'both', keep: 'everything' })
     server.sync.completeSetup(device.id)
 
-    fs.mkdirSync(path.join(server.files.root, 'Calendar'), { recursive: true })
-    fs.writeFileSync(path.join(server.files.root, 'Calendar', 'event.ics'), 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n')
+    fs.mkdirSync(path.join(server.files.disk('Calendar')), { recursive: true })
+    fs.writeFileSync(path.join(server.files.disk('Calendar'), 'event.ics'), 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n')
     fs.mkdirSync(path.join(laptop.files.root, 'Work'), { recursive: true })
     fs.writeFileSync(path.join(laptop.files.root, 'Work', 'plan.txt'), 'from the laptop')
     const photo = crypto.randomBytes(5000)
@@ -100,16 +100,16 @@ test('a desktop client joins by the phrase, and syncs files, photos and notes bo
     await client.now()
     assert.equal(client.status().error, null)
     assert.equal(fs.readFileSync(path.join(server.files.root, 'Work', 'plan.txt'), 'utf8'), 'from the laptop')
-    assert.equal(fs.readFileSync(path.join(laptop.files.root, 'Calendar', 'event.ics'), 'utf8'), 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n')
+    assert.equal(fs.readFileSync(path.join(laptop.files.disk('Calendar'), 'event.ics'), 'utf8'), 'BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n')
     assert.deepEqual(fs.readFileSync(path.join(server.dir, 'Photos', '2026', '10', 'IMG_1.jpg')), photo)
     assert.deepEqual(fs.readFileSync(path.join(laptop.dir, 'Photos', 'DCIM', 'IMG_9.jpg')), theirs)
     assert.deepEqual(laptop.sync.notes.list().map(n => n.title), ['Shopping'])
 
     // an edit on the server replaces the laptop's copy (the old one in Files history), not "(2)" beside it
-    fs.writeFileSync(path.join(server.files.root, 'Calendar', 'event.ics'), 'BEGIN:VCALENDAR\r\nX:2\r\nEND:VCALENDAR\r\n')
+    fs.writeFileSync(path.join(server.files.disk('Calendar'), 'event.ics'), 'BEGIN:VCALENDAR\r\nX:2\r\nEND:VCALENDAR\r\n')
     await client.now()
-    assert.equal(fs.readFileSync(path.join(laptop.files.root, 'Calendar', 'event.ics'), 'utf8'), 'BEGIN:VCALENDAR\r\nX:2\r\nEND:VCALENDAR\r\n')
-    assert.deepEqual(fs.readdirSync(path.join(laptop.files.root, 'Calendar')), ['event.ics'])
+    assert.equal(fs.readFileSync(path.join(laptop.files.disk('Calendar'), 'event.ics'), 'utf8'), 'BEGIN:VCALENDAR\r\nX:2\r\nEND:VCALENDAR\r\n')
+    assert.deepEqual(fs.readdirSync(path.join(laptop.files.disk('Calendar'))), ['event.ics'])
     // a second sync with nothing new brings nothing twice
     await client.now()
     assert.deepEqual(fs.readdirSync(path.join(laptop.dir, 'Photos', 'DCIM')), ['IMG_9.jpg'])
@@ -154,7 +154,7 @@ test('reset: the second acknowledgement only after 10 seconds, a verified backup
     assert.equal(done.to, path.join(out, 'Tetra backup 2026-10-26 12.30'))
     assert.equal(fs.readFileSync(path.join(done.to, 'Tetra', 'Files', 'Work', 'a.txt'), 'utf8'), 'abc')
     assert.equal(done.files, 2)
-    assert.ok(!fs.existsSync(path.join(done.to, 'Tetra', '.System')), 'the backup leaves .System out')
+    assert.ok(!fs.existsSync(path.join(done.to, 'Tetra', '.System', 'Maps', 'Tools')), 'the backup leaves .System\'s tools out (its apps\' Shared go: system.test.js)')
     await assert.rejects(reset.backUp([{ from: tetra, name: 'Tetra' }], out, new Date('2026-10-26T12:30:00Z')), 'never into an older backup')
 
     assert.throws(() => reset.wipe([tmp], tmp), 'not the home folder')

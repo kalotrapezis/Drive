@@ -1079,7 +1079,7 @@
  "contacts.labelFriend": "Ystävä",
  "contacts.labelAssistant": "Avustaja",
  "contacts.labelManager": "Esimies",
- "maps.noGraph": "Reittiverkkoa ei ole vielä tässä tietokoneessa (Files/Maps/greece-gh).",
+ "maps.noGraph": "Reittiverkkoa ei ole vielä tässä tietokoneessa (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Reittiohjeet tietokoneella vaativat Javan version 17 tai uudemman.",
  "maps.needJar": "Reittiohjeet tietokoneella vaativat tiedoston {jar} kansiossa ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh asettaa sen sinne).",
  "maps.routerStopped": "Reittipalvelin pysähtyi; katso graphhopper.log sovelluksen tiedoista.",

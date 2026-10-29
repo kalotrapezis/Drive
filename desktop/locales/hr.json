@@ -1121,7 +1121,7 @@
  "contacts.labelFriend": "Prijatelj",
  "contacts.labelAssistant": "Asistent",
  "contacts.labelManager": "Voditelj",
- "maps.noGraph": "Graf usmjeravanja još nije na ovom računalu (Files/Maps/greece-gh).",
+ "maps.noGraph": "Graf usmjeravanja još nije na ovom računalu (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Upute na računalu trebaju Javu 17 ili noviju.",
  "maps.needJar": "Upute na računalu trebaju {jar} u ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh ga tamo stavlja).",
  "maps.routerStopped": "Poslužitelj usmjeravanja se zaustavio; pogledajte graphhopper.log u podacima aplikacije.",

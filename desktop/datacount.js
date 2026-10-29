@@ -1,6 +1,6 @@
 'use strict'
 // Data on the computer (Drive-Android Plan.md § Data): this computer's own counts from Linux's network counters, written
-// as its month files in Files/Data/usage (the phone's and the tablet's come there with sync), its Wi-Fi signal for the
+// as its month files in .System/Data/Shared/usage (the phone's and the tablet's come there with sync), its Wi-Fi signal for the
 // phone's "Phone as hotspot", and a speed test the phone runs against it. Per program: each TCP connection's bytes as `ss` shows
 // them for this user's programs (no root); what TCP does not carry (calls, video over UDP, QUIC) is "Other".
 const fs = require('fs')

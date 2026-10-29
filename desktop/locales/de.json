@@ -1079,7 +1079,7 @@
  "contacts.labelFriend": "Freund",
  "contacts.labelAssistant": "Assistent",
  "contacts.labelManager": "Vorgesetzter",
- "maps.noGraph": "Das Routennetz ist auf diesem Computer noch nicht vorhanden (Files/Maps/greece-gh).",
+ "maps.noGraph": "Das Routennetz ist auf diesem Computer noch nicht vorhanden (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Die Routenberechnung am Computer braucht Java 17 oder neuer.",
  "maps.needJar": "Die Routenberechnung am Computer braucht {jar} in ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh legt es dort ab).",
  "maps.routerStopped": "Der Routing-Server wurde beendet; siehe graphhopper.log in den App-Daten.",

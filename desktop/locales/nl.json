@@ -1079,7 +1079,7 @@
  "contacts.labelFriend": "Vriend",
  "contacts.labelAssistant": "Assistent",
  "contacts.labelManager": "Manager",
- "maps.noGraph": "Het routeringsbestand staat nog niet op deze computer (Files/Maps/greece-gh).",
+ "maps.noGraph": "Het routeringsbestand staat nog niet op deze computer (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Routebeschrijvingen op de computer hebben Java 17 of nieuwer nodig.",
  "maps.needJar": "Routebeschrijvingen op de computer hebben {jar} nodig in ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh zet het daar).",
  "maps.routerStopped": "De routeringsserver is gestopt; zie graphhopper.log in de app-gegevens.",

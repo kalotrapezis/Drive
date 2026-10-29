@@ -1,7 +1,7 @@
 'use strict'
 /**
  * Tetra's Maps on the computer (Drive-Android Plan.md § Maps; Maps.kt is the phone's twin, the same files and rules).
- * Everything is a file in ~/Tetra/Files/Maps, synced as files are, hidden from Files' lists like the Calendar and the Timer:
+ * Everything is a file in ~/Tetra/.System/Maps/Shared, synced as files are, hidden from Files' lists like the Calendar and the Timer:
  *
  *   <id>.pmtiles       a country's offline map (Protomaps' basemap cut to it), served to the window as tiles; greece.pmtiles,
  *                      and any the map builder made (mapbuild.js: <id>-gh/, <id>-*.tsv and <id>.json beside it)

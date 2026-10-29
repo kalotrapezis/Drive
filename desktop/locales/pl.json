@@ -1163,7 +1163,7 @@
  "contacts.labelFriend": "Przyjaciel",
  "contacts.labelAssistant": "Asystent",
  "contacts.labelManager": "Kierownik",
- "maps.noGraph": "Grafu tras nie ma jeszcze na tym komputerze (Files/Maps/greece-gh).",
+ "maps.noGraph": "Grafu tras nie ma jeszcze na tym komputerze (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Wskazówki na komputerze wymagają Javy 17 lub nowszej.",
  "maps.needJar": "Wskazówki na komputerze wymagają {jar} w ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh umieszcza go tam).",
  "maps.routerStopped": "Serwer tras się zatrzymał; zobacz graphhopper.log w danych aplikacji.",

@@ -21,7 +21,7 @@ const DEFAULTS = { trashDays: 30, purgatoryDays: 30 } // purgatoryDays 0: never 
 
 class Purgatory {
   /**
-   * `files` is the Files module (its Trash is Files/Trash/). `serverBase` is where the purgatory lives when no drive
+   * `files` is the Files module (its Trash is .System/Trash/Shared/). `serverBase` is where the purgatory lives when no drive
    * was chosen for it: <serverBase>/Tetra/.purgatory, on this computer — the server keeps it by default.
    */
   /** `held(sha)`: a copy is already safe on the server or its backup drive, so the Trash item just goes. */
@@ -106,7 +106,7 @@ class Purgatory {
       } catch (e) { out.failed.push(`${item.path}: ${e.message}`) }
     }
 
-    const filesTrash = this.files && path.join(this.files.root, 'Trash')
+    const filesTrash = this.files && this.files.disk('Trash')
     for (const name of filesTrash && fs.existsSync(filesTrash) ? await fsp.readdir(filesTrash) : []) {
       const full = path.join(filesTrash, name)
       // A move into Trash/ changes the item's ctime and nothing else, so that is when it was trashed.
@@ -116,7 +116,7 @@ class Purgatory {
         await this.enter(driveId, mount, 'file', full, name, now)
         await fsp.rm(full, { recursive: true, force: true })
         out.entered++
-      } catch (e) { out.failed.push(`Files/Trash/${name}: ${e.message}`) }
+      } catch (e) { out.failed.push(`.System/Trash/Shared/${name}: ${e.message}`) }
     }
 
     if (purgatoryDays > 0) {

@@ -1121,7 +1121,7 @@
  "contacts.labelFriend": "Draugs",
  "contacts.labelAssistant": "Asistents",
  "contacts.labelManager": "Vadītājs",
- "maps.noGraph": "Maršrutēšanas tīkls šajā datorā vēl nav (Files/Maps/greece-gh).",
+ "maps.noGraph": "Maršrutēšanas tīkls šajā datorā vēl nav (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Norādēm šajā datorā vajadzīga Java 17 vai jaunāka versija.",
  "maps.needJar": "Norādēm šajā datorā vajadzīgs {jar} mapē ~/Tetra/.System/Maps/Tools (to tur ieliek tools/maps-greece.sh).",
  "maps.routerStopped": "Maršrutēšanas serveris apstājās; skatiet graphhopper.log lietotnes datos.",

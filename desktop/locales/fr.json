@@ -1121,7 +1121,7 @@
  "contacts.labelFriend": "Ami",
  "contacts.labelAssistant": "Assistant",
  "contacts.labelManager": "Responsable",
- "maps.noGraph": "Le graphe d’itinéraires n’est pas encore sur cet ordinateur (Files/Maps/greece-gh).",
+ "maps.noGraph": "Le graphe d’itinéraires n’est pas encore sur cet ordinateur (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Les itinéraires sur l’ordinateur nécessitent Java 17 ou plus récent.",
  "maps.needJar": "Les itinéraires sur l’ordinateur nécessitent {jar} dans ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh l’y place).",
  "maps.routerStopped": "Le serveur d’itinéraires s’est arrêté ; voir graphhopper.log dans les données de l’appli.",

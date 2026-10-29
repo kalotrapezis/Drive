@@ -1079,7 +1079,7 @@
  "contacts.labelFriend": "Sõber",
  "contacts.labelAssistant": "Assistent",
  "contacts.labelManager": "Juhataja",
- "maps.noGraph": "Marsruudigraafik pole selles arvutis veel (Files/Maps/greece-gh).",
+ "maps.noGraph": "Marsruudigraafik pole selles arvutis veel (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Juhised arvutis vajavad Java 17 või uuemat versiooni.",
  "maps.needJar": "Juhised arvutis vajavad faili {jar} kaustas ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh paigutab selle sinna).",
  "maps.routerStopped": "Marsruutimisserver peatus; vaadake rakenduse andmetes faili graphhopper.log.",

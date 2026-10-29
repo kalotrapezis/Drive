@@ -1,7 +1,7 @@
 'use strict'
 /**
  * Tetra's Timer on the computer (Drive-Android Plan.md § Timer; Timer.kt is the phone's twin, the same rules). A timer is
- * one small JSON file in ~/Tetra/Files/Timer, synced as files are, at once (files.js SCOPES.timer). Every device counts
+ * one small JSON file in ~/Tetra/.System/Timer/Shared, synced as files are, at once (files.js SCOPES.timer). Every device counts
  * down by itself from the end time in it; only Start, Pause, Resume, Stop and OK write the file:
  *
  *   {"id":"k3f9a2","seconds":300,"label":"","state":"running","ends":"2026-10-18T16:05:00Z","left":0,"rev":1,"by":"Tablet","pinned":false}

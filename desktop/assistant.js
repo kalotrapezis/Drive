@@ -1,7 +1,7 @@
 /*
  * AI Assist on the computer (Drive-Android Plan.md § Tetra Assistant; the phone's Assistant.kt is the spec, ported here).
  * What was said is written out by Mistral's Voxtral and sent with the conversation so far to mistral-small, which may call
- * Tetra's tools; the tools run here, on ~/Tetra/Files through the desktop's own modules (calendar.js, timer.js, notes.js,
+ * Tetra's tools; the tools run here, on ~/Tetra (Files and .System) through the desktop's own modules (calendar.js, timer.js, notes.js,
  * files.js, contacts.js, maps.js), and hand back only what the model needs (names and titles, never a whole calendar,
  * contact list or note). A call waits for the user's own yes, heard by Tetra, never decided by the model. Web search and
  * pictures are Mistral's own tools, through its Conversations API (the chat API does not run them). The key stays in

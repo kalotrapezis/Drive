@@ -1121,7 +1121,7 @@
  "contacts.labelFriend": "Prieten",
  "contacts.labelAssistant": "Asistent",
  "contacts.labelManager": "Manager",
- "maps.noGraph": "Rețeaua de trasee nu se află încă pe acest computer (Files/Maps/greece-gh).",
+ "maps.noGraph": "Rețeaua de trasee nu se află încă pe acest computer (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Indicațiile pe computer au nevoie de Java 17 sau mai nou.",
  "maps.needJar": "Indicațiile pe computer au nevoie de {jar} în ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh îl pune acolo).",
  "maps.routerStopped": "Serverul de trasee s-a oprit; vezi graphhopper.log în datele aplicației.",

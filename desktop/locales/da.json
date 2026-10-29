@@ -1079,7 +1079,7 @@
  "contacts.labelFriend": "Ven",
  "contacts.labelAssistant": "Assistent",
  "contacts.labelManager": "Chef",
- "maps.noGraph": "Rutegrafen er ikke på denne computer endnu (Files/Maps/greece-gh).",
+ "maps.noGraph": "Rutegrafen er ikke på denne computer endnu (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Rutevejledning på computeren kræver Java 17 eller nyere.",
  "maps.needJar": "Rutevejledning på computeren kræver {jar} i ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh lægger den dér).",
  "maps.routerStopped": "Ruteserveren stoppede; se graphhopper.log i appdataene.",

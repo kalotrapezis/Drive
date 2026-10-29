@@ -1,6 +1,6 @@
 'use strict'
 // Tetra's Calendar on the computer (Drive-Android Plan.md § Calendar). The calendars are files, so Claude or a person
-// can change them: Files/Calendar/<calendar>/color (#RRGGBB) and <calendar>/<event>.ics, one iCalendar file per event.
+// can change them: .System/Calendar/Shared/<calendar>/color (#RRGGBB) and <calendar>/<event>.ics, one iCalendar file per event.
 // Files sync carries them; this reads and writes them the way the phone's Calendar.kt does, line for line kept.
 const fs = require('node:fs')
 const i18n = require('./i18n')
@@ -350,7 +350,7 @@ function zip(entries) {
 // ——— the store ———
 
 class Calendar {
-  /** [root]: Files/Calendar; [trash]: Files/Trash (sync never deletes: a move into it crosses as a move). */
+  /** [root]: .System/Calendar/Shared; [trash]: .System/Trash/Shared (sync never deletes: a move into it crosses as a move). */
   constructor(root, trash) { this.root = root; this.trashDir = trash; this.cache = new Map() }
 
   calendars() {

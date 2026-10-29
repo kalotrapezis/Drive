@@ -2,7 +2,8 @@
 // after a forced backup, or two acknowledgements of deleting the whole Tetra folder, the second actionable only after
 // 10 seconds. The window shows the wait; main.js keeps the time it was armed and refuses an earlier delete as well.
 // The Tetra folder's .System (system.js) is Tetra's own tools and safety copies, not the library: a reset neither counts,
-// copies nor deletes it, as it never touched ~/Tetra-maps and ~/Tetra-backups before they moved in there (SYSTEM.md).
+// copies nor deletes it, as it never touched ~/Tetra-maps and ~/Tetra-backups before they moved in there (SYSTEM.md) —
+// except each app's Shared, the calendars, contacts, notes, maps and Trash that were in Files until 29 Oct: those go as before.
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
@@ -14,15 +15,18 @@ const WAIT_MS = 10_000
 /** The second acknowledgement counts only once 10 s have passed since it was shown (armed). */
 const mayDelete = (armedAt, now = Date.now()) => Number.isFinite(armedAt) && armedAt > 0 && now - armedAt >= WAIT_MS
 
+/** A path (relative to a folder a reset takes) of the .System it keeps: anything in it but an app's Shared. */
+const kept = rel => { const p = rel.split(path.sep); return p[0] === SYSTEM && p.length > 2 && p[2] !== 'Shared' }
+
 const inside = (child, parent) => { const r = path.relative(parent, child); return r === '' || (!r.startsWith('..') && !path.isAbsolute(r)) }
 
-/** Every regular file under `dir`, relative path → size; not its .System. Links are not followed (cp copies them as links). */
+/** Every regular file under `dir`, relative path → size; not what it keeps of .System. Links are not followed (cp copies them as links). */
 async function sizes(dir, rel = '', out = new Map()) {
   let entries
   try { entries = await fsp.readdir(path.join(dir, rel), { withFileTypes: true }) } catch (e) { if (e.code === 'ENOENT') return out; throw e }
   for (const e of entries) {
-    if (rel === '' && e.name === SYSTEM) continue
     const child = path.join(rel, e.name)
+    if (kept(child)) continue
     if (e.isDirectory()) await sizes(dir, child, out)
     else if (e.isFile()) out.set(child, (await fsp.stat(path.join(dir, child))).size)
   }
@@ -55,7 +59,7 @@ async function backUp(sources, dest, now = new Date()) {
     if (!fs.existsSync(s.from)) continue
     const target = path.join(to, s.name)
     await fsp.cp(s.from, target, { recursive: true, errorOnExist: true, force: false, preserveTimestamps: true, verbatimSymlinks: true,
-      filter: src => src !== path.join(s.from, SYSTEM) })
+      filter: src => !kept(path.relative(s.from, src)) })
     const want = await sizes(s.from), got = await sizes(target)
     for (const [rel, size] of want) if (got.get(rel) !== size) throw new Error(`Not backed up whole: ${path.join(s.name, rel)}`)
     files += want.size
@@ -63,7 +67,7 @@ async function backUp(sources, dest, now = new Date()) {
   return { to, files, bytes }
 }
 
-/** Deletes the Tetra folder (all but its .System) and the app's data. Never the home folder, a folder above it, or the root. */
+/** Deletes the Tetra folder (all but what it keeps of .System) and the app's data. Never the home folder, a folder above it, or the root. */
 function wipe(paths, home = os.homedir()) {
   for (const p of paths) {
     const full = path.resolve(p)
@@ -72,6 +76,7 @@ function wipe(paths, home = os.homedir()) {
   for (const p of paths) {
     if (!fs.existsSync(path.join(p, SYSTEM))) { fs.rmSync(p, { recursive: true, force: true }); continue }
     for (const n of fs.readdirSync(p)) if (n !== SYSTEM) fs.rmSync(path.join(p, n), { recursive: true, force: true })
+    for (const app of fs.readdirSync(path.join(p, SYSTEM))) fs.rmSync(path.join(p, SYSTEM, app, 'Shared'), { recursive: true, force: true })
   }
 }
 

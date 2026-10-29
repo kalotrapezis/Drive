@@ -11,7 +11,7 @@ import { lang, t, tr } from './i18n'
 maplibregl.setWorkerUrl(workerUrl) // the page loads from file://, where MapLibre cannot find its worker by itself
 
 // Tetra's Maps on the computer (Drive-Android Plan.md § Maps; MapsScreen.kt and MapsPanels.kt are the phone's): the offline
-// map of Greece from Files/Maps/greece.pmtiles, Search with the phone's pills, saved places and lists, trips planned here
+// map of Greece from .System/Maps/Shared/greece.pmtiles, Search with the phone's pills, saved places and lists, trips planned here
 // and driven with the phone. The files are the phone's own (maps.js); sync carries every change both ways.
 
 const GREECE: [[number, number], [number, number]] = [[18.6, 34.2], [30.2, 42.2]]

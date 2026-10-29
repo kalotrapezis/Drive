@@ -496,7 +496,7 @@ class SyncServer {
     if (!this.files) return []
     const root = path.join(mount, 'Tetra', 'Files')
     return (await this.files.all()).filter(i => !i.dir).map(i => {
-      const st = fs.statSync(path.join(this.files.root, i.path))
+      const st = fs.statSync(this.files.disk(i.path))
       let there = false
       try { const d = fs.statSync(path.join(root, i.path)); there = d.size === st.size && Math.abs(d.mtimeMs - st.mtimeMs) < 2 } catch {}
       // (within 2 ms: the stamp goes through floating-point seconds and can come back a hair early, which made the
@@ -511,7 +511,7 @@ class SyncServer {
    * is ever deleted. Hashed while it is read, then read back from the drive and hashed again before it counts.
    */
   async copyFileToDrive(f, mount) {
-    const src = path.join(this.files.root, f.path)
+    const src = this.files.disk(f.path)
     const target = path.join(mount, 'Tetra', 'Files', f.path)
     await fsp.mkdir(path.dirname(target), { recursive: true })
     const part = target + '.part'

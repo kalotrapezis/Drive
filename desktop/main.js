@@ -77,7 +77,7 @@ const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move',
 const NOTE_CALLS = ['list', 'create', 'save', 'snapshot', 'history', 'restoreVersion', 'remove']
 const CALENDAR_CALLS = ['calendars', 'occurrences', 'save', 'saveDay', 'skipDay', 'endBefore', 'split', 'trash', 'move', 'keep', 'newCalendar', 'setCalendar', 'deleteCalendar', 'scheduleEvent', 'trashed', 'restore']
 let calendar = null, reminderTimer = null, calendarIncoming = []
-// Contacts (Drive-Android Plan.md § Contacts): Files/Contacts, one vCard a person; the window's calls, checked by name
+// Contacts (Drive-Android Plan.md § Contacts): .System/Contacts/Shared, one vCard a person; the window's calls, checked by name
 const CONTACTS_CALLS = ['list', 'save', 'trash', 'keep', 'trashed', 'restore', 'pairs', 'merge', 'notTheSame']
 let contacts = null
 
@@ -105,11 +105,11 @@ function planReminders() {
   const next = calendar.reminders(now + 1000, now + 120 * 86_400_000)[0]
   reminderTimer = setTimeout(planReminders, Math.max(1000, Math.min(next ? next.at - now : Infinity, 6 * HOURS)))
 }
-// The Timer (Drive-Android Plan.md § Timer): a file per timer in Files/Timer. This computer counts down from the end time
+// The Timer (Drive-Android Plan.md § Timer): a file per timer in .System/Timer/Shared. This computer counts down from the end time
 // in it, as every device does; at the end it notifies and the window rings (TimerBell) until OK here or on any device.
 // The files are read again at each end and every 30 s (the user: "sync check every 30 sec"), and at once when one lands.
 let timers = null, timerAlarm = null
-let maps = null // Maps (maps.js): the phone's map files in Files/Maps, read and written as they are
+let maps = null // Maps (maps.js): the phone's map files in .System/Maps/Shared, read and written as they are
 /** Directions (router.js): GraphHopper's server on a map's graph, one a graph, started at its first route; the last three used kept. */
 const routers = new Map()
 function routerFor(dir) {
@@ -258,7 +258,7 @@ function watchMaps() {
 /** The map's style, fonts and icons: built into the app (dist/maps, the phone's assets/maps). */
 const mapsAsset = rel => [path.join(__dirname, 'dist', 'maps', rel), path.join(__dirname, 'public', 'maps', rel)].find(f => fs.existsSync(f)) ?? null
 
-/** media://maps/… — the offline maps: tiles from each Files/Maps/<id>.pmtiles, the phone's style pointed at them. */
+/** media://maps/… — the offline maps: tiles from each .System/Maps/Shared/<id>.pmtiles, the phone's style pointed at them. */
 async function mapsResponse(key) {
   const r = await mapsBody(key)
   const headers = new Headers(r.headers)
@@ -473,8 +473,21 @@ app.whenReady().then(() => {
     for (const f of failed) console.warn('[system] not moved:', f)
     try { system.cleanTemp(); tempCleaned = true } catch (e) { console.warn('[system] Temp not emptied:', e.message) }
   }
+  // Tetra's own folders of Files into .System (29 Oct 2026); a hidden run moves only the folders it was given
+  if (!process.env.DRIVE_HIDDEN || process.env.DRIVE_FILES) {
+    const { moved, failed } = system.migrateFiles(FILES_ROOT)
+    if (moved.length) console.log('[system] moved', moved.join('; '))
+    for (const f of failed) console.warn('[system] not moved:', f)
+  }
   db = library.open(DATA_DIR)
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)') // read below (Contacts) before the line that made it; a new computer's first start failed
+  // once: sync's identical "(2)" copies aside into .System/Backups, the others listed there (system.setAsideCopies)
+  if (!setting('syncCopiesSetAside') && (!process.env.DRIVE_HIDDEN || process.env.DRIVE_FILES)) {
+    const { moved, left, failed } = system.setAsideCopies(FILES_ROOT)
+    console.log(`[system] sync copies: ${moved.length} set aside, ${left.length} left where they are`, left.join('; '))
+    for (const f of failed) console.warn('[system] not moved:', f)
+    setSetting('syncCopiesSetAside', String(Date.now()))
+  }
   // Server or client is asked at the first start (Setup.tsx). A Tetra that ran before the question was the server, and
   // a hidden QA copy is one too: neither is asked. notesImported is written at every first start (below); roleAsked
   // marks a start that asked, so closing before answering asks again rather than making it a server.
@@ -485,13 +498,13 @@ app.whenReady().then(() => {
   }
   i18n.use(setting('language') || 'system', [app.getLocale()]) // before anything says a word: reminders, the tray
   files = new Files(db, FILES_ROOT)
-  // Notes live in a hidden folder of Files (notes.js), and sync through their own step, newest edit wins.
-  notes = new Notes(path.join(FILES_ROOT, '.notes'), 'tetra-desktop')
-  // The Calendar is a folder of Files (synced as files); deleting goes to Files' Trash, as everywhere.
-  calendar = new Calendar(path.join(FILES_ROOT, 'Calendar'), path.join(FILES_ROOT, 'Trash'))
+  // Notes live in .System/Notes/Shared (notes.js), and sync through their own step, newest edit wins.
+  notes = new Notes(system.dir('Notes', 'Shared', files.system), 'tetra-desktop')
+  // The Calendar is .System/Calendar/Shared, synced as Files' "Calendar" folder; deleting goes to Files' Trash, as everywhere.
+  calendar = new Calendar(files.disk('Calendar'), files.disk('Trash'))
   try { fs.mkdirSync(calendar.root, { recursive: true }) } catch {}
-  contacts = new Contacts(path.join(FILES_ROOT, 'Contacts'), path.join(FILES_ROOT, 'Trash'), calendar)
-  calls = new Calls({ contacts, act: what => sync.callAction(what), notify: (t, b) => notify(t, b), recordings: path.join(FILES_ROOT, 'Phone', 'Recordings'),
+  contacts = new Contacts(files.disk('Contacts'), files.disk('Trash'), calendar)
+  calls = new Calls({ contacts, act: what => sync.callAction(what), notify: (t, b) => notify(t, b), recordings: files.disk('Phone/Recordings'),
     me: () => sync.role() === 'client' ? sync.client?.pairing()?.id : 'server',
     early: () => sync.role() !== 'client' && !db.prepare("SELECT 1 FROM sync_devices WHERE kind = 'computer' AND volume_uuid IS NULL").get(),
     relayable: () => sync.role() === 'client' ? sync.client.soundThere() : false,
@@ -499,13 +512,13 @@ app.whenReady().then(() => {
   calls.watch()
   contacts.chosen = setting('contactsBirthdays') || null // the calendar birthdays go into (Γενέθλια when none chosen)
   try { fs.mkdirSync(contacts.root, { recursive: true }) } catch {}
-  timers = new timer.Timers(path.join(FILES_ROOT, 'Timer'), os.hostname() || 'Computer')
+  timers = new timer.Timers(files.disk('Timer'), os.hostname() || 'Computer')
   // sync's old copies of timers that are over (timer.js clean; the phone clears its own the same way)
   try { const n = timers.clean(); if (n) console.log(`Timer: cleared ${n} old copies`) } catch {}
   // Maps: deleting a place goes to Files' Trash, so the deletion reaches the phone (as the Calendar's)
-  maps = new Maps(path.join(FILES_ROOT, 'Maps'), rel => files.trash(rel))
+  maps = new Maps(files.disk('Maps'), rel => files.trash(rel))
   watchMaps()
-  dataCounter = new DataCounter(path.join(FILES_ROOT, 'Data'), os.hostname())
+  dataCounter = new DataCounter(files.disk('Data'), os.hostname())
   dataCounter.start()
   // Data's plan set on the phone: the tablets told at once, as for a timer — the plan is the phone's
   try {
@@ -1048,7 +1061,7 @@ app.whenReady().then(() => {
   ipcMain.handle('phone:setSpam', (_, number, on) => setPhoneSpam(number, !!on))
   ipcMain.handle('phone:openRecording', (_, name) => {
     if (!phoneRecordings().some(r => r.name === name)) throw new Error('No such recording.')
-    return shell.openPath(path.join(FILES_ROOT, 'Phone', 'Recordings', name))
+    return shell.openPath(path.join(files.disk('Phone/Recordings'), name))
   })
   ipcMain.handle('calls:bluetooth', () => ({ ...calls.bt, sound: calls.sound() }))
   ipcMain.handle('calls:connect', (_, mac) => calls.connect(mac))
@@ -1351,7 +1364,7 @@ process.on('exit', stopRouters) // a Tetra stopped without quitting leaves no ro
 
 /** The phone's calls, newest first (at most 1000): the lines the phone writes into Phone/calls-YYYY-MM.jsonl. */
 function phoneHistory() {
-  const dir = path.join(FILES_ROOT, 'Phone')
+  const dir = files.disk('Phone')
   let months = []
   try { months = fs.readdirSync(dir).filter(n => /^calls-\d{4}-\d{2}\.jsonl$/.test(n)).sort().reverse() } catch { return [] }
   const out = []
@@ -1366,7 +1379,7 @@ function phoneHistory() {
 
 /** Calls recorded on this computer (Phone/Recordings), newest first. */
 function phoneRecordings() {
-  const dir = path.join(FILES_ROOT, 'Phone', 'Recordings')
+  const dir = files.disk('Phone/Recordings')
   try {
     return fs.readdirSync(dir).filter(n => /\.(ogg|opus|m4a|mp3|wav)$/i.test(n)).map(name => { const s = fs.statSync(path.join(dir, name)); return { name, size: s.size, at: s.mtimeMs } })
       .sort((a, b) => b.at - a.at)
@@ -1376,7 +1389,7 @@ function phoneRecordings() {
 // Spam and unwanted callers: Phone/spam.txt, the same list as the phone's (Drive-Android PhoneSpam) — one number a line, a
 // note after #, a * at the end for a range; the phone declines a match before it rings.
 const SPAM_HEAD = '# Spam and unwanted (Tetra Phone): one number a line, a note after #; a * at the end takes every number that starts so.\n# Calls from these are declined before they ring. The same list on the phone, the tablet and the computer.\n'
-const spamFile = () => path.join(FILES_ROOT, 'Phone', 'spam.txt')
+const spamFile = () => files.disk('Phone/spam.txt')
 const spamParse = text => text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
   .map(l => ({ number: l.split('#')[0].trim().replace(/ /g, ''), note: l.includes('#') ? l.slice(l.indexOf('#') + 1).trim() : '' })).filter(e => /\d/.test(e.number))
 // a number or a range's start as + its country code and the rest, a national one read in the phone's country (src/phonecountry.ts)

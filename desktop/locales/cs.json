@@ -1163,7 +1163,7 @@
  "contacts.labelFriend": "Kamarád",
  "contacts.labelAssistant": "Asistent",
  "contacts.labelManager": "Vedoucí",
- "maps.noGraph": "Mapa tras ještě není v tomto počítači (Files/Maps/greece-gh).",
+ "maps.noGraph": "Mapa tras ještě není v tomto počítači (.System/Maps/Shared/greece-gh).",
  "maps.needJava": "Navigace na počítači potřebuje Javu 17 nebo novější.",
  "maps.needJar": "Navigace na počítači potřebuje {jar} v ~/Tetra/.System/Maps/Tools (tools/maps-greece.sh jej tam dá).",
  "maps.routerStopped": "Server tras se zastavil; podívejte se do graphhopper.log v datech aplikace.",

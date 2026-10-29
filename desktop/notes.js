@@ -1,6 +1,6 @@
 'use strict'
 /**
- * Notes (asked 2026-09-26): kept in a hidden folder of Files, `<Files>/.notes/`, one `<id>.json` per note in the
+ * Notes (asked 2026-09-26): kept in `~/Tetra/.System/Notes/Shared/` (in Files until 29 Oct 2026), one `<id>.json` per note in the
  * format the Notes apps already write (so nothing is lost moving in), with no folders — labels only.
  *
  * - `deletions.json`: a note deleted for good, so no other device brings it back.

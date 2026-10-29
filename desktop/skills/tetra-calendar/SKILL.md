@@ -1,6 +1,6 @@
 ---
 name: tetra-calendar
-description: Read and manage the user's calendar in Tetra — its calendars are folders of iCalendar (.ics) files in ~/Tetra/Files/Calendar that sync to their phone and tablet. Use whenever the user asks what is on their calendar, to add, move, change, cancel or delete an event or a reminder, to make or rename a calendar, to find free time, to plan a week, or to import events from an email, a timetable or a list into their calendar.
+description: Read and manage the user's calendar in Tetra — its calendars are folders of iCalendar (.ics) files in ~/Tetra/.System/Calendar/Shared that sync to their phone and tablet. Use whenever the user asks what is on their calendar, to add, move, change, cancel or delete an event or a reminder, to make or rename a calendar, to find free time, to plan a week, or to import events from an email, a timetable or a list into their calendar.
 ---
 
 # Tetra's calendar
@@ -9,7 +9,7 @@ The user's calendar is **files**, on purpose: Tetra (their own app, on Android a
 reminders, and you manage them by changing the files. Tetra syncs the folder to their phone and tablet.
 
 ```
-~/Tetra/Files/Calendar/                 one folder per calendar; the folder's name is the calendar's name
+~/Tetra/.System/Calendar/Shared/   one folder per calendar; the folder's name is the calendar's name
   Personal/
     color                               one line: #E91E63 (the calendar's colour)
     dentist-3f9a2c41.ics                  one event = one .ics file (a repeating one, with its changed days, too)
@@ -17,6 +17,9 @@ reminders, and you manage them by changing the files. Tetra syncs the folder to 
     color
     staff-meeting-c2d41077.ics
 ```
+
+Tetra keeps it in its hidden system folder since 29 Oct 2026 (it was `~/Tetra/Files/Calendar` before; `tetra_calendar.py` still
+finds that one on a computer whose Tetra has not moved it yet, so prefer the helper over hard-coded paths).
 
 ## Use the helper first
 
@@ -32,7 +35,7 @@ python3 $C add --calendar Personal --title "Dentist" --start "2026-10-21 17:30" 
 python3 $C add --calendar Family --title "Mum's birthday" --all-day 2027-03-12 --repeat "FREQ=YEARLY" \
     --remind 3d@09:00+daily                      # 3 days before at 9:00, and every day after until the day
 python3 $C new-calendar "School" "#33B679"
-python3 $C trash ~/Tetra/Files/Calendar/Personal/dentist-3f9a2c41.ics
+python3 $C trash ~/Tetra/.System/Calendar/Shared/Personal/dentist-3f9a2c41.ics
 python3 $C check                                 # ALWAYS after any change: every file read and checked
 ```
 
@@ -117,7 +120,7 @@ Each reminder is a `BEGIN:VALARM … END:VALARM` inside the VEVENT, with `ACTION
 - New: `new-calendar NAME [#RRGGBB]`, or `mkdir` + a `color` file holding `#RRGGBB`.
 - Rename: rename the folder. Colour: rewrite `color`.
 - Move an event to another calendar: `mv` its file into that folder.
-- Delete an event or a calendar: **`tetra_calendar.py trash PATH`** (into `~/Tetra/Files/Trash`). Not `rm`: a file moved into
+- Delete an event or a calendar: **`tetra_calendar.py trash PATH`** (into `~/Tetra/.System/Trash/Shared`). Not `rm`: a file moved into
   Trash moves there on every device and can be restored; an `rm`'d event leaves no copy here (since desktop
   0.6.0-beta.4 the other devices put theirs in their Trash; older builds brought it back from the phone).
 - Colours Tetra offers: `#E91E63` pink, `#D50000` red, `#E67C73` flamingo, `#F4511E` tangerine, `#F6BF26` yellow,

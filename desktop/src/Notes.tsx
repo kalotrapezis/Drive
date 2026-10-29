@@ -4,7 +4,7 @@ import { locale, t } from './i18n'
 import { Confirm, Modal, TagsDialog, errorText } from './Dialogs'
 import { Undo, blocks, endsWord, indent, prefix, preview, sortItems, toggleLine, wrap, type Edit, type Inline, type Item } from './notesEdit'
 
-// Notes (asked 2026-09-26): kept in Files' hidden .notes folder (notes.js). No sidebar of folders — labels only, a
+// Notes (asked 2026-09-26): kept in .System/Notes/Shared (notes.js). No sidebar of folders — labels only, a
 // bottom island for the views and a drawer pulled up from it for the pins and labels.
 
 export interface Note {
