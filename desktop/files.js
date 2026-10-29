@@ -41,6 +41,21 @@ const fail = message => { throw new Error(message) }
 const isSafeRel = rel => typeof rel === 'string' && (rel === '' || (!rel.startsWith('/') && rel.split('/').every(p => p && p !== '.' && p !== '..')))
 const isSafeName = name => typeof name === 'string' && name.trim() === name && name !== '' && name !== '.' && name !== '..' && !/[/\\\0]/.test(name)
 const inTrash = rel => rel === TRASH || rel.startsWith(TRASH + '/')
+const isCallLog = rel => /^Phone\/calls-\d{4}-\d{2}\.jsonl$/.test(rel)
+/**
+ * Two versions of a month's call log as one (29 Oct): every call of both, oldest first, each call (its time and number)
+ * once, as [newer] writes it (it may know the caller's contact by now). A line that is not a call is kept as it is.
+ */
+function mergeCallLog(older, newer) {
+  const calls = new Map()
+  for (const line of `${older}\n${newer}`.split('\n')) {
+    if (!line.trim()) continue
+    let call = null
+    try { call = JSON.parse(line) } catch {}
+    calls.set(typeof call?.at === 'string' ? `${call.at}\t${call.number ?? ''}` : line, { at: Date.parse(call?.at) || 0, line })
+  }
+  return [...calls.values()].sort((a, b) => a.at - b.at).map(c => c.line + '\n').join('')
+}
 const isEvent = rel => rel.startsWith('Calendar/') && rel.toLowerCase().endsWith('.ics')
 /** A part of Drive that syncs on its own, at once (the Calendar, 18 Oct): its folders, and its kinds of file in the Trash. */
 const SCOPES = { calendar: { dirs: ['Calendar'], trashExts: ['.ics'] }, timer: { dirs: ['Timer'], trashExts: [] }, contacts: { dirs: ['Contacts'], trashExts: ['.vcf'] }, phone: { dirs: ['Phone'], trashExts: [] }, data: { dirs: ['Data'], trashExts: [] } }
@@ -378,6 +393,11 @@ class Files {
     this.updatesTable()
     const offeredBefore = new Map(this.db.prepare('SELECT path, sha256 FROM file_offered WHERE device_id = ?').all(deviceId).filter(r => inScope(r.path)).map(r => [r.path, r.sha256]))
     const lastTheirs = rel => offered.get(rel) !== undefined && offeredBefore.get(rel) === offered.get(rel) ? offered.get(rel) : before.get(rel)
+    // The device's copy at [rel], untouched since the last sync, is a version both held there: the one agreed last time,
+    // or one it fetched from here or sent here at that path. Only this computer changed it since (29 Oct: the tablet
+    // skipped one download, so the last agreed version moved on without it, and every newer call log from the phone
+    // reached it as a new file, "(n)" beside its own, which then came back here as "calls-2026-10 (2)…(8)").
+    const agreedThere = (rel, sha) => lastTheirs(rel) === sha && (mineBefore.get(rel) === sha || this.sentHere(deviceId, rel, sha) || this.fetchedHere(deviceId, rel, sha))
     const mine = new Map() // sha256 → the paths this device holds
     const minePaths = new Map() // path → sha256, as this computer holds it now
     for (const rel of await this.walk('')) {
@@ -423,7 +443,7 @@ class Files {
       if (mine.get(sha)?.includes(rel)) continue // already here, at this very path
       // The device's copy is the version both held last time and this computer has edited it since: the new
       // version goes to the device (have), and its old one is not asked for.
-      if (lastTheirs(rel) === sha && mineBefore.get(rel) === sha && minePaths.has(rel)) continue
+      if (agreedThere(rel, sha) && minePaths.has(rel)) continue
       // The phone kept these bytes here last time and does not any more: it moved them, so follow.
       const elsewhere = (mine.get(sha) ?? []).find(other => before.get(other) === sha && !offered.has(other))
       if (elsewhere) {
@@ -465,11 +485,12 @@ class Files {
       if (offered.get(rel) === sha) continue // the device has these bytes at this very path
       // This computer edited it and the device has not touched its copy since: the new version replaces it there.
       const theirsHere = offered.get(rel)
-      if (theirsHere && lastTheirs(rel) === theirsHere && mineBefore.get(rel) === theirsHere) {
+      if (theirsHere && agreedThere(rel, theirsHere)) {
         have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel), replaces: theirsHere })
         continue
       }
       if (theirsHere && this.sentHere(deviceId, rel, sha)) continue // the device moved on from its own version: asked for (want)
+      if (theirsHere && isCallLog(rel) && want.includes(rel)) continue // both changed it: its lines are merged here once it comes
       const theirs = offeredShas.get(sha) ?? []
       // Offering a copy is safe on any sync, including the first: it adds, it never rearranges.
       if (!theirs.length) { if (gone.has(sha)) continue; have.push({ path: rel, sha256: sha, size: await this.sizeOf(rel), modified: await this.mtimeOf(rel) }); continue }
@@ -554,6 +575,10 @@ class Files {
    */
   sentHere(deviceId, rel, sha) {
     try { return !!this.db.prepare('SELECT 1 FROM sync_receipts WHERE device_id = ? AND path = ? AND sha256 = ?').get(deviceId, rel, sha) } catch { return false } // no receipts table: never synced
+  }
+  /** These bytes at [rel] went from here to the device, fetched at that path (the history's "sent"). */
+  fetchedHere(deviceId, rel, sha) {
+    try { return !!this.db.prepare("SELECT 1 FROM history WHERE device = ? AND action = 'sent' AND kind = 'file' AND name = ? AND sha256 = ?").get(deviceId, rel, sha) } catch { return false } // no history yet
   }
   /** The bytes an upload of [sha] at [rel] from [deviceId] is an edit of (reconcile said so), or null: then it is a new file. */
   pendingUpdate(deviceId, rel, sha) { this.updatesTable(); return this.db.prepare('SELECT replaces FROM file_updates WHERE device_id = ? AND path = ? AND sha256 = ?').get(deviceId, rel, sha)?.replaces ?? null }
@@ -674,4 +699,4 @@ class Files {
   }
 }
 
-module.exports = { Files, TRASH, OPTIONAL_FOLDERS, COLORS, typeGroup, kindIcon, isSafeRel, isSafeName }
+module.exports = { Files, TRASH, isCallLog, mergeCallLog, OPTIONAL_FOLDERS, COLORS, typeGroup, kindIcon, isSafeRel, isSafeName }
