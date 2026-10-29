@@ -14,6 +14,21 @@ end, and syncs the folder to their phone and tablet within seconds. You manage t
   k3f9a2.theologos-82xm.json           the same timer, changed on the computer
 ```
 
+## Use the helper first
+
+`tetra_timer.py` beside this file (standard library only) writes the file for you; you only give it the length, the
+label or the timer. It prints the timers after every change. Run it with `python3`:
+
+```bash
+T=~/.claude/skills/tetra-timer/tetra_timer.py
+python3 $T list                          # what is running, paused or pinned, and the time left
+python3 $T start 10m --label Pasta       # 10m, 1h30m, 90s or 600; --pin keeps the card when it ends
+python3 $T pause Pasta                   # by label or id; also: resume, stop, delete, again (a pinned one anew)
+```
+
+Two timers with the same label: it lists their ids; use the id. Below is the format, for anything the helper does not
+do.
+
 A file:
 
 ```json
@@ -35,7 +50,7 @@ A file:
   `printf '%s\n' "$JSON" > ~/Tetra/Files/Timer/.k3f9a2.claude.json.part && mv ~/Tetra/Files/Timer/.k3f9a2.claude.json.part ~/Tetra/Files/Timer/k3f9a2.claude.json`
 - Times in `ends` are UTC with a `Z`: `date -u -d '+10 min' +%Y-%m-%dT%H:%M:%SZ`. Never work them out by hand.
 
-## Doing things
+## Doing things by hand
 
 **What is running**: read every `*.json`, group by `id`, keep the highest `rev`. Time left of a running one =
 `ends` − now; a paused one has `left` seconds. A `running` timer more than 10 minutes past `ends` is over.
