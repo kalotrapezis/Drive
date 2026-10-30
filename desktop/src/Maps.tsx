@@ -216,8 +216,8 @@ export function MapsPage({ say, onMakeMap, initial }: { say: (message: string) =
     const m = map.current!
     const hit = m.queryRenderedFeatures(e.point, { layers: ['results-dot'] })[0]
     if (hit && results) { open({ kind: 'poi', poi: results[hit.properties.i as number] }, false); return }
-    // a place of the map's own (its name drawn on the map): its page from the search list
-    const own = m.queryRenderedFeatures(e.point).find(f => f.layer.id === 'pois' && f.properties?.name)
+    // a place of the map's own (its name drawn on the map), on any map ("pois", "pois__<id>"): its page from the search list
+    const own = m.queryRenderedFeatures(e.point).find(f => /^pois(__|$)/.test(f.layer.id) && f.properties?.name)
     if (own) {
       const [lng, lat] = (own.geometry as { coordinates: number[] }).coordinates
       const found = await window.drive.mapsNear(lat, lng, String(own.properties.name)).catch(() => null)
