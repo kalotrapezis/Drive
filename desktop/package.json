@@ -1,6 +1,6 @@
 {
   "name": "local-drive-desktop",
-  "version": "0.6.0-beta.33",
+  "version": "0.6.0-beta.34",
   "description": "Tetra desktop app",
   "main": "main.js",
   "scripts": {
