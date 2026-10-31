@@ -220,6 +220,13 @@ const SCHEMA = [
   fn('navigate', 'Show a place in Tetra Maps (offline map on this computer), to plan the way there: a place, an address or a contact\'s saved address.', [],
     { place: p('string', 'A place, a town or an address ("Ερμού 10, Αθήνα").'), contact: p('string', 'A contact\'s name, to go to their address.') }),
   fn('youtube', 'Open YouTube in the browser on a search for a song or a video.', ['query'], { query: p('string', 'The song or video, with the artist if said.') }),
+  fn('mail_search', 'Find mail in the user\'s mail archive (every account) by words in the sender, subject or first lines; answers a numbered list, newest first.', [],
+    { query: p('string', 'Words to look for; leave out to list the latest.'), days: p('integer', 'Only the last N days.'), folder: p('string', 'Inbox, Sent, Archive, Spam, Trash or Drafts.'),
+      unread: p('boolean', 'Only unread mail.') }),
+  fn('mail_read', 'Read a mail from the last mail_search or mail_needs_answer list: its whole text and its attachments\' names. Use it to summarise a mail or find a date in it.', ['choice'], CHOICE),
+  fn('mail_needs_answer', 'Mail from people (not newsletters or no-reply senders) in the Inbox of the last days that the user has not answered yet, newest first; a numbered list.', [],
+    { days: p('integer', 'How many days back; 7 if not said.') }),
+  fn('mail_status', 'Each mail account: unread mail in the Inbox, mail not yet saved on this computer, and whether syncing works.', []),
   fn('web_search', 'Search the web for current facts, news, opening hours, prices.', ['query'], { query: p('string', 'What to search for.') }),
   fn('make_image', 'Draw a picture from a description.', ['prompt'], { prompt: p('string', 'What the picture shows, in detail.') }),
 ]
@@ -244,9 +251,9 @@ const addDays = (date, n) => dayKey(new Date(localMs(date) + n * 86400000 + 3 * 
  * conversation: the numbered lists it last showed are what "the first one" means.
  */
 class Tools {
-  constructor({ calendar, timers, notes, files, contacts, maps, now = () => Date.now(), changed = () => {}, search, image, me = () => null, setMe = () => {} }) {
-    Object.assign(this, { calendar, timers, notes, files, contacts, maps, now, changed, search, image, me, setMe })
-    this.lists = { contacts: [], files: [], notes: [], timers: [] }
+  constructor({ calendar, timers, notes, files, contacts, maps, mail = null, now = () => Date.now(), changed = () => {}, search, image, me = () => null, setMe = () => {} }) {
+    Object.assign(this, { calendar, timers, notes, files, contacts, maps, mail, now, changed, search, image, me, setMe })
+    this.lists = { contacts: [], files: [], notes: [], timers: [], mail: [] }
   }
 
   async run(name, args = {}) {
@@ -319,6 +326,53 @@ class Tools {
     for (const r of stop) this.timers.change(r.id, 'stop', this.now())
     this.changed('timer')
     return { forModel: `Stopped ${stop.length} timer(s).` }
+  }
+
+  // ---- Mail (MAIL_PLAN §8, step 7): the archive in .System/Mail/Shared, read here; nothing is sent or changed ----
+  mailLine(e, i) {
+    const flags = [e.folder, e.account, ...(e.seen ? [] : ['unread']), ...(e.flagged ? ['♥'] : []), ...(e.attachments > 0 ? [`${e.attachments} attachment(s)`] : [])]
+    return `${i + 1}. ${shown(e.date)} · ${e.from || e.fromAddress}${e.from ? ` <${e.fromAddress}>` : ''} · ${e.subject || '(no subject)'} [${flags.join(', ')}]${e.snippet ? ` — ${e.snippet.slice(0, 100)}` : ''}`
+  }
+  mailList(hits, empty) {
+    this.lists.mail = hits
+    return { forModel: hits.length ? hits.map((e, i) => this.mailLine(e, i)).join('\n') : empty }
+  }
+  // shortcut: looks in the sender, subject and first 160 characters (the index), not whole texts; a full-text index if that is not enough
+  mail_search(a) {
+    if (!this.mail) return { forModel: 'Mail is not set up in Tetra.' }
+    const q = plain(a.query ?? ''), since = a.days ? this.now() - Number(a.days) * 86_400_000 : 0, folder = String(a.folder ?? '').toLowerCase()
+    const hits = this.mail.accountsMails().filter(e => (!folder || e.folder.toLowerCase() === folder) && (!a.unread || !e.seen) && e.date >= since
+      && (!q || q.split(/\s+/).every(w => plain(`${e.from} ${e.fromAddress} ${e.subject} ${e.snippet}`).includes(w)))).sort((x, y) => y.date - x.date).slice(0, 15)
+    return this.mailList(hits, 'No mail found.')
+  }
+  async mail_read(a) {
+    return this.pick(this.lists.mail, a, async e => {
+      if (!e.file) return { forModel: 'That mail is not saved on this computer yet; only its first lines are known: ' + (e.snippet || '(none)') }
+      const opened = await this.mail.open(e.id)
+      const { convert } = require('html-to-text')
+      const text = convert(opened.html || '', { wordwrap: false, selectors: [{ selector: 'img', format: 'skip' }, { selector: 'a', options: { ignoreHref: true } }] }).replace(/\n{3,}/g, '\n\n').trim()
+      return { forModel: `From: ${e.from} <${e.fromAddress}>\nTo: ${opened.to}${opened.cc ? `\nCc: ${opened.cc}` : ''}\nDate: ${shown(e.date)}\nSubject: ${e.subject}\n` +
+        `${opened.attachments.length ? `Attachments: ${opened.attachments.map(x => x.name).join(', ')}\n` : ''}\n${text.slice(0, 6000)}${text.length > 6000 ? '\n[…cut]' : ''}` }
+    })
+  }
+  /** From people, in the Inbox, recent, and no mail sent to them since (a newsletter or a no-reply sender needs no answer). */
+  mail_needs_answer(a) {
+    if (!this.mail) return { forModel: 'Mail is not set up in Tetra.' }
+    const since = this.now() - (Number(a.days) || 7) * 86_400_000, all = this.mail.accountsMails(), mine = new Set(this.mail.accounts().map(x => x.address))
+    const answered = new Map()
+    for (const e of all) if (e.folder === 'Sent') for (const to of e.to ?? []) answered.set(String(to).toLowerCase(), Math.max(answered.get(String(to).toLowerCase()) ?? 0, e.date))
+    const hits = all.filter(e => e.folder === 'Inbox' && e.date >= since && !mine.has(String(e.fromAddress).toLowerCase())
+      && !/no-?reply|newsletter|notifications?@|mailer|bounce|marketing|info@|news@/i.test(e.fromAddress) && (answered.get(String(e.fromAddress).toLowerCase()) ?? 0) < e.date)
+      .sort((x, y) => y.date - x.date).slice(0, 15)
+    return this.mailList(hits, 'Nothing waits for an answer.')
+  }
+  mail_status() {
+    if (!this.mail) return { forModel: 'Mail is not set up in Tetra.' }
+    const state = this.mail.status()
+    return { forModel: this.mail.folders().find(f => f.role === 'Inbox').accounts.map(a => {
+      const orange = this.mail.folders().reduce((n, f) => n + (f.accounts.find(x => x.id === a.id)?.orange ?? 0), 0), s = state[a.id] ?? {}
+      return `${a.id}: ${a.unread} unread in the Inbox, ${orange} not yet saved here${s.error ? `, cannot sync (${s.error})` : ''}`
+    }).join('\n') || 'No mail accounts.' }
   }
 
   // ---- Notes ----
@@ -475,6 +529,7 @@ Someone known by a job or role ("πάρε την κομμώτρια"): contacts_
 "Κλείσε ραντεβού" without a time: calendar_free first, offer two or three times, then calendar_add the one chosen.
 "Πάμε εκεί", "βάλε προορισμό": navigate; "there" is the last place in this conversation; for a contact's home, navigate with contact.
 A song or a video: youtube. "Κάνε σημείωση": note_new.
+Mail ("τι ήρθε από το πανεπιστήμιο", "τι θέλει απάντηση", "βρες το τιμολόγιο"): mail_search, mail_needs_answer, then mail_read to read or summarise one. You only read mail; you never send, move or delete it.
 Work out dates yourself from today's date ("αύριο", "την Πέμπτη").`
 
 const ROUNDS = 5 // tool rounds in one turn at most: find, then act, with room to spare
@@ -564,4 +619,13 @@ class Live {
   }
 }
 
-module.exports = { Bill, Meter, Mistral, Tools, Chat, Sentences, Live, SCHEMA, system, terms, wav, output, words, RATE, REALTIME, TTS, PER_MINUTE, PER_CHAR }
+/**
+ * The mail report (MAIL_PLAN §8): the prompt a scheduled brief (after the alarm, at a time) runs through the chat, the
+ * same tools as any question. Kept here so the briefs and a "mail report" question say the same thing.
+ */
+const MAIL_REPORT = `Give me my mail report. Call mail_status, then mail_needs_answer for the last 3 days, then mail_search for unread mail of the last day.
+Read (mail_read) the ones that look important: from people, the school, the university, banks, deadlines.
+Then say, briefly and in Greek: what came that matters, what needs an answer (who and about what), any deadline or date found in a mail,
+and any account that cannot sync or has mail not yet saved on this computer. No markdown; it may be read aloud.`
+
+module.exports = { MAIL_REPORT, Bill, Meter, Mistral, Tools, Chat, Sentences, Live, SCHEMA, system, terms, wav, output, words, RATE, REALTIME, TTS, PER_MINUTE, PER_CHAR }

@@ -869,6 +869,9 @@ class Mail extends EventEmitter {
   }
   status() { return this.state }
 
+  /** Every mail of the accounts here that is still on its server (the assistant's view). */
+  accountsMails() { const ids = new Set(this.accounts().map(a => a.id)); return [...this.index.all()].filter(e => !e.gone && ids.has(e.account)) }
+
   /** A folder's mails, of one account or all; never the gone ones. */
   list(role, account = null) {
     const ids = new Set(this.accounts().map(a => a.id))
