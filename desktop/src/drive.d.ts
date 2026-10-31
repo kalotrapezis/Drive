@@ -4,11 +4,11 @@ import type { Media } from './timeline'
 /** The AI switch (ai.js): on or off, and per app; shared by every device. */
 export interface AiSettings { enabled: boolean; apps: Record<string, boolean>; chosen: boolean }
 /** Mail (mail.js): accounts.json, a line of index.jsonl, the unified folders' counts, an opened mail. */
-/** «Αποθήκευση»: where each account's mail is kept, how much it takes and how many mails (mail.storage) */
+/** «Αποθήκη»: where each account's mail is kept, how much it takes and how many mails (mail.storage) */
 export interface MailStorageInfo { root: string; bytes: number; mails: number; accounts: { id: string; name: string; address: string; color: string; path: string; bytes: number; mails: number }[] }
 /** A mailto: link's fields (mail.parseMailto), for a new mail */
 export interface MailCompose { to: string[]; cc: string[]; bcc: string[]; subject: string; body: string }
-/** «Αποθήκευση»: an account's folders in the archive on this computer, how many mails and how many only here (gone from the server) */
+/** «Αποθήκη»: an account's folders in the archive on this computer, how many mails and how many only here (gone from the server) */
 export interface MailLocalAccount { id: string; name: string; color: string; roles: Partial<Record<MailRole, { total: number; local: number }>> }
 export type MailCheck = 'push' | 5 | 15 | 30 | 'manual'
 export type MailRole = 'Inbox' | 'Drafts' | 'Sent' | 'Archive' | 'Spam' | 'Trash'

@@ -428,7 +428,7 @@ test('mail: Gmail\'s All Mail is the Archive — only what no other folder holds
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('mail: a name is cut by whole characters (half an emoji made the phone\'s name another file), and «Αποθήκευση» says where, how much, how many', () => {
+test('mail: a name is cut by whole characters (half an emoji made the phone\'s name another file), and «Αποθήκη» says where, how much, how many', () => {
   const name = clean('Laptop μόνο 199€ + ' + '🎇'.repeat(60), 120)
   assert.ok(Buffer.byteLength(name) <= 120)
   assert.ok(!/[\ud800-\udfff]/.test(name.replace(/[\ud800-\udbff][\udc00-\udfff]/g, '')), 'no half emoji')
@@ -459,7 +459,7 @@ test('mail: a mailto: link (RFC 6068) — several recipients, an encoded Greek s
   assert.equal(parseMailto('https://example.com'), null)
 })
 
-test('mail: «Αποθήκευση» lists every mail kept here, one deleted from the server too; an export never overwrites, Greek and emoji names kept', async () => {
+test('mail: «Αποθήκη» lists every mail kept here, one deleted from the server too; an export never overwrites, Greek and emoji names kept', async () => {
   const dir = tmp()
   const folders = { INBOX: { validity: 1, next: 3, msgs: { 1: message('Κρατημένο 📎', 'kept'), 2: message('Ακόμα στον server', 'live') } } }
   const c = memoryServer(folders)

@@ -2314,7 +2314,7 @@
  "sync.trashOnDrive": "Στο {drive}",
  "sync.driveHowTrash": "Τα διαγραμμένα πιάνουν χώρο στο {drive} αντί για αυτόν τον υπολογιστή.",
  "sync.driveMapStorage": "Μια φωτογραφία φεύγει από {here} μόνο αφού διαβαστεί πίσω από το {drive}· μένει στη Φωτοθήκη και ανοίγει από εκεί όταν ο δίσκος είναι συνδεδεμένος.",
- "mail.storage": "Αποθήκευση",
+ "mail.storage": "Αποθήκη",
  "mail.storageHas": "{size} · {n} μηνύματα",
  "mail.storageTotal": "Σύνολο: {size} · {n} μηνύματα",
  "mail.openFolder": "Άνοιγμα φακέλου",

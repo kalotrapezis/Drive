@@ -818,7 +818,7 @@ class Mail extends EventEmitter {
       this.unlink(e.file); this.index.put({ ...e, file: null, movedTo: other.id })
     }
   }
-  /** «Αποθήκευση» (the user: "how can I access my mails if the folder is hidden?"): where each account's mail is, its size, its mails. */
+  /** «Αποθήκη» (the user: "how can I access my mails if the folder is hidden?"): where each account's mail is, its size, its mails. */
   storage() {
     const accounts = this.allAccounts().map(a => {
       let bytes = 0, mails = 0
@@ -1101,7 +1101,7 @@ class Mail extends EventEmitter {
   localMails(account = null, role = null) {
     return [...this.view()].filter(e => e.file && (!account || e.account === account) && (!role || e.folder === role))
   }
-  /** «Αποθήκευση» in Mail's folder list: each account (a removed one by its address), its folders, how many, how many only here. */
+  /** «Αποθήκη» in Mail's folder list: each account (a removed one by its address), its folders, how many, how many only here. */
   localFolders() {
     const accs = new Map(this.allAccounts().map(a => [a.id, { id: a.id, name: a.name, color: a.color, roles: {} }]))
     for (const e of this.view()) {

@@ -85,7 +85,7 @@ function MailBar({ items, children }: { items: BarItem[]; children: ReactNode })
 
 export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode) => void; say: (s: string, action?: () => void, label?: string) => void; compose?: (MailCompose & { at: number }) | null }) {
   const [data, setData] = useState<Data | null>(null)
-  // local: «Αποθήκευση», the archive on this computer (gone from the server too), read only towards the server
+  // local: «Αποθήκη», the archive on this computer (gone from the server too), read only towards the server
   const [where, setWhere] = useState<{ role: MailRole; account: string | null; local?: boolean }>({ role: 'Inbox', account: null })
   const [locals, setLocals] = useState<MailLocalAccount[] | null>(null)
   const [expanded, setExpanded] = useState<Set<MailRole>>(() => new Set(['Inbox']))
@@ -428,7 +428,7 @@ function Accounts({ data, onAdd, onRemove, onRenamed, onStorage, onClose }: { da
 }
 
 /**
- * «Αποθήκευση» (the user, 31 Oct: "how can I access my mails if the folder is hidden in the system folder?"): where each
+ * «Αποθήκη» (the user, 31 Oct: "how can I access my mails if the folder is hidden in the system folder?"): where each
  * account's mail is kept on this computer, how much it takes and how many mails, and «Άνοιγμα φακέλου» in the file manager.
  * The phone's Mail says the same in the same words (MAIL_PLAN §17).
  */

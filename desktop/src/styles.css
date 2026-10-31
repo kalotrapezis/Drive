@@ -1480,7 +1480,7 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .mail-store-path { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .mail-store .outline-button { justify-self: start; display: flex; align-items: center; gap: 8px; }
 .mail-store-total { margin-top: 8px !important; }
-/* «Αποθήκευση» in Mail: the archive on this computer, at the bottom of the folders (the user, 31 Oct) */
+/* «Αποθήκη» in Mail: the archive on this computer, at the bottom of the folders (the user, 31 Oct) */
 .mail-local-head { margin-top: 10px; border-top: 1px solid var(--island-2); padding-top: 6px; border-radius: 0; }
 .mail-local-acc { display: flex; align-items: center; gap: 8px; padding: 6px 10px 2px 38px; font-size: 13px; color: var(--muted); }
 .mail-local-n { font-size: 12px; color: var(--muted); }

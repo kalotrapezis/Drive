@@ -1326,7 +1326,7 @@ app.whenReady().then(() => {
   const isAddress = a => typeof a === 'string' && a.length < 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)
   ipcMain.handle('mail:accounts', () => ({ accounts: mail.allAccounts(), folders: mail.folders(), status: mail.status() })) // with the phones' own accounts (shadow)
   ipcMain.handle('mail:list', (_, role, account, local) => mail.list(String(role), account ? String(account) : null, { local: !!local }))
-  // «Αποθήκευση» in Mail: the archive on this computer, and copies out of it (the user, 31 Oct)
+  // «Αποθήκη» in Mail: the archive on this computer, and copies out of it (the user, 31 Oct)
   ipcMain.handle('mail:localFolders', () => mail.localFolders())
   ipcMain.handle('mail:export', (_, id, attachment) => mailCall(() => mail.exportTo(mail.documents(), String(id), attachment ?? null)))
   ipcMain.handle('mail:saveAs', async (_, id, attachment) => {
