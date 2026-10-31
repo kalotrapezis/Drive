@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { isScreenshot, matches, type Level, type Media } from './timeline'
-import type { Analysis, Collection, DeviceFolder, MergeUndo, Person, VaultStatus } from './drive'
+import type { Analysis, Collection, DeviceFolder, MailCompose, MergeUndo, Person, VaultStatus } from './drive'
 import { Icon, type IconName } from './Icon'
 import { Timeline } from './Timeline'
 import { Viewer } from './Viewer'
@@ -126,6 +126,9 @@ export function App() {
   useEffect(() => window.drive.files.onOpenFolder(folder => setPage({ kind: 'files', mode: 'browse', folder })), [])
   // "The map of Cyprus is over 3 months old": its click opens Settings › Maps
   useEffect(() => window.drive.onOpenDevices(() => setPage({ kind: 'sync' })), [])
+  // a mailto: link (Tetra the default email app, or a link in a mail): Mail, writing a new mail with its fields
+  const [compose, setCompose] = useState<(MailCompose & { at: number }) | null>(null)
+  useEffect(() => window.drive.mail.onCompose(c => { setPage({ kind: 'mail' }); setCompose({ ...c, at: Date.now() }) }), [])
   useEffect(() => window.drive.onOpenSettings(start => setPage({ kind: 'settings', start, at: Date.now() })), [])
   // AI Assist from anywhere: a shortcut or `tetra --assistant` (main assistantCommand); talk and live go to the page
   const [assistCommand, setAssistCommand] = useState<{ what: string; at: number } | null>(null)
@@ -324,7 +327,7 @@ export function App() {
   else if (page.kind === 'assistant') content = <AssistantPage command={assistCommand}
     go={g => setPage(g.note ? { kind: 'notes', open: g.note } : { kind: 'maps', query: g.maps, at: Date.now() })} />
   else if (page.kind === 'calendar') content = <CalendarPage setDialog={setDialog} say={say} />
-  else if (page.kind === 'mail') content = <MailPage setDialog={setDialog} say={say} />
+  else if (page.kind === 'mail') content = <MailPage setDialog={setDialog} say={say} compose={compose} />
   else if (page.kind === 'timer') content = <TimerPage say={say} />
   // Maps with no map: Settings › Maps with the builder open
   else if (page.kind === 'maps') content = <MapsPage key={page.at} initial={page.query} say={say} onMakeMap={() => {

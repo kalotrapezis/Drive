@@ -2495,5 +2495,11 @@
  "mail.storage": "Ħażna",
  "mail.storageHas": "{size} · emails: {n}",
  "mail.storageTotal": "B’kollox: {size} · emails: {n}",
- "mail.openFolder": "Iftaħ il-kartella"
+ "mail.openFolder": "Iftaħ il-kartella",
+ "mail.defaultTitle": "Applikazzjoni tal-email predefinita",
+ "mail.defaultIs": "Tetra tiftaħ links tal-email (mailto:), bħal “Ikteb lilna” fuq paġna tal-web.",
+ "mail.defaultOther": "Il-links tal-email (mailto:) issa jinfetħu f’{app}.",
+ "mail.defaultNone": "Bħalissa ebda applikazzjoni ma tiftaħ il-links tal-email (mailto:).",
+ "mail.makeDefault": "Agħmel lil Tetra l-predefinita",
+ "mail.mailtoNoAccount": "Biex tikteb din l-email, l-ewwel żid kont fil-Posta."
 }

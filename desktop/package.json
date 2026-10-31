@@ -115,6 +115,7 @@
     ],
     "linux": {
       "category": "Graphics",
+    "mimeTypes": ["x-scheme-handler/mailto"],
       "icon": "public/icon.png",
       "target": [
         "AppImage",

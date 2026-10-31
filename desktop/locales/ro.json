@@ -2406,5 +2406,11 @@
  "mail.storage": "Stocare",
  "mail.storageHas": "{size} · e-mailuri: {n}",
  "mail.storageTotal": "În total: {size} · e-mailuri: {n}",
- "mail.openFolder": "Deschide dosarul"
+ "mail.openFolder": "Deschide dosarul",
+ "mail.defaultTitle": "Aplicația de e-mail implicită",
+ "mail.defaultIs": "Tetra deschide linkurile de e-mail (mailto:), ca un „Scrie-ne” pe o pagină web.",
+ "mail.defaultOther": "Linkurile de e-mail (mailto:) se deschid acum în {app}.",
+ "mail.defaultNone": "Acum nicio aplicație nu deschide linkurile de e-mail (mailto:).",
+ "mail.makeDefault": "Setează Tetra ca implicită",
+ "mail.mailtoNoAccount": "Pentru a scrie acest mesaj, adaugă mai întâi un cont în Poștă."
 }

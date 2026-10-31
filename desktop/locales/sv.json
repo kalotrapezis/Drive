@@ -2317,5 +2317,11 @@
  "mail.storage": "Lagring",
  "mail.storageHas": "{size} · mejl: {n}",
  "mail.storageTotal": "Totalt: {size} · mejl: {n}",
- "mail.openFolder": "Öppna mapp"
+ "mail.openFolder": "Öppna mapp",
+ "mail.defaultTitle": "Standardapp för mejl",
+ "mail.defaultIs": "Tetra öppnar mejllänkar (mailto:), som ett ”Mejla oss” på en webbsida.",
+ "mail.defaultOther": "Mejllänkar (mailto:) öppnas nu i {app}.",
+ "mail.defaultNone": "Ingen app öppnar mejllänkar (mailto:) just nu.",
+ "mail.makeDefault": "Gör Tetra till standard",
+ "mail.mailtoNoAccount": "För att skriva det här mejlet, lägg först till ett konto i Mejl."
 }

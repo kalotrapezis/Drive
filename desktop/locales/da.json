@@ -2317,5 +2317,11 @@
  "mail.storage": "Lager",
  "mail.storageHas": "{size} · mails: {n}",
  "mail.storageTotal": "I alt: {size} · mails: {n}",
- "mail.openFolder": "Åbn mappe"
+ "mail.openFolder": "Åbn mappe",
+ "mail.defaultTitle": "Standard-mailapp",
+ "mail.defaultIs": "Tetra åbner mail-links (mailto:), som et »Mail os« på en webside.",
+ "mail.defaultOther": "Mail-links (mailto:) åbnes nu i {app}.",
+ "mail.defaultNone": "Ingen app åbner mail-links (mailto:) lige nu.",
+ "mail.makeDefault": "Gør Tetra til standard",
+ "mail.mailtoNoAccount": "For at skrive denne mail skal du først tilføje en konto i Mail."
 }

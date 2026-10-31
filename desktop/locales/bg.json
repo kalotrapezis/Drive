@@ -2317,5 +2317,11 @@
  "mail.storage": "Хранилище",
  "mail.storageHas": "{size} · писма: {n}",
  "mail.storageTotal": "Общо: {size} · писма: {n}",
- "mail.openFolder": "Отвори папката"
+ "mail.openFolder": "Отвори папката",
+ "mail.defaultTitle": "Приложение по подразбиране за имейл",
+ "mail.defaultIs": "Tetra отваря имейл връзките (mailto:), като „Пишете ни“ на уеб страница.",
+ "mail.defaultOther": "Имейл връзките (mailto:) сега се отварят от {app}.",
+ "mail.defaultNone": "В момента никое приложение не отваря имейл връзките (mailto:).",
+ "mail.makeDefault": "Направи Tetra приложение по подразбиране",
+ "mail.mailtoNoAccount": "За да напишете това писмо, първо добавете акаунт в Поща."
 }

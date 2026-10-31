@@ -2406,5 +2406,11 @@
  "mail.storage": "Archivio",
  "mail.storageHas": "{size} · email: {n}",
  "mail.storageTotal": "In tutto: {size} · email: {n}",
- "mail.openFolder": "Apri cartella"
+ "mail.openFolder": "Apri cartella",
+ "mail.defaultTitle": "App di posta predefinita",
+ "mail.defaultIs": "Tetra apre i link di posta (mailto:), come un «Scrivici» su una pagina web.",
+ "mail.defaultOther": "I link di posta (mailto:) ora si aprono in {app}.",
+ "mail.defaultNone": "Al momento nessuna app apre i link di posta (mailto:).",
+ "mail.makeDefault": "Imposta Tetra come predefinita",
+ "mail.mailtoNoAccount": "Per scrivere questa email, aggiungi prima un account in Posta."
 }

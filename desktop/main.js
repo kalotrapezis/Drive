@@ -32,7 +32,7 @@ const { MapBuilder } = require('./mapbuild')
 const { Thumbs } = require('./thumbs')
 const importer = require('./importer')
 const assistant = require('./assistant')
-const { Mail, MICROSOFT, detect: detectMail, check: checkMail } = require('./mail')
+const { Mail, MICROSOFT, detect: detectMail, check: checkMail, parseMailto } = require('./mail')
 const msauth = require('./msauth')
 let mail = null
 const i18n = require('./i18n')
@@ -376,6 +376,14 @@ function msToken(acc) {
     return n.access
   })().finally(() => msRenewing.delete(acc.id)))
   return msRenewing.get(acc.id)
+}
+/** A command's output, or its error. */
+const run = (cmd, args) => new Promise((resolve, reject) => require('node:child_process').execFile(cmd, args, { timeout: 10_000 }, (e, out) => e ? reject(e) : resolve(String(out))))
+/** Tetra's desktop entry: the installed one (deb), or the user's own (an AppImage, written when made the default). */
+function desktopFile() {
+  const name = 'local-drive-desktop.desktop' // electron-builder names it after package.json's "name"
+  const system = ['/usr/share/applications', '/usr/local/share/applications'].map(d => path.join(d, name)).find(f => fs.existsSync(f))
+  return { name, path: system ?? path.join(app.getPath('home'), '.local/share/applications', name) }
 }
 function notify(title, body, open = null) {
   // Kept as well as shown: a notification goes by in seconds, the Notifications page keeps them (asked 2026-09-26).
@@ -1415,7 +1423,24 @@ app.whenReady().then(() => {
     const error = await shell.openPath(full)
     if (error) throw new Error(error)
   })
-  ipcMain.handle('mail:openLink', (_, url) => { if (typeof url === 'string' && /^(https?:|mailto:)/i.test(url)) return shell.openExternal(url) })
+  // a mailto: inside a mail is written here, never handed out (with Tetra the default email app it would only come back)
+  ipcMain.handle('mail:openLink', (_, url) => { if (typeof url !== 'string') return; if (/^mailto:/i.test(url)) return openMailto(url); if (/^https?:/i.test(url)) return shell.openExternal(url) })
+  // «Προεπιλεγμένη εφαρμογή email»: what the desktop opens mailto: links with (xdg-mime), and Tetra made it on asking
+  ipcMain.handle('mail:defaultApp', async () => {
+    if (process.platform !== 'linux') return { supported: false, isDefault: app.isDefaultProtocolClient('mailto') }
+    const now = await run('xdg-mime', ['query', 'default', 'x-scheme-handler/mailto']).catch(() => '')
+    return { supported: true, isDefault: now.trim() === desktopFile().name, current: now.trim().replace(/\.desktop$/, '') || null }
+  })
+  ipcMain.handle('mail:makeDefault', async () => {
+    if (process.platform !== 'linux') return app.setAsDefaultProtocolClient('mailto')
+    const d = desktopFile()
+    if (!fs.existsSync(d.path)) { // an AppImage has no entry of its own: one for mail links only, kept out of the menus
+      fs.mkdirSync(path.dirname(d.path), { recursive: true })
+      fs.writeFileSync(d.path, `[Desktop Entry]\nName=Tetra\nExec="${process.env.APPIMAGE || process.execPath}" %U\nType=Application\nIcon=local-drive-desktop\nNoDisplay=true\nMimeType=x-scheme-handler/mailto;\n`)
+    }
+    await run('xdg-mime', ['default', d.name, 'x-scheme-handler/mailto'])
+    return true
+  })
   ipcMain.handle('mail:appPasswords', () => shell.openExternal('https://myaccount.google.com/apppasswords'))
   // Google's 16 letters, read from the clipboard when the user comes back (MAIL_PLAN §9b); anything else is not read out
   ipcMain.handle('mail:pasteAppPassword', () => { const s = clipboard.readText().trim().toLowerCase(); return /^[a-z]{4}( ?[a-z]{4}){3}$/.test(s) ? s.replace(/ /g, '') : null })
@@ -1493,6 +1518,7 @@ app.whenReady().then(() => {
   else win.loadFile(path.join(__dirname, 'dist', 'index.html'))
   // started as `tetra --assistant` (or --talk, --live): once the window listens
   if (argCommand(process.argv)) win.webContents.once('did-finish-load', () => setTimeout(() => assistantCommand(argCommand(process.argv)), 1500))
+  if (argMailto(process.argv)) win.webContents.once('did-finish-load', () => setTimeout(() => openMailto(argMailto(process.argv)), 1500))
   if (!process.env.DRIVE_HIDDEN) {
     tray = new Tray(path.join(__dirname, 'public', 'icon.png'))
     tray.on('click', showWindow)
@@ -1515,7 +1541,16 @@ if (!process.env.DRIVE_HIDDEN && !app.requestSingleInstanceLock()) app.exit(0)
 // shortcuts cannot reach (Settings › AI Assist › Shortcuts)
 const ARGS = { '--assistant': 'toggle', '--talk': 'talk', '--live': 'live' }
 const argCommand = argv => Object.entries(ARGS).find(([a]) => argv.includes(a))?.[1] ?? null
-app.on('second-instance', (_, argv) => { const what = argCommand(argv); if (what) assistantCommand(what); else showWindow() })
+app.on('second-instance', (_, argv) => { const what = argCommand(argv), link = argMailto(argv); if (link) openMailto(link); else if (what) assistantCommand(what); else showWindow() })
+/** A mailto: link given to Tetra (the default email app, its .desktop's %U), on the command line. */
+const argMailto = argv => argv.find(a => /^mailto:/i.test(a)) ?? null
+/** A mailto: link, from the desktop or a mail's own link: Mail's compose window, filled in (Mail.tsx says when there is no account). */
+function openMailto(url) {
+  const fields = parseMailto(url)
+  if (!fields || !win) return
+  showWindow()
+  win.webContents.send('mail-compose', fields)
+}
 /** A shortcut or `tetra --assistant`: open (or, when it is already in front, close) AI Assist, talk, or live. */
 function assistantCommand(what) {
   if (!win || !aiSwitch?.on()) return

@@ -2495,5 +2495,11 @@
  "mail.storage": "Saugykla",
  "mail.storageHas": "{size} · laiškų: {n}",
  "mail.storageTotal": "Iš viso: {size} · laiškų: {n}",
- "mail.openFolder": "Atidaryti aplanką"
+ "mail.openFolder": "Atidaryti aplanką",
+ "mail.defaultTitle": "Numatytoji el. pašto programėlė",
+ "mail.defaultIs": "Tetra atidaro el. pašto nuorodas (mailto:), pavyzdžiui, „Rašykite mums“ svetainėje.",
+ "mail.defaultOther": "El. pašto nuorodas (mailto:) dabar atidaro {app}.",
+ "mail.defaultNone": "Šiuo metu el. pašto nuorodų (mailto:) neatidaro jokia programėlė.",
+ "mail.makeDefault": "Padaryti Tetra numatytąja",
+ "mail.mailtoNoAccount": "Norėdami parašyti šį laišką, pirmiausia pridėkite paskyrą programėlėje „Paštas“."
 }

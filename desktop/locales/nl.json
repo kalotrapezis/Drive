@@ -2317,5 +2317,11 @@
  "mail.storage": "Opslag",
  "mail.storageHas": "{size} · mails: {n}",
  "mail.storageTotal": "In totaal: {size} · mails: {n}",
- "mail.openFolder": "Map openen"
+ "mail.openFolder": "Map openen",
+ "mail.defaultTitle": "Standaard-mailapp",
+ "mail.defaultIs": "Tetra opent maillinks (mailto:), zoals een “Mail ons” op een webpagina.",
+ "mail.defaultOther": "Maillinks (mailto:) openen nu in {app}.",
+ "mail.defaultNone": "Er is nu geen app die maillinks (mailto:) opent.",
+ "mail.makeDefault": "Tetra als standaard instellen",
+ "mail.mailtoNoAccount": "Om deze mail te schrijven, voeg je eerst een account toe in Mail."
 }

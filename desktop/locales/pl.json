@@ -2495,5 +2495,11 @@
  "mail.storage": "Magazyn",
  "mail.storageHas": "{size} · e-maili: {n}",
  "mail.storageTotal": "Razem: {size} · e-maili: {n}",
- "mail.openFolder": "Otwórz folder"
+ "mail.openFolder": "Otwórz folder",
+ "mail.defaultTitle": "Domyślna aplikacja poczty",
+ "mail.defaultIs": "Tetra otwiera linki e-mail (mailto:), jak „Napisz do nas” na stronie internetowej.",
+ "mail.defaultOther": "Linki e-mail (mailto:) otwiera teraz {app}.",
+ "mail.defaultNone": "Obecnie żadna aplikacja nie otwiera linków e-mail (mailto:).",
+ "mail.makeDefault": "Ustaw Tetra jako domyślną",
+ "mail.mailtoNoAccount": "Aby napisać tę wiadomość, najpierw dodaj konto w aplikacji Poczta."
 }

@@ -2317,5 +2317,11 @@
  "mail.storage": "Αποθήκευση",
  "mail.storageHas": "{size} · {n} μηνύματα",
  "mail.storageTotal": "Σύνολο: {size} · {n} μηνύματα",
- "mail.openFolder": "Άνοιγμα φακέλου"
+ "mail.openFolder": "Άνοιγμα φακέλου",
+ "mail.defaultTitle": "Προεπιλεγμένη εφαρμογή email",
+ "mail.defaultIs": "Το Tetra ανοίγει τους συνδέσμους email (mailto:), όπως ένα «Στείλτε μας email» σε μια σελίδα.",
+ "mail.defaultOther": "Τους συνδέσμους email (mailto:) τους ανοίγει τώρα το {app}.",
+ "mail.defaultNone": "Καμία εφαρμογή δεν ανοίγει τώρα τους συνδέσμους email (mailto:).",
+ "mail.makeDefault": "Ορισμός του Tetra ως προεπιλογής",
+ "mail.mailtoNoAccount": "Για να γράψεις αυτό το μήνυμα, πρόσθεσε πρώτα έναν λογαριασμό στην Αλληλογραφία."
 }

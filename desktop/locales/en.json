@@ -2317,5 +2317,11 @@
  "mail.storage": "Storage",
  "mail.storageHas": "{size} · {n} mails",
  "mail.storageTotal": "In all: {size} · {n} mails",
- "mail.openFolder": "Open folder"
+ "mail.openFolder": "Open folder",
+ "mail.defaultTitle": "Default email app",
+ "mail.defaultIs": "Tetra opens email links (mailto:), like an \"Email us\" on a web page.",
+ "mail.defaultOther": "Email links (mailto:) open in {app} now.",
+ "mail.defaultNone": "No app opens email links (mailto:) now.",
+ "mail.makeDefault": "Make Tetra the default",
+ "mail.mailtoNoAccount": "To write this mail, first add an account in Mail."
 }

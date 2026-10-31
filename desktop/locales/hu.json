@@ -2317,5 +2317,11 @@
  "mail.storage": "Tárhely",
  "mail.storageHas": "{size} · levél: {n}",
  "mail.storageTotal": "Összesen: {size} · levél: {n}",
- "mail.openFolder": "Mappa megnyitása"
+ "mail.openFolder": "Mappa megnyitása",
+ "mail.defaultTitle": "Alapértelmezett e-mail alkalmazás",
+ "mail.defaultIs": "A Tetra megnyitja az e-mail hivatkozásokat (mailto:), például egy weboldal „Írj nekünk” gombját.",
+ "mail.defaultOther": "Az e-mail hivatkozásokat (mailto:) most a(z) {app} nyitja meg.",
+ "mail.defaultNone": "Jelenleg egyetlen alkalmazás sem nyitja meg az e-mail hivatkozásokat (mailto:).",
+ "mail.makeDefault": "A Tetra legyen az alapértelmezett",
+ "mail.mailtoNoAccount": "A levél megírásához előbb adj hozzá egy fiókot a Levelek alkalmazásban."
 }

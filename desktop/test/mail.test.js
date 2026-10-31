@@ -447,3 +447,14 @@ test('mail: a name is cut by whole characters (half an emoji made the phone\'s n
     assert.equal(mail.folderOf('a@b.gr/Inbox'), null)
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
+
+test('mail: a mailto: link (RFC 6068) — several recipients, an encoded Greek subject, a body over lines, cc and bcc', () => {
+  const { parseMailto } = require('../mail')
+  const greek = encodeURIComponent('Σύλλογος διδασκόντων: Δευτέρα')
+  assert.deepEqual(parseMailto(`mailto:a@sch.gr,%22B%20C%22%20%3Cb@x.gr%3E?subject=${greek}&cc=c@x.gr,d@x.gr&bcc=e@x.gr&body=${encodeURIComponent('Καλημέρα,\r\nστις 13:30.\nΘεολόγος')}&to=f@x.gr`), {
+    to: ['a@sch.gr', '"B C" <b@x.gr>', 'f@x.gr'], cc: ['c@x.gr', 'd@x.gr'], bcc: ['e@x.gr'],
+    subject: 'Σύλλογος διδασκόντων: Δευτέρα', body: 'Καλημέρα,\nστις 13:30.\nΘεολόγος' })
+  assert.deepEqual(parseMailto('MAILTO:?Subject=1+1%3D2'), { to: [], cc: [], bcc: [], subject: '1+1=2', body: '' }, 'no address, "+" stays a plus')
+  assert.deepEqual(parseMailto('mailto:x@y.gr?subject=%E0%A4%A').subject, '%E0%A4%A', 'a broken escape is kept as written')
+  assert.equal(parseMailto('https://example.com'), null)
+})

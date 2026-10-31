@@ -6,6 +6,8 @@ export interface AiSettings { enabled: boolean; apps: Record<string, boolean>; c
 /** Mail (mail.js): accounts.json, a line of index.jsonl, the unified folders' counts, an opened mail. */
 /** «Αποθήκευση»: where each account's mail is kept, how much it takes and how many mails (mail.storage) */
 export interface MailStorageInfo { root: string; bytes: number; mails: number; accounts: { id: string; name: string; address: string; color: string; path: string; bytes: number; mails: number }[] }
+/** A mailto: link's fields (mail.parseMailto), for a new mail */
+export interface MailCompose { to: string[]; cc: string[]; bcc: string[]; subject: string; body: string }
 export type MailCheck = 'push' | 5 | 15 | 30 | 'manual'
 export type MailRole = 'Inbox' | 'Drafts' | 'Sent' | 'Archive' | 'Spam' | 'Trash'
 export interface MailAddress { name: string; address: string }
@@ -282,6 +284,9 @@ declare global {
         sync(): Promise<void>
         check(): Promise<MailCheck>
         storage(): Promise<MailStorageInfo>
+        defaultApp(): Promise<{ supported: boolean; isDefault: boolean; current?: string | null }>
+        makeDefault(): Promise<unknown>
+        onCompose(fn: (c: MailCompose) => void): () => void
         openFolder(id?: string): Promise<void>
         setCheck(c: MailCheck): Promise<MailCheck>
         act(op: MailOp, ids: string[], to?: MailRole): Promise<void>

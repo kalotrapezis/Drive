@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { MailAccount, MailAddress, MailCheck, MailStorageInfo, MailCleanPlan, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
+import type { MailAccount, MailAddress, MailCheck, MailCompose, MailStorageInfo, MailCleanPlan, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
 import { formatBytes } from './timeline'
 import { arrange, dayKey, DEFAULT_VIEW, type MailView } from './mailView'
 import { Confirm, Modal, errorText } from './Dialogs'
@@ -82,7 +82,7 @@ function MailBar({ items, children }: { items: BarItem[]; children: ReactNode })
   )
 }
 
-export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void; say: (s: string) => void }) {
+export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode) => void; say: (s: string) => void; compose?: (MailCompose & { at: number }) | null }) {
   const [data, setData] = useState<Data | null>(null)
   const [where, setWhere] = useState<{ role: MailRole; account: string | null }>({ role: 'Inbox', account: null })
   const [expanded, setExpanded] = useState<Set<MailRole>>(() => new Set(['Inbox']))
@@ -135,6 +135,19 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
     {(['Inbox', 'Archive', 'Spam', 'Trash', 'Drafts', 'Sent'] as MailRole[]).filter(r => r !== current.folder).map(r =>
       <button key={r} className="sheet-row" onClick={() => { close(); away('move', r) }}><Icon name={ROLE_ICON[r]} />{t(`mail.role${r}`)}</button>)}
   </Modal>)
+  // a mailto: link: a new mail from the first account (or the one shown), its fields filled in, the body above the signature
+  const composed = useRef(0)
+  useEffect(() => {
+    if (!compose || !data || composed.current === compose.at) return
+    composed.current = compose.at
+    if (!data.accounts.some(a => !a.shadow)) { say(t('mail.mailtoNoAccount')); return }
+    const who = (list: string[]) => list.map(address => ({ name: '', address }))
+    const body = compose.body ? `<p>${compose.body.split('\n').map(l => l.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)).join('<br>')}</p>` : ''
+    window.drive.mail.draftFor(null, 'new', where.account && !accounts.get(where.account)?.shadow ? where.account : undefined).then(d => {
+      setOpenId(null)
+      setDraft({ ...d, to: who(compose.to), cc: who(compose.cc), bcc: who(compose.bcc), subject: compose.subject, html: body ? (d.html.includes('<p><br></p>') ? d.html.replace('<p><br></p>', body) : body + d.html) : d.html })
+    }, e => say(errorText(e)))
+  }, [compose?.at, !!data])
   const addAccount = () => setDialog(<AddAccount onClose={close} onDone={() => { close(); reload() }} />)
   const manage = () => data && setDialog(<Accounts data={data} onClose={close} onAdd={addAccount} onRenamed={reload}
     onStorage={id => setDialog(<MailStorage only={id} onClose={manage} say={say} />)}
@@ -757,7 +770,25 @@ export function CleanCheck({ accounts, onClose }: { accounts: MailAccount[]; onC
 
 /** Settings › Αλληλογραφία: signatures, archive and clean-up, filters, spam, privacy (MAIL_PLAN §9c). */
 export function MailSettings() {
-  return <><CheckCard /><MailSignatures /><CleanCard /><FiltersCard /><SpamCard /><PrivacyCard /><MicrosoftCard /></>
+  return <><CheckCard /><DefaultAppCard /><MailSignatures /><CleanCard /><FiltersCard /><SpamCard /><PrivacyCard /><MicrosoftCard /></>
+}
+
+/** «Προεπιλεγμένη εφαρμογή email» (the user, 31 Oct: "can I set it as the default email client?"): mailto: links open in Tetra. */
+function DefaultAppCard() {
+  const [s, setS] = useState<{ supported: boolean; isDefault: boolean; current?: string | null } | null>(null)
+  const [error, setError] = useState('')
+  const load = () => window.drive.mail.defaultApp().then(setS, () => setS(null))
+  useEffect(() => { load() }, [])
+  if (!s) return null
+  const other = s.current?.split('.').pop()
+  return (
+    <section className="settings-card island">
+      <h3><Icon name="mail" size={20} />{t('mail.defaultTitle')}</h3>
+      <p className="muted">{s.isDefault ? t('mail.defaultIs') : other ? t('mail.defaultOther', { app: other }) : t('mail.defaultNone')}</p>
+      {!s.isDefault && <button className="filled-button" onClick={() => window.drive.mail.makeDefault().then(load, e => setError(errorText(e)))}>{t('mail.makeDefault')}</button>}
+      {error && <p className="error">{error}</p>}
+    </section>
+  )
 }
 
 /** «Έλεγχος για νέα» (the user, 31 Oct: "how often does it check for new mails?"): every account on this computer. */

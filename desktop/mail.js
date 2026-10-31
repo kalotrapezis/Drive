@@ -179,6 +179,25 @@ function reason(e) {
 const failure = e => Object.assign(new Error(e?.responseText || e?.message || String(e)), { reason: e?.reason ?? reason(e) })
 
 /** [auth]: a password, or { accessToken } for an account signed in with Microsoft (XOAUTH2). */
+/**
+ * A mailto: link (RFC 6068) as a new mail's fields: addresses before "?" and in to/cc/bcc, comma-separated, each part
+ * percent-decoded on its own; subject and body percent-decoded ("+" is a plus, as the RFC says). Null when not a mailto.
+ */
+function parseMailto(url) {
+  const m = /^mailto:([^?#]*)(?:\?([^#]*))?/i.exec(String(url ?? '').trim())
+  if (!m) return null
+  const dec = s => { try { return decodeURIComponent(s) } catch { return s } }
+  const list = s => s.split(',').map(a => dec(a).trim()).filter(a => a && a.length <= 320)
+  const out = { to: list(m[1]), cc: [], bcc: [], subject: '', body: '' }
+  for (const pair of (m[2] ?? '').split('&')) {
+    const i = pair.indexOf('='), key = dec(i < 0 ? pair : pair.slice(0, i)).toLowerCase(), value = i < 0 ? '' : pair.slice(i + 1)
+    if (key === 'to' || key === 'cc' || key === 'bcc') out[key].push(...list(value))
+    else if (key === 'subject') out.subject = dec(value).replace(/[\r\n]+/g, ' ').slice(0, 998)
+    else if (key === 'body') out.body = dec(value).replace(/\r\n?/g, '\n')
+  }
+  return out
+}
+
 /** A server on this computer (the tests' own): the only one allowed to speak without TLS. */
 const loopback = host => /^(127\.|::1$|localhost$)/.test(String(host))
 function client(server, user, auth) {
@@ -1092,4 +1111,4 @@ class Mail extends EventEmitter {
   }
 }
 
-module.exports = { Mail, Index, ROLES, OPS, CHECKS, MICROSOFT, detect, check, parseConfig, roles, places, mailName, clean, userName, reason }
+module.exports = { Mail, Index, ROLES, OPS, CHECKS, parseMailto, MICROSOFT, detect, check, parseConfig, roles, places, mailName, clean, userName, reason }

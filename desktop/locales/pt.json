@@ -2406,5 +2406,11 @@
  "mail.storage": "Armazenamento",
  "mail.storageHas": "{size} · e-mails: {n}",
  "mail.storageTotal": "Ao todo: {size} · e-mails: {n}",
- "mail.openFolder": "Abrir pasta"
+ "mail.openFolder": "Abrir pasta",
+ "mail.defaultTitle": "Aplicação de correio predefinida",
+ "mail.defaultIs": "O Tetra abre as ligações de correio (mailto:), como um «Contacte-nos» numa página web.",
+ "mail.defaultOther": "As ligações de correio (mailto:) abrem agora em {app}.",
+ "mail.defaultNone": "Nenhuma aplicação abre agora as ligações de correio (mailto:).",
+ "mail.makeDefault": "Tornar o Tetra a predefinição",
+ "mail.mailtoNoAccount": "Para escrever este correio, adicione primeiro uma conta em Correio."
 }

@@ -2406,5 +2406,11 @@
  "mail.storage": "Krātuve",
  "mail.storageHas": "{size} · vēstuļu: {n}",
  "mail.storageTotal": "Kopā: {size} · vēstuļu: {n}",
- "mail.openFolder": "Atvērt mapi"
+ "mail.openFolder": "Atvērt mapi",
+ "mail.defaultTitle": "Noklusējuma e-pasta lietotne",
+ "mail.defaultIs": "Tetra atver e-pasta saites (mailto:), piemēram, „Rakstiet mums” tīmekļa lapā.",
+ "mail.defaultOther": "E-pasta saites (mailto:) tagad atver {app}.",
+ "mail.defaultNone": "Pašlaik e-pasta saites (mailto:) neatver neviena lietotne.",
+ "mail.makeDefault": "Iestatīt Tetra kā noklusējuma",
+ "mail.mailtoNoAccount": "Lai uzrakstītu šo vēstuli, vispirms pievienojiet kontu lietotnē „Pasts”."
 }

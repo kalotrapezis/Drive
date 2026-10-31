@@ -2405,5 +2405,11 @@
  "mail.storage": "Pohrana",
  "mail.storageHas": "{size} · poruka: {n}",
  "mail.storageTotal": "Ukupno: {size} · poruka: {n}",
- "mail.openFolder": "Otvori mapu"
+ "mail.openFolder": "Otvori mapu",
+ "mail.defaultTitle": "Zadana aplikacija za e-poštu",
+ "mail.defaultIs": "Tetra otvara poveznice e-pošte (mailto:), poput „Pišite nam” na web-stranici.",
+ "mail.defaultOther": "Poveznice e-pošte (mailto:) sada otvara {app}.",
+ "mail.defaultNone": "Trenutačno nijedna aplikacija ne otvara poveznice e-pošte (mailto:).",
+ "mail.makeDefault": "Postavi Tetra kao zadanu",
+ "mail.mailtoNoAccount": "Za pisanje ove poruke najprije dodajte račun u aplikaciji Pošta."
 }

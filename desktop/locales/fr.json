@@ -2406,5 +2406,11 @@
  "mail.storage": "Stockage",
  "mail.storageHas": "{size} · e-mails: {n}",
  "mail.storageTotal": "Au total: {size} · e-mails: {n}",
- "mail.openFolder": "Ouvrir le dossier"
+ "mail.openFolder": "Ouvrir le dossier",
+ "mail.defaultTitle": "Application de courrier par défaut",
+ "mail.defaultIs": "Tetra ouvre les liens de courrier (mailto:), comme un « Écrivez-nous » sur une page web.",
+ "mail.defaultOther": "Les liens de courrier (mailto:) s’ouvrent maintenant dans {app}.",
+ "mail.defaultNone": "Aucune application n’ouvre actuellement les liens de courrier (mailto:).",
+ "mail.makeDefault": "Définir Tetra par défaut",
+ "mail.mailtoNoAccount": "Pour écrire ce message, ajoutez d’abord un compte dans Courrier."
 }

@@ -2317,5 +2317,11 @@
  "mail.storage": "Salvestusruum",
  "mail.storageHas": "{size} · kirju: {n}",
  "mail.storageTotal": "Kokku: {size} · kirju: {n}",
- "mail.openFolder": "Ava kaust"
+ "mail.openFolder": "Ava kaust",
+ "mail.defaultTitle": "Vaikimisi e-posti rakendus",
+ "mail.defaultIs": "Tetra avab e-posti lingid (mailto:), nagu veebilehel „Kirjuta meile“.",
+ "mail.defaultOther": "E-posti linke (mailto:) avab praegu {app}.",
+ "mail.defaultNone": "E-posti linke (mailto:) ei ava praegu ükski rakendus.",
+ "mail.makeDefault": "Tee Tetra vaikerakenduseks",
+ "mail.mailtoNoAccount": "Selle kirja kirjutamiseks lisage esmalt rakenduses Post konto."
 }

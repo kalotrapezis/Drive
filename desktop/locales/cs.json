@@ -2495,5 +2495,11 @@
  "mail.storage": "Úložiště",
  "mail.storageHas": "{size} · e-maily: {n}",
  "mail.storageTotal": "Celkem: {size} · e-maily: {n}",
- "mail.openFolder": "Otevřít složku"
+ "mail.openFolder": "Otevřít složku",
+ "mail.defaultTitle": "Výchozí e-mailová aplikace",
+ "mail.defaultIs": "Tetra otevírá e-mailové odkazy (mailto:), například „Napište nám“ na webové stránce.",
+ "mail.defaultOther": "E-mailové odkazy (mailto:) se nyní otevírají v aplikaci {app}.",
+ "mail.defaultNone": "E-mailové odkazy (mailto:) teď žádná aplikace neotevírá.",
+ "mail.makeDefault": "Nastavit Tetra jako výchozí",
+ "mail.mailtoNoAccount": "Pro napsání této zprávy nejprve přidejte v aplikaci Pošta účet."
 }

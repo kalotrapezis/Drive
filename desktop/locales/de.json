@@ -2317,5 +2317,11 @@
  "mail.storage": "Speicher",
  "mail.storageHas": "{size} · E-Mails: {n}",
  "mail.storageTotal": "Insgesamt: {size} · E-Mails: {n}",
- "mail.openFolder": "Ordner öffnen"
+ "mail.openFolder": "Ordner öffnen",
+ "mail.defaultTitle": "Standard-E-Mail-App",
+ "mail.defaultIs": "Tetra öffnet E-Mail-Links (mailto:), wie ein „Schreiben Sie uns“ auf einer Webseite.",
+ "mail.defaultOther": "E-Mail-Links (mailto:) öffnen sich jetzt in {app}.",
+ "mail.defaultNone": "Keine App öffnet gerade E-Mail-Links (mailto:).",
+ "mail.makeDefault": "Tetra zum Standard machen",
+ "mail.mailtoNoAccount": "Um diese E-Mail zu schreiben, füge zuerst in E-Mail ein Konto hinzu."
 }

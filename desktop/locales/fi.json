@@ -2317,5 +2317,11 @@
  "mail.storage": "Tallennustila",
  "mail.storageHas": "{size} · viestejä: {n}",
  "mail.storageTotal": "Yhteensä: {size} · viestejä: {n}",
- "mail.openFolder": "Avaa kansio"
+ "mail.openFolder": "Avaa kansio",
+ "mail.defaultTitle": "Oletussähköpostisovellus",
+ "mail.defaultIs": "Tetra avaa sähköpostilinkit (mailto:), kuten verkkosivun ”Lähetä meille sähköpostia” -linkin.",
+ "mail.defaultOther": "Sähköpostilinkit (mailto:) avautuvat nyt sovelluksessa {app}.",
+ "mail.defaultNone": "Mikään sovellus ei avaa nyt sähköpostilinkkejä (mailto:).",
+ "mail.makeDefault": "Aseta Tetra oletukseksi",
+ "mail.mailtoNoAccount": "Kirjoittaaksesi tämän viestin lisää ensin tili Posti-sovelluksessa."
 }
