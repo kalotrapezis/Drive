@@ -225,7 +225,7 @@ export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode
               })}
             </div>
           })}
-          <div className="mail-folder mail-local-head">
+          <div className={`mail-folder mail-local-head ${where.local && !where.account ? 'on' : ''}`}>
             <button className={`mail-twisty ${locals ? 'open' : ''}`} aria-label={t('mail.storage')} onClick={() => locals ? setLocals(null) : window.drive.mail.localFolders().then(setLocals)}><Icon name="forward" size={16} /></button>
             <button className="mail-folder-name" title={t('mail.localHint')} onClick={() => { if (!locals) window.drive.mail.localFolders().then(setLocals); setWhere({ role: 'Inbox', account: null, local: true }) }}>
               <Icon name="storage" size={18} /><span>{t('mail.storage')}</span></button>
@@ -255,21 +255,21 @@ export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode
             shown += rows.length
             return <section key={g.key}>
               <h4 className="mail-group">{view.group === 'day' ? dayText(g.key) : view.group === 'account' ? accounts.get(g.key)?.name ?? g.key : g.key}</h4>
-              {rows.map(m => <MailRow key={m.id} m={m} on={m.id === openId} color={where.account ? null : accounts.get(m.account)?.color ?? null} onOpen={() => open(m)} onHeart={accounts.get(m.account)?.shadow || where.local ? undefined : () => act(m.flagged ? 'unfavorite' : 'favorite', [m.id])} />)}
+              {rows.map(m => <MailRow key={m.id} m={m} on={m.id === openId} color={where.account ? null : accounts.get(m.account)?.color ?? null} stored={where.local} onOpen={() => open(m)} onHeart={accounts.get(m.account)?.shadow || where.local ? undefined : () => act(m.flagged ? 'unfavorite' : 'favorite', [m.id])} />)}
             </section>
           })}
           {groups.reduce((n, g) => n + g.mails.length, 0) > limit && <button className="text-button mail-more" onClick={() => setLimit(l => l + PAGE)}>{t('mail.more')}</button>}
         </div>
         <div className="mail-read island">
           {draft ? <Compose initial={draft} accounts={(data?.accounts ?? []).filter(a => !a.shadow)} api={composer} say={say} setDialog={setDialog} onDone={() => { setDraft(null); reload() }} />
-            : openId ? <Reader key={openId} id={openId} color={accounts.get(mails.find(m => m.id === openId)?.account ?? '')?.color} say={say} setDialog={setDialog} /> : <div className="empty">{t('mail.pick')}</div>}
+            : openId ? <Reader key={openId} id={openId} stored={where.local} color={accounts.get(mails.find(m => m.id === openId)?.account ?? '')?.color} say={say} setDialog={setDialog} /> : <div className="empty">{t('mail.pick')}</div>}
         </div>
       </div>
     </div>
   )
 }
 
-function MailRow({ m, on, color, onOpen, onHeart }: { m: MailEntry; on: boolean; color: string | null; onOpen: () => void; onHeart?: () => void }) {
+function MailRow({ m, on, color, stored, onOpen, onHeart }: { m: MailEntry; on: boolean; color: string | null; stored?: boolean; onOpen: () => void; onHeart?: () => void }) {
   // a row holds the ♥ button, so it is not a <button> itself
   return (
     <div role="button" tabIndex={0} className={`mail-row ${on ? 'on' : ''} ${m.seen ? '' : 'unread'}`} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
@@ -280,7 +280,7 @@ function MailRow({ m, on, color, onOpen, onHeart }: { m: MailEntry; on: boolean;
         <span className="mail-time">{timeText(m.date)}</span>
         <span className={`mail-state ${m.saved ? 'green' : 'orange'}`} title={m.saved ? t('mail.local') : t('mail.serverOnly')} />
       </span>
-      <span className="mail-subject">{m.gone && <span className="mail-local-mark">{t('mail.localOnly')}</span>}{m.subject || t('mail.noSubject')}</span>
+      <span className="mail-subject">{stored && <span className="mail-store-tag">{t('mail.storage')}</span>}{m.gone && <span className="mail-local-mark">{t('mail.localOnly')}</span>}{m.subject || t('mail.noSubject')}</span>
       {m.snippet && <span className="mail-snippet">{m.snippet}</span>}
       <button className={`mail-heart ${m.flagged ? 'on' : ''}`} title={t('mail.favorite')} aria-pressed={m.flagged} disabled={!onHeart} onClick={e => { e.stopPropagation(); onHeart?.() }}><Icon name={m.flagged ? 'heartFill' : 'heart'} size={18} /></button>
     </div>
@@ -292,7 +292,7 @@ function MailRow({ m, on, color, onOpen, onHeart }: { m: MailEntry; on: boolean;
 const RISKY = /\.(exe|msi|bat|cmd|com|scr|pif|vbs|vbe|js|jse|wsf|wsh|ps1|psm1|jar|sh|run|bin|appimage|desktop|deb|rpm|apk|lnk|reg|hta|cpl|docm|xlsm|pptm|dotm|xltm|iso|img)$/i
 const hostOf = (u: string) => { try { return new URL(/^https?:/i.test(u) ? u : `http://${u}`).hostname.replace(/^www\./, '').toLowerCase() } catch { return '' } }
 
-function Reader({ id, color, say, setDialog }: { id: string; color?: string; say: (s: string, action?: () => void, label?: string) => void; setDialog: (d: ReactNode) => void }) {
+function Reader({ id, color, stored, say, setDialog }: { id: string; color?: string; stored?: boolean; say: (s: string, action?: () => void, label?: string) => void; setDialog: (d: ReactNode) => void }) {
   const [m, setM] = useState<MailOpened | null>(null)
   const frame = useRef<HTMLIFrameElement>(null)
   const load = (images = false) => window.drive.mail.open(id, images).then(setM, e => say(errorText(e)))
@@ -328,7 +328,7 @@ function Reader({ id, color, say, setDialog }: { id: string; color?: string; say
   }
   return (
     <article className="mail-reader">
-      <h2>{m.subject || t('mail.noSubject')}</h2>
+      <h2>{stored && <span className="mail-store-tag big">{t('mail.storage')}</span>}{m.subject || t('mail.noSubject')}</h2>
       <div className="mail-head">
         <span className="mail-avatar" style={{ background: color ?? 'var(--island-2)' }}>{(m.from || m.fromAddress || '?').trim()[0]?.toUpperCase()}</span>
         <div>

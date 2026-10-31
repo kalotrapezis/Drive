@@ -1481,7 +1481,8 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .mail-store .outline-button { justify-self: start; display: flex; align-items: center; gap: 8px; }
 .mail-store-total { margin-top: 8px !important; }
 /* «Αποθήκη» in Mail: the archive on this computer, at the bottom of the folders (the user, 31 Oct) */
-.mail-local-head { margin-top: 10px; border-top: 1px solid var(--island-2); padding-top: 6px; border-radius: 0; }
+.mail-local-head { margin-top: 16px; position: relative; }
+.mail-local-head::before { content: ''; position: absolute; left: 8px; right: 8px; top: -8px; border-top: 1px solid var(--island-2); }
 .mail-local-acc { display: flex; align-items: center; gap: 8px; padding: 6px 10px 2px 38px; font-size: 13px; color: var(--muted); }
 .mail-local-n { font-size: 12px; color: var(--muted); }
 .mail-local-mark { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #d9822b33; color: #e0a43a; vertical-align: 1px; }
@@ -1489,3 +1490,26 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .mail-exports .text-button { display: flex; align-items: center; gap: 6px; }
 .mail-file { display: inline-flex; align-items: center; gap: 2px; }
 .mail-file .round.small { width: 30px; height: 30px; }
+/* The selected row in its applet's own colour, as on the phone (the user, 31 Oct): a tint, so the text reads in light and dark */
+.content[data-app=mail] { --app: var(--cat-mail); }
+.content[data-app=notes] { --app: var(--cat-notes); }
+.content[data-app=files] { --app: var(--cat-files); }
+.content[data-app=maps] { --app: var(--cat-maps); }
+.content[data-app=phone], .content[data-app=data] { --app: var(--cat-phone); }
+.content[data-app=calendar] { --app: var(--cal-pink); }
+.content[data-app=timer] { --app: var(--timer-teal); }
+.content[data-app=assistant] { --app: var(--cat-assistant); }
+.content:is([data-app=photos], [data-app=collections], [data-app=collection], [data-app=people], [data-app=person], [data-app=review], [data-app=map], [data-app=hidden], [data-app=photoTrash]) { --app: var(--cat-photos); }
+.content[data-app] .island-item.on { background: color-mix(in srgb, var(--app, var(--accent)) 30%, transparent); color: var(--text); }
+.content[data-app] .island-item.on svg { color: var(--app, currentColor); }
+.mail-folder.on, .mail-row.on { background: color-mix(in srgb, var(--cat-mail) 26%, transparent); }
+.mail-folder.on > svg, .mail-folder.on .mail-folder-name svg { color: var(--cat-mail); }
+.file.selected { background: color-mix(in srgb, var(--cat-files) 24%, transparent); }
+.file.selected .check { color: var(--cat-files); }
+.maps-row.on { background: color-mix(in srgb, var(--cat-maps) 24%, transparent); }
+.note-card.selected { outline-color: var(--cat-notes); }
+.note-card.selected .check { color: var(--cat-notes); }
+/* «Αποθήκη»: the magenta tag is Mail's own colour and for this alone (nothing else in Mail is that magenta) */
+.mail-store-tag { display: inline-block; margin-right: 6px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--cat-mail); color: #fff; vertical-align: 1px; }
+.mail-store-tag.big { font-size: 13px; padding: 2px 10px; vertical-align: 4px; margin-right: 10px; }
+@media (prefers-color-scheme: light) { .mail-local-mark { background: #d9822b2e; color: #8a4500; } }

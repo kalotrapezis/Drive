@@ -485,3 +485,17 @@ test('mail: «Αποθήκη» lists every mail kept here, one deleted from the 
     mail.index.flush()
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
+
+test('mail: Mail\'s magenta is the «Αποθήκη» tag\'s alone — an account in pink (old default or a phone\'s) gets another colour, saved', () => {
+  const { nearMagenta } = require('../mail')
+  assert.ok(nearMagenta('#E8029A') && nearMagenta('#e57ab0') && nearMagenta('#ff00ff'))
+  assert.ok(!['#e5534b', '#4f8ff7', '#e0a43a', '#3fb27f', '#b77ce6', '#a1887f', '#3bb8c4'].some(nearMagenta), 'no account colour is near it')
+  const dir = tmp()
+  try {
+    const mail = new Mail(dir, { secret: () => 'x' })
+    mail.saveAccounts([{ id: 'a@b.gr', color: '#e5534b' }, { id: 'c@d.gr', color: '#e57ab0' }])
+    assert.equal(mail.allAccounts()[1].color, '#4f8ff7', 'the first colour nobody has')
+    mail.startAll(); mail.stopAll()
+    assert.equal(mail.accounts()[1].color, '#4f8ff7', 'written, so the phone sees it too')
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})

@@ -447,7 +447,7 @@ export function App() {
           <button className="round" title={t('photos.rescanLibrary')} disabled={!!scan} onClick={rescan}><Icon name="refresh" size={20} /></button>
         </div>
       </nav>
-      <main className="content">
+      <main className="content" data-app={page.kind}>
         {content}
         {section && section !== 'files' && ['photos', 'collections', 'collection'].includes(page.kind) && picked.length === 0 && dock}
         {page.kind === 'person' && person && picked.length === 0 && (

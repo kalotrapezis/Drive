@@ -23,7 +23,18 @@ const { t, locale } = require('./i18n')
 
 const ROLES = ['Inbox', 'Drafts', 'Sent', 'Archive', 'Spam', 'Trash']
 const SPECIAL = { '\\Inbox': 'Inbox', '\\Sent': 'Sent', '\\Drafts': 'Drafts', '\\Archive': 'Archive', '\\Junk': 'Spam', '\\Trash': 'Trash' }
-const COLORS = ['#e5534b', '#4f8ff7', '#e0a43a', '#3fb27f', '#b77ce6', '#e57ab0', '#3bb8c4']
+const COLORS = ['#e5534b', '#4f8ff7', '#e0a43a', '#3fb27f', '#b77ce6', '#a1887f', '#3bb8c4'] // no pink: Mail's magenta is the «Αποθήκη» tag's
+/** Near Mail's own magenta (#E8029A): a hue of 290–345° with some colour in it. That is the «Αποθήκη» tag's alone (the user, 31 Oct). */
+function nearMagenta(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex ?? ''))
+  if (!m) return false
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255), max = Math.max(r, g, b), d = max - Math.min(r, g, b)
+  if (d < 0.25) return false
+  const h = ((max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60 + 360) % 360
+  return h >= 290 && h <= 345
+}
+/** Accounts with a colour near the magenta get one of the others not taken yet. */
+const unmagenta = list => { const used = new Set(list.map(a => a.color)); return list.map(a => nearMagenta(a.color) ? { ...a, color: COLORS.find(c => !used.has(c) && used.add(c)) ?? COLORS[5] } : a) }
 const EVERY = 15 * 60_000 // a full look at every folder; new mail in the Inbox comes at once by IDLE
 /** «Έλεγχος για νέα» (Settings › Αλληλογραφία): 'push' is IDLE plus the quarter-hour look; minutes poll; 'manual' only when asked. */
 const CHECKS = ['push', 5, 15, 30, 'manual']
@@ -283,7 +294,7 @@ class Mail extends EventEmitter {
     }
     return [...out.values()]
   }
-  allAccounts() { return [...this.accounts(), ...this.shadows()] }
+  allAccounts() { return unmagenta([...this.accounts(), ...this.shadows()]) }
 
   /**
    * Mail on each device (MAIL_PLAN §14): devices/<device>.json — { mode: copy | move, limit (bytes, -1 everything) } —
@@ -362,7 +373,13 @@ class Mail extends EventEmitter {
   /** Out of Tetra; its mail stays on disk and in the index (added again, nothing is fetched twice). */
   remove(id) { this.stop(id); this.saveAccounts(this.accounts().filter(a => a.id !== id)); delete this.state[id]; this.changed() }
 
-  startAll() { this.checking = this.check(); for (const a of this.accounts()) this.start(a); this.watchRequests() }
+  startAll() {
+    const list = this.accounts(), fixed = unmagenta(list)
+    if (fixed.some((a, i) => a.color !== list[i].color)) this.saveAccounts(fixed) // an account in pink from before: written anew, so the phones see it too
+    this.checking = this.check()
+    for (const a of this.accounts()) this.start(a)
+    this.watchRequests()
+  }
   start(acc) {
     if (this.live.has(acc.id)) return
     const run = { acc, stop: false, client: null, wake: null }
@@ -1158,4 +1175,4 @@ class Mail extends EventEmitter {
   }
 }
 
-module.exports = { Mail, Index, ROLES, OPS, CHECKS, parseMailto, freeName, MICROSOFT, detect, check, parseConfig, roles, places, mailName, clean, userName, reason }
+module.exports = { Mail, Index, ROLES, OPS, CHECKS, parseMailto, freeName, nearMagenta, MICROSOFT, detect, check, parseConfig, roles, places, mailName, clean, userName, reason }
