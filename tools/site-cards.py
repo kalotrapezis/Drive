@@ -93,9 +93,13 @@ NEW = {
     'guide': ('#8E99A6', [('d-guide-f3.png', 800, 'pc', 660, 80), ('t-guide-files.png', 520, 'tablet', 1010, 500)]),
     'languages': ('#8E99A6', [('t-language.png', 760, 'tablet', 810, 150), ('p-home-de.png', 250, 'phone', 680, 300)]),
     'phone-tablet': ('#1A9AA8', [('t-phone.png', 880, 'tablet', 680, 170)]),
+    'phone-phone': ('#1A9AA8', [('p-phone-recents.png', 310, 'phone', 760, 90), ('p-phone-dial.png', 310, 'phone', 1150, 150)]),
+    'phone-call': ('#1A9AA8', [('p-phone-call.png', 270, 'phone', 680, 120), ('p-phone-note.png', 270, 'phone', 990, 170), ('p-phone-detail.png', 270, 'phone', 1300, 120)]),
     'mail': ('#E8029A', [('d-mail.png', 820, 'pc', 640, 110), ('p-mail-storage.png', 250, 'phone', 1300, 230)]),
+    'mail-thread': ('#E8029A', [('p-mail-conversations.png', 310, 'phone', 760, 90), ('p-mail-thread.png', 310, 'phone', 1150, 150)]),
     'devices': ('#2E9D4F', [('d-devices.png', 860, 'pc', 660, 130)]),
     'ai': ('#FD6A04', [('d-ai-settings.png', 800, 'pc', 640, 110), ('p-ai-settings.png', 250, 'phone', 1300, 230)]),
+    'ai-chat': ('#FD6A04', [('d-ai-chat.png', 900, 'pc', 650, 140)]),
 }
 
 def make_new(shots):

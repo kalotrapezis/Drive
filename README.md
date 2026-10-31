@@ -14,7 +14,7 @@ Photos, files, notes, calendar, timers, maps, contacts, calls and data on Linux,
 ![Tetra on a computer, a tablet and a phone](Assets/cards/tetra-devices.jpg)
 
 The computer half of [Tetra for Android](https://github.com/kalotrapezis/Tetra-mobile): Photos, Files, Notes,
-Calendar, Timer, Maps\*, Contacts, Phone, Data and Mail on Linux, in sync with your phone and tablet over your own Wi-Fi.
+Calendar, Timer, Maps, Contacts, Phone, Data and Mail on Linux, in sync with your phone and tablet over your own Wi-Fi.
 Faces, documents and search labels are analysed on this computer.
 
 **0.6.0 Beta 32** ([what's new](https://github.com/kalotrapezis/Tetra/releases/tag/desktop-v0.6.0-beta.32)). A beta: keep
@@ -39,7 +39,7 @@ your own backups. Screenshots use invented sample data.
 - **Notes and lists, organised.** Notes and shopping lists with tags, the same on the phone and here. Each note is a
   plain file in your own Tetra folder.
 - **Photos that know who and where.** Bring your Google Photos over (Takeout import, with their dates), then tags, live
-  photos, and People and Documents collections from face recognition that runs on this computer. Find photos by place\*.
+  photos, and People and Documents collections from face recognition that runs on this computer. Find photos by place.
 - **Keep the internal SSD light.** Pair an external drive with Tetra and it backs everything up automatically, or moves
   older photos onto it so the computer's own disk stays as empty as possible.
 - **More than one copy, no subscription.** Tetra shows how many places hold each file, the phone, the tablet, the
@@ -51,8 +51,6 @@ your own backups. Screenshots use invented sample data.
 - **AI Assist, off until you switch it on.** It uses Mistral with your own key. One switch turns all AI off, and off means
   nothing is sent anywhere; a switch per app decides what it may see.
 - **Maps that work offline.** Search, save places, lists and trips, and plan routes by car, on foot or by bike.
-
-<sub>\* Finding photos by place covers Greece only for now.</sub>
 
 ## The applets
 
