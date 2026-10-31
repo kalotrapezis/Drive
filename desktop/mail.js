@@ -44,7 +44,8 @@ const OPS = ['read', 'unread', 'favorite', 'unfavorite', 'archive', 'delete', 'm
 /** Text a file name takes on every file system, at most [bytes] bytes of UTF-8 (names are 255 bytes, Greek is two each). */
 function clean(s, bytes) {
   let out = String(s ?? '').replace(/[/\\\0:*?"<>|\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim().replace(/^\.+/, '')
-  while (Buffer.byteLength(out) > bytes) out = out.slice(0, -1)
+  // a whole character at a time: half an emoji (a lone surrogate) was a different name here and on the phone (31 Oct)
+  while (Buffer.byteLength(out) > bytes) out = out.slice(0, /[\udc00-\udfff]/.test(out.at(-1)) ? -2 : -1)
   return out.trim()
 }
 /** `2026/2026-10-31 0912 Γραμματεία ΜΠΣ - Προθεσμία εργασίας`, by local time, without the extension. */
@@ -60,6 +61,9 @@ function roles(list) {
     const role = f.path.toUpperCase() === 'INBOX' ? 'Inbox' : SPECIAL[f.specialUse]
     if (role && !out[role] && !f.flags?.has?.('\\Noselect')) out[role] = f.path
   }
+  // Gmail has no Archive: an archived mail is one only in All Mail (\All), which holds the rest too (headers' elsewhere)
+  const all = !out.Archive && list.find(f => f.specialUse === '\\All' && !f.flags?.has?.('\\Noselect'))
+  if (all) out.Archive = all.path
   return out
 }
 
@@ -415,16 +419,20 @@ class Mail extends EventEmitter {
     const c = run.client = this.connect(acc.server, acc.server.user, await this.login(acc))
     await c.connect()
     const closed = new Promise(r => c.once('close', () => r('closed')))
-    const boxes = roles(await c.list())
+    let list = await c.list()
+    const boxes = roles(list)
     let what = 'all'
     for (;;) {
       this.setState(acc.id, { busy: true, error: null, detail: null })
       // listed again each time: an archive's new year folder is synced as soon as it is there
       let now = [['Inbox', boxes.Inbox]]
-      if (what !== 'inbox' || !boxes.Inbox) { const list = await c.list(); Object.assign(boxes, roles(list)); now = places(list, boxes) }
-      for (const [role, box] of now) await this.headers(c, acc, role, box, boxes[role])
+      if (what !== 'inbox' || !boxes.Inbox) { list = await c.list(); Object.assign(boxes, roles(list)); now = places(list, boxes) }
+      const all = list.find(f => f.specialUse === '\\All')?.path
+      now.sort((a, b) => (a[1] === all) - (b[1] === all)) // All Mail after the folders whose mail it also holds
+      for (const [role, box] of now) await this.headers(c, acc, role, box, boxes[role], run, box === all)
       run.fresh = []
       for (const role of ROLES) for (const [r, box] of now) if (r === role) await this.bodies(c, acc, role, box, run, boxes[role])
+      this.dropCopies(acc)
       this.index.flush()
       // new mail through the filters and the spam filter (once on disk, so they can read it); then the daily clean-up
       const care = require('./mailclean')
@@ -449,9 +457,15 @@ class Mail extends EventEmitter {
   mine(acc, role, box, main = box) { return [...this.index.all()].filter(e => e.account === acc.id && e.folder === role && (e.box ?? main) === box) }
 
   /** A folder's list: new mails' headers (orange until fetched), flags of the known ones, the gone ones marked. */
-  async headers(c, acc, role, box, main = box, run = this.live.get(acc.id)) {
+  async headers(c, acc, role, box, main = box, run = this.live.get(acc.id), allMail = false) {
     await c.mailboxOpen(box, { readOnly: true })
     const validity = String(c.mailbox.uidValidity)
+    // Gmail's All Mail: only what no other folder holds is archived mail; a mail back in the Inbox is no longer here
+    const elsewhere = allMail ? new Set([...this.index.all()].filter(e => e.account === acc.id && e.box !== box && !e.gone && e.messageId).map(e => e.messageId)) : null
+    if (elsewhere) for (const e of this.mine(acc, role, box, main)) if (!e.gone && elsewhere.has(e.messageId)) this.index.put({ ...e, gone: true })
+    // uid → Message-ID of what lives elsewhere: its envelope is not fetched again at every look while it does
+    const skip = elsewhere && run ? (run.skipped ??= new Map()).get(`${box}/${validity}`) ?? new Map() : null
+    if (skip) run.skipped.set(`${box}/${validity}`, skip)
     const mine = this.mine(acc, role, box, main), first = !mine.length
     const known = new Map(mine.filter(e => e.uidValidity === validity && !e.gone).map(e => [e.uid, e]))
     const uids = (c.mailbox.exists && await c.search({ all: true }, { uid: true })) || []
@@ -465,10 +479,11 @@ class Mail extends EventEmitter {
       const seen = m.flags.has('\\Seen'), flagged = m.flags.has('\\Flagged')
       if (e.seen !== seen || e.flagged !== flagged) this.index.put({ ...e, seen, flagged })
     }
-    const fresh = uids.filter(u => !known.has(u))
+    const fresh = uids.filter(u => !known.has(u) && !(skip?.has(u) && elsewhere.has(skip.get(u))))
     for (let i = 0; i < fresh.length; i += 500) {
       for await (const m of c.fetch(fresh.slice(i, i + 500).join(','), { uid: true, envelope: true, flags: true, size: true, bodyStructure: true, internalDate: true }, { uid: true })) {
         const env = m.envelope ?? {}, from = env.from?.[0] ?? {}
+        if (env.messageId && elsewhere?.has(env.messageId)) { skip?.set(m.uid, env.messageId); continue }
         const e = {
           id: box === main ? `${acc.id}/${role}/${validity}/${m.uid}` : `${acc.id}/${role}/${box}/${validity}/${m.uid}`, account: acc.id, folder: role, box, uidValidity: validity, uid: m.uid,
           date: +(env.date || m.internalDate || 0), from: from.name || from.address || '', fromAddress: from.address || '',
@@ -695,6 +710,7 @@ class Mail extends EventEmitter {
    * (`archiveBy`: year, the default as in Thunderbird; month; none).
    */
   async archiveBox(c, acc, boxes, folders, paths, date) {
+    if (folders.find(f => f.path === boxes.Archive)?.specialUse === '\\All') return boxes.Archive // Gmail: archiving is leaving the Inbox
     if (!boxes.Archive) { if (!paths.has('Archive')) await c.mailboxCreate('Archive'); paths.add('Archive'); boxes.Archive = 'Archive' }
     const d = new Date(date || Date.now()), by = acc.archiveBy ?? 'year'
     const sep = folders.find(f => f.path === boxes.Archive)?.delimiter || '/'
@@ -760,6 +776,37 @@ class Mail extends EventEmitter {
     return acc
   }
   /** A file Tetra wrote itself and is replacing (an old draft, a sent copy the server changed), with its attachments. */
+  /**
+   * A mail gone from one folder that lives on in another of the account's, the same bytes: the gone one's file is a second
+   * copy, and goes (31 Oct: webmail had kept mails both in INBOX and in Archive.Inbox; once one goes from the server, its
+   * file here is only a duplicate). A gone mail with no live copy keeps its file, as always.
+   */
+  dropCopies(acc) {
+    const size = rel => { try { return fs.statSync(path.join(this.root, rel)).size } catch { return -1 } }
+    const live = new Map()
+    for (const e of this.index.all()) if (e.account === acc.id && !e.gone && e.file && e.messageId) live.set(e.messageId, e)
+    for (const e of [...this.index.all()]) {
+      const other = e.account === acc.id && e.gone && e.file && e.messageId && live.get(e.messageId)
+      if (!other || other.file === e.file || size(other.file) !== size(e.file)) continue
+      this.unlink(e.file); this.index.put({ ...e, file: null, movedTo: other.id })
+    }
+  }
+  /** «Αποθήκευση» (the user: "how can I access my mails if the folder is hidden?"): where each account's mail is, its size, its mails. */
+  storage() {
+    const accounts = this.allAccounts().map(a => {
+      let bytes = 0, mails = 0
+      const walk = dir => { let es = []; try { es = fs.readdirSync(dir, { withFileTypes: true }) } catch {} for (const e of es) { const f = path.join(dir, e.name); if (e.isDirectory()) walk(f); else if (e.isFile()) { try { bytes += fs.statSync(f).size } catch {} if (e.name.endsWith('.eml')) mails++ } } }
+      const dir = path.join(this.root, a.id)
+      walk(dir)
+      return { id: a.id, name: a.name, address: a.address ?? a.id, color: a.color, path: dir, bytes, mails }
+    })
+    return { root: this.root, accounts, bytes: accounts.reduce((n, a) => n + a.bytes, 0), mails: accounts.reduce((n, a) => n + a.mails, 0) }
+  }
+  /** An account's folder (or the whole archive), for the system's file manager: only a folder inside the archive. */
+  folderOf(id) {
+    const dir = id ? path.join(this.root, String(id)) : this.root
+    return path.dirname(dir) === this.root || dir === this.root ? dir : null
+  }
   unlink(rel) {
     const full = this.inside(rel)
     if (!full) return

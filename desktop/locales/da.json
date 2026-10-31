@@ -2313,5 +2313,9 @@
  "sync.trashHere": "På {here}",
  "sync.trashOnDrive": "På {drive}",
  "sync.driveHowTrash": "Slettede elementer fylder på {drive} i stedet for på denne pc.",
- "sync.driveMapStorage": "Et foto forlader {here} først, når det er læst tilbage fra {drive}; det bliver i Fotos og åbnes derfra, mens drevet er sat i."
+ "sync.driveMapStorage": "Et foto forlader {here} først, når det er læst tilbage fra {drive}; det bliver i Fotos og åbnes derfra, mens drevet er sat i.",
+ "mail.storage": "Lager",
+ "mail.storageHas": "{size} · mails: {n}",
+ "mail.storageTotal": "I alt: {size} · mails: {n}",
+ "mail.openFolder": "Åbn mappe"
 }

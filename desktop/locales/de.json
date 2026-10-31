@@ -2313,5 +2313,9 @@
  "sync.trashHere": "{here}",
  "sync.trashOnDrive": "Auf {drive}",
  "sync.driveHowTrash": "Gelöschte Elemente belegen Platz auf {drive} statt auf diesem PC.",
- "sync.driveMapStorage": "{here} gibt ein Foto erst frei, nachdem es von {drive} zurückgelesen wurde; es bleibt in Fotos und wird von dort geöffnet, solange das Laufwerk angeschlossen ist."
+ "sync.driveMapStorage": "{here} gibt ein Foto erst frei, nachdem es von {drive} zurückgelesen wurde; es bleibt in Fotos und wird von dort geöffnet, solange das Laufwerk angeschlossen ist.",
+ "mail.storage": "Speicher",
+ "mail.storageHas": "{size} · E-Mails: {n}",
+ "mail.storageTotal": "Insgesamt: {size} · E-Mails: {n}",
+ "mail.openFolder": "Ordner öffnen"
 }

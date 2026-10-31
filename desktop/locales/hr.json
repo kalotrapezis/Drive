@@ -2401,5 +2401,9 @@
  "sync.trashHere": "{here}",
  "sync.trashOnDrive": "Na {drive}",
  "sync.driveHowTrash": "Izbrisane stavke zauzimaju prostor na {drive} umjesto na ovom računalu.",
- "sync.driveMapStorage": "Fotografija napušta {here} tek nakon što se pročita natrag s {drive}; ostaje u aplikaciji Fotografije i otvara se odande dok je disk spojen."
+ "sync.driveMapStorage": "Fotografija napušta {here} tek nakon što se pročita natrag s {drive}; ostaje u aplikaciji Fotografije i otvara se odande dok je disk spojen.",
+ "mail.storage": "Pohrana",
+ "mail.storageHas": "{size} · poruka: {n}",
+ "mail.storageTotal": "Ukupno: {size} · poruka: {n}",
+ "mail.openFolder": "Otvori mapu"
 }

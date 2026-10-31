@@ -2491,5 +2491,9 @@
  "sync.trashHere": "{here}",
  "sync.trashOnDrive": "Na {drive}",
  "sync.driveHowTrash": "Izbrisani elementi zasedajo prostor na {drive} namesto na tem računalniku.",
- "sync.driveMapStorage": "Fotografija zapusti {here} šele, ko se prebere nazaj z {drive}; ostane v Galeriji in se odpira od tam, dokler je disk priključen."
+ "sync.driveMapStorage": "Fotografija zapusti {here} šele, ko se prebere nazaj z {drive}; ostane v Galeriji in se odpira od tam, dokler je disk priključen.",
+ "mail.storage": "Shramba",
+ "mail.storageHas": "{size} · e-poštnih sporočil: {n}",
+ "mail.storageTotal": "Skupaj: {size} · e-poštnih sporočil: {n}",
+ "mail.openFolder": "Odpri mapo"
 }

@@ -2313,5 +2313,9 @@
  "sync.trashHere": "На {here}",
  "sync.trashOnDrive": "На {drive}",
  "sync.driveHowTrash": "Изтритите елементи заемат място на {drive} вместо на този компютър.",
- "sync.driveMapStorage": "Снимка напуска {here} едва след като бъде прочетена обратно от {drive}; остава в Галерия и се отваря оттам, докато дискът е свързан."
+ "sync.driveMapStorage": "Снимка напуска {here} едва след като бъде прочетена обратно от {drive}; остава в Галерия и се отваря оттам, докато дискът е свързан.",
+ "mail.storage": "Хранилище",
+ "mail.storageHas": "{size} · писма: {n}",
+ "mail.storageTotal": "Общо: {size} · писма: {n}",
+ "mail.openFolder": "Отвори папката"
 }

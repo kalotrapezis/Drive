@@ -2313,5 +2313,9 @@
  "sync.trashHere": "På {here}",
  "sync.trashOnDrive": "På {drive}",
  "sync.driveHowTrash": "Raderade objekt tar plats på {drive} i stället för på den här datorn.",
- "sync.driveMapStorage": "Ett foto lämnar {here} först efter att det har lästs tillbaka från {drive}; det blir kvar i Foton och öppnas därifrån medan disken är ansluten."
+ "sync.driveMapStorage": "Ett foto lämnar {here} först efter att det har lästs tillbaka från {drive}; det blir kvar i Foton och öppnas därifrån medan disken är ansluten.",
+ "mail.storage": "Lagring",
+ "mail.storageHas": "{size} · mejl: {n}",
+ "mail.storageTotal": "Totalt: {size} · mejl: {n}",
+ "mail.openFolder": "Öppna mapp"
 }

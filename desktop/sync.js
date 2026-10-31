@@ -209,6 +209,8 @@ class SyncServer {
     await new Promise((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.port, '0.0.0.0', resolve) })
     this.port = this.server.address().port
     await this.listenForProbes(this.beaconPort)
+    this.pruneSnapshots()
+    this.pruning = setInterval(() => this.pruneSnapshots(), 60_000); this.pruning.unref?.()
     return this
   }
 
@@ -239,6 +241,7 @@ class SyncServer {
   }
 
   stop() {
+    clearInterval(this.pruning)
     this.beacon?.close()
     this.beacon = null
     return new Promise(r => this.server ? this.server.close(r) : r())
@@ -1089,9 +1092,23 @@ class SyncServer {
    * A growing file as it is now, set aside under its hash for ten minutes, so the device's fetch gets what it was offered
    * (31 Oct: the 13 MB mail index changed between the offer and the fetch, every time — the phones had accounts, no mail).
    */
+  /**
+   * Snapshots older than ten minutes go, by the files' own age: those of an earlier run too, which nothing here remembers
+   * (31 Oct: three 18 MB copies left in sync/offered, the oldest 13 minutes old). At each offer, and every minute.
+   */
+  pruneSnapshots(now = Date.now()) {
+    const dir = path.join(this.dataDir, 'sync', 'offered')
+    let names = []
+    try { names = fs.readdirSync(dir) } catch { return }
+    for (const n of names) {
+      const file = path.join(dir, n)
+      try { if (now - fs.statSync(file).mtimeMs > 10 * 60_000) { fs.rmSync(file, { force: true }); this.snapshots.delete(n) } } catch {}
+    }
+  }
+
   async snapshot(deviceId, item) {
     const dir = path.join(this.dataDir, 'sync', 'offered')
-    for (const [sha, s] of this.snapshots) if (Date.now() - s.at > 10 * 60_000) { this.snapshots.delete(sha); fsp.rm(s.file, { force: true }).catch(() => {}) }
+    this.pruneSnapshots()
     await fsp.mkdir(dir, { recursive: true })
     const tmp = path.join(dir, `.${crypto.randomUUID()}.part`)
     await fsp.copyFile(this.files.resolve(item.path, false), tmp)
@@ -1099,6 +1116,7 @@ class SyncServer {
     for await (const chunk of fs.createReadStream(tmp)) hash.update(chunk)
     const sha256 = hash.digest('hex'), file = path.join(dir, sha256)
     await fsp.rename(tmp, file)
+    const now = new Date(); await fsp.utimes(file, now, now) // its age is from now (pruneSnapshots), not the index's
     this.snapshots.set(sha256, { file, path: item.path, at: Date.now() })
     // offered as these bytes: the next sync knows them as the version both hold (files.reconcile's file_offered)
     if (sha256 !== item.sha256) this.db.prepare('UPDATE file_offered SET sha256 = ? WHERE device_id = ? AND path = ?').run(sha256, deviceId, item.path)

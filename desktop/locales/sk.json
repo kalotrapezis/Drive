@@ -2491,5 +2491,9 @@
  "sync.trashHere": "{here}",
  "sync.trashOnDrive": "Na {drive}",
  "sync.driveHowTrash": "Odstránené položky zaberajú miesto na {drive} namiesto tohto počítača.",
- "sync.driveMapStorage": "Fotka opustí {here} až po tom, čo sa prečíta späť z {drive}; zostane v aplikácii Fotky a otvára sa odtiaľ, kým je disk pripojený."
+ "sync.driveMapStorage": "Fotka opustí {here} až po tom, čo sa prečíta späť z {drive}; zostane v aplikácii Fotky a otvára sa odtiaľ, kým je disk pripojený.",
+ "mail.storage": "Úložisko",
+ "mail.storageHas": "{size} · e-mailov: {n}",
+ "mail.storageTotal": "Spolu: {size} · e-mailov: {n}",
+ "mail.openFolder": "Otvoriť priečinok"
 }

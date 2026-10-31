@@ -2491,5 +2491,9 @@
  "sync.trashHere": "{here}",
  "sync.trashOnDrive": "Diske {drive}",
  "sync.driveHowTrash": "Ištrinti elementai užima vietą diske {drive}, o ne šiame kompiuteryje.",
- "sync.driveMapStorage": "{here} nuotrauką atleidžia tik tada, kai ji perskaitoma atgal iš {drive}; ji lieka Nuotraukose ir atidaroma iš ten, kol diskas prijungtas."
+ "sync.driveMapStorage": "{here} nuotrauką atleidžia tik tada, kai ji perskaitoma atgal iš {drive}; ji lieka Nuotraukose ir atidaroma iš ten, kol diskas prijungtas.",
+ "mail.storage": "Saugykla",
+ "mail.storageHas": "{size} · laiškų: {n}",
+ "mail.storageTotal": "Iš viso: {size} · laiškų: {n}",
+ "mail.openFolder": "Atidaryti aplanką"
 }

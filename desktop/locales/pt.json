@@ -2402,5 +2402,9 @@
  "sync.trashHere": "{here}",
  "sync.trashOnDrive": "Em {drive}",
  "sync.driveHowTrash": "Os itens eliminados ocupam espaço em {drive} em vez de neste PC.",
- "sync.driveMapStorage": "{here} só liberta uma foto depois de esta ser lida de volta a partir de {drive}; fica em Fotos e abre-se a partir daí enquanto a unidade estiver ligada."
+ "sync.driveMapStorage": "{here} só liberta uma foto depois de esta ser lida de volta a partir de {drive}; fica em Fotos e abre-se a partir daí enquanto a unidade estiver ligada.",
+ "mail.storage": "Armazenamento",
+ "mail.storageHas": "{size} · e-mails: {n}",
+ "mail.storageTotal": "Ao todo: {size} · e-mails: {n}",
+ "mail.openFolder": "Abrir pasta"
 }

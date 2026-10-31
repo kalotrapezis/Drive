@@ -2313,5 +2313,9 @@
  "sync.trashHere": "{here}",
  "sync.trashOnDrive": "Asemalla {drive}",
  "sync.driveHowTrash": "Poistetut kohteet vievät tilaa asemalta {drive} tämän tietokoneen sijaan.",
- "sync.driveMapStorage": "{here} vapauttaa kuvan vasta, kun se on luettu takaisin asemalta {drive}; se pysyy Kuvat-sovelluksessa ja avautuu sieltä, kun asema on liitetty."
+ "sync.driveMapStorage": "{here} vapauttaa kuvan vasta, kun se on luettu takaisin asemalta {drive}; se pysyy Kuvat-sovelluksessa ja avautuu sieltä, kun asema on liitetty.",
+ "mail.storage": "Tallennustila",
+ "mail.storageHas": "{size} · viestejä: {n}",
+ "mail.storageTotal": "Yhteensä: {size} · viestejä: {n}",
+ "mail.openFolder": "Avaa kansio"
 }

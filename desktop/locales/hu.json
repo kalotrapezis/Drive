@@ -2313,5 +2313,9 @@
  "sync.trashHere": "Itt: {here}",
  "sync.trashOnDrive": "Itt: {drive}",
  "sync.driveHowTrash": "A törölt elemek a(z) {drive} meghajtón foglalnak helyet, nem ezen a számítógépen.",
- "sync.driveMapStorage": "A fotó csak azután távozik innen ({here}), hogy visszaolvasták a(z) {drive} meghajtóról; a Fotók között marad, és onnan nyílik meg, amíg a meghajtó csatlakoztatva van."
+ "sync.driveMapStorage": "A fotó csak azután távozik innen ({here}), hogy visszaolvasták a(z) {drive} meghajtóról; a Fotók között marad, és onnan nyílik meg, amíg a meghajtó csatlakoztatva van.",
+ "mail.storage": "Tárhely",
+ "mail.storageHas": "{size} · levél: {n}",
+ "mail.storageTotal": "Összesen: {size} · levél: {n}",
+ "mail.openFolder": "Mappa megnyitása"
 }

@@ -1699,6 +1699,16 @@ test('the mail index, growing while mail arrives, is fetched as it was offered (
     offer = (await manifest([{ path: rel, sha256: sha(v2), size: v2.length }])).body.have.find(h => h.path === rel)
     assert.deepEqual([offer.sha256, offer.replaces], [sha(v3), sha(v2)])
     assert.equal((await fetch(sha(Buffer.from('never offered')))).status, 404)
+    // ten minutes on, a snapshot goes — one of an earlier run too, which nothing here remembers
+    const dir = path.join(tmp, 'data', 'sync', 'offered'), stale = path.join(dir, 'f'.repeat(64))
+    fs.writeFileSync(stale, 'from yesterday'); const old = new Date(Date.now() - 11 * 60_000); fs.utimesSync(stale, old, old)
+    const fresh = fs.readdirSync(dir).filter(n => n !== 'f'.repeat(64))
+    assert.ok(fresh.length >= 1)
+    server.pruneSnapshots()
+    assert.deepEqual(fs.readdirSync(dir).sort(), fresh.sort(), 'the old one went, the new ones stay')
+    server.pruneSnapshots(Date.now() + 11 * 60_000)
+    assert.deepEqual(fs.readdirSync(dir), [])
+    assert.equal((await fetch(sha(v2))).status, 404, 'and is not served any more')
   } finally {
     await server.stop()
     fs.rmSync(tmp, { recursive: true })

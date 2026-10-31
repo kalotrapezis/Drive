@@ -2402,5 +2402,9 @@
  "sync.trashHere": "Sur {here}",
  "sync.trashOnDrive": "Sur {drive}",
  "sync.driveHowTrash": "Les éléments supprimés prennent de la place sur {drive} au lieu de ce PC.",
- "sync.driveMapStorage": "Une photo quitte {here} seulement après avoir été relue depuis {drive} ; elle reste dans Galerie et s’ouvre de là tant que le disque est branché."
+ "sync.driveMapStorage": "Une photo quitte {here} seulement après avoir été relue depuis {drive} ; elle reste dans Galerie et s’ouvre de là tant que le disque est branché.",
+ "mail.storage": "Stockage",
+ "mail.storageHas": "{size} · e-mails: {n}",
+ "mail.storageTotal": "Au total: {size} · e-mails: {n}",
+ "mail.openFolder": "Ouvrir le dossier"
 }

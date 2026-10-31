@@ -2313,5 +2313,9 @@
  "sync.trashHere": "On {here}",
  "sync.trashOnDrive": "On {drive}",
  "sync.driveHowTrash": "Deleted items take room on {drive} instead of this computer.",
- "sync.driveMapStorage": "A photo leaves {here} only after it is read back from {drive}; it stays in Photos and opens from there while the drive is plugged in."
+ "sync.driveMapStorage": "A photo leaves {here} only after it is read back from {drive}; it stays in Photos and opens from there while the drive is plugged in.",
+ "mail.storage": "Storage",
+ "mail.storageHas": "{size} · {n} mails",
+ "mail.storageTotal": "In all: {size} · {n} mails",
+ "mail.openFolder": "Open folder"
 }

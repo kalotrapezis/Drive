@@ -2402,5 +2402,9 @@
  "sync.trashHere": "{here}",
  "sync.trashOnDrive": "Diskā {drive}",
  "sync.driveHowTrash": "Dzēstie vienumi aizņem vietu diskā {drive}, nevis šajā datorā.",
- "sync.driveMapStorage": "{here} atbrīvo fotoattēlu tikai pēc tam, kad tas ir nolasīts atpakaļ no {drive}; tas paliek lietotnē Fotoattēli un tiek atvērts no turienes, kamēr disks ir pievienots."
+ "sync.driveMapStorage": "{here} atbrīvo fotoattēlu tikai pēc tam, kad tas ir nolasīts atpakaļ no {drive}; tas paliek lietotnē Fotoattēli un tiek atvērts no turienes, kamēr disks ir pievienots.",
+ "mail.storage": "Krātuve",
+ "mail.storageHas": "{size} · vēstuļu: {n}",
+ "mail.storageTotal": "Kopā: {size} · vēstuļu: {n}",
+ "mail.openFolder": "Atvērt mapi"
 }

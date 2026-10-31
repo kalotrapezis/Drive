@@ -4,6 +4,8 @@ import type { Media } from './timeline'
 /** The AI switch (ai.js): on or off, and per app; shared by every device. */
 export interface AiSettings { enabled: boolean; apps: Record<string, boolean>; chosen: boolean }
 /** Mail (mail.js): accounts.json, a line of index.jsonl, the unified folders' counts, an opened mail. */
+/** «Αποθήκευση»: where each account's mail is kept, how much it takes and how many mails (mail.storage) */
+export interface MailStorageInfo { root: string; bytes: number; mails: number; accounts: { id: string; name: string; address: string; color: string; path: string; bytes: number; mails: number }[] }
 export type MailCheck = 'push' | 5 | 15 | 30 | 'manual'
 export type MailRole = 'Inbox' | 'Drafts' | 'Sent' | 'Archive' | 'Spam' | 'Trash'
 export interface MailAddress { name: string; address: string }
@@ -279,6 +281,8 @@ declare global {
         remove(id: string): Promise<void>
         sync(): Promise<void>
         check(): Promise<MailCheck>
+        storage(): Promise<MailStorageInfo>
+        openFolder(id?: string): Promise<void>
         setCheck(c: MailCheck): Promise<MailCheck>
         act(op: MailOp, ids: string[], to?: MailRole): Promise<void>
         draftFor(id: string | null, kind: MailDraftKind, account?: string): Promise<MailDraft>

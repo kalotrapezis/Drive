@@ -2313,5 +2313,9 @@
  "sync.trashHere": "{here}",
  "sync.trashOnDrive": "Kettal {drive}",
  "sync.driveHowTrash": "Kustutatud üksused võtavad ruumi kettal {drive}, mitte sellel arvutil.",
- "sync.driveMapStorage": "{here} vabastab foto alles pärast seda, kui see on kettalt {drive} tagasi loetud; see jääb rakendusse Fotod ja avatakse sealt, kuni ketas on ühendatud."
+ "sync.driveMapStorage": "{here} vabastab foto alles pärast seda, kui see on kettalt {drive} tagasi loetud; see jääb rakendusse Fotod ja avatakse sealt, kuni ketas on ühendatud.",
+ "mail.storage": "Salvestusruum",
+ "mail.storageHas": "{size} · kirju: {n}",
+ "mail.storageTotal": "Kokku: {size} · kirju: {n}",
+ "mail.openFolder": "Ava kaust"
 }

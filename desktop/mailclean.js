@@ -152,6 +152,13 @@ function garbage(mail, now = Date.now()) {
     const keep = list.find(e => !e.gone && e.uidValidity !== 'local') ?? list.find(e => !e.gone) ?? list[0]
     for (const e of list) if (e !== keep && e.file !== keep.file && size(e.file) === size(keep.file)) { out.duplicates.push({ keep: keep.id, drop: e.id }); out.bytes += size(e.file) }
   }
+  // and across folders: a mail gone from one that lives on in another (both were on the server), the gone one's file (mail.dropCopies)
+  const live = new Map()
+  for (const e of mail.index.all()) if (e.file && e.messageId && !e.gone) live.set(`${e.account}\n${e.messageId}`, e)
+  for (const e of mail.index.all()) {
+    const keep = e.file && e.messageId && e.gone && live.get(`${e.account}\n${e.messageId}`)
+    if (keep && keep.folder !== e.folder && keep.file !== e.file && size(e.file) === size(keep.file) && !out.duplicates.some(d => d.drop === e.id)) { out.duplicates.push({ keep: keep.id, drop: e.id }); out.bytes += size(e.file) }
+  }
   for (const r of out.lonely) out.bytes += dirSize(path.join(mail.root, r))
   return out
 }

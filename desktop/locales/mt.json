@@ -2491,5 +2491,9 @@
  "sync.trashHere": "Fuq {here}",
  "sync.trashOnDrive": "Fuq {drive}",
  "sync.driveHowTrash": "L-oġġetti mħassra jieħdu l-ispazju fuq {drive} minflok fuq dan il-kompjuter.",
- "sync.driveMapStorage": "Ritratt jitlaq minn {here} biss wara li jinqara lura minn {drive}; jibqa’ fir-Ritratti u jinfetaħ minn hemm sakemm id-disk ikun imdaħħal."
+ "sync.driveMapStorage": "Ritratt jitlaq minn {here} biss wara li jinqara lura minn {drive}; jibqa’ fir-Ritratti u jinfetaħ minn hemm sakemm id-disk ikun imdaħħal.",
+ "mail.storage": "Ħażna",
+ "mail.storageHas": "{size} · emails: {n}",
+ "mail.storageTotal": "B’kollox: {size} · emails: {n}",
+ "mail.openFolder": "Iftaħ il-kartella"
 }

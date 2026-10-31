@@ -2313,5 +2313,9 @@
  "sync.trashHere": "Op {here}",
  "sync.trashOnDrive": "Op {drive}",
  "sync.driveHowTrash": "Verwijderde items nemen ruimte in op {drive} in plaats van op deze pc.",
- "sync.driveMapStorage": "Een foto verlaat {here} pas nadat hij van {drive} is teruggelezen; hij blijft in Foto's en wordt van daaruit geopend zolang de schijf is aangesloten."
+ "sync.driveMapStorage": "Een foto verlaat {here} pas nadat hij van {drive} is teruggelezen; hij blijft in Foto's en wordt van daaruit geopend zolang de schijf is aangesloten.",
+ "mail.storage": "Opslag",
+ "mail.storageHas": "{size} · mails: {n}",
+ "mail.storageTotal": "In totaal: {size} · mails: {n}",
+ "mail.openFolder": "Map openen"
 }

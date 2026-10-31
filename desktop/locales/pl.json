@@ -2491,5 +2491,9 @@
  "sync.trashHere": "{here}",
  "sync.trashOnDrive": "Na {drive}",
  "sync.driveHowTrash": "Usunięte elementy zajmują miejsce na {drive} zamiast na tym komputerze.",
- "sync.driveMapStorage": "Zdjęcie opuszcza {here} dopiero po odczytaniu go z powrotem z {drive}; zostaje w Galerii i otwiera się stamtąd, dopóki dysk jest podłączony."
+ "sync.driveMapStorage": "Zdjęcie opuszcza {here} dopiero po odczytaniu go z powrotem z {drive}; zostaje w Galerii i otwiera się stamtąd, dopóki dysk jest podłączony.",
+ "mail.storage": "Magazyn",
+ "mail.storageHas": "{size} · e-maili: {n}",
+ "mail.storageTotal": "Razem: {size} · e-maili: {n}",
+ "mail.openFolder": "Otwórz folder"
 }

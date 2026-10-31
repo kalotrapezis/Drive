@@ -2402,5 +2402,9 @@
  "sync.trashHere": "Pe {here}",
  "sync.trashOnDrive": "Pe {drive}",
  "sync.driveHowTrash": "Elementele șterse ocupă spațiu pe {drive} în loc de acest PC.",
- "sync.driveMapStorage": "O fotografie pleacă de pe {here} doar după ce este citită înapoi de pe {drive}; rămâne în Foto și se deschide de acolo cât timp unitatea este conectată."
+ "sync.driveMapStorage": "O fotografie pleacă de pe {here} doar după ce este citită înapoi de pe {drive}; rămâne în Foto și se deschide de acolo cât timp unitatea este conectată.",
+ "mail.storage": "Stocare",
+ "mail.storageHas": "{size} · e-mailuri: {n}",
+ "mail.storageTotal": "În total: {size} · e-mailuri: {n}",
+ "mail.openFolder": "Deschide dosarul"
 }

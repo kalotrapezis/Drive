@@ -1398,6 +1398,17 @@ app.whenReady().then(() => {
   ipcMain.handle('mail:signatures', () => mail.signatures())
   ipcMain.handle('mail:setSignature', (_, address, sig) => { if (!mail.accounts().some(a => a.address === address)) throw new Error(t('mail.badServer')); mail.setSignature(address, sig) })
   ipcMain.handle('mail:setAccount', (_, id, changes) => mail.setAccount(String(id), changes))
+  ipcMain.handle('mail:storage', () => { // the paths as the user knows them: ~/Tetra/.System/Mail/Shared/<address>
+    const s = mail.storage(), home = require('node:os').homedir(), short = p => p.startsWith(home) ? '~' + p.slice(home.length) : p
+    return { ...s, root: short(s.root), accounts: s.accounts.map(a => ({ ...a, path: short(a.path) })) }
+  })
+  ipcMain.handle('mail:openFolder', async (_, id) => {
+    const dir = mail.folderOf(id)
+    if (!dir) throw new Error(t('mail.fileGone'))
+    fs.mkdirSync(dir, { recursive: true }) // an account with no mail yet still has a place
+    const error = await shell.openPath(dir)
+    if (error) throw new Error(error)
+  })
   ipcMain.handle('mail:openFile', async (_, rel) => {
     const full = mail.inside(rel)
     if (!full) throw new Error(t('mail.fileGone'))

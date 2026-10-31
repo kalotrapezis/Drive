@@ -65,7 +65,9 @@ test('mail: the roles come from SPECIAL-USE first, INBOX is always the Inbox, \\
     { path: '[Gmail]', specialUse: '\\Sent', flags: new Set(['\\Noselect']) }, { path: '[Gmail]/Σταλμένα', specialUse: '\\Sent' },
     { path: '[Gmail]/All Mail', specialUse: '\\All' },
   ]
-  assert.deepEqual(roles(list), { Inbox: 'INBOX', Spam: '[Gmail]/Ανεπιθύμητα', Sent: '[Gmail]/Σταλμένα' })
+  // Gmail has no \\Archive: All Mail stands in for it (headers keeps only what no other folder holds)
+  assert.deepEqual(roles(list), { Inbox: 'INBOX', Spam: '[Gmail]/Ανεπιθύμητα', Sent: '[Gmail]/Σταλμένα', Archive: '[Gmail]/All Mail' })
+  assert.equal(roles([...list, { path: 'Archive', specialUse: '\\Archive' }]).Archive, 'Archive', 'a real Archive wins')
 })
 
 test('mail: the servers are found from known providers, Thunderbird\'s database, the MX, then the usual names', async () => {
@@ -370,4 +372,78 @@ test('mail: «Έλεγχος για νέα» — by hand, a look only when asked
     fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ check: 'push', setBy: '24129PN74G' }))
     await until(() => c.events.includes('idle'))
   } finally { mail.stopAll(); await new Promise(r => setTimeout(r, 100)); fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('mail: one mail in INBOX and in a webmail\'s Archive.Inbox — once the server drops one, its file here goes too; the scan finds such copies', async () => {
+  const dir = tmp()
+  const both = message('Κόμικς', 'comic')
+  const folders = { INBOX: { validity: 1, next: 2, msgs: { 1: both } }, 'Archive/Inbox': { validity: 2, next: 2, msgs: { 1: { ...both, flags: new Set() } } }, Archive: { use: '\\Archive', validity: 3, next: 1, msgs: {} } }
+  const c = memoryServer(folders)
+  const mail = new Mail(dir, { secret: () => 'x', connect: () => c })
+  const acc = { id: 'me@sch.gr' }, run = { stop: false }
+  try {
+    mail.saveAccounts([acc])
+    const pass = async () => { for (const [role, box, main] of [['Inbox', 'INBOX', 'INBOX'], ['Archive', 'Archive/Inbox', 'Archive']]) { await mail.headers(c, acc, role, box, main); await mail.bodies(c, acc, role, box, run, main) } }
+    await pass()
+    const [inbox, archived] = [mail.list('Inbox')[0], mail.list('Archive')[0]]
+    assert.ok(inbox.file && archived.file && inbox.file !== archived.file, 'both on the server: both kept')
+    mail.dropCopies(acc)
+    assert.ok(fs.existsSync(path.join(dir, inbox.file)), 'nothing goes while the server has both')
+    delete folders.INBOX.msgs[1]
+    await mail.headers(c, acc, 'Inbox', 'INBOX')
+    const care = require('../mailclean')
+    assert.deepEqual(care.garbage(mail).duplicates, [{ keep: archived.id, drop: inbox.id }], 'the first-run scan finds it')
+    mail.dropCopies(acc)
+    assert.ok(!fs.existsSync(path.join(dir, inbox.file)), 'the Inbox copy went')
+    assert.ok(fs.existsSync(path.join(dir, archived.file)), 'the Archive copy stays')
+    assert.equal(mail.index.get(inbox.id).movedTo, archived.id)
+    mail.index.flush()
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('mail: Gmail\'s All Mail is the Archive — only what no other folder holds; archiving is leaving the Inbox', async () => {
+  const dir = tmp()
+  const kept = message('Στα εισερχόμενα', 'in'), old = message('Αρχειοθετημένο', 'old'), sent = message('Στάλθηκε', 'sent')
+  const folders = { INBOX: { validity: 1, next: 2, msgs: { 1: kept } }, '[Gmail]/Sent Mail': { use: '\\Sent', validity: 2, next: 2, msgs: { 1: sent } },
+    '[Gmail]/All Mail': { use: '\\All', validity: 3, next: 4, msgs: { 1: { ...kept, flags: new Set() }, 2: old, 3: { ...sent, flags: new Set() } } } }
+  const c = memoryServer(folders)
+  const mail = new Mail(dir, { secret: () => 'x', connect: () => c })
+  const acc = { id: 'me@gmail.com', server: {} }, run = { stop: false }
+  try {
+    mail.saveAccounts([acc])
+    const boxes = roles(await c.list())
+    assert.equal(boxes.Archive, '[Gmail]/All Mail')
+    for (const [role, box] of [['Inbox', 'INBOX'], ['Sent', '[Gmail]/Sent Mail'], ['Archive', '[Gmail]/All Mail']]) await mail.headers(c, acc, role, box, box, run, box === boxes.Archive)
+    assert.deepEqual(mail.list('Archive').map(m => m.subject), ['Αρχειοθετημένο'], 'not the Inbox\'s or Sent\'s mail a second time')
+    assert.equal(run.skipped.get('[Gmail]/All Mail/3').size, 2, 'and their envelopes are not fetched again')
+    // archived from the Inbox: into All Mail itself, no year folder made under [Gmail]
+    await mail.act({ op: 'archive', ids: [mail.list('Inbox')[0].id] })
+    assert.ok(!c.calls.some(x => x[0] === 'create'))
+    assert.deepEqual(c.calls.find(x => x[0] === 'move').slice(1, 4), ['INBOX', '1', '[Gmail]/All Mail'])
+    delete folders['[Gmail]/All Mail'].msgs[4] // Gmail keeps one copy: the label went, the mail is the one already there
+    await mail.headers(c, acc, 'Inbox', 'INBOX')
+    await mail.headers(c, acc, 'Archive', '[Gmail]/All Mail', '[Gmail]/All Mail', run, true)
+    assert.deepEqual(mail.list('Archive').map(m => m.subject).sort(), ['Αρχειοθετημένο', 'Στα εισερχόμενα'], 'once out of the Inbox it is archived mail')
+    mail.index.flush()
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('mail: a name is cut by whole characters (half an emoji made the phone\'s name another file), and «Αποθήκευση» says where, how much, how many', () => {
+  const name = clean('Laptop μόνο 199€ + ' + '🎇'.repeat(60), 120)
+  assert.ok(Buffer.byteLength(name) <= 120)
+  assert.ok(!/[\ud800-\udfff]/.test(name.replace(/[\ud800-\udbff][\udc00-\udfff]/g, '')), 'no half emoji')
+  const dir = tmp()
+  try {
+    const mail = new Mail(dir, { secret: () => 'x' })
+    mail.saveAccounts([{ id: 'a@b.gr', name: 'Work', color: '#e5534b' }])
+    fs.mkdirSync(path.join(dir, 'a@b.gr/Inbox/2026/x.files'), { recursive: true })
+    fs.writeFileSync(path.join(dir, 'a@b.gr/Inbox/2026/x.eml'), 'x'.repeat(100))
+    fs.writeFileSync(path.join(dir, 'a@b.gr/Inbox/2026/x.files/a.pdf'), 'y'.repeat(50))
+    const s = mail.storage()
+    assert.deepEqual(s.accounts.map(a => [a.name, a.bytes, a.mails, a.path]), [['Work', 150, 1, path.join(dir, 'a@b.gr')]])
+    assert.deepEqual([s.bytes, s.mails], [150, 1])
+    assert.equal(mail.folderOf('a@b.gr'), path.join(dir, 'a@b.gr'))
+    assert.equal(mail.folderOf('../../etc'), null, 'nothing outside the archive opens')
+    assert.equal(mail.folderOf('a@b.gr/Inbox'), null)
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })

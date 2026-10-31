@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { MailAccount, MailAddress, MailCheck, MailCleanPlan, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
+import type { MailAccount, MailAddress, MailCheck, MailStorageInfo, MailCleanPlan, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
 import { formatBytes } from './timeline'
 import { arrange, dayKey, DEFAULT_VIEW, type MailView } from './mailView'
 import { Confirm, Modal, errorText } from './Dialogs'
@@ -137,6 +137,7 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
   </Modal>)
   const addAccount = () => setDialog(<AddAccount onClose={close} onDone={() => { close(); reload() }} />)
   const manage = () => data && setDialog(<Accounts data={data} onClose={close} onAdd={addAccount} onRenamed={reload}
+    onStorage={id => setDialog(<MailStorage only={id} onClose={manage} say={say} />)}
     onRemove={a => setDialog(<Confirm title={t('mail.removeTitle', { name: a.name })} body={t('mail.removeBody')} action={t('common.remove')} danger onClose={close}
       onConfirm={() => window.drive.mail.remove(a.id).then(() => { close(); reload() }, e => say(errorText(e)))} />)} />)
   const filter = () => setDialog(<FilterDialog initial={view} accounts={data?.accounts ?? []} onClose={close}
@@ -159,6 +160,7 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
         { key: 'sync', rank: 7, icon: 'refresh', label: t('mail.sync'), onClick: () => window.drive.mail.sync() },
         { key: 'filter', rank: 6, cls: filtered ? 'on' : '', icon: 'filter', label: t('mail.filter'), onClick: filter },
         { key: 'accounts', rank: 8, icon: 'person', label: t('mail.accounts'), onClick: manage },
+        { key: 'storage', rank: 9, icon: 'storage', label: t('mail.storage'), onClick: () => setDialog(<MailStorage onClose={close} say={say} />) },
         ...(draft ? [
           { key: 'send', rank: 0, cls: 'send', label: t('mail.send'), icon: 'send', onClick: () => composer.current?.send(), sep: true, wide: true },
           { key: 'save', rank: 1, label: t('mail.saveDraft'), icon: 'save', onClick: () => composer.current?.save(), wide: true },
@@ -354,7 +356,7 @@ function FilterDialog({ initial, accounts, onChange, onClose }: { initial: MailV
   )
 }
 
-function Accounts({ data, onAdd, onRemove, onRenamed, onClose }: { data: Data; onAdd: () => void; onRemove: (a: MailAccount) => void; onRenamed: () => void; onClose: () => void }) {
+function Accounts({ data, onAdd, onRemove, onRenamed, onStorage, onClose }: { data: Data; onAdd: () => void; onRemove: (a: MailAccount) => void; onRenamed: () => void; onStorage: (id: string) => void; onClose: () => void }) {
   return (
     <Modal onClose={onClose}>
       <h3>{t('mail.accounts')}</h3>
@@ -372,6 +374,7 @@ function Accounts({ data, onAdd, onRemove, onRenamed, onClose }: { data: Data; o
               <select defaultValue={a.archiveBy ?? 'year'} onChange={e => window.drive.mail.setAccount(a.id, { archiveBy: e.target.value as 'year' })}>
                 <option value="year">{t('mail.byYear')}</option><option value="month">{t('mail.byMonth')}</option><option value="none">{t('mail.byNone')}</option>
               </select></label>}</span>
+          <button className="round flat" title={t('mail.storage')} onClick={() => onStorage(a.id)}><Icon name="storage" size={20} /></button>
           {!a.shadow && <button className="round flat" title={t('common.remove')} onClick={() => onRemove(a)}><Icon name="trash" size={20} /></button>}
         </div>
       })}
@@ -379,6 +382,36 @@ function Accounts({ data, onAdd, onRemove, onRenamed, onClose }: { data: Data; o
         <button className="text-button" onClick={onClose}>{t('common.close')}</button>
         <button className="filled-button" onClick={onAdd}>{t('mail.addAccount')}</button>
       </div>
+    </Modal>
+  )
+}
+
+/**
+ * «Αποθήκευση» (the user, 31 Oct: "how can I access my mails if the folder is hidden in the system folder?"): where each
+ * account's mail is kept on this computer, how much it takes and how many mails, and «Άνοιγμα φακέλου» in the file manager.
+ * The phone's Mail says the same in the same words (MAIL_PLAN §17).
+ */
+function MailStorage({ only, onClose, say }: { only?: string; onClose: () => void; say: (s: string) => void }) {
+  const [info, setInfo] = useState<MailStorageInfo | null>(null)
+  useEffect(() => { window.drive.mail.storage().then(setInfo, e => say(errorText(e))) }, [])
+  const open = (id?: string) => window.drive.mail.openFolder(id).catch(e => say(errorText(e)))
+  const gb = (n: number) => n >= 1e9 ? `${(n / 1e9).toLocaleString(locale(), { maximumFractionDigits: 1 })} GB` : n >= 1e6 ? `${Math.round(n / 1e6).toLocaleString(locale())} MB` : `${Math.ceil(n / 1e3).toLocaleString(locale())} KB`
+  const shown = info?.accounts.filter(a => !only || a.id === only) ?? []
+  return (
+    <Modal onClose={onClose}>
+      <h3><Icon name="storage" />{t('mail.storage')}</h3>
+      {!info ? <span className="spinner" /> : <>
+        {shown.map(a => (
+          <div key={a.id} className="mail-store">
+            <div className="mail-store-head"><span className="mail-dot" style={{ background: a.color }} /><strong>{a.name}</strong><small>{a.address}</small></div>
+            <p>{t('mail.storageHas', { size: gb(a.bytes), n: a.mails.toLocaleString(locale()) })}</p>
+            <code className="mail-store-path">{a.path}</code>
+            <button className="outline-button" onClick={() => open(a.id)}><Icon name="open" size={18} />{t('mail.openFolder')}</button>
+          </div>
+        ))}
+        {!only && <p className="mail-store-total">{t('mail.storageTotal', { size: gb(info.bytes), n: info.mails.toLocaleString(locale()) })} <button className="link" onClick={() => open()}>{t('mail.openFolder')}</button></p>}
+      </>}
+      <div className="dialog-actions"><button className="filled-button" onClick={onClose}>{t('common.close')}</button></div>
     </Modal>
   )
 }

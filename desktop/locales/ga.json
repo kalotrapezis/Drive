@@ -2580,5 +2580,9 @@
  "sync.trashHere": "Ar {here}",
  "sync.trashOnDrive": "Ar {drive}",
  "sync.driveHowTrash": "Tógann míreanna scriosta spás ar {drive} in ionad an ríomhaire seo.",
- "sync.driveMapStorage": "Ní fhágann grianghraf {here} ach tar éis é a léamh ar ais ó {drive}; fanann sé i nGrianghraif agus osclaítear as sin é fad is atá an tiomántán plugáilte isteach."
+ "sync.driveMapStorage": "Ní fhágann grianghraf {here} ach tar éis é a léamh ar ais ó {drive}; fanann sé i nGrianghraif agus osclaítear as sin é fad is atá an tiomántán plugáilte isteach.",
+ "mail.storage": "Stóras",
+ "mail.storageHas": "{size} · ríomhphost: {n}",
+ "mail.storageTotal": "Iomlán: {size} · ríomhphost: {n}",
+ "mail.openFolder": "Oscail fillteán"
 }
