@@ -80,6 +80,7 @@ const FILE_CALLS = ['list', 'search', 'withTag', 'destinations', 'copy', 'move',
 const NOTE_CALLS = ['list', 'create', 'save', 'snapshot', 'history', 'restoreVersion', 'remove']
 const CALENDAR_CALLS = ['calendars', 'occurrences', 'save', 'saveDay', 'skipDay', 'endBefore', 'split', 'trash', 'move', 'keep', 'newCalendar', 'setCalendar', 'deleteCalendar', 'scheduleEvent', 'trashed', 'restore']
 let calendar = null, reminderTimer = null, calendarIncoming = []
+let aiSwitch = null // the user's AI switch (ai.js), shared by every device
 // Contacts (Drive-Android Plan.md § Contacts): .System/Contacts/Shared, one vCard a person; the window's calls, checked by name
 const CONTACTS_CALLS = ['list', 'save', 'trash', 'keep', 'trashed', 'restore', 'pairs', 'merge', 'notTheSame']
 let contacts = null
@@ -1193,7 +1194,9 @@ app.whenReady().then(() => {
   const assistWords = () => setting('assistantWords') ?? 'Καλοτραπέζης, Θεολόγος, Tetra, ΥΠΕΧΩΔΕ'
   const assistBias = () => assistant.terms(assistWords(), setting('assistantContactWords') === '1' ? contacts.list().filter(c => c.favourite).map(c => c.name).slice(0, 50) : [])
   const assistPause = () => Math.min(6000, Math.max(1000, Number(setting('assistantPause')) || 2500))
-  const api = new assistant.Mistral({ key: assistKey, bill: new assistant.Bill(meterAdd) })
+  // the AI switch: asked before anything is sent to Mistral; no choice yet, on only where a key is already set
+  aiSwitch = new (require('./ai').AiSwitch)(path.join(system.dir('Assistant', 'Shared', files.system), 'ai.json'), { hasKey: () => !!assistKey() })
+  const api = new assistant.Mistral({ key: assistKey, bill: new assistant.Bill(meterAdd), allowed: () => aiSwitch.on() })
   /** The voice that reads: 'system' (this computer's own, free) or a Mistral voice's id, Mistral's first when none was picked. */
   const assistVoice = async () => {
     const v = setting('assistantVoice')
@@ -1203,7 +1206,7 @@ app.whenReady().then(() => {
     setSetting('assistantVoice', first.id); setSetting('assistantVoiceName', first.name)
     return first.id
   }
-  const assistTools = new assistant.Tools({ calendar, timers, notes, files, contacts, maps, mail,
+  const assistTools = new assistant.Tools({ calendar, timers, notes, files, contacts, maps, mail, allowed: app => aiSwitch.allows(app),
     // the Calendar's, Timer's and Contacts' folders are watched (shown, the devices told); Notes' is not
     changed: what => { if (what === 'notes') { win?.webContents.send('notes-changed'); sync?.nudge().catch(() => {}) } },
     search: async q => { const r = await api.conversation(q, 'web_search', 'Search the web and answer briefly with the facts found.'); return r.text + (r.sources.length ? '\nSources: ' + r.sources.slice(0, 3).join('; ') : '') },
@@ -1260,7 +1263,7 @@ app.whenReady().then(() => {
     const key = assistKey()
     if (!key) throw new Error(t('assistant.noKey'))
     const send = x => { if (!e.sender.isDestroyed()) e.sender.send('assistant-live', x) }
-    live = new assistant.Live({ key, bias: assistBias(), pauseMs: assistPause(),
+    live = new assistant.Live({ key, bias: assistBias(), pauseMs: assistPause(), allowed: () => aiSwitch.on(),
       heard: text => send({ type: 'heard', text }), turn: text => send({ type: 'turn', text }), failed: err => send({ type: 'error', message: err.message }) })
     live.started = Date.now()
   })
@@ -1278,13 +1281,21 @@ app.whenReady().then(() => {
   function registerShortcuts() {
     globalShortcut.unregisterAll()
     shortcutsOn = {}
-    if (process.env.DRIVE_HIDDEN) return
+    if (process.env.DRIVE_HIDDEN || !aiSwitch.on()) return // the AI switched off: no shortcut opens it
     for (const [what, acc] of Object.entries(shortcuts())) {
       if (!acc) continue
       try { shortcutsOn[what] = globalShortcut.register(acc, () => assistantCommand(what)) } catch (e) { console.warn('[assistant] shortcut', acc, e.message); shortcutsOn[what] = false }
     }
   }
   registerShortcuts()
+  ipcMain.handle('ai:get', () => aiSwitch.read())
+  ipcMain.handle('ai:set', (_, changes) => { const r = aiSwitch.set(changes ?? {}); if (!r.enabled) { hush(); live?.end(); live = null } registerShortcuts(); win?.webContents.send('ai-changed'); return r })
+  // changed on the phone or the tablet: sync writes the file, the window and the shortcuts follow
+  try {
+    let settle = null
+    fs.mkdirSync(path.dirname(aiSwitch.file), { recursive: true })
+    fs.watch(path.dirname(aiSwitch.file), (_, name) => { if (name !== 'ai.json') return; clearTimeout(settle); settle = setTimeout(() => { registerShortcuts(); win?.webContents.send('ai-changed') }, 300) })
+  } catch (e) { console.warn('[ai] cannot watch', e.message) }
   const meterNow = () => { const m = assistant.Meter.of(setting('assistantMeter')); return { total: m.total, trip: m.trip, since: m.since, past: m.past } }
   // Mail, read-only (mail.js). The password is checked against the server before it is kept, encrypted, in settings.
   const isAddress = a => typeof a === 'string' && a.length < 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)
@@ -1474,7 +1485,7 @@ const argCommand = argv => Object.entries(ARGS).find(([a]) => argv.includes(a))?
 app.on('second-instance', (_, argv) => { const what = argCommand(argv); if (what) assistantCommand(what); else showWindow() })
 /** A shortcut or `tetra --assistant`: open (or, when it is already in front, close) AI Assist, talk, or live. */
 function assistantCommand(what) {
-  if (!win) return
+  if (!win || !aiSwitch?.on()) return
   if (what === 'toggle' && win.isVisible() && win.isFocused()) { win.webContents.send('assistant-command', 'toggle'); return }
   showWindow()
   win.webContents.send('assistant-command', what === 'toggle' ? 'open' : what)

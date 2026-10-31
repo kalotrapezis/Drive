@@ -2311,5 +2311,11 @@
  "assistant.mailSent": "Trimis către {to}.",
  "assistant.mailKept": "Netrimis: rămâne în Ciorne.",
  "mail.accountName": "Numele contului",
- "mail.accountNameHint": "de ex. Serviciu, Personal, Master"
+ "mail.accountNameHint": "de ex. Serviciu, Personal, Master",
+ "assistant.aiOff": "AI Assist este oprit în Setări: nu s-a trimis nimic.",
+ "assistant.aiMaster": "Folosește AI Assist",
+ "assistant.aiMasterHow": "Oprit, nu se trimite absolut nimic către un serviciu de IA, iar AI Assist este ascuns — pe calculator, pe telefon și pe tabletă.",
+ "assistant.aiApps": "Ce poate folosi AI Assist",
+ "assistant.aiAppsHow": "O aplicație oprită aici nu este nici citită, nici modificată de AI Assist, pe niciun dispozitiv.",
+ "assistant.aiWeb": "Internetul (căutare, YouTube, imagini)"
 }

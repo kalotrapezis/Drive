@@ -2222,5 +2222,11 @@
  "assistant.mailSent": "Skickat till {to}.",
  "assistant.mailKept": "Inte skickat: det ligger kvar i Utkast.",
  "mail.accountName": "Kontonamn",
- "mail.accountNameHint": "t.ex. Jobb, Privat, Master"
+ "mail.accountNameHint": "t.ex. Jobb, Privat, Master",
+ "assistant.aiOff": "AI Assist är avstängt i Inställningar: ingenting skickades.",
+ "assistant.aiMaster": "Använd AI Assist",
+ "assistant.aiMasterHow": "Av: ingenting alls skickas till någon AI-tjänst, och AI Assist döljs — på datorn, telefonen och surfplattan.",
+ "assistant.aiApps": "Vad AI Assist får använda",
+ "assistant.aiAppsHow": "En app som är avstängd här varken läses eller ändras av AI Assist, på någon enhet.",
+ "assistant.aiWeb": "Webben (sökning, YouTube, bilder)"
 }

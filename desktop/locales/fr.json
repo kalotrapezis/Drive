@@ -2311,5 +2311,11 @@
  "assistant.mailSent": "Envoyé à {to}.",
  "assistant.mailKept": "Non envoyé : il reste dans Brouillons.",
  "mail.accountName": "Nom du compte",
- "mail.accountNameHint": "p. ex. Travail, Personnel, Master"
+ "mail.accountNameHint": "p. ex. Travail, Personnel, Master",
+ "assistant.aiOff": "AI Assist est désactivé dans Paramètres : rien n'a été envoyé.",
+ "assistant.aiMaster": "Utiliser AI Assist",
+ "assistant.aiMasterHow": "Désactivé, rien du tout n'est envoyé à un service d'IA et AI Assist est masqué — sur l'ordinateur, le téléphone et la tablette.",
+ "assistant.aiApps": "Ce que AI Assist peut utiliser",
+ "assistant.aiAppsHow": "Une application désactivée ici n'est ni lue ni modifiée par AI Assist, sur tous les appareils.",
+ "assistant.aiWeb": "Le web (recherche, YouTube, images)"
 }

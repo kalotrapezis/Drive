@@ -2222,5 +2222,11 @@
  "assistant.mailSent": "Изпратено до {to}.",
  "assistant.mailKept": "Не е изпратено: остава в Чернови.",
  "mail.accountName": "Име на акаунта",
- "mail.accountNameHint": "напр. Работа, Лично, Магистратура"
+ "mail.accountNameHint": "напр. Работа, Лично, Магистратура",
+ "assistant.aiOff": "AI Assist е изключен в Настройки: нищо не беше изпратено.",
+ "assistant.aiMaster": "Използване на AI Assist",
+ "assistant.aiMasterHow": "Изключено, изобщо нищо не се изпраща към AI услуга и AI Assist е скрит — на компютъра, телефона и таблета.",
+ "assistant.aiApps": "Какво може да използва AI Assist",
+ "assistant.aiAppsHow": "Приложение, изключено тук, нито се чете, нито се променя от AI Assist, на всяко устройство.",
+ "assistant.aiWeb": "Интернет (търсене, YouTube, снимки)"
 }

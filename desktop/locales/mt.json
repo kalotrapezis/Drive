@@ -2400,5 +2400,11 @@
  "assistant.mailSent": "Intbagħat lil {to}.",
  "assistant.mailKept": "Ma ntbagħatx: jibqa' fl-Abbozzi.",
  "mail.accountName": "Isem tal-kont",
- "mail.accountNameHint": "eż. Xogħol, Personali, Masters"
+ "mail.accountNameHint": "eż. Xogħol, Personali, Masters",
+ "assistant.aiOff": "AI Assist huwa mitfi f'Settings: ma ntbagħat xejn.",
+ "assistant.aiMaster": "Uża AI Assist",
+ "assistant.aiMasterHow": "Mitfi, ma jintbagħat xejn xejn lil servizz tal-AI u AI Assist jinħeba — fuq il-kompjuter, it-telefon u t-tablet.",
+ "assistant.aiApps": "X'jista' juża AI Assist",
+ "assistant.aiAppsHow": "App mitfija hawn la tinqara u lanqas tinbidel minn AI Assist, fuq kull apparat.",
+ "assistant.aiWeb": "L-internet (tfittxija, YouTube, stampi)"
 }

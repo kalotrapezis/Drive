@@ -2311,5 +2311,11 @@
  "assistant.mailSent": "Inviato a {to}.",
  "assistant.mailKept": "Non inviato: resta in Bozze.",
  "mail.accountName": "Nome dell'account",
- "mail.accountNameHint": "ad es. Lavoro, Personale, Magistrale"
+ "mail.accountNameHint": "ad es. Lavoro, Personale, Magistrale",
+ "assistant.aiOff": "AI Assist è disattivato in Impostazioni: non è stato inviato nulla.",
+ "assistant.aiMaster": "Usa AI Assist",
+ "assistant.aiMasterHow": "Disattivato, non viene inviato assolutamente nulla a un servizio di IA e AI Assist è nascosto — sul computer, sul telefono e sul tablet.",
+ "assistant.aiApps": "Cosa può usare AI Assist",
+ "assistant.aiAppsHow": "Un'app disattivata qui non viene né letta né modificata da AI Assist, su ogni dispositivo.",
+ "assistant.aiWeb": "Il web (ricerca, YouTube, immagini)"
 }

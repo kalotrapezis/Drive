@@ -2222,5 +2222,11 @@
  "assistant.mailSent": "Saadetud: {to}.",
  "assistant.mailKept": "Ei saadetud: jääb Mustandite hulka.",
  "mail.accountName": "Konto nimi",
- "mail.accountNameHint": "nt Töö, Isiklik, Magistriõpe"
+ "mail.accountNameHint": "nt Töö, Isiklik, Magistriõpe",
+ "assistant.aiOff": "AI Assist on Seadetes välja lülitatud: midagi ei saadetud.",
+ "assistant.aiMaster": "Kasuta abilist AI Assist",
+ "assistant.aiMasterHow": "Väljas: tehisintellekti teenusele ei saadeta absoluutselt midagi ja AI Assist on peidetud — arvutis, telefonis ja tahvelarvutis.",
+ "assistant.aiApps": "Mida AI Assist võib kasutada",
+ "assistant.aiAppsHow": "Välja lülitatud rakendust AI Assist ei loe ega muuda, igas seadmes.",
+ "assistant.aiWeb": "Veeb (otsing, YouTube, pildid)"
 }

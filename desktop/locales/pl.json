@@ -2400,5 +2400,11 @@
  "assistant.mailSent": "Wysłano: {to}.",
  "assistant.mailKept": "Nie wysłano: zostaje w Szkicach.",
  "mail.accountName": "Nazwa konta",
- "mail.accountNameHint": "np. Praca, Osobiste, Magisterka"
+ "mail.accountNameHint": "np. Praca, Osobiste, Magisterka",
+ "assistant.aiOff": "AI Assist jest wyłączony w Ustawieniach: nic nie zostało wysłane.",
+ "assistant.aiMaster": "Używaj AI Assist",
+ "assistant.aiMasterHow": "Wyłączone: do usługi AI nie jest wysyłane absolutnie nic, a AI Assist jest ukryty — na komputerze, telefonie i tablecie.",
+ "assistant.aiApps": "Z czego może korzystać AI Assist",
+ "assistant.aiAppsHow": "Aplikacji wyłączonej tutaj AI Assist nie czyta ani nie zmienia, na żadnym urządzeniu.",
+ "assistant.aiWeb": "Internet (wyszukiwanie, YouTube, obrazy)"
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AppNotification, AssistSettings, AssistShortcuts, CleanItem } from './drive'
+import type { AiSettings, AppNotification, AssistSettings, AssistShortcuts, CleanItem } from './drive'
 import { accelerator, money } from './assist'
 import { Icon, type IconName } from './Icon'
 import { locale, t } from './i18n'
@@ -95,7 +95,7 @@ export function SettingsPage({ onGuide, start }: { onGuide: () => void; start?: 
           {tab === 'mail' && <MailSettings />}
           {tab === 'maps' && <><MapsCard /><LocationCard /></>}
           {tab === 'phone' && <CallsCard />}
-          {tab === 'assistant' && <AssistCard />}
+          {tab === 'assistant' && <><AiCard /><AssistCard /></>}
         </div>
       </div>
     </div>
@@ -266,6 +266,29 @@ function CleanCard() {
  * Settings › AI Assist (the phone's AssistantSettings): the Mistral key, My words, the voice, the pause time, what it has
  * cost, and the shortcuts (below).
  */
+/** The AI switch (ai.js): AI Assist on or off, and what it may use, the same on every device (the user, 31 Oct). */
+function AiCard() {
+  const [a, setA] = useState<AiSettings | null>(null)
+  useEffect(() => { const read = () => window.drive.ai.get().then(setA); read(); return window.drive.ai.onChange(read) }, [])
+  if (!a) return null
+  const set = (x: { enabled?: boolean; apps?: Record<string, boolean> }) => window.drive.ai.set(x).then(setA)
+  const apps: [string, string][] = [['mail', 'app.mail'], ['calendar', 'app.calendar'], ['notes', 'app.notes'], ['files', 'app.files'], ['contacts', 'app.contacts'],
+    ['phone', 'app.phone'], ['timer', 'app.timer'], ['maps', 'app.maps'], ['web', 'assistant.aiWeb']]
+  return (
+    <section className="settings-card island">
+      <h3><Icon name="sparkle" size={20} />{t('app.assistant')}</h3>
+      <label className="cal-switch ai-master"><input type="checkbox" checked={a.enabled} onChange={e => set({ enabled: e.target.checked })} />
+        <span><strong>{t('assistant.aiMaster')}</strong><br />{t('assistant.aiMasterHow')}</span></label>
+      {a.enabled && <>
+        <h4 className="mail-filter-head">{t('assistant.aiApps')}</h4>
+        <p className="muted">{t('assistant.aiAppsHow')}</p>
+        <div className="ai-apps">{apps.map(([id, key]) =>
+          <label key={id} className="cal-switch"><input type="checkbox" checked={a.apps[id] !== false} onChange={e => set({ apps: { [id]: e.target.checked } })} /><span>{t(key)}</span></label>)}</div>
+      </>}
+    </section>
+  )
+}
+
 function AssistCard() {
   const [s, setS] = useState<AssistSettings | null>(null)
   const [key, setKey] = useState('')

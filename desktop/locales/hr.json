@@ -2310,5 +2310,11 @@
  "assistant.mailSent": "Poslano: {to}.",
  "assistant.mailKept": "Nije poslano: ostaje u Skicama.",
  "mail.accountName": "Naziv računa",
- "mail.accountNameHint": "npr. Posao, Osobno, Diplomski studij"
+ "mail.accountNameHint": "npr. Posao, Osobno, Diplomski studij",
+ "assistant.aiOff": "AI Assist je isključen u Postavkama: ništa nije poslano.",
+ "assistant.aiMaster": "Koristi AI Assist",
+ "assistant.aiMasterHow": "Isključeno, uopće se ništa ne šalje AI usluzi i AI Assist je skriven — na računalu, telefonu i tabletu.",
+ "assistant.aiApps": "Što AI Assist smije koristiti",
+ "assistant.aiAppsHow": "Aplikaciju koja je ovdje isključena AI Assist ne čita niti mijenja, na svakom uređaju.",
+ "assistant.aiWeb": "Web (pretraživanje, YouTube, slike)"
 }

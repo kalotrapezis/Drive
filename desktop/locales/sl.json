@@ -2400,5 +2400,11 @@
  "assistant.mailSent": "Poslano: {to}.",
  "assistant.mailKept": "Ni poslano: ostane v Osnutkih.",
  "mail.accountName": "Ime računa",
- "mail.accountNameHint": "npr. Služba, Osebno, Magisterij"
+ "mail.accountNameHint": "npr. Služba, Osebno, Magisterij",
+ "assistant.aiOff": "AI Assist je izklopljen v Nastavitvah: nič ni bilo poslano.",
+ "assistant.aiMaster": "Uporabljaj AI Assist",
+ "assistant.aiMasterHow": "Izklopljeno: storitvi umetne inteligence se ne pošlje čisto nič in AI Assist je skrit — v računalniku, telefonu in tablici.",
+ "assistant.aiApps": "Kaj sme uporabljati AI Assist",
+ "assistant.aiAppsHow": "Aplikacije, ki je tukaj izklopljena, AI Assist ne bere in ne spreminja, na nobeni napravi.",
+ "assistant.aiWeb": "Splet (iskanje, YouTube, slike)"
 }

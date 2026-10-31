@@ -2281,5 +2281,11 @@
  "assistant.mailSent": "Enviado a {to}.",
  "assistant.mailKept": "No enviado: se queda en Borradores.",
  "mail.accountName": "Nombre de la cuenta",
- "mail.accountNameHint": "p. ej. Trabajo, Personal, Máster"
+ "mail.accountNameHint": "p. ej. Trabajo, Personal, Máster",
+ "assistant.aiOff": "AI Assist está desactivado en Ajustes: no se envió nada.",
+ "assistant.aiMaster": "Usar AI Assist",
+ "assistant.aiMasterHow": "Desactivado, no se envía absolutamente nada a ningún servicio de IA y AI Assist se oculta — en el ordenador, el móvil y la tableta.",
+ "assistant.aiApps": "Qué puede usar AI Assist",
+ "assistant.aiAppsHow": "Una aplicación desactivada aquí no es leída ni modificada por AI Assist, en ningún dispositivo.",
+ "assistant.aiWeb": "La web (búsqueda, YouTube, imágenes)"
 }

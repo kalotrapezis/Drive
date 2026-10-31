@@ -2222,5 +2222,11 @@
  "assistant.mailSent": "Sendt til {to}.",
  "assistant.mailKept": "Ikke sendt: den bliver liggende i Kladder.",
  "mail.accountName": "Kontonavn",
- "mail.accountNameHint": "f.eks. Arbejde, Privat, Kandidat"
+ "mail.accountNameHint": "f.eks. Arbejde, Privat, Kandidat",
+ "assistant.aiOff": "AI Assist er slået fra i Indstillinger: der blev ikke sendt noget.",
+ "assistant.aiMaster": "Brug AI Assist",
+ "assistant.aiMasterHow": "Fra: der sendes slet ingenting til en AI-tjeneste, og AI Assist er skjult — på computeren, telefonen og tabletten.",
+ "assistant.aiApps": "Hvad AI Assist må bruge",
+ "assistant.aiAppsHow": "En app, der er slået fra her, bliver hverken læst eller ændret af AI Assist, på alle enheder.",
+ "assistant.aiWeb": "Nettet (søgning, YouTube, billeder)"
 }

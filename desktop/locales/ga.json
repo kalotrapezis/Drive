@@ -2489,5 +2489,11 @@
  "assistant.mailSent": "Seolta chuig {to}.",
  "assistant.mailKept": "Níor seoladh: fanann sé i nDréachtaí.",
  "mail.accountName": "Ainm an chuntais",
- "mail.accountNameHint": "m.sh. Obair, Pearsanta, Máistir"
+ "mail.accountNameHint": "m.sh. Obair, Pearsanta, Máistir",
+ "assistant.aiOff": "Tá AI Assist múchta i Socruithe: níor seoladh aon rud.",
+ "assistant.aiMaster": "Úsáid AI Assist",
+ "assistant.aiMasterHow": "Múchta, ní sheoltar aon rud ar chor ar bith chuig seirbhís AI agus tá AI Assist folaithe — ar an ríomhaire, ar an bhfón agus ar an táibléad.",
+ "assistant.aiApps": "An rud a fhéadfaidh AI Assist a úsáid",
+ "assistant.aiAppsHow": "Ní léann ná ní athraíonn AI Assist feidhmchlár atá múchta anseo, ar gach feiste.",
+ "assistant.aiWeb": "An gréasán (cuardach, YouTube, pictiúir)"
 }

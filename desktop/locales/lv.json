@@ -2311,5 +2311,11 @@
  "assistant.mailSent": "Nosūtīts: {to}.",
  "assistant.mailKept": "Nav nosūtīts: paliek Melnrakstos.",
  "mail.accountName": "Konta nosaukums",
- "mail.accountNameHint": "piem., Darbs, Personīgais, Maģistratūra"
+ "mail.accountNameHint": "piem., Darbs, Personīgais, Maģistratūra",
+ "assistant.aiOff": "AI Assist ir izslēgts sadaļā Iestatījumi: nekas netika nosūtīts.",
+ "assistant.aiMaster": "Izmantot AI Assist",
+ "assistant.aiMasterHow": "Izslēgts: MI pakalpojumam netiek sūtīts pilnīgi nekas, un AI Assist ir paslēpts — datorā, tālrunī un planšetdatorā.",
+ "assistant.aiApps": "Ko drīkst izmantot AI Assist",
+ "assistant.aiAppsHow": "Šeit izslēgtu lietotni AI Assist ne lasa, ne maina, nevienā ierīcē.",
+ "assistant.aiWeb": "Tīmeklis (meklēšana, YouTube, attēli)"
 }

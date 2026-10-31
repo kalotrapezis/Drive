@@ -92,6 +92,7 @@
       "importer.js",
       "assistant.js",
       "mail.js",
+      "ai.js",
       "mailclean.js",
       "msauth.js",
       "models/*.onnx",

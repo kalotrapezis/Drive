@@ -2400,5 +2400,11 @@
  "assistant.mailSent": "Odesláno: {to}.",
  "assistant.mailKept": "Neodesláno: zůstává v Konceptech.",
  "mail.accountName": "Název účtu",
- "mail.accountNameHint": "např. Práce, Osobní, Magisterské studium"
+ "mail.accountNameHint": "např. Práce, Osobní, Magisterské studium",
+ "assistant.aiOff": "AI Assist je v Nastavení vypnutý: nic se neodeslalo.",
+ "assistant.aiMaster": "Používat AI Assist",
+ "assistant.aiMasterHow": "Vypnuto: nic se vůbec neodesílá žádné službě AI a AI Assist je skrytý — v počítači, telefonu i tabletu.",
+ "assistant.aiApps": "Co smí AI Assist používat",
+ "assistant.aiAppsHow": "Aplikaci, která je tady vypnutá, AI Assist nečte ani nemění, na žádném zařízení.",
+ "assistant.aiWeb": "Web (hledání, YouTube, obrázky)"
 }

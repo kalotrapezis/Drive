@@ -2400,5 +2400,11 @@
  "assistant.mailSent": "Išsiųsta: {to}.",
  "assistant.mailKept": "Neišsiųsta: lieka Juodraščiuose.",
  "mail.accountName": "Paskyros pavadinimas",
- "mail.accountNameHint": "pvz., Darbas, Asmeninė, Magistrantūra"
+ "mail.accountNameHint": "pvz., Darbas, Asmeninė, Magistrantūra",
+ "assistant.aiOff": "AI Assist išjungtas skiltyje Nustatymai: nieko neišsiųsta.",
+ "assistant.aiMaster": "Naudoti AI Assist",
+ "assistant.aiMasterHow": "Išjungta: DI paslaugai nesiunčiama visiškai nieko, o AI Assist paslėptas — kompiuteryje, telefone ir planšetėje.",
+ "assistant.aiApps": "Ką gali naudoti AI Assist",
+ "assistant.aiAppsHow": "Čia išjungtos programos AI Assist nei skaito, nei keičia, jokiame įrenginyje.",
+ "assistant.aiWeb": "Internetas (paieška, YouTube, paveikslėliai)"
 }

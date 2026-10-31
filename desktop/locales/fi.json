@@ -2222,5 +2222,11 @@
  "assistant.mailSent": "Lähetetty: {to}.",
  "assistant.mailKept": "Ei lähetetty: se jää Luonnoksiin.",
  "mail.accountName": "Tilin nimi",
- "mail.accountNameHint": "esim. Työ, Henkilökohtainen, Maisterin opinnot"
+ "mail.accountNameHint": "esim. Työ, Henkilökohtainen, Maisterin opinnot",
+ "assistant.aiOff": "AI Assist on poissa päältä Asetuksissa: mitään ei lähetetty.",
+ "assistant.aiMaster": "Käytä AI Assist -avustajaa",
+ "assistant.aiMasterHow": "Pois: tekoälypalveluun ei lähetetä mitään ja AI Assist piilotetaan — tietokoneella, puhelimessa ja tabletissa.",
+ "assistant.aiApps": "Mitä AI Assist saa käyttää",
+ "assistant.aiAppsHow": "AI Assist ei lue eikä muuta sovellusta, joka on täällä pois päältä, millään laitteella.",
+ "assistant.aiWeb": "Verkko (haku, YouTube, kuvat)"
 }

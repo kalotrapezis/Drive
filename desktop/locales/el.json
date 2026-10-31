@@ -2222,5 +2222,11 @@
  "assistant.mailSent": "Στάλθηκε σε {to}.",
  "assistant.mailKept": "Δεν στάλθηκε· έμεινε στα Πρόχειρα.",
  "mail.accountName": "Όνομα λογαριασμού",
- "mail.accountNameHint": "π.χ. Δουλειά, Προσωπικό, Μεταπτυχιακό"
+ "mail.accountNameHint": "π.χ. Δουλειά, Προσωπικό, Μεταπτυχιακό",
+ "assistant.aiOff": "Το AI Assist είναι κλειστό στις Ρυθμίσεις: δεν στάλθηκε τίποτα.",
+ "assistant.aiMaster": "Χρήση του AI Assist",
+ "assistant.aiMasterHow": "Κλειστό, δεν στέλνεται απολύτως τίποτα σε υπηρεσία AI και το AI Assist κρύβεται — στον υπολογιστή, στο κινητό και στο tablet.",
+ "assistant.aiApps": "Τι μπορεί να χρησιμοποιεί το AI Assist",
+ "assistant.aiAppsHow": "Μια εφαρμογή που είναι κλειστή εδώ ούτε διαβάζεται ούτε αλλάζει από το AI Assist, σε κάθε συσκευή.",
+ "assistant.aiWeb": "Το διαδίκτυο (αναζήτηση, YouTube, εικόνες)"
 }

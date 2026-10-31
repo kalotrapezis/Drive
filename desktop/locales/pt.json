@@ -2311,5 +2311,11 @@
  "assistant.mailSent": "Enviado para {to}.",
  "assistant.mailKept": "Não enviado: fica em Rascunhos.",
  "mail.accountName": "Nome da conta",
- "mail.accountNameHint": "p. ex. Trabalho, Pessoal, Mestrado"
+ "mail.accountNameHint": "p. ex. Trabalho, Pessoal, Mestrado",
+ "assistant.aiOff": "O AI Assist está desligado em Definições: nada foi enviado.",
+ "assistant.aiMaster": "Usar o AI Assist",
+ "assistant.aiMasterHow": "Desligado, não é enviado absolutamente nada a um serviço de IA e o AI Assist fica oculto — no computador, no telemóvel e no tablet.",
+ "assistant.aiApps": "O que o AI Assist pode usar",
+ "assistant.aiAppsHow": "Uma aplicação desligada aqui não é lida nem alterada pelo AI Assist, em nenhum dispositivo.",
+ "assistant.aiWeb": "A web (pesquisa, YouTube, imagens)"
 }

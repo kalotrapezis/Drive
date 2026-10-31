@@ -2222,5 +2222,11 @@
  "assistant.mailSent": "Sent to {to}.",
  "assistant.mailKept": "Not sent: it stays in Drafts.",
  "mail.accountName": "Account name",
- "mail.accountNameHint": "e.g. Work, Personal, Masters"
+ "mail.accountNameHint": "e.g. Work, Personal, Masters",
+ "assistant.aiOff": "AI Assist is switched off in Settings: nothing was sent.",
+ "assistant.aiMaster": "Use AI Assist",
+ "assistant.aiMasterHow": "Off, nothing at all is sent to an AI service, and AI Assist is hidden — on the computer, the phone and the tablet.",
+ "assistant.aiApps": "What AI Assist may use",
+ "assistant.aiAppsHow": "An app switched off is neither read nor changed by AI Assist, on every device.",
+ "assistant.aiWeb": "The web (search, YouTube, pictures)"
 }

@@ -130,6 +130,10 @@ export function App() {
   const [assistCommand, setAssistCommand] = useState<{ what: string; at: number } | null>(null)
   const pageKind = useRef(page.kind)
   pageKind.current = page.kind
+  // the AI switch (ai.js): off, AI Assist is not in the sidebar and nothing opens it
+  const [aiOn, setAiOn] = useState(false)
+  useEffect(() => { const read = () => window.drive.ai.get().then(a => setAiOn(a.enabled)); read(); return window.drive.ai.onChange(read) }, [])
+  useEffect(() => { if (!aiOn && page.kind === 'assistant') setPage({ kind: 'photos' }) }, [aiOn])
   useEffect(() => window.drive.assistant.onCommand(what => {
     if (what === 'toggle' && pageKind.current === 'assistant') { window.drive.assistant.hide(); return }
     setPage({ kind: 'assistant' })
@@ -417,7 +421,7 @@ export function App() {
         {nav({ kind: 'maps' }, page.kind === 'maps', 'map', t('app.maps'))}
         {nav({ kind: 'contacts' }, page.kind === 'contacts', 'person', t('app.contacts'))}
         {nav({ kind: 'phone' }, page.kind === 'phone', 'call', t('app.phone'))}
-        {nav({ kind: 'assistant' }, page.kind === 'assistant', 'sparkle', t('app.assistant'))}
+        {aiOn && nav({ kind: 'assistant' }, page.kind === 'assistant', 'sparkle', t('app.assistant'))}
         {nav({ kind: 'data' }, page.kind === 'data', 'dataUsage', t('app.data'))}
         {nav({ kind: 'sync' }, page.kind === 'sync', 'refresh', t('app.devices'))}
         {/* A drive is a device: its photos sit under Devices (asked 2026-09-26). */}

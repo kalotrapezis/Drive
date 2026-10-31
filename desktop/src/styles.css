@@ -1413,3 +1413,5 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .assist-mail small { color: var(--muted); }
 .mail-acc-name { font: inherit; font-weight: 700; color: var(--text); background: transparent; border: 0; border-bottom: 1px dashed var(--muted); padding: 2px 0; outline: none; width: 100%; }
 .mail-acc-name:focus { border-bottom-style: solid; border-color: var(--accent); }
+.ai-master { font-size: 15px; color: var(--text); }
+.ai-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0 12px; }

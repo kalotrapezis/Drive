@@ -2222,5 +2222,11 @@
  "assistant.mailSent": "Verstuurd naar {to}.",
  "assistant.mailKept": "Niet verstuurd: hij blijft in Concepten.",
  "mail.accountName": "Accountnaam",
- "mail.accountNameHint": "bijv. Werk, Privé, Master"
+ "mail.accountNameHint": "bijv. Werk, Privé, Master",
+ "assistant.aiOff": "AI Assist staat uit in Instellingen: er is niets verstuurd.",
+ "assistant.aiMaster": "AI Assist gebruiken",
+ "assistant.aiMasterHow": "Uit: er wordt helemaal niets naar een AI-dienst gestuurd en AI Assist wordt verborgen — op de computer, de telefoon en de tablet.",
+ "assistant.aiApps": "Wat AI Assist mag gebruiken",
+ "assistant.aiAppsHow": "Een app die hier uit staat, wordt door AI Assist niet gelezen en niet gewijzigd, op elk apparaat.",
+ "assistant.aiWeb": "Het web (zoeken, YouTube, afbeeldingen)"
 }

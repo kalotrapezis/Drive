@@ -13,7 +13,7 @@ any document, is in Files.
 
 ```
 ~/Tetra/.System/<App>/<Kind>
-  App:  Photos  Files  Notes  Calendar  Timer  Contacts  Phone  Maps  Office  Sync  Backups  Data  Trash  Mail
+  App:  Photos  Files  Notes  Calendar  Timer  Contacts  Phone  Maps  Office  Sync  Backups  Data  Trash  Mail  Assistant
   Kind: Data  Tools  Cache  Temp  Shared
 ```
 
@@ -46,6 +46,7 @@ A new app or kind is added to `system.js` and to this file first.
 | `Maps/Shared` | the installed maps (`<id>.pmtiles`, `-gh` graphs, `.tsv`s), `Places/`, `Lists/`, `Trips/`, `added-places.tsv` | `Files/Maps` |
 | `Trash/Shared` | Files' Trash: what the user or an app deleted, kept until the Trash is emptied (or the purgatory takes it) | `Files/Trash` |
 | `Notes/Shared` | one `<id>.json` per note, `history/`, `deletions.json` | `Files/.notes` |
+| `Assistant/Shared` | `ai.json`, the AI switch (ai.js): on/off and which apps AI Assist may use; synced as `AI Assist/…` (not `Assistant`: Files/Assistant is the user's pictures) | new, 31 Oct 2026 |
 | `Mail/Shared` | the mail archive (mail.js): `accounts.json` (no passwords), `index.jsonl`, `<address>/<Inbox, Sent…>/<yyyy>/… .eml` with each mail's attachments in `<same name>.files/`, `requests/` (the phones' actions, done and removed by the desktop); synced as `Mail/…` (MAIL_PLAN §11) | new, 31 Oct 2026 |
 | `Office/Data` | (phone and tablet) the Office templates, `.potx`/`.dotx` themes | `Tetra/.templates` |
 

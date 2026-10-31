@@ -222,6 +222,12 @@ contextBridge.exposeInMainWorld('drive', {
     answer: (faceId, personId, answer) => ipcRenderer.invoke('people:answer', faceId, personId, answer),
     onProgress: fn => { const l = (_, p) => fn(p); ipcRenderer.on('people-progress', l); return () => ipcRenderer.off('people-progress', l) },
   },
+  // the AI switch (ai.js): on or off, and which apps AI Assist may use; the same on every device
+  ai: {
+    get: () => ipcRenderer.invoke('ai:get'),
+    set: changes => ipcRenderer.invoke('ai:set', changes),
+    onChange: fn => { const l = () => fn(); ipcRenderer.on('ai-changed', l); return () => ipcRenderer.off('ai-changed', l) },
+  },
   // Mail (mail.js), read-only: the passwords never come here, the window only hands a new one over once
   mail: {
     accounts: () => ipcRenderer.invoke('mail:accounts'),

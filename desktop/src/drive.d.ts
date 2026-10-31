@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 import type { Media } from './timeline'
 
+/** The AI switch (ai.js): on or off, and per app; shared by every device. */
+export interface AiSettings { enabled: boolean; apps: Record<string, boolean>; chosen: boolean }
 /** Mail (mail.js): accounts.json, a line of index.jsonl, the unified folders' counts, an opened mail. */
 export type MailRole = 'Inbox' | 'Drafts' | 'Sent' | 'Archive' | 'Spam' | 'Trash'
 export interface MailAddress { name: string; address: string }
@@ -253,6 +255,11 @@ declare global {
         last(): Promise<number>
       }
       onTimerChanged(cb: () => void): () => void
+      ai: {
+        get(): Promise<AiSettings>
+        set(changes: { enabled?: boolean; apps?: Record<string, boolean> }): Promise<AiSettings>
+        onChange(fn: () => void): () => void
+      }
       mail: {
         accounts(): Promise<{ accounts: MailAccount[]; folders: MailFolder[]; status: Record<string, MailState> }>
         list(role: MailRole, account: string | null): Promise<MailEntry[]>

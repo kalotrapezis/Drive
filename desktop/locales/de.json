@@ -2222,5 +2222,11 @@
  "assistant.mailSent": "An {to} gesendet.",
  "assistant.mailKept": "Nicht gesendet: Sie bleibt in Entwürfe.",
  "mail.accountName": "Kontoname",
- "mail.accountNameHint": "z. B. Arbeit, Privat, Masterstudium"
+ "mail.accountNameHint": "z. B. Arbeit, Privat, Masterstudium",
+ "assistant.aiOff": "AI Assist ist in den Einstellungen ausgeschaltet: Es wurde nichts gesendet.",
+ "assistant.aiMaster": "AI Assist verwenden",
+ "assistant.aiMasterHow": "Aus: Es wird überhaupt nichts an einen KI-Dienst gesendet, und AI Assist ist ausgeblendet — auf dem Computer, dem Handy und dem Tablet.",
+ "assistant.aiApps": "Was AI Assist verwenden darf",
+ "assistant.aiAppsHow": "Eine ausgeschaltete App wird von AI Assist weder gelesen noch geändert, auf jedem Gerät.",
+ "assistant.aiWeb": "Das Web (Suche, YouTube, Bilder)"
 }

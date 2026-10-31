@@ -2222,5 +2222,11 @@
  "assistant.mailSent": "Elküldve ide: {to}.",
  "assistant.mailKept": "Nem lett elküldve: a Piszkozatok között marad.",
  "mail.accountName": "Fiók neve",
- "mail.accountNameHint": "pl. Munka, Személyes, Mesterképzés"
+ "mail.accountNameHint": "pl. Munka, Személyes, Mesterképzés",
+ "assistant.aiOff": "Az AI Assist ki van kapcsolva a Beállításokban: semmi nem lett elküldve.",
+ "assistant.aiMaster": "AI Assist használata",
+ "assistant.aiMasterHow": "Kikapcsolva semmi nem megy el semmilyen AI-szolgáltatásnak, és az AI Assist el van rejtve — a számítógépen, a telefonon és a táblagépen.",
+ "assistant.aiApps": "Mit használhat az AI Assist",
+ "assistant.aiAppsHow": "Az itt kikapcsolt alkalmazást az AI Assist sem nem olvassa, sem nem módosítja, egyetlen eszközön sem.",
+ "assistant.aiWeb": "A web (keresés, YouTube, képek)"
 }

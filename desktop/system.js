@@ -22,14 +22,14 @@ const os = require('node:os')
 const path = require('node:path')
 
 const NAME = '.System'
-const APPS = ['Photos', 'Files', 'Notes', 'Calendar', 'Timer', 'Contacts', 'Phone', 'Maps', 'Office', 'Sync', 'Backups', 'Data', 'Trash', 'Mail']
+const APPS = ['Photos', 'Files', 'Notes', 'Calendar', 'Timer', 'Contacts', 'Phone', 'Maps', 'Office', 'Sync', 'Backups', 'Data', 'Trash', 'Mail', 'Assistant']
 const KINDS = ['Data', 'Tools', 'Cache', 'Temp', 'Shared']
 /**
  * The folders of Files that were Tetra's own until 29 Oct 2026 → the app whose Shared holds them now. Their name stays
  * the name sync uses, so a device on an older version sends and gets the same paths (SYSTEM.md, "Sync"). Android's
  * TetraSystem.SHARED is the same list.
  */
-const SHARED = { Calendar: 'Calendar', Contacts: 'Contacts', Data: 'Data', Phone: 'Phone', Timer: 'Timer', Maps: 'Maps', Trash: 'Trash', Mail: 'Mail' }
+const SHARED = { Calendar: 'Calendar', Contacts: 'Contacts', Data: 'Data', Phone: 'Phone', Timer: 'Timer', Maps: 'Maps', Trash: 'Trash', Mail: 'Mail', 'AI Assist': 'Assistant' } // 'AI Assist': ai.js's switch; Files/Assistant stays the user's pictures
 
 /** ~/Tetra/.System, always beside ~/Tetra/Photos and ~/Tetra/Files. */
 const root = (home = os.homedir()) => path.join(home, 'Tetra', NAME)

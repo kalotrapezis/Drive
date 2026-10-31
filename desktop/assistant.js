@@ -62,11 +62,18 @@ function wav(pcm) {
   return b
 }
 
-/** Mistral's REST API; [key] answers the key at each request (a new one counts at once), [fetch] is the tests'. */
+/** The user switched the AI off (ai.js): said in one sentence, and nothing was sent. */
+const aiOff = () => Object.assign(new Error(t('assistant.aiOff')), { aiOff: true })
+
+/**
+ * Mistral's REST API; [key] answers the key at each request (a new one counts at once), [fetch] is the tests'.
+ * [allowed]() is the user's AI switch, asked before every request: off, nothing leaves the computer.
+ */
 class Mistral {
-  constructor({ key, bill = new Bill(), fetch = globalThis.fetch }) { Object.assign(this, { key, bill, fetch }) }
+  constructor({ key, bill = new Bill(), fetch = globalThis.fetch, allowed = () => true }) { Object.assign(this, { key, bill, fetch, allowed }) }
 
   async request(path, { body, type = 'application/json', signal } = {}) {
+    if (!this.allowed()) throw aiOff()
     const k = this.key()
     if (!k) throw new Error(t('assistant.noKey'))
     let r
@@ -238,6 +245,15 @@ const SCHEMA = [
   fn('make_image', 'Draw a picture from a description.', ['prompt'], { prompt: p('string', 'What the picture shows, in detail.') }),
 ]
 
+/** Which of the user's apps each tool reads or changes (ai.js APPS): a tool of an app switched off is not even offered. */
+const TOOL_APP = {
+  calendar_add: 'calendar', calendar_list: 'calendar', calendar_free: 'calendar', timer_start: 'timer', timer_list: 'timer', timer_stop: 'timer',
+  notes_search: 'notes', note_open: 'notes', note_new: 'notes', shopping_list: 'notes', files_find: 'files', file_open: 'files',
+  contacts_find: 'contacts', relation_remember: 'contacts', relation_forget: 'contacts', my_card: 'contacts', contact_call: 'phone',
+  navigate: 'maps', youtube: 'web', web_search: 'web', make_image: 'web',
+  mail_new: 'mail', mail_important: 'mail', mail_search: 'mail', mail_read: 'mail', mail_needs_answer: 'mail', mail_send: 'mail', mail_status: 'mail',
+}
+
 const pad = n => String(n).padStart(2, '0')
 const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`
@@ -258,8 +274,9 @@ const addDays = (date, n) => dayKey(new Date(localMs(date) + n * 86400000 + 3 * 
  * conversation: the numbered lists it last showed are what "the first one" means.
  */
 class Tools {
-  constructor({ calendar, timers, notes, files, contacts, maps, mail = null, now = () => Date.now(), changed = () => {}, search, image, me = () => null, setMe = () => {} }) {
-    Object.assign(this, { calendar, timers, notes, files, contacts, maps, mail, now, changed, search, image, me, setMe })
+  /** [allowed](app): the user's switch for each app (ai.js); an app switched off is neither read nor changed. */
+  constructor({ calendar, timers, notes, files, contacts, maps, mail = null, now = () => Date.now(), changed = () => {}, search, image, me = () => null, setMe = () => {}, allowed = () => true }) {
+    Object.assign(this, { calendar, timers, notes, files, contacts, maps, mail, now, changed, search, image, me, setMe, allowed })
     this.lists = { contacts: [], files: [], notes: [], timers: [], mail: [] }
   }
 
@@ -267,9 +284,12 @@ class Tools {
     try {
       const f = this[name]
       if (!SCHEMA.some(s => s.function.name === name) || typeof f !== 'function') return { forModel: `No tool called ${name}.` }
+      if (TOOL_APP[name] && !this.allowed(TOOL_APP[name])) return { forModel: `The user has switched AI Assist off for ${TOOL_APP[name]}: say so; it cannot be read or changed.` }
       return await f.call(this, args)
     } catch (e) { return { forModel: `Failed: ${e.message}` } }
   }
+  /** The tools the model is offered: none of an app switched off. */
+  offered() { return SCHEMA.filter(s => !TOOL_APP[s.function.name] || this.allowed(TOOL_APP[s.function.name])) }
   pick(list, args, use) { const n = Number(args.choice) || 0; return list[n - 1] ? use(list[n - 1]) : { forModel: `No choice ${n}: the last list had ${list.length}.` } }
 
   // ---- Calendar ----
@@ -475,8 +495,9 @@ class Tools {
   file_open(a) { return this.pick(this.lists.files, a, f => ({ forModel: `Opened ${f.name}.`, open: f.path })) }
 
   // ---- Contacts ----
-  all() { return this.contacts.all().map(c => ({ ...c.info, name: nameOf(c.info) })) }
-  myCard() { const uid = this.me(); return uid ? this.contacts.all().find(c => c.info.uid === uid) ?? null : null }
+  // Contacts switched off: no tool sees a card, not even mail's or maps' look-up of an address
+  all() { return this.allowed('contacts') ? this.contacts.all().map(c => ({ ...c.info, name: nameOf(c.info) })) : [] }
+  myCard() { const uid = this.me(); return uid && this.allowed('contacts') ? this.contacts.all().find(c => c.info.uid === uid) ?? null : null }
   /** All a card says about who someone is, without accents: what keywords are looked for in. */
   about(i) { return plain([i.name, i.nickname, i.org, i.department, i.title, i.note, ...i.categories, ...i.related.flatMap(r => [r.label, r.value])].join('\n')) }
   /** The contacts a name means: the one with that very name, else those with all its words. */
@@ -604,7 +625,7 @@ class Chat {
     this.messages.push({ role: 'user', content: text })
     const out = { text: '', choices: [], call: null, send: null, images: [], open: null, go: null }
     for (let round = 0; round < ROUNDS; round++) {
-      const m = await this.api.chat([{ role: 'system', content: system(this.now()) }, ...this.messages], SCHEMA, onText)
+      const m = await this.api.chat([{ role: 'system', content: system(this.now()) }, ...this.messages], this.tools.offered?.() ?? SCHEMA, onText)
       const calls = m.tool_calls ?? []
       this.messages.push({ role: 'assistant', content: m.content ?? '', ...(calls.length ? { tool_calls: calls } : {}) })
       if (!calls.length) return { ...out, text: words(m).trim() }
@@ -652,7 +673,8 @@ class Sentences {
  * (thinking, reading the answer aloud) it sends silence, so Tetra does not hear itself and the stream stays open.
  */
 class Live {
-  constructor({ key, bias, pauseMs, heard, turn, failed, WebSocketImpl = globalThis.WebSocket }) {
+  constructor({ key, bias, pauseMs, heard, turn, failed, WebSocketImpl = globalThis.WebSocket, allowed = () => true }) {
+    if (!allowed()) throw aiOff() // the AI switch is off: no connection is opened
     Object.assign(this, { heard, turn, failed, open: true, text: '' })
     this.ws = new WebSocketImpl(`wss://api.mistral.ai/v1/audio/transcriptions/realtime?model=${REALTIME}`, { headers: { Authorization: `Bearer ${key}` } })
     this.ws.onmessage = m => { try { this.event(JSON.parse(String(m.data))) } catch (e) { console.warn('[assistant] live', e.message) } }
@@ -689,4 +711,4 @@ Read (mail_read) the ones that look important: from people, the school, the univ
 Then say, briefly and in Greek: what came that matters, what needs an answer (who and about what), any deadline or date found in a mail,
 and any account that cannot sync or has mail not yet saved on this computer. No markdown; it may be read aloud.`
 
-module.exports = { MAIL_REPORT, Bill, Meter, Mistral, Tools, Chat, Sentences, Live, SCHEMA, system, terms, wav, output, words, RATE, REALTIME, TTS, PER_MINUTE, PER_CHAR }
+module.exports = { MAIL_REPORT, TOOL_APP, Bill, Meter, Mistral, Tools, Chat, Sentences, Live, SCHEMA, system, terms, wav, output, words, RATE, REALTIME, TTS, PER_MINUTE, PER_CHAR }
