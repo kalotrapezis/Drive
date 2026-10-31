@@ -290,3 +290,38 @@ test('mail: a phone\'s outbox is sent and removed; Gmail files its own Sent copy
     mail.index.flush()
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
+
+test('mail: what a phone fetches itself is read here — its own accounts as shadows, its files taken instead of a second download', async () => {
+  const dir = tmp()
+  try {
+    const folders = { INBOX: { validity: 7, next: 3, msgs: { 1: message('Both have it', 'a'), 2: message('Only here', 'b') } } }
+    const c = memoryServer(folders)
+    const mail = new Mail(dir, { secret: () => 'x', connect: () => c })
+    const acc = { id: 'me@sch.gr', address: 'me@sch.gr', server: {} }
+    mail.saveAccounts([acc])
+    // the phone: the same account, one mail already on disk (sync brought it), and an account of its own
+    const theirs = 'me@sch.gr/Inbox/2026/2026-10-31 0912 Γραμματεία - Both have it.eml'
+    fs.mkdirSync(path.join(dir, path.dirname(theirs)), { recursive: true }); fs.writeFileSync(path.join(dir, theirs), folders.INBOX.msgs[1].source)
+    fs.writeFileSync(path.join(dir, 'accounts.Xiaomi_15.json'), JSON.stringify([{ id: 'me@gmail.com', address: 'me@gmail.com', name: 'Gmail', color: '#e5534b', addedOn: 'phone' }, { id: 'me@sch.gr', address: 'me@sch.gr' }]))
+    fs.writeFileSync(path.join(dir, 'index.Xiaomi_15.jsonl'), [
+      { id: 'me@sch.gr/Inbox/7/1', account: 'me@sch.gr', folder: 'Inbox', uid: 1, date: 1, subject: 'Both have it', file: theirs, saved: true },
+      { id: 'me@gmail.com/Inbox/5/9', account: 'me@gmail.com', folder: 'Inbox', uid: 9, date: 2, subject: 'Phone only', seen: false, saved: true, file: 'me@gmail.com/Inbox/2026/x.eml' },
+      { id: 'me@gmail.com/Inbox/5/9', account: 'me@gmail.com', folder: 'Inbox', uid: 9, date: 2, subject: 'Phone only', seen: false, saved: true, file: null }, // let go on the phone: the file line stays
+    ].map(e => JSON.stringify(e)).join('\n') + '\n')
+    mail.loadForeign()
+    assert.deepEqual(mail.allAccounts().map(a => [a.id, !!a.shadow, a.device ?? '']), [['me@sch.gr', false, ''], ['me@gmail.com', true, 'Xiaomi_15']])
+    assert.equal(mail.foreign.get('me@gmail.com/Inbox/5/9').file, 'me@gmail.com/Inbox/2026/x.eml', 'a later line without a file does not hide it')
+
+    await mail.headers(c, acc, 'Inbox', 'INBOX'); await mail.bodies(c, acc, 'Inbox', 'INBOX', { stop: false })
+    assert.deepEqual(c.calls.filter(x => x[0] === 'fetchOne').map(x => x[2]), ['2'], 'the phone\'s copy is taken, only the other comes down')
+    assert.equal(mail.index.get('me@sch.gr/Inbox/7/1').file, theirs)
+    assert.equal(mail.index.get('me@sch.gr/Inbox/7/1').saved, true)
+    assert.deepEqual(mail.list('Inbox', 'me@gmail.com').map(e => e.subject), ['Phone only'], 'the phone\'s own account is listed here')
+    assert.equal(mail.folders()[0].accounts.find(a => a.id === 'me@gmail.com').unread, 1)
+    await mail.act({ op: 'delete', ids: ['me@gmail.com/Inbox/5/9'] }) // no password here: nothing happens to it
+    assert.equal(mail.list('Inbox', 'me@gmail.com').length, 1)
+    const g = require('../mailclean').garbage(mail)
+    assert.deepEqual(g.orphans, [], 'the phone\'s files are not leftovers')
+    mail.index.flush()
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})

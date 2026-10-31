@@ -110,8 +110,9 @@ function garbage(mail, now = Date.now()) {
   const size = rel => { try { return fs.statSync(path.join(mail.root, rel)).size } catch { return 0 } }
   for (const e of mail.index.all()) if (e.file) {
     known.add(e.file)
-    if (!fs.existsSync(path.join(mail.root, e.file))) out.missing.push(e.id)
+    if (!fs.existsSync(path.join(mail.root, e.file)) && !mail.foreignFile(e.id)) out.missing.push(e.id)
   }
+  for (const f of mail.foreign.values()) if (f.file) known.add(f.file) // the phones' files are theirs, not leftovers
   const walk = rel => {
     let entries = []
     try { entries = fs.readdirSync(path.join(mail.root, rel), { withFileTypes: true }) } catch { return 0 }

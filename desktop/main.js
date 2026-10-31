@@ -1288,7 +1288,7 @@ app.whenReady().then(() => {
   const meterNow = () => { const m = assistant.Meter.of(setting('assistantMeter')); return { total: m.total, trip: m.trip, since: m.since, past: m.past } }
   // Mail, read-only (mail.js). The password is checked against the server before it is kept, encrypted, in settings.
   const isAddress = a => typeof a === 'string' && a.length < 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)
-  ipcMain.handle('mail:accounts', () => ({ accounts: mail.accounts(), folders: mail.folders(), status: mail.status() }))
+  ipcMain.handle('mail:accounts', () => ({ accounts: mail.allAccounts(), folders: mail.folders(), status: mail.status() })) // with the phones' own accounts (shadow)
   ipcMain.handle('mail:list', (_, role, account) => mail.list(String(role), account ? String(account) : null))
   ipcMain.handle('mail:open', (_, id, images) => mail.open(String(id), { images: images === true }))
   // step 6: the clean-up and its first-run check, the garbage scan, filters, the spam filter, remote pictures

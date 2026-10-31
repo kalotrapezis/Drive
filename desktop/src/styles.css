@@ -1400,3 +1400,6 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .mail-filter select, .mail-filter-run select { background: var(--island); color: var(--text); border: 0; border-radius: 8px; padding: 6px 8px; font: inherit; }
 .mail-filter-row > span { color: var(--muted); font-size: 13px; min-width: 40px; }
 .mail-ms { background: #2f6fde; color: #fff; margin: 4px 0 12px; }
+.mail-folder.sub.shadow { opacity: .6; }
+.mail-shadow { font-size: 11px; color: var(--muted); border: 1px solid var(--island-2); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+.mail-heart:disabled { cursor: default; }

@@ -13,7 +13,8 @@ export type MailOp = 'read' | 'unread' | 'favorite' | 'unfavorite' | 'archive' |
 export interface MailServer { host: string; port: number; secure: boolean; users: string[]; provider: 'google' | 'microsoft' | null }
 export interface MailClean { on: boolean; attachmentsMonths?: number; otherMonths?: number }
 export interface MailAccount { id: string; address: string; name: string; color: string; provider: string | null; archive: boolean; archiveBy?: 'year' | 'month' | 'none'; notify: boolean
-  serverClean: MailClean; localClean: MailClean; keepFavorites?: boolean; cleanConfirmed?: boolean; cleanedAt?: number }
+  serverClean: MailClean; localClean: MailClean; keepFavorites?: boolean; cleanConfirmed?: boolean; cleanedAt?: number
+  shadow?: boolean; device?: string } // shadow: a phone fetches it; this computer only reads what it brings
 type MailPart = { count: number; bytes: number; sample: { id: string; subject: string; from: string; date: number; folder: MailRole }[] }
 export interface MailCleanPlan { archive: MailPart; server: MailPart; local: MailPart; unsafe: MailPart; warn: boolean }
 type MailHeap = { count: number; sample: string[] }

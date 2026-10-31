@@ -119,7 +119,7 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
           <button className="mail-bar-item act" title={t('mail.ccBcc')} onClick={() => composer.current?.cc()}><Icon name="person" size={20} /><span>{t('mail.ccBcc')}</span></button>
           <button className="mail-bar-item act" title={t('mail.discard')} onClick={() => composer.current?.discard()}><Icon name="deleteForever" size={20} /><span>{t('mail.discard')}</span></button>
         </>}
-        {current && !draft && <>
+        {current && !draft && !accounts.get(current.account)?.shadow && <>
           <span className="mail-bar-sep" />
           <button className="mail-bar-item act" title={t('mail.reply')} onClick={() => write(current.id, 'reply')}><Icon name="reply" size={20} /><span>{t('mail.reply')}</span></button>
           <button className="mail-bar-item act" title={t('mail.replyAll')} onClick={() => write(current.id, 'replyAll')}><Icon name="replyAll" size={20} /><span>{t('mail.replyAll')}</span></button>
@@ -137,9 +137,9 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
         <label className="mail-search"><Icon name="search" size={18} />
           <input value={query} placeholder={t('mail.search')} onChange={e => { setQuery(e.target.value); setLimit(PAGE) }} /></label>
       </div>
-      {data?.accounts.some(a => !a.cleanConfirmed && (a.serverClean.on !== false || a.localClean.on)) && <div className="mail-banner island">
+      {data?.accounts.some(a => !a.shadow && !a.cleanConfirmed && (a.serverClean.on !== false || a.localClean.on)) && <div className="mail-banner island">
         <span>{t('mail.cleanBanner')}</span>
-        <button className="text-button" onClick={() => setDialog(<CleanCheck accounts={data.accounts.filter(a => !a.cleanConfirmed)} onClose={() => { close(); reload() }} />)}>{t('mail.check')}</button>
+        <button className="text-button" onClick={() => setDialog(<CleanCheck accounts={data.accounts.filter(a => !a.shadow && !a.cleanConfirmed)} onClose={() => { close(); reload() }} />)}>{t('mail.check')}</button>
       </div>}
       <div className="mail-columns">
         <nav className="mail-folders island">
@@ -153,8 +153,9 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
               </div>
               {open && f.accounts.filter(a => accounts.has(a.id)).map(a => {
                 const acc = accounts.get(a.id)!
-                return <button key={a.id} className={`mail-folder sub ${where.role === f.role && where.account === a.id ? 'on' : ''}`} onClick={() => setWhere({ role: f.role, account: a.id })}>
-                  <span className="mail-dot" style={{ background: acc.color }} /><span className="mail-folder-label">{acc.name}</span><Count unread={a.unread} orange={a.orange} />
+                return <button key={a.id} className={`mail-folder sub ${acc.shadow ? 'shadow' : ''} ${where.role === f.role && where.account === a.id ? 'on' : ''}`} onClick={() => setWhere({ role: f.role, account: a.id })}>
+                  <span className="mail-dot" style={{ background: acc.color }} /><span className="mail-folder-label">{acc.name}</span>
+                  {acc.shadow && <span className="mail-shadow" title={acc.device}>⇄ {acc.device}</span>}<Count unread={a.unread} orange={a.orange} />
                 </button>
               })}
             </div>
@@ -177,13 +178,13 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
             shown += rows.length
             return <section key={g.key}>
               <h4 className="mail-group">{view.group === 'day' ? dayText(g.key) : view.group === 'account' ? accounts.get(g.key)?.name ?? g.key : g.key}</h4>
-              {rows.map(m => <MailRow key={m.id} m={m} on={m.id === openId} color={where.account ? null : accounts.get(m.account)?.color ?? null} onOpen={() => open(m)} onHeart={() => act(m.flagged ? 'unfavorite' : 'favorite', [m.id])} />)}
+              {rows.map(m => <MailRow key={m.id} m={m} on={m.id === openId} color={where.account ? null : accounts.get(m.account)?.color ?? null} onOpen={() => open(m)} onHeart={accounts.get(m.account)?.shadow ? undefined : () => act(m.flagged ? 'unfavorite' : 'favorite', [m.id])} />)}
             </section>
           })}
           {groups.reduce((n, g) => n + g.mails.length, 0) > limit && <button className="text-button mail-more" onClick={() => setLimit(l => l + PAGE)}>{t('mail.more')}</button>}
         </div>
         <div className="mail-read island">
-          {draft ? <Compose initial={draft} accounts={data?.accounts ?? []} api={composer} say={say} setDialog={setDialog} onDone={() => { setDraft(null); reload() }} />
+          {draft ? <Compose initial={draft} accounts={(data?.accounts ?? []).filter(a => !a.shadow)} api={composer} say={say} setDialog={setDialog} onDone={() => { setDraft(null); reload() }} />
             : openId ? <Reader key={openId} id={openId} color={accounts.get(mails.find(m => m.id === openId)?.account ?? '')?.color} say={say} setDialog={setDialog} /> : <div className="empty">{t('mail.pick')}</div>}
         </div>
       </div>
@@ -191,7 +192,7 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
   )
 }
 
-function MailRow({ m, on, color, onOpen, onHeart }: { m: MailEntry; on: boolean; color: string | null; onOpen: () => void; onHeart: () => void }) {
+function MailRow({ m, on, color, onOpen, onHeart }: { m: MailEntry; on: boolean; color: string | null; onOpen: () => void; onHeart?: () => void }) {
   // a row holds the ♥ button, so it is not a <button> itself
   return (
     <div role="button" tabIndex={0} className={`mail-row ${on ? 'on' : ''} ${m.seen ? '' : 'unread'}`} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
@@ -204,7 +205,7 @@ function MailRow({ m, on, color, onOpen, onHeart }: { m: MailEntry; on: boolean;
       </span>
       <span className="mail-subject">{m.subject || t('mail.noSubject')}</span>
       {m.snippet && <span className="mail-snippet">{m.snippet}</span>}
-      <button className={`mail-heart ${m.flagged ? 'on' : ''}`} title={t('mail.favorite')} aria-pressed={m.flagged} onClick={e => { e.stopPropagation(); onHeart() }}><Icon name={m.flagged ? 'heartFill' : 'heart'} size={18} /></button>
+      <button className={`mail-heart ${m.flagged ? 'on' : ''}`} title={t('mail.favorite')} aria-pressed={m.flagged} disabled={!onHeart} onClick={e => { e.stopPropagation(); onHeart?.() }}><Icon name={m.flagged ? 'heartFill' : 'heart'} size={18} /></button>
     </div>
   )
 }
@@ -315,12 +316,12 @@ function Accounts({ data, onAdd, onRemove, onClose }: { data: Data; onAdd: () =>
         const s = data.status[a.id] ?? {}
         return <div key={a.id} className="sheet-row">
           <span className="mail-dot" style={{ background: a.color }} />
-          <span className="mail-acc-text"><strong>{a.name}</strong><small>{a.address}{s.error ? ` · ${t(`mail.err_${s.error}`)}` : ''}</small>
-            <label className="mail-archive-by">{t('mail.archiveBy')}
+          <span className="mail-acc-text"><strong>{a.name}{a.shadow && <span className="mail-shadow"> ⇄ {a.device}</span>}</strong><small>{a.address}{s.error ? ` · ${t(`mail.err_${s.error}`)}` : ''}</small>
+            {!a.shadow && <label className="mail-archive-by">{t('mail.archiveBy')}
               <select defaultValue={a.archiveBy ?? 'year'} onChange={e => window.drive.mail.setAccount(a.id, { archiveBy: e.target.value as 'year' })}>
                 <option value="year">{t('mail.byYear')}</option><option value="month">{t('mail.byMonth')}</option><option value="none">{t('mail.byNone')}</option>
-              </select></label></span>
-          <button className="round flat" title={t('common.remove')} onClick={() => onRemove(a)}><Icon name="trash" size={20} /></button>
+              </select></label>}</span>
+          {!a.shadow && <button className="round flat" title={t('common.remove')} onClick={() => onRemove(a)}><Icon name="trash" size={20} /></button>}
         </div>
       })}
       <div className="dialog-actions">
@@ -571,7 +572,7 @@ export function MailSignatures() {
   const [error, setError] = useState('')
   const ed = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    window.drive.mail.accounts().then(r => { setAccs(r.accounts); setAddress(a => a || r.accounts[0]?.address || '') })
+    window.drive.mail.accounts().then(r => { const own = r.accounts.filter(a => !a.shadow); setAccs(own); setAddress(a => a || own[0]?.address || '') })
     window.drive.mail.signatures().then(x => { setSigs(x); setLoaded(true) })
   }, [])
   const sig: MailSignature = sigs[address] ?? { html: '', newMail: true, replies: true, position: 'below' }
@@ -697,7 +698,7 @@ function MicrosoftCard() {
 function CleanCard() {
   const [accs, setAccs] = useState<MailAccount[] | null>(null)
   const [check, setCheck] = useState(false)
-  const load = () => window.drive.mail.accounts().then(r => setAccs(r.accounts))
+  const load = () => window.drive.mail.accounts().then(r => setAccs(r.accounts.filter(a => !a.shadow)))
   useEffect(() => { load() }, [])
   if (!accs?.length) return null
   const set = (a: MailAccount, changes: Parameters<typeof window.drive.mail.setAccount>[1]) => window.drive.mail.setAccount(a.id, changes).then(load)

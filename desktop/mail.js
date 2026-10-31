@@ -210,6 +210,55 @@ class Mail extends EventEmitter {
     this.state = {}        // account id → { busy, error }
     this.nudge = null
     this.queue = {}        // account id → its actions, one after another
+    this.loadForeign()
+  }
+
+  // ── What the phones fetch themselves (Tetra-mobile's MAIL_PLAN §11): their own files, read here, never written
+
+  /** index.<device>.jsonl: the phones' lines, by id; a later line without a file does not hide the file an earlier one had. */
+  loadForeign() {
+    this.foreign = new Map()
+    let names = []
+    try { names = fs.readdirSync(this.root).filter(n => /^index\..+\.jsonl$/.test(n)).sort() } catch {}
+    for (const n of names) {
+      let text = ''
+      try { text = fs.readFileSync(path.join(this.root, n), 'utf8') } catch { continue }
+      for (const line of text.split('\n')) {
+        if (!line.trim()) continue
+        try {
+          const e = JSON.parse(line), was = e?.id && this.foreign.get(e.id)
+          if (e?.id) this.foreign.set(e.id, !e.file && was?.file ? { ...e, file: was.file, saved: was.saved } : e)
+        } catch {}
+      }
+    }
+  }
+  /** A phone's line for a mail whose file is on this disk (sync brought it). */
+  foreignFile(id) { const f = this.foreign.get(id); return f?.file && fs.existsSync(path.join(this.root, f.file)) ? f : null }
+  /** Accounts a phone fetches itself (accounts.<device>.json) and this computer does not: shown dimmed, ⇄ phone, never fetched here. */
+  shadows() {
+    const own = new Set(this.accounts().map(a => a.id)), out = new Map()
+    let names = []
+    try { names = fs.readdirSync(this.root).filter(n => /^accounts\..+\.json$/.test(n)).sort() } catch {}
+    for (const n of names) {
+      let list = []
+      try { list = JSON.parse(fs.readFileSync(path.join(this.root, n), 'utf8')) } catch { continue }
+      for (const a of Array.isArray(list) ? list : [list]) if (a?.id && !own.has(a.id) && !out.has(a.id))
+        out.set(a.id, { ...a, shadow: true, device: a.device ?? n.slice(9, -5), serverClean: a.serverClean ?? { on: false }, localClean: a.localClean ?? { on: false } })
+    }
+    return [...out.values()]
+  }
+  allAccounts() { return [...this.accounts(), ...this.shadows()] }
+  /** A mail as this computer knows it: its own line (with a phone's file when it has none here), else a phone's line. */
+  entry(id) {
+    const e = this.index.get(id)
+    if (!e) return this.foreign.get(id) ?? null
+    const f = !e.file && this.foreignFile(id)
+    return f ? { ...e, file: f.file, saved: f.saved } : e
+  }
+  /** Every mail: this computer's lines, then the phones' lines for mail it does not know. */
+  *view() {
+    for (const e of this.index.all()) { const f = !e.file && this.foreign.size ? this.foreignFile(e.id) : null; yield f ? { ...e, file: f.file, saved: f.saved } : e }
+    for (const [id, f] of this.foreign) if (!this.index.get(id)) yield f
   }
 
   accounts() { try { return JSON.parse(fs.readFileSync(path.join(this.root, 'accounts.json'), 'utf8')) } catch { return [] } }
@@ -377,6 +426,14 @@ class Mail extends EventEmitter {
     let open = false
     for (const e of todo) {
       if (run.stop) return
+      const theirs = this.foreignFile(e.id) // the phone fetched it too (the same account on both): its file, not a second download
+      if (theirs) {
+        let size = 0
+        try { size = fs.statSync(path.join(this.root, theirs.file)).size } catch {}
+        this.index.put({ ...e, file: theirs.file, saved: size === e.size, snippet: theirs.snippet || e.snippet, attachments: theirs.attachments ?? e.attachments })
+        this.changed()
+        continue
+      }
       const was = e.messageId && moved.get(e.messageId)
       if (was) {
         moved.delete(e.messageId)
@@ -611,6 +668,13 @@ class Mail extends EventEmitter {
     }
     this.retry = setInterval(soon, 60_000)
     soon()
+    let again = null
+    try {
+      this.watchers.push(fs.watch(this.root, (_, name) => {
+        if (!/^(index\..+\.jsonl|accounts\..+\.json)$/.test(String(name ?? ''))) return
+        clearTimeout(again); again = setTimeout(() => { this.loadForeign(); this.changed() }, 1000)
+      }))
+    } catch (e) { console.warn('[mail] cannot watch the phones\' files', e.message) }
   }
 
   // ── Writing (MAIL_PLAN §10 step 4)
@@ -774,10 +838,11 @@ class Mail extends EventEmitter {
       const acc = this.account(accountId ?? this.accounts()[0]?.id)
       return { account: acc.id, to: [], cc: [], bcc: [], subject: '', html: sign(acc, false, '<p><br></p>'), attachments: [], references: [] }
     }
-    const e = this.index.get(id)
+    const e = this.entry(id)
     const file = e?.file && this.inside(e.file)
     if (!file) throw Object.assign(new Error('This mail is not on this computer yet'), { reason: 'other' })
-    const acc = this.account(e.account), me = acc.address.toLowerCase()
+    // a phone's own account is written from here through one of this computer's (its From can be changed in the window)
+    const acc = this.accounts().find(a => a.id === e.account) ?? this.account(this.accounts()[0]?.id), me = String(e.account).toLowerCase()
     const { simpleParser } = require('mailparser')
     const p = await simpleParser(fs.readFileSync(file))
     const list = x => (Array.isArray(x) ? x : x ? [x] : []).flatMap(a => a.value ?? []).filter(a => a.address).map(a => ({ name: a.name ?? '', address: a.address }))
@@ -858,9 +923,9 @@ class Mail extends EventEmitter {
 
   /** The unified folders: per role, each account's unread, total and orange counts, with the account's state. */
   folders() {
-    const accs = this.accounts(), at = new Map()
+    const accs = this.allAccounts(), at = new Map()
     const out = ROLES.map(role => ({ role, accounts: accs.map(a => { const x = { id: a.id, unread: 0, total: 0, orange: 0 }; at.set(`${role}\n${a.id}`, x); return x }) }))
-    for (const e of this.index.all()) {
+    for (const e of this.view()) {
       const x = !e.gone && at.get(`${e.folder}\n${e.account}`)
       if (!x) continue
       x.total++; if (!e.seen) x.unread++; if (!e.saved) x.orange++
@@ -870,18 +935,18 @@ class Mail extends EventEmitter {
   status() { return this.state }
 
   /** Every mail of the accounts here that is still on its server (the assistant's view). */
-  accountsMails() { const ids = new Set(this.accounts().map(a => a.id)); return [...this.index.all()].filter(e => !e.gone && ids.has(e.account)) }
+  accountsMails() { const ids = new Set(this.allAccounts().map(a => a.id)); return [...this.view()].filter(e => !e.gone && ids.has(e.account)) }
 
   /** A folder's mails, of one account or all; never the gone ones. */
   list(role, account = null) {
-    const ids = new Set(this.accounts().map(a => a.id))
-    return [...this.index.all()].filter(e => e.folder === role && !e.gone && ids.has(e.account) && (!account || e.account === account))
+    const ids = new Set(this.allAccounts().map(a => a.id))
+    return [...this.view()].filter(e => e.folder === role && !e.gone && ids.has(e.account) && (!account || e.account === account))
   }
 
   /** A mail to read: its text, the HTML with its inline pictures, and its attachments on disk. */
   /** [images]: load this mail's pictures from the web this once («Εμφάνιση εικόνων»); always for an allowed sender. */
   async open(id, { images = false } = {}) {
-    const e = this.index.get(id)
+    const e = this.entry(id)
     if (!e) return null
     if (!e.file) return { ...e, missing: true }
     const { simpleParser } = require('mailparser')
