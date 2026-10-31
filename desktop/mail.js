@@ -27,7 +27,7 @@ const COLORS = ['#e5534b', '#4f8ff7', '#e0a43a', '#3fb27f', '#b77ce6', '#e57ab0'
 const EVERY = 15 * 60_000 // a full look at every folder; new mail in the Inbox comes at once by IDLE
 
 const GMAIL = { host: 'imap.gmail.com', port: 993, secure: true, users: ['%EMAILADDRESS%'], provider: 'google', smtp: { host: 'smtp.gmail.com', port: 465, secure: true } }
-const MICROSOFT = { host: 'outlook.office365.com', port: 993, secure: true, users: ['%EMAILADDRESS%'], provider: 'microsoft', smtp: { host: 'smtp-mail.outlook.com', port: 587, secure: false } }
+const MICROSOFT = { host: 'outlook.office365.com', port: 993, secure: true, users: ['%EMAILADDRESS%'], provider: 'microsoft', smtp: { host: 'smtp.office365.com', port: 587, secure: false } }
 /** Known providers first (MAIL_PLAN §9b); sch.gr's own server takes the user name without @sch.gr. */
 const KNOWN = {
   'gmail.com': GMAIL, 'googlemail.com': GMAIL,
@@ -170,11 +170,13 @@ function reason(e) {
   if (['ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH', 'NoConnection'].includes(e?.code) || /timeout/i.test(text)) return 'unreachable'
   return 'other'
 }
-const failure = e => Object.assign(new Error(e?.responseText || e?.message || String(e)), { reason: reason(e) })
+const failure = e => Object.assign(new Error(e?.responseText || e?.message || String(e)), { reason: e?.reason ?? reason(e) })
 
-function client(server, user, pass) {
+/** [auth]: a password, or { accessToken } for an account signed in with Microsoft (XOAUTH2). */
+function client(server, user, auth) {
   const { ImapFlow } = require('imapflow')
-  const c = new ImapFlow({ host: server.host, port: server.port, secure: server.secure, auth: { user, pass }, logger: false, maxIdleTime: 10 * 60_000 })
+  const c = new ImapFlow({ host: server.host, port: server.port, secure: server.secure, auth: typeof auth === 'string' ? { user, pass: auth } : { user, accessToken: auth.accessToken },
+    logger: false, maxIdleTime: 10 * 60_000 })
   c.on('error', () => {}) // a dropped connection also ends in 'close', which the account's loop waits for
   return c
 }
@@ -199,9 +201,10 @@ const sleep = (ms, run) => new Promise(r => { const t = setTimeout(r, ms); run.w
 
 class Mail extends EventEmitter {
   /** [root] is .System/Mail/Shared; [secret](id) gives an account's password from the keychain, or null; [connect] is for tests. */
-  constructor(root, { secret, connect = client, smtp = o => require('nodemailer').createTransport(o) }) {
+  /** [token](acc): an access token for an account signed in with Microsoft (main keeps and renews it, msauth.js). */
+  constructor(root, { secret, token = null, connect = client, smtp = o => require('nodemailer').createTransport(o) }) {
     super()
-    this.root = root; this.secret = secret; this.connect = connect; this.smtp = smtp
+    this.root = root; this.secret = secret; this.token = token; this.connect = connect; this.smtp = smtp
     this.index = new Index(path.join(root, 'index.jsonl'))
     this.live = new Map()  // account id → its loop: { acc, stop, client, wake }
     this.state = {}        // account id → { busy, error }
@@ -217,7 +220,7 @@ class Mail extends EventEmitter {
   }
 
   /** A new account from a check that passed, with the plan's defaults (MAIL_PLAN §3, §9b); syncing starts at once. */
-  add({ address, name, server, user }) {
+  add({ address, name, server, user, auth = 'password' }) {
     const list = this.accounts().filter(a => a.id !== address)
     const used = new Set(list.map(a => a.color))
     const acc = {
@@ -226,7 +229,7 @@ class Mail extends EventEmitter {
       // shortcut: a server found by guessing sends through its own host on 465; a different one needs editing accounts.json
       smtp: server.smtp ?? { host: server.host, port: 465, secure: true },
       archive: true, archiveBy: 'year', serverClean: { on: true, attachmentsMonths: 36, otherMonths: 24 }, localClean: { on: false }, notify: true,
-      addedOn: 'desktop', added: Date.now(),
+      auth, addedOn: 'desktop', added: Date.now(),
     }
     this.saveAccounts([...list, acc])
     this.stop(acc.id); this.start(acc)
@@ -254,9 +257,17 @@ class Mail extends EventEmitter {
     const list = this.accounts(), a = list.find(x => x.id === id)
     if (!a) return
     if (['year', 'month', 'none'].includes(changes?.archiveBy)) a.archiveBy = changes.archiveBy
+    // the clean-up's switches and ages (MAIL_PLAN §3), in months, 1 to 50 years
+    const ages = (x, was) => x && typeof x === 'object' ? { ...was, ...(typeof x.on === 'boolean' ? { on: x.on } : {}),
+      ...Object.fromEntries(['attachmentsMonths', 'otherMonths'].filter(k => Number.isInteger(x[k]) && x[k] >= 1 && x[k] <= 600).map(k => [k, x[k]])) } : was
+    a.serverClean = ages(changes?.serverClean, a.serverClean)
+    a.localClean = ages(changes?.localClean, a.localClean)
+    if (typeof changes?.keepFavorites === 'boolean') a.keepFavorites = changes.keepFavorites
     this.saveAccounts(list); this.changed()
   }
-  syncNow() { for (const run of this.live.values()) run.wake?.('all') }
+  syncNow() { for (const id of this.live.keys()) this.kick(id) }
+  /** Another pass soon; remembered when it comes between two passes, so it is never lost. */
+  kick(id, what = 'all') { const run = this.live.get(id); if (!run) return; run.again = run.again === 'all' ? 'all' : what; run.wake?.(what) }
 
   setState(id, s) { this.state[id] = { ...this.state[id], ...s }; this.changed() }
   /** The window hears of changes at most twice a second. */
@@ -279,9 +290,7 @@ class Mail extends EventEmitter {
   /** One connection: every folder, then IDLE in the Inbox until new mail, the quarter-hour look, or the connection ends. */
   async session(run) {
     const { acc } = run
-    const pass = this.secret(acc.id)
-    if (!pass) throw Object.assign(new Error('No password saved on this computer'), { authenticationFailed: true })
-    const c = run.client = this.connect(acc.server, acc.server.user, pass)
+    const c = run.client = this.connect(acc.server, acc.server.user, await this.login(acc))
     await c.connect()
     const closed = new Promise(r => c.once('close', () => r('closed')))
     const boxes = roles(await c.list())
@@ -292,16 +301,22 @@ class Mail extends EventEmitter {
       let now = [['Inbox', boxes.Inbox]]
       if (what !== 'inbox' || !boxes.Inbox) { const list = await c.list(); Object.assign(boxes, roles(list)); now = places(list, boxes) }
       for (const [role, box] of now) await this.headers(c, acc, role, box, boxes[role])
+      run.fresh = []
       for (const role of ROLES) for (const [r, box] of now) if (r === role) await this.bodies(c, acc, role, box, run, boxes[role])
       this.index.flush()
+      // new mail through the filters and the spam filter (once on disk, so they can read it); then the daily clean-up
+      const care = require('./mailclean')
+      await care.onNew(this, run.fresh.splice(0), { filesRoot: this.filesRoot }).catch(e => console.warn('[mail] new mail', e.message))
+      await care.daily(this, this.accounts().find(a => a.id === acc.id) ?? acc).catch(e => console.warn('[mail] clean-up', e.message))
       this.setState(acc.id, { busy: false, synced: Date.now() })
       this.requests().catch(() => {}) // a phone's actions that waited for the connection
       if (run.stop) return
       if (boxes.Inbox) { await c.mailboxOpen(boxes.Inbox, { readOnly: true }); c.idle().catch(() => {}) } // at once, not after imapflow's 15 s
       // shortcut: mail arriving while another folder is open waits for the quarter-hour look; enough for one person
-      const onNew = () => run.wake?.('inbox')
+      const onNew = () => this.kick(acc.id, 'inbox')
       c.on('exists', onNew)
-      what = await Promise.race([closed, sleep(EVERY, run).then(w => w ?? 'all')])
+      if (run.again) { what = run.again; run.again = null } // asked for while the last pass was ending
+      else { what = await Promise.race([closed, sleep(EVERY, run).then(w => w ?? 'all')]); run.again = null }
       c.off('exists', onNew)
       if (what === 'closed' || what === 'stop' || run.stop) return
     }
@@ -311,7 +326,7 @@ class Mail extends EventEmitter {
   mine(acc, role, box, main = box) { return [...this.index.all()].filter(e => e.account === acc.id && e.folder === role && (e.box ?? main) === box) }
 
   /** A folder's list: new mails' headers (orange until fetched), flags of the known ones, the gone ones marked. */
-  async headers(c, acc, role, box, main = box) {
+  async headers(c, acc, role, box, main = box, run = this.live.get(acc.id)) {
     await c.mailboxOpen(box, { readOnly: true })
     const validity = String(c.mailbox.uidValidity)
     const mine = this.mine(acc, role, box, main), first = !mine.length
@@ -345,7 +360,7 @@ class Mail extends EventEmitter {
           this.index.put({ ...local, gone: true, file: null, movedTo: e.id })
         }
         this.index.put(e)
-        if (!first && role === 'Inbox' && !e.seen && acc.notify) this.emit('new', e, acc)
+        if (!first && role === 'Inbox') { run?.fresh?.push(e); if (!e.seen && acc.notify) this.emit('new', e, acc) }
       }
       this.changed()
     }
@@ -353,7 +368,7 @@ class Mail extends EventEmitter {
 
   /** The mails of a folder not on disk yet, newest first: each written, its attachments beside it, then green. */
   async bodies(c, acc, role, box, run, main = box) {
-    const todo = this.mine(acc, role, box, main).filter(e => !e.file && !e.gone).sort((a, b) => b.date - a.date)
+    const todo = this.mine(acc, role, box, main).filter(e => !e.file && !e.gone && !e.pruned).sort((a, b) => b.date - a.date) // pruned: let go here by the clean-up, not fetched again
     if (!todo.length) return
     // A mail moved (here, on a phone, on the web) is a new one in its new folder and gone from the old: its file follows it
     // by Message-ID instead of coming down again.
@@ -430,12 +445,51 @@ class Mail extends EventEmitter {
     }
   }
 
+  /** The local spam filter, read once. */
+  junk() { const { Junk } = require('./mailclean'); return this.junkFilter ??= new Junk(path.join(this.root, 'junk.json')) }
+  /** A mail's folder on the server, for a line from before folders were noted. */
+  async boxOf(c, e) { return e.box ?? roles(await c.list())[e.folder] }
+
+  /** privacy.json (§9c): remote content off by default; the senders and domains it is always shown for. */
+  privacy() { try { return { images: 'ask', senders: [], ...JSON.parse(fs.readFileSync(path.join(this.root, 'privacy.json'), 'utf8')) } } catch { return { images: 'ask', senders: [] } } }
+  setPrivacy(p) {
+    const value = { images: p?.images === 'always' ? 'always' : 'ask', senders: [...new Set((p?.senders ?? []).map(s => String(s).trim().toLowerCase()).filter(s => /^[^\s]*@?[^\s@]+\.[^\s@]+$/.test(s)))].slice(0, 2000) }
+    fs.mkdirSync(this.root, { recursive: true })
+    const file = path.join(this.root, 'privacy.json')
+    fs.writeFileSync(part(file), JSON.stringify(value, null, 2)); fs.renameSync(part(file), file)
+    return value
+  }
+  /** The pictures a mail loads from the web, fetched here and put into it, so the page loads nothing itself; 1×1 trackers never. */
+  remoteImages(html) {
+    const found = [...html.matchAll(/<img\b[^>]*?\ssrc\s*=\s*["']?(https?:\/\/[^"'\s>]+)[^>]*>/gi)]
+    return [...new Set(found.filter(m => !/\s(width|height)\s*=\s*["']?[01]["'\s>/]/i.test(m[0])).map(m => m[1]))].slice(0, 40)
+  }
+  async inlineImages(html) {
+    for (const u of this.remoteImages(html)) try {
+      const r = await fetch(u.replace(/&amp;/g, '&'), { signal: AbortSignal.timeout(8000) })
+      const type = (r.headers.get('content-type') ?? '').split(';')[0]
+      if (!r.ok || !type.startsWith('image/')) continue
+      const b = Buffer.from(await r.arrayBuffer())
+      if (b.length <= 3e6) html = html.split(u).join(`data:${type};base64,${b.toString('base64')}`)
+    } catch {}
+    return html
+  }
+
+  /** How this account signs in here: its password, or a Microsoft access token. Throws, with a reason, when it cannot. */
+  async login(acc) {
+    if (acc.auth === 'microsoft') {
+      if (!this.token) throw Object.assign(new Error('Microsoft sign-in is not set up here'), { reason: 'noClient', authenticationFailed: true })
+      return { accessToken: await this.token(acc) }
+    }
+    const pass = this.secret(acc.id)
+    if (!pass) throw Object.assign(new Error('No password saved on this computer'), { reason: 'auth', authenticationFailed: true })
+    return pass
+  }
+
   /** A short connection of its own for an action, one at a time per account, so the sync's open folder is never changed under it. */
   withClient(acc, fn) {
     const run = async () => {
-      const pass = this.secret(acc.id)
-      if (!pass) throw Object.assign(new Error('No password saved on this computer'), { reason: 'auth' })
-      const c = this.connect(acc.server, acc.server.user, pass)
+      const c = this.connect(acc.server, acc.server.user, await this.login(acc))
       try { await c.connect(); return await fn(c) } catch (e) { throw e.reason ? e : failure(e) } finally { await c.logout().catch(() => c.close()) }
     }
     const p = (this.queue[acc.id] ?? Promise.resolve()).then(run, run)
@@ -448,7 +502,7 @@ class Mail extends EventEmitter {
    * The local copy is never deleted: a mail moved away is gone from its folder here until the sync finds it in the new
    * one, where its file follows it (bodies); one deleted for good on the server stays on disk, out of the lists.
    */
-  async act({ op, ids, to } = {}) {
+  async act({ op, ids, to, learn = true } = {}) {
     if (!OPS.includes(op)) throw new Error(`Unknown mail action: ${op}`)
     if (op === 'move' && !ROLES.includes(to)) throw new Error(`No such folder: ${to}`)
     if (!Array.isArray(ids) || ids.length > 5000) throw new Error('Which mails?')
@@ -458,7 +512,12 @@ class Mail extends EventEmitter {
       const acc = this.accounts().find(a => a.id === id)
       if (!acc) continue
       await this.withClient(acc, c => this.apply(c, acc, op, list, to))
-      if (!['read', 'unread', 'favorite', 'unfavorite'].includes(op)) this.live.get(id)?.wake?.('all')
+      if (!['read', 'unread', 'favorite', 'unfavorite'].includes(op)) this.kick(id)
+      if (learn && (op === 'spam' || op === 'notSpam')) { // Spam and Not spam teach the local filter (§5)
+        const { mailText } = require('./mailclean'), junk = this.junk()
+        for (const e of list) junk.train(await mailText(this, e), op === 'spam')
+        junk.save()
+      }
     }
     this.index.flush(); this.changed()
   }
@@ -668,10 +727,9 @@ class Mail extends EventEmitter {
     } else raw = await this.compose(acc, draft)
     const to = [...(draft.to ?? []), ...(draft.cc ?? []), ...(draft.bcc ?? [])].map(a => String(a?.address ?? '')).filter(a => /^[^\s@<>]+@[^\s@<>]+$/.test(a))
     if (!to.length) throw Object.assign(new Error('No one to send it to'), { reason: 'noRecipients' })
-    const pass = this.secret(acc.id)
-    if (!pass) throw Object.assign(new Error('No password saved on this computer'), { reason: 'auth' })
-    const smtp = await this.smtpFor(acc)
-    const transport = this.smtp({ host: smtp.host, port: smtp.port, secure: smtp.secure, auth: { user: acc.server.user, pass }, connectionTimeout: 20_000 })
+    const login = await this.login(acc), smtp = await this.smtpFor(acc)
+    const transport = this.smtp({ host: smtp.host, port: smtp.port, secure: smtp.secure, connectionTimeout: 20_000,
+      auth: typeof login === 'string' ? { user: acc.server.user, pass: login } : { type: 'OAuth2', user: acc.server.user, accessToken: login.accessToken } })
     try { await transport.sendMail({ envelope: { from: acc.address, to }, raw }) } catch (e) { throw failure(e) } finally { transport.close?.() }
     await this.keep(acc, 'Sent', raw, draft)
     if (acc.provider !== 'google') await this.withClient(acc, async c => {
@@ -679,7 +737,7 @@ class Mail extends EventEmitter {
       if (box) await c.append(box, raw, ['\\Seen'])
     }).catch(e => console.warn('[mail] sent, but no copy in the server\'s Sent', e.message))
     if (d.messageId) await this.discardDraft({ account: acc.id, messageId: d.messageId })
-    this.live.get(acc.id)?.wake?.('all')
+    this.kick(acc.id)
     return { messageId: draft.messageId }
   }
 
@@ -818,19 +876,23 @@ class Mail extends EventEmitter {
   }
 
   /** A mail to read: its text, the HTML with its inline pictures, and its attachments on disk. */
-  async open(id) {
+  /** [images]: load this mail's pictures from the web this once («Εμφάνιση εικόνων»); always for an allowed sender. */
+  async open(id, { images = false } = {}) {
     const e = this.index.get(id)
     if (!e) return null
     if (!e.file) return { ...e, missing: true }
     const { simpleParser } = require('mailparser')
     const file = path.join(this.root, e.file)
     const p = await simpleParser(fs.readFileSync(file))
-    let html = p.html || p.textAsHtml || ''
-    for (const a of p.attachments) if (a.related && a.cid && a.size < 5e6) html = html.split(`cid:${a.cid}`).join(`data:${a.contentType};base64,${a.content.toString('base64')}`)
+    let html = this.htmlOf(p)
+    const priv = this.privacy(), from = String(e.fromAddress).toLowerCase()
+    const allowed = priv.images === 'always' || priv.senders.includes(from) || priv.senders.includes('@' + from.split('@')[1])
+    const remote = this.remoteImages(html).length > 0
+    if (remote && (images || allowed)) html = await this.inlineImages(html)
     const dir = file.slice(0, -4) + '.files'
     let attachments = []
     try { attachments = fs.readdirSync(dir).map(n => ({ name: n, size: fs.statSync(path.join(dir, n)).size, file: `${e.file.slice(0, -4)}.files/${n}` })) } catch {}
-    return { ...e, to: p.to?.text ?? e.to.join(', '), cc: p.cc?.text ?? '', html, attachments }
+    return { ...e, to: p.to?.text ?? e.to.join(', '), cc: p.cc?.text ?? '', html, attachments, remote: remote && !images && !allowed }
   }
 
   /** A path inside the archive, or null for anything that would leave it. */
@@ -840,4 +902,4 @@ class Mail extends EventEmitter {
   }
 }
 
-module.exports = { Mail, Index, ROLES, OPS, detect, check, parseConfig, roles, places, mailName, clean, userName, reason }
+module.exports = { Mail, Index, ROLES, OPS, MICROSOFT, detect, check, parseConfig, roles, places, mailName, clean, userName, reason }

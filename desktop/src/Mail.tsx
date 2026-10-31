@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { MailAccount, MailAddress, MailDraft, MailDraftKind, MailEntry, MailFolder, MailOp, MailOpened, MailRole, MailServer, MailSignature, MailState } from './drive'
+import type { MailAccount, MailAddress, MailCleanPlan, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
+import { formatBytes } from './timeline'
 import { arrange, dayKey, DEFAULT_VIEW, type MailView } from './mailView'
 import { Confirm, Modal, errorText } from './Dialogs'
 import { Icon, type IconName } from './Icon'
@@ -136,6 +137,10 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
         <label className="mail-search"><Icon name="search" size={18} />
           <input value={query} placeholder={t('mail.search')} onChange={e => { setQuery(e.target.value); setLimit(PAGE) }} /></label>
       </div>
+      {data?.accounts.some(a => !a.cleanConfirmed && (a.serverClean.on !== false || a.localClean.on)) && <div className="mail-banner island">
+        <span>{t('mail.cleanBanner')}</span>
+        <button className="text-button" onClick={() => setDialog(<CleanCheck accounts={data.accounts.filter(a => !a.cleanConfirmed)} onClose={() => { close(); reload() }} />)}>{t('mail.check')}</button>
+      </div>}
       <div className="mail-columns">
         <nav className="mail-folders island">
           {data?.folders.filter(f => f.role === 'Inbox' || sum(f, 'total')).map(f => {
@@ -179,7 +184,7 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
         </div>
         <div className="mail-read island">
           {draft ? <Compose initial={draft} accounts={data?.accounts ?? []} api={composer} say={say} setDialog={setDialog} onDone={() => { setDraft(null); reload() }} />
-            : openId ? <Reader key={openId} id={openId} color={accounts.get(mails.find(m => m.id === openId)?.account ?? '')?.color} say={say} /> : <div className="empty">{t('mail.pick')}</div>}
+            : openId ? <Reader key={openId} id={openId} color={accounts.get(mails.find(m => m.id === openId)?.account ?? '')?.color} say={say} setDialog={setDialog} /> : <div className="empty">{t('mail.pick')}</div>}
         </div>
       </div>
     </div>
@@ -205,11 +210,30 @@ function MailRow({ m, on, color, onOpen, onHeart }: { m: MailEntry; on: boolean;
 }
 
 /** The open mail: its HTML in a frame that runs no script and loads nothing from the web (the page's own CSP). */
-function Reader({ id, color, say }: { id: string; color?: string; say: (s: string) => void }) {
+// files that can run something on this computer (§9c): opened only after a warning
+const RISKY = /\.(exe|msi|bat|cmd|com|scr|pif|vbs|vbe|js|jse|wsf|wsh|ps1|psm1|jar|sh|run|bin|appimage|desktop|deb|rpm|apk|lnk|reg|hta|cpl|docm|xlsm|pptm|dotm|xltm|iso|img)$/i
+const hostOf = (u: string) => { try { return new URL(/^https?:/i.test(u) ? u : `http://${u}`).hostname.replace(/^www\./, '').toLowerCase() } catch { return '' } }
+
+function Reader({ id, color, say, setDialog }: { id: string; color?: string; say: (s: string) => void; setDialog: (d: ReactNode) => void }) {
   const [m, setM] = useState<MailOpened | null>(null)
   const frame = useRef<HTMLIFrameElement>(null)
-  useEffect(() => { window.drive.mail.open(id).then(setM, e => say(errorText(e))) }, [id])
+  const load = (images = false) => window.drive.mail.open(id, images).then(setM, e => say(errorText(e)))
+  useEffect(() => { load() }, [id])
   if (!m) return null
+  const close = () => setDialog(null)
+  const openFile = (a: { name: string; file: string }) => {
+    const go = () => window.drive.mail.openFile(a.file).catch(e => say(errorText(e)))
+    if (RISKY.test(a.name)) setDialog(<Confirm title={t('mail.riskyTitle')} body={t('mail.riskyBody', { name: a.name })} action={t('mail.openAnyway')} danger onClose={close} onConfirm={() => { close(); go() }} />)
+    else go()
+  }
+  /** A link whose words name one place and whose address goes to another (phishing, §9c): said before it opens. */
+  const follow = (a: HTMLAnchorElement) => {
+    const shown = (a.textContent ?? '').trim(), go = () => window.drive.mail.openLink(a.href)
+    const looks = /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(shown)
+    if (looks && /^https?:/i.test(a.href) && hostOf(shown) !== hostOf(a.href))
+      setDialog(<Confirm title={t('mail.phishTitle')} body={t('mail.phishBody', { shown: hostOf(shown), real: hostOf(a.href) })} action={t('mail.openAnyway')} danger onClose={close} onConfirm={() => { close(); go() }} />)
+    else go()
+  }
   const fit = () => {
     const doc = frame.current?.contentDocument
     if (!doc) return
@@ -217,7 +241,7 @@ function Reader({ id, color, say }: { id: string; color?: string; say: (s: strin
     // links open in the browser, never inside Tetra
     doc.addEventListener('click', e => {
       const a = (e.target as Element).closest?.('a[href]') as HTMLAnchorElement | null
-      if (a) { e.preventDefault(); window.drive.mail.openLink(a.href) }
+      if (a) { e.preventDefault(); follow(a) }
     })
   }
   return (
@@ -232,8 +256,13 @@ function Reader({ id, color, say }: { id: string; color?: string; say: (s: strin
         </div>
       </div>
       {m.attachments.length > 0 && <div className="mail-files">
-        {m.attachments.map(a => <button key={a.file} className="chip" onClick={() => window.drive.mail.openFile(a.file).catch(e => say(errorText(e)))}>
-          <Icon name="file" size={16} /> {a.name} · {sizeText(a.size)}</button>)}
+        {m.attachments.map(a => <button key={a.file} className={`chip ${RISKY.test(a.name) ? 'risky' : ''}`} onClick={() => openFile(a)}>
+          <Icon name={RISKY.test(a.name) ? 'warning' : 'file'} size={16} /> {a.name} · {sizeText(a.size)}</button>)}
+      </div>}
+      {m.remote && <div className="mail-images-bar">
+        <span>{t('mail.imagesBlocked')}</span>
+        <button className="text-button" onClick={() => load(true)}>{t('mail.showImages')}</button>
+        <button className="text-button" onClick={() => window.drive.mail.privacy().then(p => window.drive.mail.setPrivacy({ ...p, senders: [...p.senders, m.fromAddress] })).then(() => load())}>{t('mail.alwaysSender')}</button>
       </div>}
       {m.missing ? <p className="muted">{t('mail.notYet')}</p>
         : <iframe ref={frame} className="mail-body" sandbox="allow-same-origin" title={m.subject} onLoad={fit}
@@ -341,7 +370,7 @@ function AddAccount({ onClose, onDone }: { onClose: () => void; onDone: () => vo
     if (!server) return
     setBusy(true); setError(null)
     try {
-      const r = await window.drive.mail.add(address.trim(), server, google ? pass.replace(/\s/g, '') : pass)
+      const r = microsoft ? await window.drive.mail.addMicrosoft(address.trim()) : await window.drive.mail.add(address.trim(), server, google ? pass.replace(/\s/g, '') : pass)
       if (r.error) setError({ reason: r.error, detail: r.detail }); else { setDone(r); setStep(3) }
     } catch (e) { setError({ reason: 'other', detail: errorText(e) }) }
     setBusy(false)
@@ -369,7 +398,10 @@ function AddAccount({ onClose, onDone }: { onClose: () => void; onDone: () => vo
         </>}
         {step === 2 && <>
           <h3>{t('mail.signIn')}</h3>
-          {microsoft ? <p>{t('mail.microsoftLater')}</p> : <>
+          {microsoft ? <>
+            <p>{t('mail.msHow')}</p>
+            <button className="filled-button mail-ms" disabled={busy} onClick={signIn}>{busy ? t('mail.msWaiting') : t('mail.msSignIn')}</button>
+          </> : <>
             <p>{google ? t('mail.googleHow') : t('mail.passwordHow')}</p>
             {google && <button className="filled-button secondary mail-google" onClick={() => window.drive.mail.appPasswords()}>{t('mail.openGoogle')}</button>}
             <input className="field" type="password" autoFocus value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && pass) signIn() }}
@@ -390,7 +422,7 @@ function AddAccount({ onClose, onDone }: { onClose: () => void; onDone: () => vo
           <div className="mail-summary">
             <div><span>{t('common.name')}</span><span>{done.account.name} <span className="mail-dot" style={{ background: done.account.color }} /></span></div>
             <div><span>{t('mail.archiveLocal')}</span><span>{t('common.yes')}</span></div>
-            <div><span>{t('mail.serverClean')}</span><span>{t('mail.serverCleanValue', { a: done.account.serverClean.attachmentsMonths / 12, b: done.account.serverClean.otherMonths / 12 })}</span></div>
+            <div><span>{t('mail.serverClean')}</span><span>{t('mail.serverCleanValue', { a: (done.account.serverClean.attachmentsMonths ?? 36) / 12, b: (done.account.serverClean.otherMonths ?? 24) / 12 })}</span></div>
             <div><span>{t('mail.notifications')}</span><span>{t('common.yes')}</span></div>
             <div><span>{t('mail.folders')}</span><span>{done.roles.map(r => t(`mail.role${r}`)).join(', ')}</span></div>
           </div>
@@ -572,6 +604,218 @@ export function MailSignatures() {
       <div className="segmented island">
         {(['above', 'below'] as const).map(p => <button key={p} className={sig.position === p ? 'on' : ''} onClick={() => save({ ...sig, position: p })}>{t(p === 'above' ? 'mail.sigAbove' : 'mail.sigBelow')}</button>)}
       </div>
+    </section>
+  )
+}
+
+/**
+ * The first-run check (the user, 31 Oct): what the clean-up would do for an account — archive where, delete on the
+ * server (each with a checked copy here), delete here — and nothing until «Εκτέλεση»; then what it did. Below it the
+ * garbage scan, with «Καθαρισμός» after the same kind of preview.
+ */
+export function CleanCheck({ accounts, onClose }: { accounts: MailAccount[]; onClose: () => void }) {
+  const [id, setId] = useState(accounts[0]?.id ?? '')
+  const [plan, setPlan] = useState<MailCleanPlan | null>(null)
+  const [done, setDone] = useState<{ archive: number; server: number; local: number; errors: string[] } | null>(null)
+  const [junk, setJunk] = useState<MailGarbage | null>(null)
+  const [swept, setSwept] = useState<{ adopted: number; cleared: number; deleted: number } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const look = () => window.drive.mail.cleanPlan(id).then(setPlan, e => setError(errorText(e)))
+  const scan = () => window.drive.mail.garbage().then(setJunk, e => setError(errorText(e)))
+  useEffect(() => { setPlan(null); setDone(null); look() }, [id])
+  useEffect(() => { scan() }, [])
+  const acc = accounts.find(a => a.id === id)
+  const part = (key: string, p: MailCleanPlan['server']) => p.count > 0 && <details className="mail-check-row" key={key}>
+    <summary><span>{t(key)}</span><strong>{t('mail.nMails', { count: p.count })} · {formatBytes(p.bytes)}</strong></summary>
+    <ul>{p.sample.map(s => <li key={s.id}>{new Date(s.date).toLocaleDateString(locale())} · {s.from} · {s.subject || t('mail.noSubject')}</li>)}</ul>
+  </details>
+  const heap = (key: string, h: MailGarbage['orphans']) => h.count > 0 && <details className="mail-check-row" key={key}>
+    <summary><span>{t(key)}</span><strong>{h.count}</strong></summary><ul>{h.sample.map(s => <li key={s}>{s}</li>)}</ul></details>
+  const nothing = plan && !plan.archive.count && !plan.server.count && !plan.local.count
+  const clean = junk && ['orphans', 'missing', 'lonely', 'partial', 'empty', 'leftovers', 'duplicates'].every(k => (junk[k as 'orphans'] as { count: number }).count === 0)
+  return (
+    <Modal onClose={onClose}>
+      <div className="mail-check">
+        <h3>{t('mail.check')}</h3>
+        {accounts.length > 1 && <select className="field" value={id} onChange={e => setId(e.target.value)}>{accounts.map(a => <option key={a.id} value={a.id}>{a.address}</option>)}</select>}
+        <p>{acc?.cleanConfirmed ? t('mail.checkAgain') : t('mail.checkFirst')}</p>
+        {plan && <>
+          {part(acc?.archiveBy === 'month' ? 'mail.wouldArchiveMonth' : 'mail.wouldArchiveYear', plan.archive)}
+          {part('mail.wouldServer', plan.server)}
+          {part('mail.wouldLocal', plan.local)}
+          {part('mail.wouldKeep', plan.unsafe)}
+          {nothing && <p className="muted">{t('mail.wouldNothing')}</p>}
+          {plan.warn && <p className="error">{t('mail.cleanWarn')}</p>}
+        </>}
+        {done && <p className="mail-check-done">{t('mail.didClean', { archive: done.archive, server: done.server, local: done.local })}{done.errors.length ? ` ${done.errors.join(' ')}` : ''}</p>}
+        <div className="dialog-actions">
+          <button className="filled-button" disabled={!plan || busy || (!!nothing && !!acc?.cleanConfirmed)}
+            onClick={async () => { setBusy(true); setError(''); try { setDone(await window.drive.mail.cleanRun(id)); await look() } catch (e) { setError(errorText(e)) } setBusy(false) }}>{t('mail.run')}</button>
+        </div>
+        <h4>{t('mail.garbage')}</h4>
+        {junk && <>
+          {heap('mail.gOrphans', junk.orphans)}{heap('mail.gMissing', junk.missing)}{heap('mail.gLonely', junk.lonely)}{heap('mail.gPartial', junk.partial)}
+          {heap('mail.gEmpty', junk.empty)}{heap('mail.gLeftovers', junk.leftovers)}{heap('mail.gDuplicates', junk.duplicates)}
+          {clean ? <p className="muted">{t('mail.gNothing')}</p> : <p className="muted">{t('mail.gHow')}</p>}
+        </>}
+        {swept && <p className="mail-check-done">{t('mail.swept', { adopted: swept.adopted, cleared: swept.cleared, deleted: swept.deleted })}</p>}
+        {error && <p className="error">{error}</p>}
+        <div className="dialog-actions">
+          <button className="text-button" onClick={onClose}>{t('common.close')}</button>
+          <button className="filled-button secondary" disabled={!junk || !!clean || busy} onClick={async () => { setBusy(true); try { setSwept(await window.drive.mail.sweep()); await scan() } catch (e) { setError(errorText(e)) } setBusy(false) }}>{t('mail.sweep')}</button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/** Settings › Αλληλογραφία: signatures, archive and clean-up, filters, spam, privacy (MAIL_PLAN §9c). */
+export function MailSettings() {
+  return <><MailSignatures /><CleanCard /><FiltersCard /><SpamCard /><PrivacyCard /><MicrosoftCard /></>
+}
+
+/** The Microsoft app's id (MAIL_PLAN §13): registered once by the user; Hotmail and Microsoft 365 sign in through it. */
+function MicrosoftCard() {
+  const [id, setId] = useState<string | null>(null)
+  const [state, setState] = useState('')
+  useEffect(() => { window.drive.mail.msClient().then(setId) }, [])
+  if (id === null) return null
+  return (
+    <section className="settings-card island">
+      <h3><Icon name="key" size={20} />{t('mail.msTitle')}</h3>
+      <p className="muted">{t('mail.msClientHow')}</p>
+      <div className="mail-filter-row">
+        <input className="field" value={id} placeholder="00000000-0000-0000-0000-000000000000" spellCheck={false} onChange={e => { setId(e.target.value); setState('') }} />
+        <button className="text-button" onClick={() => window.drive.mail.setMsClient(id).then(() => setState(t('mail.msSaved')), e => setState(errorText(e)))}>{t('common.save')}</button>
+      </div>
+      {state && <p className="muted">{state}</p>}
+    </section>
+  )
+}
+
+function CleanCard() {
+  const [accs, setAccs] = useState<MailAccount[] | null>(null)
+  const [check, setCheck] = useState(false)
+  const load = () => window.drive.mail.accounts().then(r => setAccs(r.accounts))
+  useEffect(() => { load() }, [])
+  if (!accs?.length) return null
+  const set = (a: MailAccount, changes: Parameters<typeof window.drive.mail.setAccount>[1]) => window.drive.mail.setAccount(a.id, changes).then(load)
+  const years = (a: MailAccount, which: 'serverClean' | 'localClean', key: 'attachmentsMonths' | 'otherMonths', fallback: number) =>
+    <input className="field mail-years" type="number" min={0.5} max={50} step={0.5} defaultValue={(a[which][key] ?? fallback) / 12}
+      onBlur={e => { const m = Math.round(Number(e.target.value) * 12); if (m >= 1 && m <= 600) set(a, { [which]: { ...a[which], [key]: m } }) }} />
+  return (
+    <section className="settings-card island mail-clean">
+      <h3><Icon name="archive" size={20} />{t('mail.cleanTitle')}</h3>
+      {accs.map(a => <div key={a.id} className="mail-clean-acc">
+        <strong><span className="mail-dot" style={{ background: a.color }} /> {a.address}</strong>
+        <label className="mail-archive-by">{t('mail.archiveBy')}
+          <select value={a.archiveBy ?? 'year'} onChange={e => set(a, { archiveBy: e.target.value as 'year' })}>
+            <option value="year">{t('mail.byYear')}</option><option value="month">{t('mail.byMonth')}</option><option value="none">{t('mail.byNone')}</option></select></label>
+        <label className="cal-switch"><input type="checkbox" checked={a.serverClean.on !== false} onChange={e => set(a, { serverClean: { ...a.serverClean, on: e.target.checked } })} /><span>{t('mail.cleanServer')}</span></label>
+        {a.serverClean.on !== false && <div className="mail-ages">{t('mail.withAttachmentsAfter')} {years(a, 'serverClean', 'attachmentsMonths', 36)} {t('mail.years')} · {t('mail.otherAfter')} {years(a, 'serverClean', 'otherMonths', 24)} {t('mail.years')}</div>}
+        <label className="cal-switch"><input type="checkbox" checked={!!a.localClean.on} onChange={e => set(a, { localClean: { ...a.localClean, on: e.target.checked } })} /><span>{t('mail.cleanLocal')}</span></label>
+        {a.localClean.on && <div className="mail-ages">{t('mail.withAttachmentsAfter')} {years(a, 'localClean', 'attachmentsMonths', 120)} {t('mail.years')} · {t('mail.otherAfter')} {years(a, 'localClean', 'otherMonths', 120)} {t('mail.years')}</div>}
+        <label className="cal-switch"><input type="checkbox" checked={a.keepFavorites !== false} onChange={e => set(a, { keepFavorites: e.target.checked })} /><span>{t('mail.keepFavorites')}</span></label>
+        <p className="muted">{a.cleanConfirmed ? t('mail.cleanRuns', { date: a.cleanedAt ? new Date(a.cleanedAt).toLocaleString(locale()) : '—' }) : t('mail.cleanWaits')}</p>
+      </div>)}
+      <button className="filled-button secondary" onClick={() => setCheck(true)}>{t('mail.check')}</button>
+      {check && <CleanCheck accounts={accs} onClose={() => { setCheck(false); load() }} />}
+    </section>
+  )
+}
+
+const OPS_FOR: Record<string, string[]> = { size: ['gt', 'lt'], age: ['gt', 'lt'], hasAttachment: [] }
+function FiltersCard() {
+  const [list, setList] = useState<MailFilter[] | null>(null)
+  const [role, setRole] = useState<MailRole>('Inbox')
+  const [result, setResult] = useState('')
+  useEffect(() => { window.drive.mail.filters().then(setList) }, [])
+  if (!list) return null
+  const save = (next: MailFilter[]) => { setList(next); window.drive.mail.setFilters(next) }
+  const edit = (i: number, x: Partial<MailFilter>) => save(list.map((r, j) => j === i ? { ...r, ...x } : r))
+  const field = (f: string) => t(`mail.f_${f}`)
+  return (
+    <section className="settings-card island mail-filters">
+      <h3><Icon name="filter" size={20} />{t('mail.filters')}</h3>
+      <p className="muted">{t('mail.filtersHow')}</p>
+      {list.map((r, i) => <div key={r.id} className="mail-filter">
+        <div className="mail-filter-top">
+          <input type="checkbox" checked={r.on} onChange={e => edit(i, { on: e.target.checked })} aria-label={t('common.on')} />
+          <input className="field" value={r.name} placeholder={t('common.name')} onChange={e => edit(i, { name: e.target.value })} />
+          <select value={r.match} onChange={e => edit(i, { match: e.target.value as 'all' })}><option value="all">{t('mail.matchAll')}</option><option value="any">{t('mail.matchAny')}</option></select>
+          <button className="round flat" title={t('common.delete')} onClick={() => save(list.filter((_, j) => j !== i))}><Icon name="trash" size={18} /></button>
+        </div>
+        {r.conditions.map((c, k) => <div key={k} className="mail-filter-row">
+          <span>{t('mail.if')}</span>
+          <select value={c.field} onChange={e => edit(i, { conditions: r.conditions.map((x, j) => j === k ? { field: e.target.value, op: (OPS_FOR[e.target.value] ?? ['contains'])[0] ?? 'is', value: e.target.value === 'hasAttachment' ? true : '' } : x) })}>
+            {['from', 'to', 'subject', 'body', 'account', 'hasAttachment', 'size', 'age'].map(f => <option key={f} value={f}>{field(f)}</option>)}</select>
+          {c.field === 'hasAttachment'
+            ? <select value={String(c.value)} onChange={e => edit(i, { conditions: r.conditions.map((x, j) => j === k ? { ...x, value: e.target.value === 'true' } : x) })}><option value="true">{t('common.yes')}</option><option value="false">{t('common.no')}</option></select>
+            : <>
+              <select value={c.op} onChange={e => edit(i, { conditions: r.conditions.map((x, j) => j === k ? { ...x, op: e.target.value } : x) })}>
+                {(OPS_FOR[c.field] ?? ['contains', 'not', 'is', 'starts']).map(o => <option key={o} value={o}>{t(`mail.op_${o}${c.field === 'size' ? 'Kb' : c.field === 'age' ? 'Days' : ''}`)}</option>)}</select>
+              <input className="field" value={String(c.value ?? '')} onChange={e => edit(i, { conditions: r.conditions.map((x, j) => j === k ? { ...x, value: e.target.value } : x) })} />
+            </>}
+          <button className="round flat" aria-label={t('common.remove')} onClick={() => edit(i, { conditions: r.conditions.filter((_, j) => j !== k) })}><Icon name="close" size={16} /></button>
+        </div>)}
+        <button className="text-button" onClick={() => edit(i, { conditions: [...r.conditions, { field: 'from', op: 'contains', value: '' }] })}>+ {t('mail.addCondition')}</button>
+        {r.actions.map((a, k) => <div key={k} className="mail-filter-row">
+          <span>{t('mail.then')}</span>
+          <select value={a.type} onChange={e => edit(i, { actions: r.actions.map((x, j) => j === k ? { type: e.target.value, ...(e.target.value === 'move' ? { to: 'Archive' } : {}) } : x) })}>
+            {['move', 'archive', 'delete', 'spam', 'read', 'favorite', 'saveAttachments'].map(x => <option key={x} value={x}>{t(`mail.a_${x}`)}</option>)}</select>
+          {a.type === 'move' && <select value={a.to} onChange={e => edit(i, { actions: r.actions.map((x, j) => j === k ? { ...x, to: e.target.value } : x) })}>
+            {(['Inbox', 'Archive', 'Spam', 'Trash'] as MailRole[]).map(x => <option key={x} value={x}>{t(`mail.role${x}`)}</option>)}</select>}
+          {a.type === 'saveAttachments' && <input className="field" placeholder={t('mail.filesFolder')} value={a.folder ?? ''} onChange={e => edit(i, { actions: r.actions.map((x, j) => j === k ? { ...x, folder: e.target.value } : x) })} />}
+          <button className="round flat" aria-label={t('common.remove')} onClick={() => edit(i, { actions: r.actions.filter((_, j) => j !== k) })}><Icon name="close" size={16} /></button>
+        </div>)}
+        <button className="text-button" onClick={() => edit(i, { actions: [...r.actions, { type: 'move', to: 'Archive' }] })}>+ {t('mail.addAction')}</button>
+      </div>)}
+      <div className="mail-filter-run">
+        <button className="filled-button secondary" onClick={() => save([...list, { id: `f${Date.now()}`, name: '', on: true, match: 'all', conditions: [{ field: 'from', op: 'contains', value: '' }], actions: [{ type: 'move', to: 'Archive' }] }])}>{t('mail.newFilter')}</button>
+        {list.length > 0 && <>
+          <select value={role} onChange={e => setRole(e.target.value as MailRole)}>{(['Inbox', 'Archive', 'Sent', 'Spam'] as MailRole[]).map(x => <option key={x} value={x}>{t(`mail.role${x}`)}</option>)}</select>
+          <button className="text-button" onClick={() => window.drive.mail.runFilters(role, null).then(r => setResult(t('mail.filtersRan', { matched: r.matched })), e => setResult(errorText(e)))}>{t('mail.runNow')}</button>
+          {result && <span className="muted">{result}</span>}
+        </>}
+      </div>
+    </section>
+  )
+}
+
+function SpamCard() {
+  const [j, setJ] = useState<{ on: boolean; nSpam: number; nHam: number; ready: boolean } | null>(null)
+  useEffect(() => { window.drive.mail.junk().then(setJ) }, [])
+  if (!j) return null
+  return (
+    <section className="settings-card island">
+      <h3><Icon name="warning" size={20} />{t('mail.spamTitle')}</h3>
+      <p className="muted">{t('mail.spamHow')}</p>
+      <label className="cal-switch"><input type="checkbox" checked={j.on} onChange={e => window.drive.mail.setJunk(e.target.checked).then(() => window.drive.mail.junk().then(setJ))} /><span>{t('mail.spamLocal')}</span></label>
+      <p className="muted">{j.ready ? t('mail.spamReady', { spam: j.nSpam, ham: j.nHam }) : t('mail.spamLearning', { spam: j.nSpam, ham: j.nHam })}</p>
+    </section>
+  )
+}
+
+function PrivacyCard() {
+  const [p, setP] = useState<MailPrivacy | null>(null)
+  const [add, setAdd] = useState('')
+  useEffect(() => { window.drive.mail.privacy().then(setP) }, [])
+  if (!p) return null
+  const save = (x: MailPrivacy) => window.drive.mail.setPrivacy(x).then(setP)
+  return (
+    <section className="settings-card island">
+      <h3><Icon name="lock" size={20} />{t('mail.privacy')}</h3>
+      <label className="cal-switch"><input type="checkbox" checked={p.images === 'always'} onChange={e => save({ ...p, images: e.target.checked ? 'always' : 'ask' })} />
+        <span><strong>{t('mail.loadRemote')}</strong><br />{t('mail.loadRemoteHow')}</span></label>
+      <h4 className="mail-filter-head">{t('mail.allowedSenders')}</h4>
+      <div className="chips wrap">{p.senders.map(s => <span key={s} className="mail-addr-chip">{s}<button aria-label={t('common.remove')} onClick={() => save({ ...p, senders: p.senders.filter(x => x !== s) })}><Icon name="close" size={14} /></button></span>)}
+        {!p.senders.length && <span className="muted">{t('mail.noneYet')}</span>}</div>
+      <div className="mail-filter-row">
+        <input className="field" value={add} placeholder="name@example.gr · @example.gr" onChange={e => setAdd(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && add.trim()) { save({ ...p, senders: [...p.senders, add.trim()] }); setAdd('') } }} />
+        <button className="text-button" disabled={!add.trim()} onClick={() => { save({ ...p, senders: [...p.senders, add.trim()] }); setAdd('') }}>{t('common.add')}</button>
+      </div>
+      <p className="muted">{t('mail.alwaysWarned')}</p>
     </section>
   )
 }

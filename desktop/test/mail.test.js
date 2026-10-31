@@ -5,24 +5,10 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { Mail, Index, detect, parseConfig, roles, mailName, clean, reason } = require('../mail')
+const { raw, memoryServer, message, smtpSpy } = require('./mailfake')
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'mail-'))
 
-const raw = (subject, { attach = false } = {}) => Buffer.from([
-  'From: =?UTF-8?B?zpPPgc6xzrzOvM6xz4TOtc6vzrEgzpzOoM6j?= <secretariat@nup.ac.cy>',
-  'To: t@nup.ac.cy',
-  `Subject: ${subject}`,
-  'Date: Fri, 31 Oct 2026 09:12:00 +0200',
-  'MIME-Version: 1.0',
-  'Content-Type: multipart/mixed; boundary="b"',
-  '',
-  '--b',
-  'Content-Type: text/plain; charset=utf-8',
-  '',
-  'Dear students,   the deadline is 15 November.',
-  ...(attach ? ['--b', 'Content-Type: application/pdf; name="Guide.pdf"', 'Content-Disposition: attachment; filename="Guide.pdf"', 'Content-Transfer-Encoding: base64', '', Buffer.from('%PDF-1.4 x').toString('base64')] : []),
-  '--b--', '',
-].join('\r\n'))
 
 /** Just enough of an imapflow client: one folder per path, uids → raw mail. */
 function fakeServer(boxes) {
@@ -140,44 +126,6 @@ test('mail: a sync writes <account>/<Folder>/<yyyy>/… .eml with its attachment
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
 
-/** A small IMAP server in memory, as imapflow sees it: folders of uid → { source, flags, messageId }. */
-function memoryServer(folders) {
-  let open = null
-  const box = () => folders[open]
-  const pick = range => String(range).split(',').map(Number)
-  const env = m => ({ date: new Date('2026-10-31T07:12:00Z'), subject: m.subject, messageId: m.messageId, from: [{ name: 'Γραμματεία', address: 's@x.gr' }], to: [] })
-  const c = {
-    calls: [],
-    async connect() {}, async logout() {}, close() {}, usable: true,
-    async list() { return Object.keys(folders).map(p => ({ path: p, delimiter: '/', specialUse: folders[p].use })) },
-    get mailbox() { return { uidValidity: BigInt(box().validity), exists: Object.keys(box().msgs).length } },
-    async mailboxOpen(p) { open = p },
-    async getMailboxLock(p) { open = p; return { release() {} } },
-    async search(q) { return Object.keys(box().msgs).map(Number).filter(u => !q?.header || box().msgs[u].messageId === q.header['message-id']) },
-    async append(p, raw, flags) {
-      c.calls.push(['append', p])
-      const text = raw.toString(), head = n => new RegExp(`^${n}: (.*)$`, 'mi').exec(text)?.[1]?.trim()
-      folders[p].msgs[folders[p].next++] = { subject: head('Subject'), messageId: head('Message-ID'), flags: new Set(flags), source: Buffer.from(raw) }
-    },
-    async *fetch(range, query) {
-      for (const uid of range === '1:*' ? Object.keys(box().msgs).map(Number) : pick(range)) {
-        const m = box().msgs[uid]
-        yield { uid, flags: m.flags, size: m.source.length, envelope: env(m), bodyStructure: {}, internalDate: new Date('2026-10-31T07:12:00Z') }
-      }
-    },
-    async fetchOne(uid) { c.calls.push(['fetchOne', open, uid]); return { source: box().msgs[uid].source } },
-    async messageFlagsAdd(range, flags) { for (const u of pick(range)) for (const f of flags) box().msgs[u].flags.add(f) },
-    async messageFlagsRemove(range, flags) { for (const u of pick(range)) for (const f of flags) box().msgs[u].flags.delete(f) },
-    async mailboxCreate(p) { c.calls.push(['create', p]); folders[p] = { validity: 9, next: 1, msgs: {} } },
-    async messageMove(range, dest) {
-      c.calls.push(['move', open, range, dest])
-      for (const u of pick(range)) { const to = folders[dest]; to.msgs[to.next++] = box().msgs[u]; delete box().msgs[u] }
-    },
-    async messageDelete(range) { for (const u of pick(range)) delete box().msgs[u] },
-  }
-  return c
-}
-const message = (subject, id) => ({ subject, messageId: `<${id}@x>`, flags: new Set(), source: raw(subject) })
 
 test('mail: the Archive\'s year folders are synced as Archive', () => {
   const list = [{ path: 'INBOX' }, { path: 'Archive', specialUse: '\\Archive', delimiter: '/' }, { path: 'Archive/2026', delimiter: '/' }, { path: 'Archived', delimiter: '/' }]
@@ -246,7 +194,6 @@ test('mail: a phone\'s requests are carried out oldest first and removed; one th
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
 
-const smtpSpy = () => { const sent = []; return { sent, make: o => ({ async sendMail(m) { sent.push({ ...m, auth: o.auth.user }) }, close() {} }) } }
 
 test('mail: sending goes by SMTP, the same bytes are in Sent here (green) and on the server, and the server\'s copy takes the file over', async () => {
   const dir = tmp()

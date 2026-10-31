@@ -32,7 +32,8 @@ const { MapBuilder } = require('./mapbuild')
 const { Thumbs } = require('./thumbs')
 const importer = require('./importer')
 const assistant = require('./assistant')
-const { Mail, detect: detectMail, check: checkMail } = require('./mail')
+const { Mail, MICROSOFT, detect: detectMail, check: checkMail } = require('./mail')
+const msauth = require('./msauth')
 let mail = null
 const i18n = require('./i18n')
 const { t } = i18n
@@ -356,6 +357,25 @@ const said = { offer: 0, full: 0 }
 const HOURS = 3_600_000
 const fmtBytes = n => n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`
 const shownNotes = new Set()
+// Mail's secrets: a password, or {"refresh": …} for an account signed in with Microsoft — encrypted, in this computer's settings only
+const mailSecret = id => { try { const s = setting('mailSecret:' + id); return s ? safeStorage.decryptString(Buffer.from(s, 'base64')) : null } catch { return null } }
+const keepMailSecret = (id, value) => setSetting('mailSecret:' + id, safeStorage.encryptString(value).toString('base64'))
+const msClient = () => setting('mailMicrosoftClientId') || ''
+const msTokens = new Map(), msRenewing = new Map()
+/** A Microsoft access token for an account: the one in memory while it lasts, else renewed — one renewal at a time per account. */
+function msToken(acc) {
+  const t = msTokens.get(acc.id)
+  if (t && t.expires > Date.now()) return Promise.resolve(t.access)
+  if (!msRenewing.has(acc.id)) msRenewing.set(acc.id, (async () => {
+    let stored = null
+    try { stored = JSON.parse(mailSecret(acc.id) ?? 'null') } catch {}
+    const n = await msauth.refresh({ clientId: msClient(), refreshToken: stored?.refresh })
+    if (n.refresh !== stored?.refresh) keepMailSecret(acc.id, JSON.stringify({ refresh: n.refresh }))
+    msTokens.set(acc.id, n)
+    return n.access
+  })().finally(() => msRenewing.delete(acc.id)))
+  return msRenewing.get(acc.id)
+}
 function notify(title, body, open = null) {
   // Kept as well as shown: a notification goes by in seconds, the Notifications page keeps them (asked 2026-09-26).
   try {
@@ -516,13 +536,12 @@ app.whenReady().then(() => {
   try { fs.mkdirSync(contacts.root, { recursive: true }) } catch {}
   timers = new timer.Timers(files.disk('Timer'), os.hostname() || 'Computer')
   // Mail (mail.js): the archive in .System/Mail/Shared; each account's password only in this computer's keyring
-  mail = new Mail(system.dir('Mail', 'Shared', files.system), {
-    secret: id => { try { const s = setting('mailSecret:' + id); return s ? safeStorage.decryptString(Buffer.from(s, 'base64')) : null } catch { return null } },
-  })
+  mail = new Mail(system.dir('Mail', 'Shared', files.system), { secret: mailSecret, token: msToken })
   mail.on('changed', () => win?.webContents.send('mail-changed'))
   mail.on('new', e => notify(e.from || e.fromAddress, e.subject || t('common.noTitle')))
   mail.on('failed', (r, e) => notify(t('mail.notSent'), `${r.draft?.subject || t('common.noTitle')}: ${e.reason && e.reason !== 'other' ? t(`mail.err_${e.reason}`) : e.message}`))
   mail.picked = new Set() // files chosen here to attach: nothing else on this computer can be sent from the window
+  mail.filesRoot = files.root // where a filter saves attachments ("save to a Files folder", MAIL_PLAN §6)
   if (!process.env.DRIVE_HIDDEN) mail.startAll() // a hidden QA copy fetches nothing
   // sync's old copies of timers that are over (timer.js clean; the phone clears its own the same way)
   try { const n = timers.clean(); if (n) console.log(`Timer: cleared ${n} old copies`) } catch {}
@@ -1271,7 +1290,21 @@ app.whenReady().then(() => {
   const isAddress = a => typeof a === 'string' && a.length < 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)
   ipcMain.handle('mail:accounts', () => ({ accounts: mail.accounts(), folders: mail.folders(), status: mail.status() }))
   ipcMain.handle('mail:list', (_, role, account) => mail.list(String(role), account ? String(account) : null))
-  ipcMain.handle('mail:open', (_, id) => mail.open(String(id)))
+  ipcMain.handle('mail:open', (_, id, images) => mail.open(String(id), { images: images === true }))
+  // step 6: the clean-up and its first-run check, the garbage scan, filters, the spam filter, remote pictures
+  const care = require('./mailclean')
+  const short = g => Object.fromEntries(Object.entries(g).map(([k, v]) => [k, Array.isArray(v) ? { count: v.length, sample: v.slice(0, 30).map(x => typeof x === 'string' ? x : x.drop) } : v]))
+  ipcMain.handle('mail:cleanPlan', (_, id) => care.summary(mail, care.plan(mail, mail.account(String(id)))))
+  ipcMain.handle('mail:cleanRun', (_, id) => mailCall(() => { const acc = mail.account(String(id)); return care.run(mail, acc, care.plan(mail, acc)) }))
+  ipcMain.handle('mail:garbage', () => short(care.garbage(mail)))
+  ipcMain.handle('mail:sweep', () => care.sweep(mail))
+  ipcMain.handle('mail:filters', () => care.filters(mail))
+  ipcMain.handle('mail:setFilters', (_, list) => care.setFilters(mail, list))
+  ipcMain.handle('mail:runFilters', (_, role, account) => mailCall(() => care.applyFilters(mail, mail.list(String(role), account ? String(account) : null), { filesRoot: files.root })))
+  ipcMain.handle('mail:junk', () => { const j = mail.junk(); return { on: j.on, nSpam: j.nSpam, nHam: j.nHam, ready: j.ready() } })
+  ipcMain.handle('mail:setJunk', (_, on) => { const j = mail.junk(); j.on = !!on; j.save() })
+  ipcMain.handle('mail:privacy', () => mail.privacy())
+  ipcMain.handle('mail:setPrivacy', (_, p) => mail.setPrivacy(p))
   ipcMain.handle('mail:detect', (_, address) => isAddress(address) ? detectMail(address.trim().toLowerCase()) : null)
   ipcMain.handle('mail:add', async (_, address, server, pass) => {
     const s = server ?? {}
@@ -1284,9 +1317,27 @@ app.whenReady().then(() => {
     const found = { host: s.host, port: s.port, secure: !!s.secure, users: s.users, provider: s.provider === 'google' ? 'google' : null, smtp }
     try {
       const { user, roles } = await checkMail(found, address, pass)
-      setSetting('mailSecret:' + address, safeStorage.encryptString(pass).toString('base64'))
+      keepMailSecret(address, pass)
       return { account: mail.add({ address, server: found, user }), roles: Object.keys(roles) }
     } catch (e) { return { error: e.reason ?? 'other', detail: e.message } }
+  })
+  // «Σύνδεση με Microsoft»: Microsoft's page in the browser, the code back to this computer, the refresh token kept encrypted
+  ipcMain.handle('mail:addMicrosoft', async (_, address) => {
+    if (!isAddress(address)) throw new Error(t('mail.badServer'))
+    if (!safeStorage.isEncryptionAvailable()) return { error: 'keyring' }
+    address = address.trim().toLowerCase()
+    try {
+      const tok = await msauth.signIn({ clientId: msClient(), address, open: url => shell.openExternal(url) })
+      const { user, roles } = await checkMail(MICROSOFT, address, { accessToken: tok.access })
+      keepMailSecret(address, JSON.stringify({ refresh: tok.refresh })); msTokens.set(address, tok)
+      return { account: mail.add({ address, server: MICROSOFT, user, auth: 'microsoft' }), roles: Object.keys(roles) }
+    } catch (e) { return { error: e.reason ?? 'other', detail: e.message } }
+  })
+  ipcMain.handle('mail:msClient', () => msClient())
+  ipcMain.handle('mail:setMsClient', (_, id) => {
+    const v = String(id ?? '').trim()
+    if (v && !msauth.isClientId(v)) throw new Error(t('mail.badClient'))
+    setSetting('mailMicrosoftClientId', v); msTokens.clear()
   })
   ipcMain.handle('mail:remove', (_, id) => { mail.remove(String(id)); db.prepare('DELETE FROM settings WHERE key = ?').run('mailSecret:' + id) })
   ipcMain.handle('mail:sync', () => mail.syncNow())

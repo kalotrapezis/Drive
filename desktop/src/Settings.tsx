@@ -7,7 +7,7 @@ import { ResetCard } from './Role'
 import { MapsCard } from './MapBuilder'
 import { formatBytes } from './timeline'
 import { errorText } from './Dialogs'
-import { MailSignatures } from './Mail'
+import { MailSettings } from './Mail'
 
 // The foot of the sidebar (asked 2026-09-26): what Tetra said, kept — a notification goes by in seconds — and Settings.
 
@@ -92,7 +92,7 @@ export function SettingsPage({ onGuide, start }: { onGuide: () => void; start?: 
           {tab === 'computer' && <ResetCard />}
           {tab === 'cleanUp' && <CleanCard />}
           {tab === 'photos' && <MotionCard />}
-          {tab === 'mail' && <MailSignatures />}
+          {tab === 'mail' && <MailSettings />}
           {tab === 'maps' && <><MapsCard /><LocationCard /></>}
           {tab === 'phone' && <CallsCard />}
           {tab === 'assistant' && <AssistCard />}

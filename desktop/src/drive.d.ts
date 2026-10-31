@@ -11,14 +11,21 @@ export interface MailSignature { html: string; newMail: boolean; replies: boolea
 export type MailDraftKind = 'new' | 'reply' | 'replyAll' | 'forward' | 'forwardAttached' | 'edit'
 export type MailOp = 'read' | 'unread' | 'favorite' | 'unfavorite' | 'archive' | 'delete' | 'move' | 'spam' | 'notSpam'
 export interface MailServer { host: string; port: number; secure: boolean; users: string[]; provider: 'google' | 'microsoft' | null }
+export interface MailClean { on: boolean; attachmentsMonths?: number; otherMonths?: number }
 export interface MailAccount { id: string; address: string; name: string; color: string; provider: string | null; archive: boolean; archiveBy?: 'year' | 'month' | 'none'; notify: boolean
-  serverClean: { on: boolean; attachmentsMonths: number; otherMonths: number }; localClean: { on: boolean } }
+  serverClean: MailClean; localClean: MailClean; keepFavorites?: boolean; cleanConfirmed?: boolean; cleanedAt?: number }
+type MailPart = { count: number; bytes: number; sample: { id: string; subject: string; from: string; date: number; folder: MailRole }[] }
+export interface MailCleanPlan { archive: MailPart; server: MailPart; local: MailPart; unsafe: MailPart; warn: boolean }
+type MailHeap = { count: number; sample: string[] }
+export interface MailGarbage { orphans: MailHeap; missing: MailHeap; lonely: MailHeap; partial: MailHeap; empty: MailHeap; leftovers: MailHeap; duplicates: MailHeap; bytes: number }
+export interface MailFilter { id: string; name: string; on: boolean; match: 'all' | 'any'; conditions: { field: string; op: string; value: string | number | boolean }[]; actions: { type: string; to?: string; folder?: string }[] }
+export interface MailPrivacy { images: 'ask' | 'always'; senders: string[] }
 export interface MailEntry { id: string; account: string; folder: MailRole; uid: number; date: number; from: string; fromAddress: string; to: string[]
   subject: string; seen: boolean; flagged: boolean; size: number; attachments: number; snippet: string; saved: boolean; file?: string }
 export interface MailFolder { role: MailRole; accounts: { id: string; unread: number; total: number; orange: number }[] }
 export interface MailState { busy?: boolean; error?: string | null; detail?: string | null; synced?: number }
-export interface MailOpened extends Omit<MailEntry, 'to'> { missing?: boolean; to: string; cc: string; html: string; attachments: { name: string; size: number; file: string }[] }
-export type MailAddResult = { account: MailAccount; roles: MailRole[]; error?: undefined } | { error: 'auth' | 'appPassword' | 'unreachable' | 'keyring' | 'other'; detail?: string }
+export interface MailOpened extends Omit<MailEntry, 'to'> { missing?: boolean; remote?: boolean; to: string; cc: string; html: string; attachments: { name: string; size: number; file: string }[] }
+export type MailAddResult = { account: MailAccount; roles: MailRole[]; error?: undefined } | { error: 'auth' | 'appPassword' | 'unreachable' | 'keyring' | 'noClient' | 'approval' | 'other'; detail?: string }
 
 /** AI Assist (assistant.js): an answer, and what its tools left for the screen. */
 export interface AssistCall { name: string; number: string }
@@ -245,9 +252,12 @@ declare global {
       mail: {
         accounts(): Promise<{ accounts: MailAccount[]; folders: MailFolder[]; status: Record<string, MailState> }>
         list(role: MailRole, account: string | null): Promise<MailEntry[]>
-        open(id: string): Promise<MailOpened | null>
+        open(id: string, images?: boolean): Promise<MailOpened | null>
         detect(address: string): Promise<{ server: MailServer; how: string } | null>
         add(address: string, server: MailServer, pass: string): Promise<MailAddResult>
+        addMicrosoft(address: string): Promise<MailAddResult>
+        msClient(): Promise<string>
+        setMsClient(id: string): Promise<void>
         remove(id: string): Promise<void>
         sync(): Promise<void>
         act(op: MailOp, ids: string[], to?: MailRole): Promise<void>
@@ -260,7 +270,18 @@ declare global {
         pickImage(): Promise<string | null>
         signatures(): Promise<Record<string, MailSignature>>
         setSignature(address: string, sig: MailSignature | null): Promise<void>
-        setAccount(id: string, changes: { archiveBy?: 'year' | 'month' | 'none' }): Promise<void>
+        setAccount(id: string, changes: Partial<Pick<MailAccount, 'archiveBy' | 'serverClean' | 'localClean' | 'keepFavorites'>>): Promise<void>
+        cleanPlan(id: string): Promise<MailCleanPlan>
+        cleanRun(id: string): Promise<{ archive: number; server: number; local: number; bytes: number; errors: string[] }>
+        garbage(): Promise<MailGarbage>
+        sweep(): Promise<{ adopted: number; cleared: number; deleted: number }>
+        filters(): Promise<MailFilter[]>
+        setFilters(list: MailFilter[]): Promise<MailFilter[]>
+        runFilters(role: MailRole, account: string | null): Promise<{ matched: number; actions: number }>
+        junk(): Promise<{ on: boolean; nSpam: number; nHam: number; ready: boolean }>
+        setJunk(on: boolean): Promise<void>
+        privacy(): Promise<MailPrivacy>
+        setPrivacy(p: MailPrivacy): Promise<MailPrivacy>
         openFile(rel: string): Promise<void>
         openLink(url: string): Promise<void>
         appPasswords(): Promise<void>

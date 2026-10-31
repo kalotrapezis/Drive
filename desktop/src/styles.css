@@ -1378,3 +1378,25 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .mail-sig-source { font-family: ui-monospace, monospace; font-size: 13px; }
 .mail-search { flex: 1 1 200px; min-width: 150px; }
 .mail-editor { border: 1px solid var(--island-2); }
+.mail-files .chip.risky { background: #d9822b33; }
+.mail-images-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; padding: 8px 14px; margin-bottom: 12px; border-radius: 14px; background: var(--island-2); font-size: 13px; color: var(--muted); }
+.mail-images-bar .text-button { padding: 6px 10px; }
+.mail-banner { display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 18px; font-size: 14px; flex: none; }
+.mail-banner .text-button { margin-left: auto; }
+.mail-check { display: flex; flex-direction: column; gap: 8px; }
+.dialog:has(.mail-check) { width: min(640px, 94vw); }
+.mail-check h4 { margin: 12px 0 0; }
+.mail-check-row { background: var(--island-2); border-radius: 12px; padding: 8px 12px; }
+.mail-check-row summary { display: flex; justify-content: space-between; gap: 12px; cursor: pointer; }
+.mail-check-row ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--muted); max-height: 180px; overflow-y: auto; }
+.mail-check-done { color: #3fb27f; }
+.mail-clean-acc { display: flex; flex-direction: column; gap: 4px; padding: 8px 0 12px; border-bottom: 1px solid var(--island-2); margin-bottom: 8px; }
+.mail-ages { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding-left: 32px; font-size: 13px; color: var(--muted); }
+.mail-years { width: 70px; padding: 4px 8px; }
+.mail-filter { border-radius: 14px; background: var(--island-2); padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; }
+.mail-filter-top, .mail-filter-row, .mail-filter-run { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mail-filter-top .field { flex: 1; min-width: 140px; padding: 6px 10px; background: var(--island); }
+.mail-filter-row .field { flex: 1; min-width: 120px; padding: 6px 10px; background: var(--island); }
+.mail-filter select, .mail-filter-run select { background: var(--island); color: var(--text); border: 0; border-radius: 8px; padding: 6px 8px; font: inherit; }
+.mail-filter-row > span { color: var(--muted); font-size: 13px; min-width: 40px; }
+.mail-ms { background: #2f6fde; color: #fff; margin: 4px 0 12px; }
