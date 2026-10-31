@@ -17,19 +17,21 @@ const net = require('node:net')
 const tls = require('node:tls')
 const path = require('node:path')
 const dns = require('node:dns').promises
+const crypto = require('node:crypto')
 const { EventEmitter } = require('node:events')
+const { t, locale } = require('./i18n')
 
 const ROLES = ['Inbox', 'Drafts', 'Sent', 'Archive', 'Spam', 'Trash']
 const SPECIAL = { '\\Inbox': 'Inbox', '\\Sent': 'Sent', '\\Drafts': 'Drafts', '\\Archive': 'Archive', '\\Junk': 'Spam', '\\Trash': 'Trash' }
 const COLORS = ['#e5534b', '#4f8ff7', '#e0a43a', '#3fb27f', '#b77ce6', '#e57ab0', '#3bb8c4']
 const EVERY = 15 * 60_000 // a full look at every folder; new mail in the Inbox comes at once by IDLE
 
-const GMAIL = { host: 'imap.gmail.com', port: 993, secure: true, users: ['%EMAILADDRESS%'], provider: 'google' }
-const MICROSOFT = { host: 'outlook.office365.com', port: 993, secure: true, users: ['%EMAILADDRESS%'], provider: 'microsoft' }
+const GMAIL = { host: 'imap.gmail.com', port: 993, secure: true, users: ['%EMAILADDRESS%'], provider: 'google', smtp: { host: 'smtp.gmail.com', port: 465, secure: true } }
+const MICROSOFT = { host: 'outlook.office365.com', port: 993, secure: true, users: ['%EMAILADDRESS%'], provider: 'microsoft', smtp: { host: 'smtp-mail.outlook.com', port: 587, secure: false } }
 /** Known providers first (MAIL_PLAN §9b); sch.gr's own server takes the user name without @sch.gr. */
 const KNOWN = {
   'gmail.com': GMAIL, 'googlemail.com': GMAIL,
-  'sch.gr': { host: 'mail.sch.gr', port: 993, secure: true, users: ['%EMAILLOCALPART%', '%EMAILADDRESS%'], provider: null },
+  'sch.gr': { host: 'mail.sch.gr', port: 993, secure: true, users: ['%EMAILLOCALPART%', '%EMAILADDRESS%'], provider: null, smtp: { host: 'mail.sch.gr', port: 465, secure: true } },
   ...Object.fromEntries(['outlook.com', 'hotmail.com', 'hotmail.gr', 'live.com', 'msn.com'].map(d => [d, MICROSOFT])),
 }
 
@@ -117,7 +119,10 @@ function parseConfig(xml) {
   const host = tag('hostname'), port = Number(tag('port'))
   if (!host || !(port > 0 && port < 65536)) return null
   const provider = /gmail\.com$/i.test(host) ? 'google' : /office365\.com$|outlook\.com$/i.test(host) ? 'microsoft' : null
-  return { host, port, secure: tag('socketType') === 'SSL', users: [tag('username') || '%EMAILADDRESS%'], provider }
+  const out = /<outgoingServer\s+type="smtp">([\s\S]*?)<\/outgoingServer>/.exec(String(xml))?.[1] ?? ''
+  const otag = n => new RegExp(`<${n}>([^<]*)</${n}>`).exec(out)?.[1]?.trim()
+  const smtp = otag('hostname') && Number(otag('port')) > 0 ? { host: otag('hostname'), port: Number(otag('port')), secure: otag('socketType') === 'SSL' } : null
+  return { host, port, secure: tag('socketType') === 'SSL', users: [tag('username') || '%EMAILADDRESS%'], provider, smtp }
 }
 
 /** %EMAILADDRESS% and the rest, as Thunderbird fills them. */
@@ -194,9 +199,9 @@ const sleep = (ms, run) => new Promise(r => { const t = setTimeout(r, ms); run.w
 
 class Mail extends EventEmitter {
   /** [root] is .System/Mail/Shared; [secret](id) gives an account's password from the keychain, or null; [connect] is for tests. */
-  constructor(root, { secret, connect = client }) {
+  constructor(root, { secret, connect = client, smtp = o => require('nodemailer').createTransport(o) }) {
     super()
-    this.root = root; this.secret = secret; this.connect = connect
+    this.root = root; this.secret = secret; this.connect = connect; this.smtp = smtp
     this.index = new Index(path.join(root, 'index.jsonl'))
     this.live = new Map()  // account id → its loop: { acc, stop, client, wake }
     this.state = {}        // account id → { busy, error }
@@ -218,6 +223,8 @@ class Mail extends EventEmitter {
     const acc = {
       id: address, address, name: name || (/^(gmail|googlemail)\.com$/.test(address.split('@')[1]) ? 'Gmail' : address.split('@')[1]), color: COLORS.find(c => !used.has(c)) ?? COLORS[list.length % COLORS.length],
       server: { host: server.host, port: server.port, secure: server.secure, user }, provider: server.provider ?? null,
+      // shortcut: a server found by guessing sends through its own host on 465; a different one needs editing accounts.json
+      smtp: server.smtp ?? { host: server.host, port: 465, secure: true },
       archive: true, archiveBy: 'year', serverClean: { on: true, attachmentsMonths: 36, otherMonths: 24 }, localClean: { on: false }, notify: true,
       addedOn: 'desktop', added: Date.now(),
     }
@@ -241,7 +248,7 @@ class Mail extends EventEmitter {
     this.live.delete(id); run.stop = true; run.wake?.('stop')
     run.client?.logout().catch(() => run.client?.close())
   }
-  stopAll() { for (const id of [...this.live.keys()]) this.stop(id); this.watcher?.close(); clearInterval(this.retry); this.index.flush() }
+  stopAll() { for (const id of [...this.live.keys()]) this.stop(id); for (const w of this.watchers ?? []) w.close(); clearInterval(this.retry); this.index.flush() }
   /** archiveBy (year, month, none) and the like, kept in accounts.json. */
   setAccount(id, changes) {
     const list = this.accounts(), a = list.find(x => x.id === id)
@@ -311,7 +318,9 @@ class Mail extends EventEmitter {
     const known = new Map(mine.filter(e => e.uidValidity === validity && !e.gone).map(e => [e.uid, e]))
     const uids = (c.mailbox.exists && await c.search({ all: true }, { uid: true })) || []
     const there = new Set(uids)
-    for (const e of mine) if (!e.gone && (e.uidValidity !== validity || !there.has(e.uid))) this.index.put({ ...e, gone: true })
+    for (const e of mine) if (!e.gone && e.uidValidity !== 'local' && (e.uidValidity !== validity || !there.has(e.uid))) this.index.put({ ...e, gone: true })
+    // what Tetra wrote itself (a sent mail, a draft) waits as 'local' until the server's copy turns up, and gives it its file
+    const locals = new Map(mine.filter(e => e.uidValidity === 'local' && !e.gone).map(e => [e.messageId, e]))
     if (known.size && uids.length) for await (const m of c.fetch('1:*', { uid: true, flags: true })) {
       const e = known.get(m.uid)
       if (!e) continue
@@ -327,6 +336,13 @@ class Mail extends EventEmitter {
           date: +(env.date || m.internalDate || 0), from: from.name || from.address || '', fromAddress: from.address || '',
           to: (env.to ?? []).map(a => a.address).filter(Boolean), subject: env.subject || '', messageId: env.messageId || '',
           seen: m.flags.has('\\Seen'), flagged: m.flags.has('\\Flagged'), size: m.size, attachments: countAttachments(m.bodyStructure), snippet: '', saved: false,
+        }
+        const local = e.messageId && locals.get(e.messageId)
+        if (local) {
+          locals.delete(e.messageId)
+          if (local.file && local.size === e.size) Object.assign(e, { file: local.file, saved: true, snippet: local.snippet, attachments: local.attachments })
+          else if (local.file) this.unlink(local.file) // the server changed it (Gmail's Sent copy): its own copy comes down instead
+          this.index.put({ ...local, gone: true, file: null, movedTo: e.id })
         }
         this.index.put(e)
         if (!first && role === 'Inbox' && !e.seen && acc.notify) this.emit('new', e, acc)
@@ -524,15 +540,262 @@ class Mail extends EventEmitter {
       }
     } finally { this.requesting = false }
   }
-  /** Looks for requests as they arrive (sync writes them) and every minute, for the ones that waited. */
+  /** Looks at requests/ and outbox/ as sync writes into them, and every minute for what waited. */
   watchRequests() {
-    const dir = path.join(this.root, 'requests')
-    fs.mkdirSync(dir, { recursive: true })
+    this.watchers = []
     let settle = null
-    const soon = () => { clearTimeout(settle); settle = setTimeout(() => this.requests().catch(e => console.warn('[mail]', e.message)), 500) }
-    try { this.watcher = fs.watch(dir, soon) } catch (e) { console.warn('[mail] cannot watch requests', e.message) }
+    const soon = () => { clearTimeout(settle); settle = setTimeout(() => { this.requests().catch(e => console.warn('[mail]', e.message)); this.outbox().catch(e => console.warn('[mail]', e.message)) }, 500) }
+    for (const name of ['requests', 'outbox']) {
+      const dir = path.join(this.root, name)
+      fs.mkdirSync(dir, { recursive: true })
+      try { this.watchers.push(fs.watch(dir, soon)) } catch (e) { console.warn('[mail] cannot watch', name, e.message) }
+    }
     this.retry = setInterval(soon, 60_000)
     soon()
+  }
+
+  // ── Writing (MAIL_PLAN §10 step 4)
+
+  account(id) {
+    const acc = this.accounts().find(a => a.id === id)
+    if (!acc) throw Object.assign(new Error(`No account ${id}`), { reason: 'other' })
+    return acc
+  }
+  /** A file Tetra wrote itself and is replacing (an old draft, a sent copy the server changed), with its attachments. */
+  unlink(rel) {
+    const full = this.inside(rel)
+    if (!full) return
+    fs.rmSync(full, { force: true }); fs.rmSync(full.slice(0, -4) + '.files', { recursive: true, force: true })
+  }
+  /** The name in this account's own sent mail, so a new mail says "Theologos Kalotrapezis" as the old ones did. */
+  fromName(acc) {
+    const names = new Map()
+    for (const e of this.index.all()) if (e.account === acc.id && e.folder === 'Sent' && e.fromAddress?.toLowerCase() === acc.address && e.from && e.from !== e.fromAddress) names.set(e.from, (names.get(e.from) ?? 0) + 1)
+    return [...names].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
+  }
+  /** Where an attachment of a draft is: `file` inside the archive (a phone's outbox, a mail forwarded), or `path`, a file this computer picked. */
+  attachmentPath(a) {
+    if (a?.file) { const f = this.inside(a.file); if (f) return f }
+    if (a?.path && this.picked?.has(a.path) && fs.existsSync(a.path)) return a.path
+    throw Object.assign(new Error(`${a?.name ?? 'An attachment'} is not there any more`), { reason: 'other' })
+  }
+
+  /**
+   * A draft (the window's, or a phone's outbox) as MIME bytes: { account, to, cc, bcc (envelope only), subject, html,
+   * inReplyTo, references, attachments: [{ name, file | path, type? }], messageId }. The text copy is made from the HTML.
+   */
+  async compose(acc, d) {
+    const MailComposer = require('nodemailer/lib/mail-composer')
+    const { convert } = require('html-to-text')
+    const html = String(d.html ?? '')
+    const list = x => (Array.isArray(x) ? x : []).filter(a => a?.address).map(a => ({ name: String(a.name ?? ''), address: String(a.address) }))
+    const raw = await new MailComposer({
+      from: { name: this.fromName(acc), address: acc.address }, to: list(d.to), cc: list(d.cc), subject: String(d.subject ?? ''),
+      html, text: convert(html, { wordwrap: 78, selectors: [{ selector: 'img', format: 'skip' }] }), messageId: d.messageId, date: new Date(),
+      inReplyTo: d.inReplyTo || undefined, references: d.references?.length ? d.references : undefined,
+      attachments: (d.attachments ?? []).map(a => ({ filename: String(a.name), path: this.attachmentPath(a), ...(a.type ? { contentType: a.type } : {}) })),
+    }).compile().build()
+    return raw
+  }
+  newId(acc) { return `<${crypto.randomUUID()}@${acc.address.split('@')[1]}>` }
+
+  /** A copy of what Tetra wrote, kept here at once (green) as 'local' until the server's copy turns up (headers). */
+  async keep(acc, role, raw, draft) {
+    const e = {
+      id: `${acc.id}/${role}/local/${draft.messageId}`, account: acc.id, folder: role, uidValidity: 'local', uid: 0, date: Date.now(),
+      from: this.fromName(acc) || acc.address, fromAddress: acc.address, to: (draft.to ?? []).map(a => a.address), subject: String(draft.subject ?? ''),
+      messageId: draft.messageId, seen: true, flagged: false, size: raw.length, attachments: (draft.attachments ?? []).length, snippet: '', saved: false,
+    }
+    this.index.put({ ...e, ...(await this.store(acc, e, raw)) })
+    this.index.flush(); this.changed()
+  }
+  /** This draft, every version of it, here: a draft is kept as its last version only. */
+  dropDraft(acc, messageId) {
+    for (const e of [...this.index.all()]) if (e.account === acc.id && e.folder === 'Drafts' && e.messageId === messageId && !e.gone) {
+      if (e.file) this.unlink(e.file)
+      this.index.put({ ...e, gone: true, file: null })
+    }
+  }
+  /** On the server: the draft's old versions out of Drafts, and [raw] in when there is one. */
+  async serverDraft(acc, messageId, raw) {
+    await this.withClient(acc, async c => {
+      const box = roles(await c.list()).Drafts
+      if (!box) return
+      const lock = await c.getMailboxLock(box)
+      try {
+        const old = (await c.search({ header: { 'message-id': messageId } }, { uid: true })) || []
+        if (raw) await c.append(box, raw, ['\\Draft', '\\Seen'])
+        if (old.length) await c.messageDelete(old.join(','), { uid: true })
+      } finally { lock.release() }
+    })
+  }
+
+  /** Saved as it is typed: here at once, on the server when it can be. { messageId, server }. */
+  async saveDraft(d) {
+    const acc = this.account(d.account), draft = { ...d, messageId: d.messageId || this.newId(acc) }
+    const raw = await this.compose(acc, draft)
+    this.dropDraft(acc, draft.messageId)
+    await this.keep(acc, 'Drafts', raw, draft)
+    try { await this.serverDraft(acc, draft.messageId, raw); return { messageId: draft.messageId, server: true } }
+    catch (e) { console.warn('[mail] draft kept here only', e.message); return { messageId: draft.messageId, server: false } }
+  }
+  async discardDraft(d) {
+    const acc = this.account(d.account)
+    if (!d.messageId) return
+    this.dropDraft(acc, d.messageId); this.index.flush(); this.changed()
+    await this.serverDraft(acc, d.messageId, null).catch(e => console.warn('[mail] draft left on the server', e.message))
+  }
+
+  /** The account's SMTP server: from accounts.json, or found again for an account added before Tetra could send. */
+  async smtpFor(acc) {
+    if (acc.smtp) return acc.smtp
+    const smtp = (await detect(acc.address).catch(() => null))?.server.smtp ?? { host: acc.server.host, port: 465, secure: true }
+    this.saveAccounts(this.accounts().map(a => a.id === acc.id ? { ...a, smtp } : a))
+    return smtp
+  }
+
+  /**
+   * Sends by SMTP with the account's own password; the same bytes are kept here in Sent (green at once) and put in the
+   * server's Sent (Gmail files its own copy); the draft it came from goes. [raw]: a phone's ready .eml.
+   */
+  async send(d, raw = null) {
+    const acc = this.account(d.account), draft = { ...d, messageId: d.messageId || this.newId(acc) }
+    if (raw) {
+      const { simpleParser } = require('mailparser')
+      const p = await simpleParser(raw)
+      const all = x => (Array.isArray(x) ? x : x ? [x] : []).flatMap(a => a.value ?? [])
+      Object.assign(draft, { to: all(p.to), cc: all(p.cc), subject: p.subject ?? '', messageId: p.messageId || draft.messageId, attachments: p.attachments.filter(a => !a.related) })
+    } else raw = await this.compose(acc, draft)
+    const to = [...(draft.to ?? []), ...(draft.cc ?? []), ...(draft.bcc ?? [])].map(a => String(a?.address ?? '')).filter(a => /^[^\s@<>]+@[^\s@<>]+$/.test(a))
+    if (!to.length) throw Object.assign(new Error('No one to send it to'), { reason: 'noRecipients' })
+    const pass = this.secret(acc.id)
+    if (!pass) throw Object.assign(new Error('No password saved on this computer'), { reason: 'auth' })
+    const smtp = await this.smtpFor(acc)
+    const transport = this.smtp({ host: smtp.host, port: smtp.port, secure: smtp.secure, auth: { user: acc.server.user, pass }, connectionTimeout: 20_000 })
+    try { await transport.sendMail({ envelope: { from: acc.address, to }, raw }) } catch (e) { throw failure(e) } finally { transport.close?.() }
+    await this.keep(acc, 'Sent', raw, draft)
+    if (acc.provider !== 'google') await this.withClient(acc, async c => {
+      const box = roles(await c.list()).Sent
+      if (box) await c.append(box, raw, ['\\Seen'])
+    }).catch(e => console.warn('[mail] sent, but no copy in the server\'s Sent', e.message))
+    if (d.messageId) await this.discardDraft({ account: acc.id, messageId: d.messageId })
+    this.live.get(acc.id)?.wake?.('all')
+    return { messageId: draft.messageId }
+  }
+
+  /** The HTML of a parsed mail, its inline pictures in it. */
+  htmlOf(p) {
+    let html = p.html || p.textAsHtml || ''
+    for (const a of p.attachments) if (a.related && a.cid && a.size < 5e6) html = html.split(`cid:${a.cid}`).join(`data:${a.contentType};base64,${a.content.toString('base64')}`)
+    return html
+  }
+  signatures() { try { return JSON.parse(fs.readFileSync(path.join(this.root, 'signatures.json'), 'utf8')) } catch { return {} } }
+  /** One address's signature (MAIL_PLAN §9c): { html, newMail, replies, position: 'above' | 'below' } — the quoted text's. */
+  setSignature(address, sig) {
+    const all = this.signatures()
+    if (!sig) delete all[address]
+    else all[address] = { html: String(sig.html ?? ''), newMail: !!sig.newMail, replies: !!sig.replies, position: sig.position === 'above' ? 'above' : 'below' }
+    fs.mkdirSync(this.root, { recursive: true })
+    const file = path.join(this.root, 'signatures.json')
+    fs.writeFileSync(part(file), JSON.stringify(all, null, 2)); fs.renameSync(part(file), file)
+  }
+
+  /**
+   * A new draft: empty ('new'), or from a mail: 'reply', 'replyAll', 'forward' (inline, its attachments too),
+   * 'forwardAttached' (the .eml attached), 'edit' (a draft opened again). The signature goes where the account says.
+   */
+  async draftFor(id, kind, accountId = null) {
+    const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+    const who = a => a.name ? `${esc(a.name)} &lt;${esc(a.address)}&gt;` : esc(a.address)
+    const sign = (acc, reply, body, quote = '') => {
+      const s = this.signatures()[acc.address]
+      const sig = s?.html && (reply ? s.replies : s.newMail) ? `<div class="tetra-signature">-- <br>${s.html}</div>` : ''
+      return s?.position === 'above' || !quote ? `${body}${sig}${quote}` : `${body}${quote}${sig}`
+    }
+    if (kind === 'new') {
+      const acc = this.account(accountId ?? this.accounts()[0]?.id)
+      return { account: acc.id, to: [], cc: [], bcc: [], subject: '', html: sign(acc, false, '<p><br></p>'), attachments: [], references: [] }
+    }
+    const e = this.index.get(id)
+    const file = e?.file && this.inside(e.file)
+    if (!file) throw Object.assign(new Error('This mail is not on this computer yet'), { reason: 'other' })
+    const acc = this.account(e.account), me = acc.address.toLowerCase()
+    const { simpleParser } = require('mailparser')
+    const p = await simpleParser(fs.readFileSync(file))
+    const list = x => (Array.isArray(x) ? x : x ? [x] : []).flatMap(a => a.value ?? []).filter(a => a.address).map(a => ({ name: a.name ?? '', address: a.address }))
+    const files = () => { const dir = file.slice(0, -4) + '.files'; try { return fs.readdirSync(dir).map(n => ({ name: n, file: `${e.file.slice(0, -4)}.files/${n}` })) } catch { return [] } }
+    const refs = [...(Array.isArray(p.references) ? p.references : p.references ? [p.references] : []), ...(p.messageId ? [p.messageId] : [])]
+    const date = (p.date ?? new Date(e.date)).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' })
+    const from = list(p.from)[0] ?? { name: e.from, address: e.fromAddress }
+    if (kind === 'edit') return { account: acc.id, to: list(p.to), cc: list(p.cc), bcc: list(p.bcc), subject: p.subject ?? '', html: p.html || p.textAsHtml || '',
+      attachments: files(), messageId: p.messageId, inReplyTo: p.inReplyTo ?? '', references: Array.isArray(p.references) ? p.references : p.references ? [p.references] : [] }
+    if (kind === 'reply' || kind === 'replyAll') {
+      const to = list(p.replyTo).length ? list(p.replyTo) : [from]
+      const seen = new Set([me, ...to.map(a => a.address.toLowerCase())])
+      const cc = kind === 'replyAll' ? [...list(p.to), ...list(p.cc)].filter(a => !seen.has(a.address.toLowerCase()) && seen.add(a.address.toLowerCase())) : []
+      const quote = `<p>${t('mail.wrote', { date: esc(date), from: who(from) })}</p><blockquote type="cite">${this.htmlOf(p)}</blockquote>`
+      return { account: acc.id, to, cc, bcc: [], subject: /^\s*(re|απ|σχετ)\s*:/i.test(p.subject ?? '') ? p.subject : `Re: ${p.subject ?? ''}`,
+        html: sign(acc, true, '<p><br></p>', quote), attachments: [], inReplyTo: p.messageId ?? '', references: refs }
+    }
+    if (kind === 'forward' || kind === 'forwardAttached') {
+      const head = `<p>-------- ${t('mail.forwarded')} --------<br>${t('mail.hSubject')}: ${esc(p.subject)}<br>${t('mail.hDate')}: ${esc(date)}<br>` +
+        `${t('mail.hFrom')}: ${who(from)}<br>${t('mail.hTo')}: ${list(p.to).map(who).join(', ')}</p>`
+      return { account: acc.id, to: [], cc: [], bcc: [], subject: `Fwd: ${p.subject ?? ''}`, references: refs,
+        html: sign(acc, true, '<p><br></p>', kind === 'forward' ? `${head}${this.htmlOf(p)}` : ''),
+        attachments: kind === 'forward' ? files() : [{ name: `${clean(p.subject, 120) || 'mail'}.eml`, file: e.file, type: 'message/rfc822' }] }
+    }
+    throw new Error(`Unknown draft: ${kind}`)
+  }
+
+  /** Every address in the mail here, the most written-to and heard-from first: the address fields' suggestions. */
+  addresses() {
+    const seen = new Map()
+    const add = (address, name) => {
+      const k = String(address ?? '').toLowerCase()
+      if (!k.includes('@') || /no-?reply|mailer-daemon/.test(k)) return
+      const x = seen.get(k) ?? { address: k, name: '', count: 0 }
+      x.count++; if (name && name !== address && !x.name) x.name = name
+      seen.set(k, x)
+    }
+    for (const e of this.index.all()) { add(e.fromAddress, e.from); for (const a of e.to ?? []) add(a) }
+    return [...seen.values()].sort((a, b) => b.count - a.count).slice(0, 3000)
+  }
+
+  /**
+   * A phone's mail (MAIL_PLAN §11): `outbox/<name>.json` { account, action: 'send' | 'draft' | 'discard', draft, eml?, at }
+   * — the draft as the window's, its attachments `file`s inside the archive (`outbox/<name>.files/…` for the phone's own),
+   * or a ready `eml` beside it. Done, all of it is removed; one that cannot be done now waits; one that failed for good
+   * becomes `<name>.failed.json` with the reason, for the phone to show.
+   */
+  async outbox() {
+    if (this.sending) return
+    this.sending = true
+    try {
+      const dir = path.join(this.root, 'outbox')
+      let names = []
+      try { names = fs.readdirSync(dir).filter(n => n.endsWith('.json') && !n.endsWith('.failed.json') && !n.startsWith('.')) } catch { return }
+      const jobs = []
+      for (const n of names) try { jobs.push({ name: n.slice(0, -5), r: JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8')) }) } catch {}
+      for (const { name, r } of jobs.sort((a, b) => (Number(a.r?.at) || 0) - (Number(b.r?.at) || 0))) {
+        const base = path.join(dir, name)
+        const eml = typeof r.eml === 'string' && !r.eml.includes('/') && r.eml.endsWith('.eml') ? path.join(dir, r.eml) : null
+        if (eml && !fs.existsSync(eml)) continue // still arriving
+        try {
+          const draft = { ...(r.draft ?? {}), account: r.account }
+          if (r.action === 'send') { await this.send(draft, eml ? fs.readFileSync(eml) : null); this.emit('sent', draft) }
+          else if (r.action === 'draft') await this.saveDraft(draft)
+          else if (r.action === 'discard') await this.discardDraft(draft)
+          else throw new Error(`Unknown outbox action: ${r.action}`)
+        } catch (e) {
+          if (['unreachable', 'auth'].includes(e.reason)) continue
+          console.warn('[mail] outbox', name, e.message)
+          fs.writeFileSync(base + '.failed.json', JSON.stringify({ ...r, error: e.reason ?? 'other', detail: e.message }, null, 2))
+          this.emit('failed', r, e)
+        }
+        fs.rmSync(base + '.json', { force: true }); fs.rmSync(base + '.files', { recursive: true, force: true })
+        if (eml) fs.rmSync(eml, { force: true })
+      }
+    } finally { this.sending = false }
   }
 
   /** The unified folders: per role, each account's unread, total and orange counts, with the account's state. */

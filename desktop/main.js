@@ -521,6 +521,8 @@ app.whenReady().then(() => {
   })
   mail.on('changed', () => win?.webContents.send('mail-changed'))
   mail.on('new', e => notify(e.from || e.fromAddress, e.subject || t('common.noTitle')))
+  mail.on('failed', (r, e) => notify(t('mail.notSent'), `${r.draft?.subject || t('common.noTitle')}: ${e.reason && e.reason !== 'other' ? t(`mail.err_${e.reason}`) : e.message}`))
+  mail.picked = new Set() // files chosen here to attach: nothing else on this computer can be sent from the window
   if (!process.env.DRIVE_HIDDEN) mail.startAll() // a hidden QA copy fetches nothing
   // sync's old copies of timers that are over (timer.js clean; the phone clears its own the same way)
   try { const n = timers.clean(); if (n) console.log(`Timer: cleared ${n} old copies`) } catch {}
@@ -1277,7 +1279,9 @@ app.whenReady().then(() => {
       || !Array.isArray(s.users) || !s.users.every(u => typeof u === 'string' && u.length < 255) || typeof pass !== 'string' || !pass) throw new Error(t('mail.badServer'))
     if (!safeStorage.isEncryptionAvailable()) return { error: 'keyring' }
     address = address.trim().toLowerCase()
-    const found = { host: s.host, port: s.port, secure: !!s.secure, users: s.users, provider: s.provider === 'google' ? 'google' : null }
+    const smtp = s.smtp && typeof s.smtp.host === 'string' && /^[a-z0-9.-]{1,253}$/i.test(s.smtp.host) && Number.isInteger(s.smtp.port) && s.smtp.port > 0 && s.smtp.port < 65536
+      ? { host: s.smtp.host, port: s.smtp.port, secure: !!s.smtp.secure } : null
+    const found = { host: s.host, port: s.port, secure: !!s.secure, users: s.users, provider: s.provider === 'google' ? 'google' : null, smtp }
     try {
       const { user, roles } = await checkMail(found, address, pass)
       setSetting('mailSecret:' + address, safeStorage.encryptString(pass).toString('base64'))
@@ -1286,9 +1290,29 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('mail:remove', (_, id) => { mail.remove(String(id)); db.prepare('DELETE FROM settings WHERE key = ?').run('mailSecret:' + id) })
   ipcMain.handle('mail:sync', () => mail.syncNow())
-  ipcMain.handle('mail:act', async (_, op, ids, to) => {
-    try { await mail.act({ op, ids, to }) } catch (e) { throw new Error(e.reason && e.reason !== 'other' ? t(`mail.err_${e.reason}`) : e.message) }
+  // what went wrong, as the one plain sentence (MAIL_PLAN §9b); the technical part stays in the log
+  const mailCall = async fn => { try { return await fn() } catch (e) { throw new Error(e.reason && e.reason !== 'other' ? t(`mail.err_${e.reason}`) : e.message) } }
+  ipcMain.handle('mail:act', (_, op, ids, to) => mailCall(() => mail.act({ op, ids, to })))
+  ipcMain.handle('mail:draftFor', (_, id, kind, account) => mailCall(() => mail.draftFor(id ? String(id) : null, String(kind), account ? String(account) : null)))
+  ipcMain.handle('mail:saveDraft', (_, d) => mailCall(() => mail.saveDraft(d)))
+  ipcMain.handle('mail:send', (_, d) => mailCall(() => mail.send(d)))
+  ipcMain.handle('mail:discard', (_, d) => mailCall(() => mail.discardDraft(d)))
+  ipcMain.handle('mail:addresses', () => mail.addresses())
+  ipcMain.handle('mail:pickFiles', async () => {
+    const r = await dialog.showOpenDialog(win, { title: t('mail.attach'), properties: ['openFile', 'multiSelections'] })
+    return r.canceled ? [] : r.filePaths.map(p => { mail.picked.add(p); return { name: path.basename(p), path: p, size: fs.statSync(p).size } })
   })
+  // a logo for a signature: the picture itself goes into the HTML, so it shows without loading anything from the web
+  ipcMain.handle('mail:pickImage', async () => {
+    const r = await dialog.showOpenDialog(win, { title: t('mail.image'), properties: ['openFile'], filters: [{ name: t('mail.image'), extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }] })
+    if (r.canceled) return null
+    const bytes = fs.readFileSync(r.filePaths[0])
+    if (bytes.length > 300_000) throw new Error(t('mail.imageTooBig'))
+    const ext = path.extname(r.filePaths[0]).slice(1).toLowerCase()
+    return `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${bytes.toString('base64')}`
+  })
+  ipcMain.handle('mail:signatures', () => mail.signatures())
+  ipcMain.handle('mail:setSignature', (_, address, sig) => { if (!mail.accounts().some(a => a.address === address)) throw new Error(t('mail.badServer')); mail.setSignature(address, sig) })
   ipcMain.handle('mail:setAccount', (_, id, changes) => mail.setAccount(String(id), changes))
   ipcMain.handle('mail:openFile', async (_, rel) => {
     const full = mail.inside(rel)

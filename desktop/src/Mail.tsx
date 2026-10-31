@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { MailAccount, MailEntry, MailFolder, MailOp, MailOpened, MailRole, MailServer, MailState } from './drive'
+import type { MailAccount, MailAddress, MailDraft, MailDraftKind, MailEntry, MailFolder, MailOp, MailOpened, MailRole, MailServer, MailSignature, MailState } from './drive'
 import { arrange, dayKey, DEFAULT_VIEW, type MailView } from './mailView'
 import { Confirm, Modal, errorText } from './Dialogs'
 import { Icon, type IconName } from './Icon'
 import { locale, t } from './i18n'
 
 // Tetra Mail, step 1 (Tetra-mobile's MAIL_PLAN.md, the desktop layout of §9): the action bar on top, then three columns —
-// the unified folders expanding into the accounts, the list, the open mail. Read, ♥, archive, delete, spam and move go to
-// the server (step 3); writing (New, Reply) is step 4.
+// the unified folders expanding into the accounts, the list, the open mail — or the mail being written. Read, ♥, archive,
+// delete, spam and move go to the server (step 3); New, Reply, Forward and drafts are step 4.
 
 type Data = { accounts: MailAccount[]; folders: MailFolder[]; status: Record<string, MailState> }
 const ROLE_ICON: Record<MailRole, IconName> = { Inbox: 'mail', Drafts: 'edit', Sent: 'arrowRight', Archive: 'archive', Spam: 'warning', Trash: 'trash' }
@@ -40,6 +40,8 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
   const [expanded, setExpanded] = useState<Set<MailRole>>(() => new Set(['Inbox']))
   const [mails, setMails] = useState<MailEntry[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
+  const [draft, setDraft] = useState<MailDraft | null>(null) // the mail being written, in place of the open one
+  const composer = useRef<ComposeApi | null>(null)
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(PAGE)
   const viewKey = `mail.view.${where.role}.${where.account ?? '*'}` // the Filter's choice, kept per folder
@@ -73,7 +75,12 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
     const i = flat.indexOf(current), next = flat[i + 1] ?? flat[i - 1]
     if (await act(op, [current.id], to)) setOpenId(next?.id ?? null)
   }
-  const open = (m: MailEntry) => { setOpenId(m.id); if (!m.seen) act('read', [m.id]) }
+  const write = (id: string | null, kind: MailDraftKind) => window.drive.mail.draftFor(id, kind, where.account ?? undefined)
+    .then(d => { setDraft(null); setTimeout(() => { setOpenId(null); setDraft(d) }) }, e => say(errorText(e))) // a fresh Compose, the old one saved as it goes
+  const open = (m: MailEntry) => {
+    if (m.folder === 'Drafts') { write(m.id, 'edit'); return } // a draft opens to be written on
+    setDraft(null); setOpenId(m.id); if (!m.seen) act('read', [m.id])
+  }
   const moveTo = () => current && setDialog(<Modal onClose={close}>
     <h3>{t('mail.moveTo')}</h3>
     {(['Inbox', 'Archive', 'Spam', 'Trash', 'Drafts', 'Sent'] as MailRole[]).filter(r => r !== current.folder).map(r =>
@@ -99,10 +106,24 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
   return (
     <div className="mail-page">
       <div className="mail-bar island">
-        <button className="mail-bar-item" onClick={() => window.drive.mail.sync()}><Icon name="refresh" size={20} /><span>{t('mail.sync')}</span></button>
-        <button className={`mail-bar-item ${filtered ? 'on' : ''}`} onClick={filter}><Icon name="filter" size={20} /><span>{t('mail.filter')}</span></button>
-        <button className="mail-bar-item" onClick={manage}><Icon name="person" size={20} /><span>{t('mail.accounts')}</span></button>
-        {current && <>
+        <button className="mail-bar-item new" onClick={() => write(null, 'new')}><Icon name="add" size={20} /><span>{t('mail.new')}</span></button>
+        <button className="mail-bar-item act" title={t('mail.sync')} onClick={() => window.drive.mail.sync()}><Icon name="refresh" size={20} /><span>{t('mail.sync')}</span></button>
+        <button className={`mail-bar-item act ${filtered ? 'on' : ''}`} title={t('mail.filter')} onClick={filter}><Icon name="filter" size={20} /><span>{t('mail.filter')}</span></button>
+        <button className="mail-bar-item act" title={t('mail.accounts')} onClick={manage}><Icon name="person" size={20} /><span>{t('mail.accounts')}</span></button>
+        {draft && <>
+          <span className="mail-bar-sep" />
+          <button className="mail-bar-item send" onClick={() => composer.current?.send()}><Icon name="send" size={20} /><span>{t('mail.send')}</span></button>
+          <button className="mail-bar-item" onClick={() => composer.current?.save()}><Icon name="save" size={20} /><span>{t('mail.saveDraft')}</span></button>
+          <button className="mail-bar-item act" title={t('mail.attach')} onClick={() => composer.current?.attach()}><Icon name="attach" size={20} /><span>{t('mail.attach')}</span></button>
+          <button className="mail-bar-item act" title={t('mail.ccBcc')} onClick={() => composer.current?.cc()}><Icon name="person" size={20} /><span>{t('mail.ccBcc')}</span></button>
+          <button className="mail-bar-item act" title={t('mail.discard')} onClick={() => composer.current?.discard()}><Icon name="deleteForever" size={20} /><span>{t('mail.discard')}</span></button>
+        </>}
+        {current && !draft && <>
+          <span className="mail-bar-sep" />
+          <button className="mail-bar-item act" title={t('mail.reply')} onClick={() => write(current.id, 'reply')}><Icon name="reply" size={20} /><span>{t('mail.reply')}</span></button>
+          <button className="mail-bar-item act" title={t('mail.replyAll')} onClick={() => write(current.id, 'replyAll')}><Icon name="replyAll" size={20} /><span>{t('mail.replyAll')}</span></button>
+          <button className="mail-bar-item act" title={t('mail.forward')} onClick={() => write(current.id, 'forward')}><Icon name="mailForward" size={20} /><span>{t('mail.forward')}</span></button>
+          <button className="mail-bar-item act" title={t('mail.forwardAttached')} onClick={() => write(current.id, 'forwardAttached')}><Icon name="attach" size={20} /><span>{t('mail.forwardAttached')}</span></button>
           <span className="mail-bar-sep" />
           {current.folder !== 'Archive' && <button className="mail-bar-item act" title={t('mail.archive')} onClick={() => away('archive')}><Icon name="archive" size={20} /><span>{t('mail.archive')}</span></button>}
           <button className="mail-bar-item act" title={t('common.delete')} onClick={() => away('delete')}><Icon name="trash" size={20} /><span>{t('common.delete')}</span></button>
@@ -157,7 +178,8 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
           {groups.reduce((n, g) => n + g.mails.length, 0) > limit && <button className="text-button mail-more" onClick={() => setLimit(l => l + PAGE)}>{t('mail.more')}</button>}
         </div>
         <div className="mail-read island">
-          {openId ? <Reader key={openId} id={openId} color={accounts.get(mails.find(m => m.id === openId)?.account ?? '')?.color} say={say} /> : <div className="empty">{t('mail.pick')}</div>}
+          {draft ? <Compose initial={draft} accounts={data?.accounts ?? []} api={composer} say={say} setDialog={setDialog} onDone={() => { setDraft(null); reload() }} />
+            : openId ? <Reader key={openId} id={openId} color={accounts.get(mails.find(m => m.id === openId)?.account ?? '')?.color} say={say} /> : <div className="empty">{t('mail.pick')}</div>}
         </div>
       </div>
     </div>
@@ -378,5 +400,178 @@ function AddAccount({ onClose, onDone }: { onClose: () => void; onDone: () => vo
         </>}
       </div>
     </Modal>
+  )
+}
+
+/** HTML from a mail, made safe to edit in the window: nothing that runs, loads, submits or restyles the whole page. */
+function safe(html: string) {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  doc.querySelectorAll('script,style,iframe,frame,frameset,object,embed,form,input,button,textarea,select,link,meta,base').forEach(n => n.remove())
+  for (const el of doc.body.querySelectorAll('*')) for (const a of [...el.attributes])
+    if (/^on/i.test(a.name) || (/^(href|src|xlink:href|action|formaction)$/i.test(a.name) && /^\s*(javascript|vbscript):/i.test(a.value))) el.removeAttribute(a.name)
+  return doc.body.innerHTML
+}
+// "forgot the attachment?": the mail's own words (not the quoted ones) speak of one
+const ATTACH_WORDS = /attach|συνημμ|επισυν|anhang|angehängt|pièce jointe|ci-joint|adjunt|allegat|bijlage|załącz|příloh|priložen|bilaga|vedhæft|liite|melléklet/i
+const ADDRESS = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/
+
+type Book = { address: string; name: string; count: number }[]
+/** To, Cc, Bcc: chips, and the addresses already in the mail as suggestions. */
+function AddressField({ label, value, onChange, book }: { label: string; value: MailAddress[]; onChange: (v: MailAddress[]) => void; book: Book }) {
+  const [text, setText] = useState('')
+  const [pick, setPick] = useState(0)
+  const q = text.trim().toLowerCase()
+  const hits = q ? book.filter(b => !value.some(v => v.address === b.address) && (b.address.includes(q) || b.name.toLowerCase().includes(q))).slice(0, 6) : []
+  const add = (a: MailAddress) => { onChange([...value, a]); setText(''); setPick(0) }
+  const commit = () => { const s = text.trim().replace(/[,;]$/, ''); if (ADDRESS.test(s)) add({ name: '', address: s }); else if (hits[pick]) add(hits[pick]) }
+  return (
+    <div className="mail-addr">
+      <span className="mail-addr-label">{label}</span>
+      {value.map(a => <span key={a.address} className="mail-addr-chip" title={a.address}>{a.name || a.address}
+        <button aria-label={t('common.remove')} onClick={() => onChange(value.filter(x => x !== a))}><Icon name="close" size={14} /></button></span>)}
+      <input value={text} onChange={e => { setText(e.target.value); setPick(0) }} onBlur={() => { if (text.trim()) commit() }}
+        onKeyDown={e => {
+          if ((['Enter', ',', ';'].includes(e.key) || (e.key === 'Tab' && hits.length)) && text.trim()) { e.preventDefault(); commit() }
+          else if (e.key === 'Backspace' && !text && value.length) onChange(value.slice(0, -1))
+          else if (e.key === 'ArrowDown') { e.preventDefault(); setPick(p => Math.min(p + 1, hits.length - 1)) }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setPick(p => Math.max(p - 1, 0)) }
+        }} />
+      {hits.length > 0 && <div className="mail-addr-hits island">{hits.map((h, i) =>
+        <button key={h.address} className={i === pick ? 'on' : ''} onMouseDown={e => { e.preventDefault(); add(h) }}><strong>{h.name || h.address}</strong>{h.name && <small>{h.address}</small>}</button>)}</div>}
+    </div>
+  )
+}
+
+export type ComposeApi = { send(): void; save(): void; attach(): void; cc(): void; discard(): void; sending: boolean }
+/**
+ * Writing a mail (MAIL_PLAN §9, step 4): From, To, Cc/Bcc, Subject, attachments and the text, the quoted mail and the
+ * signature in it. Saved as a draft four seconds after the typing stops (here and on the server), and when left; the
+ * bar above holds Send and Save draft, and the rest ([api]).
+ */
+function Compose({ initial, accounts, api, onDone, say, setDialog }: { initial: MailDraft; accounts: MailAccount[]; api: { current: ComposeApi | null }
+  onDone: () => void; say: (s: string) => void; setDialog: (d: ReactNode) => void }) {
+  const [d, setD] = useState(initial)
+  const [showCc, setShowCc] = useState(initial.cc.length + initial.bcc.length > 0)
+  const [state, setState] = useState<'' | 'saving' | 'saved' | 'here'>('')
+  const [sending, setSending] = useState(false)
+  const [book, setBook] = useState<Book>([])
+  const [sigs, setSigs] = useState<Record<string, MailSignature>>({})
+  const body = useRef<HTMLDivElement>(null), html = useRef(initial.html)
+  const dRef = useRef(d), dirty = useRef(false), closed = useRef(false), chain = useRef<Promise<unknown>>(Promise.resolve())
+  const [rev, setRev] = useState(0)
+  dRef.current = d
+  useEffect(() => { window.drive.mail.addresses().then(setBook); window.drive.mail.signatures().then(setSigs) }, [])
+  useEffect(() => { html.current = safe(initial.html); body.current!.innerHTML = html.current }, [])
+  const edit = (x: Partial<MailDraft>) => { setD(v => { const n = { ...v, ...x }; dRef.current = n; return n }); dirty.current = true; setRev(r => r + 1) }
+  const now = (): MailDraft => ({ ...dRef.current, html: html.current })
+  // one save at a time, so the second one already knows the draft's Message-ID
+  const save = () => chain.current = chain.current.then(async () => {
+    if (closed.current) return
+    dirty.current = false; setState('saving')
+    try {
+      const r = await window.drive.mail.saveDraft(now())
+      dRef.current = { ...dRef.current, messageId: r.messageId }; setD(dRef.current); setState(r.server ? 'saved' : 'here')
+    } catch (e) { setState(''); say(errorText(e)) }
+  })
+  useEffect(() => { if (!rev) return; const timer = setTimeout(() => { if (dirty.current) save() }, 4000); return () => clearTimeout(timer) }, [rev])
+  useEffect(() => () => { if (dirty.current && !closed.current) save() }, []) // left for another mail: kept as a draft
+
+  const really = async () => {
+    closed.current = true; setSending(true)
+    await chain.current
+    try { await window.drive.mail.send(now()); say(t('mail.sent')); onDone() }
+    catch (e) { closed.current = false; say(errorText(e)) }
+    setSending(false)
+  }
+  const send = () => {
+    const x = now()
+    if (!x.to.length && !x.cc.length && !x.bcc.length) { say(t('mail.err_noRecipients')); return }
+    const own = body.current!.cloneNode(true) as HTMLElement
+    own.querySelectorAll('blockquote, .tetra-signature').forEach(n => n.remove())
+    if (!x.attachments.length && ATTACH_WORDS.test(`${x.subject} ${own.textContent}`)) {
+      setDialog(<Confirm title={t('mail.forgotTitle')} body={t('mail.forgotBody')} action={t('mail.sendAnyway')} onClose={() => setDialog(null)} onConfirm={() => { setDialog(null); really() }} />)
+      return
+    }
+    really()
+  }
+  api.current = {
+    sending, send, save: () => { save(); },
+    attach: () => window.drive.mail.pickFiles().then(f => f.length && edit({ attachments: [...dRef.current.attachments, ...f] }), e => say(errorText(e))),
+    cc: () => setShowCc(s => !s),
+    discard: () => { closed.current = true; (dRef.current.messageId ? window.drive.mail.discard(now()) : Promise.resolve()).catch(e => say(errorText(e))); onDone() },
+  }
+  // another account: its own signature in place of the old one
+  const from = (account: string) => {
+    const el = body.current!, old = el.querySelector('.tetra-signature'), s = sigs[accounts.find(a => a.id === account)?.address ?? '']
+    if (s?.html) { const div = old ?? el.appendChild(document.createElement('div')); div.className = 'tetra-signature'; div.innerHTML = `-- <br>${safe(s.html)}` }
+    else old?.remove()
+    html.current = el.innerHTML
+    edit({ account })
+  }
+  return (
+    <div className="mail-compose">
+      <div className="mail-compose-row">
+        <span className="mail-addr-label">{t('mail.from')}</span>
+        <select value={d.account} onChange={e => from(e.target.value)}>{accounts.map(a => <option key={a.id} value={a.id}>{a.address}</option>)}</select>
+        <span className="mail-draft-state">{state && t({ saving: 'mail.draftSaving', saved: 'mail.draftSaved', here: 'mail.draftHere' }[state])}</span>
+      </div>
+      <AddressField label={t('mail.toField')} value={d.to} onChange={to => edit({ to })} book={book} />
+      {showCc && <><AddressField label={t('mail.cc')} value={d.cc} onChange={cc => edit({ cc })} book={book} />
+        <AddressField label={t('mail.bcc')} value={d.bcc} onChange={bcc => edit({ bcc })} book={book} /></>}
+      <input className="mail-compose-subject" placeholder={t('mail.subjectField')} value={d.subject} onChange={e => edit({ subject: e.target.value })} />
+      {d.attachments.length > 0 && <div className="mail-files">{d.attachments.map((a, i) =>
+        <span key={i} className="chip"><Icon name="attach" size={16} /> {a.name}{a.size ? ` · ${sizeText(a.size)}` : ''}
+          <button aria-label={t('common.remove')} onClick={() => edit({ attachments: d.attachments.filter((_, j) => j !== i) })}><Icon name="close" size={14} /></button></span>)}</div>}
+      <div ref={body} className="mail-editor" contentEditable role="textbox" aria-multiline aria-label={t('mail.subjectField')}
+        onInput={() => { html.current = body.current!.innerHTML; dirty.current = true; setRev(r => r + 1) }} />
+    </div>
+  )
+}
+
+/** Settings › Αλληλογραφία › Υπογραφές (MAIL_PLAN §9c): an HTML signature per address, edited as text or as HTML. */
+export function MailSignatures() {
+  const [accs, setAccs] = useState<MailAccount[] | null>(null)
+  const [sigs, setSigs] = useState<Record<string, MailSignature>>({})
+  const [address, setAddress] = useState('')
+  const [source, setSource] = useState(false)
+  const [url, setUrl] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState('')
+  const ed = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    window.drive.mail.accounts().then(r => { setAccs(r.accounts); setAddress(a => a || r.accounts[0]?.address || '') })
+    window.drive.mail.signatures().then(x => { setSigs(x); setLoaded(true) })
+  }, [])
+  const sig: MailSignature = sigs[address] ?? { html: '', newMail: true, replies: true, position: 'below' }
+  const save = (s: MailSignature) => { setSigs(x => ({ ...x, [address]: s })); window.drive.mail.setSignature(address, s) }
+  const fromEditor = () => ed.current && save({ ...sig, html: ed.current.innerHTML })
+  useEffect(() => { if (ed.current && !source) ed.current.innerHTML = safe(sig.html) }, [address, source, accs, loaded])
+  const command = (name: string, value?: string) => { ed.current?.focus(); document.execCommand(name, false, value); fromEditor() }
+  if (!accs) return null
+  if (!accs.length) return <section className="settings-card island"><h3>{t('mail.signatures')}</h3><p className="muted">{t('mail.noAccounts')}</p></section>
+  return (
+    <section className="settings-card island mail-sig">
+      <h3><Icon name="edit" size={20} />{t('mail.signatures')}</h3>
+      <label className="mail-sig-for">{t('mail.sigFor')}
+        <select value={address} onChange={e => setAddress(e.target.value)}>{accs.map(a => <option key={a.id} value={a.address}>{a.address}</option>)}</select></label>
+      <div className="mail-sig-tools">
+        <button className="round flat" title={t('mail.bold')} disabled={source} onClick={() => command('bold')}><Icon name="bold" size={20} /></button>
+        <button className="round flat" title={t('mail.italic')} disabled={source} onClick={() => command('italic')}><Icon name="italic" size={20} /></button>
+        <input className="field" placeholder="https://…" value={url} disabled={source} onChange={e => setUrl(e.target.value)} />
+        <button className="round flat" title={t('mail.link')} disabled={source || !/^(https?:|mailto:)/i.test(url)} onClick={() => { command('createLink', url); setUrl('') }}><Icon name="link" size={20} /></button>
+        <button className="round flat" title={t('mail.image')} disabled={source} onClick={() => { setError(''); window.drive.mail.pickImage().then(src => src && command('insertImage', src), e => setError(errorText(e))) }}><Icon name="photos" size={20} /></button>
+        <label className="cal-switch"><input type="checkbox" checked={source} onChange={e => { if (!e.target.checked) fromEditor(); setSource(e.target.checked) }} /><span>{t('mail.sigHtml')}</span></label>
+      </div>
+      {source
+        ? <textarea className="field mail-sig-source" rows={8} value={sig.html} onChange={e => save({ ...sig, html: e.target.value })} spellCheck={false} />
+        : <div ref={ed} className="mail-editor mail-sig-editor" contentEditable onBlur={fromEditor} />}
+      {error && <p className="error">{error}</p>}
+      <p className="muted">{t('mail.sigPlain')}</p>
+      <label className="cal-switch"><input type="checkbox" checked={sig.newMail} onChange={e => save({ ...sig, newMail: e.target.checked })} /><span>{t('mail.sigNew')}</span></label>
+      <label className="cal-switch"><input type="checkbox" checked={sig.replies} onChange={e => save({ ...sig, replies: e.target.checked })} /><span>{t('mail.sigReplies')}</span></label>
+      <div className="segmented island">
+        {(['above', 'below'] as const).map(p => <button key={p} className={sig.position === p ? 'on' : ''} onClick={() => save({ ...sig, position: p })}>{t(p === 'above' ? 'mail.sigAbove' : 'mail.sigBelow')}</button>)}
+      </div>
+    </section>
   )
 }

@@ -13,6 +13,9 @@
 > the Trash for good on the server), move, spam/not spam, each on its own short connection; a moved mail's file follows it
 > by Message-ID. Phones ask through `Mail/requests/<device>-<ms>.json` (MAIL_PLAN §11). Not yet: sending, the
 > server/local clean-up (defaults stored, nothing deletes), Gmail's other labels, multi-select.
+> **Step 4 (same day):** writing. `mail.send/saveDraft/discardDraft/draftFor` (nodemailer's MailComposer + SMTP;
+> `smtp` per account), Sent and Drafts copies kept as `local` index lines until the server's copy takes the file over;
+> `signatures.json`; the phone's `Mail/outbox/` (MAIL_PLAN §12). UI: Compose in the third column, Settings › Αλληλογραφία.
 
 > **Calendar (18 Oct 2026, branch `calendar`, worktree Drive-worktrees/calendar; not merged, not pushed).** The plan is
 > Drive-Android's Plan.md § Calendar. The desktop part: `desktop/calendar.js` reads and writes `~/Tetra/Files/Calendar`

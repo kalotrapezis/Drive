@@ -86,7 +86,7 @@ test('mail: the servers are found from known providers, Thunderbird\'s database,
   assert.equal((await detect('kalotrapezis@gmail.com')).server.host, 'imap.gmail.com')
   assert.equal((await detect('goodtable@sch.gr')).server.users[0], '%EMAILLOCALPART%')
   const xml = '<clientConfig><incomingServer type="pop3"><hostname>pop.x</hostname><port>995</port></incomingServer><incomingServer type="imap"><hostname>imap.x.org</hostname><port>993</port><socketType>SSL</socketType><username>%EMAILLOCALPART%</username></incomingServer></clientConfig>'
-  assert.deepEqual(parseConfig(xml), { host: 'imap.x.org', port: 993, secure: true, users: ['%EMAILLOCALPART%'], provider: null })
+  assert.deepEqual(parseConfig(xml), { host: 'imap.x.org', port: 993, secure: true, users: ['%EMAILLOCALPART%'], provider: null, smtp: null })
   const none = async () => null, nomx = async () => []
   assert.equal((await detect('a@x.org', { lookup: async u => (u.includes('thunderbird') ? parseConfig(xml) : null) })).how, 'thunderbird')
   assert.equal((await detect('t@nup.ac.cy', { lookup: none, mx: async () => [{ priority: 0, exchange: 'nup-ac-cy.mail.protection.outlook.com' }] })).server.provider, 'microsoft')
@@ -153,7 +153,12 @@ function memoryServer(folders) {
     get mailbox() { return { uidValidity: BigInt(box().validity), exists: Object.keys(box().msgs).length } },
     async mailboxOpen(p) { open = p },
     async getMailboxLock(p) { open = p; return { release() {} } },
-    async search() { return Object.keys(box().msgs).map(Number) },
+    async search(q) { return Object.keys(box().msgs).map(Number).filter(u => !q?.header || box().msgs[u].messageId === q.header['message-id']) },
+    async append(p, raw, flags) {
+      c.calls.push(['append', p])
+      const text = raw.toString(), head = n => new RegExp(`^${n}: (.*)$`, 'mi').exec(text)?.[1]?.trim()
+      folders[p].msgs[folders[p].next++] = { subject: head('Subject'), messageId: head('Message-ID'), flags: new Set(flags), source: Buffer.from(raw) }
+    },
     async *fetch(range, query) {
       for (const uid of range === '1:*' ? Object.keys(box().msgs).map(Number) : pick(range)) {
         const m = box().msgs[uid]
@@ -237,6 +242,104 @@ test('mail: a phone\'s requests are carried out oldest first and removed; one th
     await mail.requests()
     assert.deepEqual(fs.readdirSync(req), ['phone-4.json'])
     assert.equal(mail.index.get('me@sch.gr/Inbox/7/1').flagged, false, 'the later one wins')
+    mail.index.flush()
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+const smtpSpy = () => { const sent = []; return { sent, make: o => ({ async sendMail(m) { sent.push({ ...m, auth: o.auth.user }) }, close() {} }) } }
+
+test('mail: sending goes by SMTP, the same bytes are in Sent here (green) and on the server, and the server\'s copy takes the file over', async () => {
+  const dir = tmp()
+  try {
+    const folders = { INBOX: { validity: 7, next: 1, msgs: {} }, Sent: { use: '\\Sent', validity: 3, next: 1, msgs: {} }, Drafts: { use: '\\Drafts', validity: 4, next: 1, msgs: {} } }
+    const c = memoryServer(folders), smtp = smtpSpy()
+    const mail = new Mail(dir, { secret: () => 'pw', connect: () => c, smtp: smtp.make })
+    const acc = { id: 'me@sch.gr', address: 'me@sch.gr', server: { host: 'mail.sch.gr', user: 'me' }, smtp: { host: 'mail.sch.gr', port: 465, secure: true } }
+    mail.saveAccounts([acc])
+    const file = path.join(dir, 'Οδηγίες.pdf'); fs.writeFileSync(file, '%PDF')
+    mail.picked = new Set([file])
+    const d = { account: 'me@sch.gr', to: [{ name: 'Γραμματεία', address: 's@x.gr' }], bcc: [{ address: 'hidden@x.gr' }], subject: 'Εργασία', html: '<p>Καλησπέρα</p>', attachments: [{ name: 'Οδηγίες.pdf', path: file }] }
+
+    const { messageId } = await mail.saveDraft(d)
+    await mail.saveDraft({ ...d, messageId, html: '<p>Καλησπέρα σας</p>' })
+    assert.equal(Object.keys(folders.Drafts.msgs).length, 1, 'one version of a draft on the server')
+    assert.equal(mail.list('Drafts').length, 1, 'and here')
+
+    await mail.send({ ...d, messageId })
+    assert.deepEqual(smtp.sent[0].envelope, { from: 'me@sch.gr', to: ['s@x.gr', 'hidden@x.gr'] })
+    assert.equal(smtp.sent[0].auth, 'me')
+    const raw = smtp.sent[0].raw.toString()
+    assert.doesNotMatch(raw, /hidden@x\.gr/, 'Bcc is not in the mail')
+    assert.match(raw, /Content-Type: text\/plain/); assert.match(raw, /Content-Disposition: attachment/)
+    assert.equal(Object.keys(folders.Drafts.msgs).length, 0, 'the draft goes once it is sent')
+    assert.equal(mail.list('Drafts').length, 0)
+    const sent = mail.list('Sent')[0]
+    assert.ok(sent.saved && fs.existsSync(path.join(dir, sent.file)), 'green here at once')
+    assert.equal(folders.Sent.msgs[1].source.toString(), raw, 'the same bytes on the server')
+
+    const fetched = c.calls.filter(x => x[0] === 'fetchOne').length
+    await mail.headers(c, acc, 'Sent', 'Sent'); await mail.bodies(c, acc, 'Sent', 'Sent', { stop: false })
+    assert.deepEqual(mail.list('Sent').map(e => [e.id, e.file]), [['me@sch.gr/Sent/3/1', sent.file]], 'the server\'s copy has the file, nothing downloaded')
+    assert.equal(c.calls.filter(x => x[0] === 'fetchOne').length, fetched)
+
+    await assert.rejects(mail.send({ account: 'me@sch.gr', to: [], subject: 'x', html: '' }), /No one/)
+    await assert.rejects(mail.send({ ...d, attachments: [{ name: 'passwd', path: '/etc/passwd' }] }), /not there/, 'only files picked here')
+    mail.index.flush()
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('mail: reply, reply all and forward are filled from the mail, the signature above or below the quote', async () => {
+  const dir = tmp()
+  try {
+    const folders = { INBOX: { validity: 7, next: 2, msgs: { 1: { subject: 'Deadline', messageId: '<a@x>', flags: new Set(), source: Buffer.from(raw('Deadline', { attach: true }).toString().replace('To: t@nup.ac.cy', 'To: me@nup.ac.cy, b@x.gr\r\nCc: c@x.gr\r\nMessage-ID: <a@x>')) } } } }
+    const c = memoryServer(folders)
+    const mail = new Mail(dir, { secret: () => 'x', connect: () => c })
+    const acc = { id: 'me@nup.ac.cy', address: 'me@nup.ac.cy', server: {} }
+    mail.saveAccounts([acc])
+    await mail.headers(c, acc, 'Inbox', 'INBOX'); await mail.bodies(c, acc, 'Inbox', 'INBOX', { stop: false })
+    const id = 'me@nup.ac.cy/Inbox/7/1'
+    mail.setSignature('me@nup.ac.cy', { html: '<b>Θεολόγος</b>', newMail: true, replies: true, position: 'below' })
+
+    const r = await mail.draftFor(id, 'reply')
+    assert.deepEqual(r.to.map(a => a.address), ['secretariat@nup.ac.cy'])
+    assert.equal(r.subject, 'Re: Deadline'); assert.equal(r.inReplyTo, '<a@x>'); assert.deepEqual(r.references, ['<a@x>'])
+    assert.ok(r.html.indexOf('<blockquote') < r.html.indexOf('tetra-signature'), 'below the quote')
+    const all = await mail.draftFor(id, 'replyAll')
+    assert.deepEqual(all.cc.map(a => a.address), ['b@x.gr', 'c@x.gr'], 'everyone but me')
+    mail.setSignature('me@nup.ac.cy', { html: '<b>Θεολόγος</b>', newMail: false, replies: true, position: 'above' })
+    const above = await mail.draftFor(id, 'reply')
+    assert.ok(above.html.indexOf('tetra-signature') < above.html.indexOf('<blockquote'), 'above the quote')
+    assert.doesNotMatch((await mail.draftFor(null, 'new', 'me@nup.ac.cy')).html, /tetra-signature/, 'not on new mail when switched off')
+
+    const f = await mail.draftFor(id, 'forward')
+    assert.equal(f.subject, 'Fwd: Deadline'); assert.deepEqual(f.attachments.map(a => a.name), ['Guide.pdf']); assert.match(f.html, /Dear students/)
+    const fa = await mail.draftFor(id, 'forwardAttached')
+    assert.deepEqual(fa.attachments.map(a => [a.name, a.type]), [['Deadline.eml', 'message/rfc822']])
+    assert.ok(mail.addresses().some(a => a.address === 's@x.gr' && a.name === 'Γραμματεία'))
+    mail.index.flush()
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('mail: a phone\'s outbox is sent and removed; Gmail files its own Sent copy; a mail that cannot go says why', async () => {
+  const dir = tmp()
+  try {
+    const folders = { INBOX: { validity: 7, next: 1, msgs: {} }, Sent: { use: '\\Sent', validity: 3, next: 1, msgs: {} } }
+    const c = memoryServer(folders), smtp = smtpSpy()
+    const mail = new Mail(dir, { secret: () => 'pw', connect: () => c, smtp: smtp.make })
+    mail.saveAccounts([{ id: 'me@gmail.com', address: 'me@gmail.com', provider: 'google', server: { user: 'me@gmail.com' }, smtp: { host: 'smtp.gmail.com', port: 465, secure: true } }])
+    const out = path.join(dir, 'outbox')
+    fs.mkdirSync(path.join(out, 'phone-1.files'), { recursive: true })
+    fs.writeFileSync(path.join(out, 'phone-1.files', 'photo.jpg'), 'jpg')
+    fs.writeFileSync(path.join(out, 'phone-1.json'), JSON.stringify({ account: 'me@gmail.com', action: 'send', at: 1,
+      draft: { to: [{ address: 'x@y.gr' }], subject: 'Από το κινητό', html: '<p>Γεια</p>', attachments: [{ name: 'photo.jpg', file: 'outbox/phone-1.files/photo.jpg' }] } }))
+    fs.writeFileSync(path.join(out, 'phone-2.json'), JSON.stringify({ account: 'me@gmail.com', action: 'send', at: 2, draft: { to: [], subject: 'κανείς' } }))
+    await mail.outbox()
+    assert.equal(smtp.sent.length, 1)
+    assert.match(smtp.sent[0].raw.toString(), /photo\.jpg/)
+    assert.equal(Object.keys(folders.Sent.msgs).length, 0, 'Gmail keeps its own Sent copy')
+    assert.equal(mail.list('Sent').length, 1)
+    assert.deepEqual(fs.readdirSync(out).sort(), ['phone-2.failed.json'])
+    assert.equal(JSON.parse(fs.readFileSync(path.join(out, 'phone-2.failed.json'), 'utf8')).error, 'noRecipients')
     mail.index.flush()
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })

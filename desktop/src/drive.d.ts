@@ -3,6 +3,12 @@ import type { Media } from './timeline'
 
 /** Mail (mail.js): accounts.json, a line of index.jsonl, the unified folders' counts, an opened mail. */
 export type MailRole = 'Inbox' | 'Drafts' | 'Sent' | 'Archive' | 'Spam' | 'Trash'
+export interface MailAddress { name: string; address: string }
+export interface MailAttachment { name: string; file?: string; path?: string; type?: string; size?: number }
+export interface MailDraft { account: string; to: MailAddress[]; cc: MailAddress[]; bcc: MailAddress[]; subject: string; html: string; attachments: MailAttachment[]
+  messageId?: string; inReplyTo?: string; references?: string[] }
+export interface MailSignature { html: string; newMail: boolean; replies: boolean; position: 'above' | 'below' }
+export type MailDraftKind = 'new' | 'reply' | 'replyAll' | 'forward' | 'forwardAttached' | 'edit'
 export type MailOp = 'read' | 'unread' | 'favorite' | 'unfavorite' | 'archive' | 'delete' | 'move' | 'spam' | 'notSpam'
 export interface MailServer { host: string; port: number; secure: boolean; users: string[]; provider: 'google' | 'microsoft' | null }
 export interface MailAccount { id: string; address: string; name: string; color: string; provider: string | null; archive: boolean; archiveBy?: 'year' | 'month' | 'none'; notify: boolean
@@ -245,6 +251,15 @@ declare global {
         remove(id: string): Promise<void>
         sync(): Promise<void>
         act(op: MailOp, ids: string[], to?: MailRole): Promise<void>
+        draftFor(id: string | null, kind: MailDraftKind, account?: string): Promise<MailDraft>
+        saveDraft(d: MailDraft): Promise<{ messageId: string; server: boolean }>
+        send(d: MailDraft): Promise<{ messageId: string }>
+        discard(d: MailDraft): Promise<void>
+        addresses(): Promise<{ address: string; name: string; count: number }[]>
+        pickFiles(): Promise<MailAttachment[]>
+        pickImage(): Promise<string | null>
+        signatures(): Promise<Record<string, MailSignature>>
+        setSignature(address: string, sig: MailSignature | null): Promise<void>
         setAccount(id: string, changes: { archiveBy?: 'year' | 'month' | 'none' }): Promise<void>
         openFile(rel: string): Promise<void>
         openLink(url: string): Promise<void>

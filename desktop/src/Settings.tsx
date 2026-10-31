@@ -7,6 +7,7 @@ import { ResetCard } from './Role'
 import { MapsCard } from './MapBuilder'
 import { formatBytes } from './timeline'
 import { errorText } from './Dialogs'
+import { MailSignatures } from './Mail'
 
 // The foot of the sidebar (asked 2026-09-26): what Tetra said, kept — a notification goes by in seconds — and Settings.
 
@@ -37,7 +38,7 @@ export function NotificationsPage() {
 }
 
 /** Settings' pages, as the phone's (SettingsScreen.SettingsPage): the general ones, then one an app in its colour. */
-type SettingsTab = 'appearance' | 'computer' | 'cleanUp' | 'photos' | 'maps' | 'phone' | 'assistant'
+type SettingsTab = 'appearance' | 'computer' | 'cleanUp' | 'photos' | 'mail' | 'maps' | 'phone' | 'assistant'
 const GENERAL: { id: SettingsTab; icon: IconName; title: string; summary: string }[] = [
   { id: 'appearance', icon: 'palette', title: 'settings.appearance', summary: 'settings.sum.appearance' },
   { id: 'computer', icon: 'server', title: 'reset.title', summary: 'settings.sum.computer' },
@@ -45,6 +46,7 @@ const GENERAL: { id: SettingsTab; icon: IconName; title: string; summary: string
 ]
 const APPS: { id: SettingsTab; icon: IconName; cat: string; title: string; summary: string }[] = [
   { id: 'photos', icon: 'photos', cat: 'photos', title: 'app.photos', summary: 'settings.sum.photos' },
+  { id: 'mail', icon: 'mail', cat: 'mail', title: 'app.mail', summary: 'settings.sum.mail' },
   { id: 'maps', icon: 'map', cat: 'maps', title: 'app.maps', summary: 'settings.sum.maps' },
   { id: 'phone', icon: 'call', cat: 'phone', title: 'app.phone', summary: 'settings.sum.phone' },
   { id: 'assistant', icon: 'sparkle', cat: 'assistant', title: 'app.assistant', summary: 'settings.sum.assistant' },
@@ -90,6 +92,7 @@ export function SettingsPage({ onGuide, start }: { onGuide: () => void; start?: 
           {tab === 'computer' && <ResetCard />}
           {tab === 'cleanUp' && <CleanCard />}
           {tab === 'photos' && <MotionCard />}
+          {tab === 'mail' && <MailSignatures />}
           {tab === 'maps' && <><MapsCard /><LocationCard /></>}
           {tab === 'phone' && <CallsCard />}
           {tab === 'assistant' && <AssistCard />}
