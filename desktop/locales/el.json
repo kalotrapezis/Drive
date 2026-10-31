@@ -2220,5 +2220,7 @@
  "mail.uses": "Η αλληλογραφία πιάνει {size}",
  "assistant.mailSend": "Αποστολή σε {to}",
  "assistant.mailSent": "Στάλθηκε σε {to}.",
- "assistant.mailKept": "Δεν στάλθηκε· έμεινε στα Πρόχειρα."
+ "assistant.mailKept": "Δεν στάλθηκε· έμεινε στα Πρόχειρα.",
+ "mail.accountName": "Όνομα λογαριασμού",
+ "mail.accountNameHint": "π.χ. Δουλειά, Προσωπικό, Μεταπτυχιακό"
 }

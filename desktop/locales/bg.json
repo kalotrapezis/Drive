@@ -2220,5 +2220,7 @@
  "mail.uses": "Пощата заема {size}",
  "assistant.mailSend": "Изпращане до {to}",
  "assistant.mailSent": "Изпратено до {to}.",
- "assistant.mailKept": "Не е изпратено: остава в Чернови."
+ "assistant.mailKept": "Не е изпратено: остава в Чернови.",
+ "mail.accountName": "Име на акаунта",
+ "mail.accountNameHint": "напр. Работа, Лично, Магистратура"
 }

@@ -2398,5 +2398,7 @@
  "mail.uses": "Pošta zabírá {size}",
  "assistant.mailSend": "Odeslat: {to}",
  "assistant.mailSent": "Odesláno: {to}.",
- "assistant.mailKept": "Neodesláno: zůstává v Konceptech."
+ "assistant.mailKept": "Neodesláno: zůstává v Konceptech.",
+ "mail.accountName": "Název účtu",
+ "mail.accountNameHint": "např. Práce, Osobní, Magisterské studium"
 }

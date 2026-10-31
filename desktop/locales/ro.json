@@ -2309,5 +2309,7 @@
  "mail.uses": "Poșta ocupă {size}",
  "assistant.mailSend": "Trimite către {to}",
  "assistant.mailSent": "Trimis către {to}.",
- "assistant.mailKept": "Netrimis: rămâne în Ciorne."
+ "assistant.mailKept": "Netrimis: rămâne în Ciorne.",
+ "mail.accountName": "Numele contului",
+ "mail.accountNameHint": "de ex. Serviciu, Personal, Master"
 }

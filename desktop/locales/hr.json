@@ -2308,5 +2308,7 @@
  "mail.uses": "Pošta zauzima {size}",
  "assistant.mailSend": "Pošalji: {to}",
  "assistant.mailSent": "Poslano: {to}.",
- "assistant.mailKept": "Nije poslano: ostaje u Skicama."
+ "assistant.mailKept": "Nije poslano: ostaje u Skicama.",
+ "mail.accountName": "Naziv računa",
+ "mail.accountNameHint": "npr. Posao, Osobno, Diplomski studij"
 }

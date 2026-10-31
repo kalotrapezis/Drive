@@ -2220,5 +2220,7 @@
  "mail.uses": "A levelek {size} helyet foglalnak",
  "assistant.mailSend": "Küldés ide: {to}",
  "assistant.mailSent": "Elküldve ide: {to}.",
- "assistant.mailKept": "Nem lett elküldve: a Piszkozatok között marad."
+ "assistant.mailKept": "Nem lett elküldve: a Piszkozatok között marad.",
+ "mail.accountName": "Fiók neve",
+ "mail.accountNameHint": "pl. Munka, Személyes, Mesterképzés"
 }

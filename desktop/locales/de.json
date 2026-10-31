@@ -2220,5 +2220,7 @@
  "mail.uses": "E-Mails belegen {size}",
  "assistant.mailSend": "An {to} senden",
  "assistant.mailSent": "An {to} gesendet.",
- "assistant.mailKept": "Nicht gesendet: Sie bleibt in Entwürfe."
+ "assistant.mailKept": "Nicht gesendet: Sie bleibt in Entwürfe.",
+ "mail.accountName": "Kontoname",
+ "mail.accountNameHint": "z. B. Arbeit, Privat, Masterstudium"
 }

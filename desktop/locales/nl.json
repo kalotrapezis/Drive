@@ -2220,5 +2220,7 @@
  "mail.uses": "Mail neemt {size} in beslag",
  "assistant.mailSend": "Verstuur naar {to}",
  "assistant.mailSent": "Verstuurd naar {to}.",
- "assistant.mailKept": "Niet verstuurd: hij blijft in Concepten."
+ "assistant.mailKept": "Niet verstuurd: hij blijft in Concepten.",
+ "mail.accountName": "Accountnaam",
+ "mail.accountNameHint": "bijv. Werk, Privé, Master"
 }

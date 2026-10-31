@@ -339,6 +339,8 @@ class Mail extends EventEmitter {
     const list = this.accounts(), a = list.find(x => x.id === id)
     if (!a) return
     if (['year', 'month', 'none'].includes(changes?.archiveBy)) a.archiveBy = changes.archiveBy
+    // the account's own name (the user, 31 Oct: "Work", "Personal", "Masters"), shown everywhere in place of the domain
+    if (typeof changes?.name === 'string' && changes.name.trim()) a.name = changes.name.trim().slice(0, 40)
     // the clean-up's switches and ages (MAIL_PLAN §3), in months, 1 to 50 years
     const ages = (x, was) => x && typeof x === 'object' ? { ...was, ...(typeof x.on === 'boolean' ? { on: x.on } : {}),
       ...Object.fromEntries(['attachmentsMonths', 'otherMonths'].filter(k => Number.isInteger(x[k]) && x[k] >= 1 && x[k] <= 600).map(k => [k, x[k]])) } : was

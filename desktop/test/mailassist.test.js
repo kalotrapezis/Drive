@@ -65,6 +65,10 @@ test('assistant: new mail, what is important, mail from a contact, and a mail to
     const card = (name, address) => ({ info: { uid: name, formatted: name, emails: address ? [{ value: address }] : [], phones: [], related: [], categories: [] } })
     const contacts = { all: () => [card('Μαρία Κωνσταντίνου', 'maria@x.gr'), card('Νίκος Χωρίς Μέιλ', null)] }
     const tools = new Tools({ mail, contacts })
+    mail.setAccount('me@sch.gr', { name: '  Masters  ' })
+    assert.equal(mail.accounts()[0].name, 'Masters', 'an account named by the user')
+    assert.match((await tools.run('mail_search', { account: 'masters', contact: 'Μαρία' })).forModel, /\[Inbox, Masters \(me@sch\.gr\)/)
+    assert.match((await tools.run('mail_search', { account: 'Work' })).forModel, /No mail account called Work: the accounts are Masters/)
 
     const fresh = (await tools.run('mail_new', {})).forModel
     assert.match(fresh, /Πληρωμή/); assert.match(fresh, /Καλημέρα/); assert.doesNotMatch(fresh, /Newsletter/, 'read already')

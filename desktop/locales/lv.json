@@ -2309,5 +2309,7 @@
  "mail.uses": "Pasts aizņem {size}",
  "assistant.mailSend": "Sūtīt: {to}",
  "assistant.mailSent": "Nosūtīts: {to}.",
- "assistant.mailKept": "Nav nosūtīts: paliek Melnrakstos."
+ "assistant.mailKept": "Nav nosūtīts: paliek Melnrakstos.",
+ "mail.accountName": "Konta nosaukums",
+ "mail.accountNameHint": "piem., Darbs, Personīgais, Maģistratūra"
 }

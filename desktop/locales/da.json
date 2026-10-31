@@ -2220,5 +2220,7 @@
  "mail.uses": "Mail fylder {size}",
  "assistant.mailSend": "Send til {to}",
  "assistant.mailSent": "Sendt til {to}.",
- "assistant.mailKept": "Ikke sendt: den bliver liggende i Kladder."
+ "assistant.mailKept": "Ikke sendt: den bliver liggende i Kladder.",
+ "mail.accountName": "Kontonavn",
+ "mail.accountNameHint": "f.eks. Arbejde, Privat, Kandidat"
 }

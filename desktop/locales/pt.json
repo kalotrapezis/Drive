@@ -2309,5 +2309,7 @@
  "mail.uses": "O correio ocupa {size}",
  "assistant.mailSend": "Enviar para {to}",
  "assistant.mailSent": "Enviado para {to}.",
- "assistant.mailKept": "Não enviado: fica em Rascunhos."
+ "assistant.mailKept": "Não enviado: fica em Rascunhos.",
+ "mail.accountName": "Nome da conta",
+ "mail.accountNameHint": "p. ex. Trabalho, Pessoal, Mestrado"
 }

@@ -2309,5 +2309,7 @@
  "mail.uses": "La posta occupa {size}",
  "assistant.mailSend": "Invia a {to}",
  "assistant.mailSent": "Inviato a {to}.",
- "assistant.mailKept": "Non inviato: resta in Bozze."
+ "assistant.mailKept": "Non inviato: resta in Bozze.",
+ "mail.accountName": "Nome dell'account",
+ "mail.accountNameHint": "ad es. Lavoro, Personale, Magistrale"
 }

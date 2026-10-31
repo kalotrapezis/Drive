@@ -2487,5 +2487,7 @@
  "mail.uses": "Tógann an ríomhphost {size}",
  "assistant.mailSend": "Seol chuig {to}",
  "assistant.mailSent": "Seolta chuig {to}.",
- "assistant.mailKept": "Níor seoladh: fanann sé i nDréachtaí."
+ "assistant.mailKept": "Níor seoladh: fanann sé i nDréachtaí.",
+ "mail.accountName": "Ainm an chuntais",
+ "mail.accountNameHint": "m.sh. Obair, Pearsanta, Máistir"
 }

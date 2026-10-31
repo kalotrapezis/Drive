@@ -225,13 +225,14 @@ const SCHEMA = [
     { days: p('integer', 'How many days back; 7 if not said.') }),
   fn('mail_search', 'Find mail in the user\'s mail archive (every account) by words in the sender, subject or first lines, or from and to a contact; answers a numbered list, newest first.', [],
     { query: p('string', 'Words to look for; leave out to list the latest.'), contact: p('string', 'A contact\'s name or an email address: mail from or to them (their addresses come from Contacts).'),
+      account: p('string', 'Only one of the user\'s accounts: its name (Work, Personal…) or address.'),
       days: p('integer', 'Only the last N days.'), folder: p('string', 'Inbox, Sent, Archive, Spam, Trash or Drafts.'), unread: p('boolean', 'Only unread mail.') }),
   fn('mail_read', 'Read a mail from the last mail_search or mail_needs_answer list: its whole text and its attachments\' names. Use it to summarise a mail or find a date in it.', ['choice'], CHOICE),
   fn('mail_needs_answer', 'Mail from people (not newsletters or no-reply senders) in the Inbox of the last days that the user has not answered yet, newest first; a numbered list.', [],
     { days: p('integer', 'How many days back; 7 if not said.') }),
   fn('mail_send', 'Write a mail and make it ready to send. Tetra keeps it as a draft and shows it with a Send button: it goes only when the user presses Send or says yes. Before that, read back to the user who it goes to, the subject and the text.', ['text'],
     { to: STRINGS('Who it goes to: contacts\' names or email addresses.'), subject: p('string', 'The subject; leave out for a reply.'), text: p('string', 'The mail\'s text, as the user wants it, in their language; greeting and closing included.'),
-      reply_to: p('integer', 'To answer a mail from the last mail list: its number (then "to" and "subject" may be left out).'), from: p('string', 'The user\'s own address to send from, if said.') }),
+      reply_to: p('integer', 'To answer a mail from the last mail list: its number (then "to" and "subject" may be left out).'), from: p('string', 'The user\'s own account to send from, if said: its name (Work, Personal…) or address.') }),
   fn('mail_status', 'Each mail account: unread mail in the Inbox, mail not yet saved on this computer, and whether syncing works.', []),
   fn('web_search', 'Search the web for current facts, news, opening hours, prices.', ['query'], { query: p('string', 'What to search for.') }),
   fn('make_image', 'Draw a picture from a description.', ['prompt'], { prompt: p('string', 'What the picture shows, in detail.') }),
@@ -336,7 +337,8 @@ class Tools {
 
   // ---- Mail (MAIL_PLAN §8, step 7): the archive in .System/Mail/Shared, read here; nothing is sent or changed ----
   mailLine(e, i) {
-    const flags = [e.folder, e.account, ...(e.seen ? [] : ['unread']), ...(e.flagged ? ['♥'] : []), ...(e.attachments > 0 ? [`${e.attachments} attachment(s)`] : [])]
+    const acc = this.mail.allAccounts().find(a => a.id === e.account), named = acc?.name && acc.name !== acc.address ? `${acc.name} (${e.account})` : e.account
+    const flags = [e.folder, named, ...(e.seen ? [] : ['unread']), ...(e.flagged ? ['♥'] : []), ...(e.attachments > 0 ? [`${e.attachments} attachment(s)`] : [])]
     return `${i + 1}. ${shown(e.date)} · ${e.from || e.fromAddress}${e.from ? ` <${e.fromAddress}>` : ''} · ${e.subject || '(no subject)'} [${flags.join(', ')}]${e.snippet ? ` — ${e.snippet.slice(0, 100)}` : ''}`
   }
   mailList(hits, empty) {
@@ -349,7 +351,9 @@ class Tools {
     const q = plain(a.query ?? ''), since = a.days ? this.now() - Number(a.days) * 86_400_000 : 0, folder = String(a.folder ?? '').toLowerCase()
     const people = a.contact ? new Set(this.addressesFor(a.contact).map(x => x.address.toLowerCase())) : null
     if (people && !people.size) return { forModel: `No email address for ${a.contact} in Contacts.` }
-    const hits = this.mail.accountsMails().filter(e => (!folder || e.folder.toLowerCase() === folder) && (!a.unread || !e.seen) && e.date >= since
+    const only = a.account ? this.mail.allAccounts().find(x => x.address === String(a.account).toLowerCase().trim() || plain(x.name) === plain(a.account)) : null
+    if (a.account && !only) return { forModel: `No mail account called ${a.account}: the accounts are ${this.mail.allAccounts().map(x => x.name).join(', ')}.` }
+    const hits = this.mail.accountsMails().filter(e => (!only || e.account === only.id) && (!folder || e.folder.toLowerCase() === folder) && (!a.unread || !e.seen) && e.date >= since
       && (!people || people.has(String(e.fromAddress).toLowerCase()) || (e.to ?? []).some(x => people.has(String(x).toLowerCase())))
       && (!q || q.split(/\s+/).every(w => plain(`${e.from} ${e.fromAddress} ${e.subject} ${e.snippet}`).includes(w)))).sort((x, y) => y.date - x.date).slice(0, 15)
     return this.mailList(hits, 'No mail found.')
@@ -399,7 +403,7 @@ class Tools {
     if (!reply && !to.length) return { forModel: 'Say who the mail goes to.' }
     const text = String(a.text ?? '').trim()
     if (!text) return { forModel: 'Say what the mail says.' }
-    const from = a.from ? this.mail.accounts().find(x => x.address === String(a.from).toLowerCase().trim()) : null
+    const from = a.from ? this.mail.accounts().find(x => x.address === String(a.from).toLowerCase().trim() || plain(x.name) === plain(a.from)) : null
     let d = reply ? await this.mail.draftFor(reply.id, 'reply') : await this.mail.draftFor(null, 'new', from?.id ?? null)
     if (from) d = { ...d, account: from.id }
     const esc = x => x.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])

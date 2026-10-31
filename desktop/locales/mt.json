@@ -2398,5 +2398,7 @@
  "mail.uses": "Il-posta tieħu {size}",
  "assistant.mailSend": "Ibgħat lil {to}",
  "assistant.mailSent": "Intbagħat lil {to}.",
- "assistant.mailKept": "Ma ntbagħatx: jibqa' fl-Abbozzi."
+ "assistant.mailKept": "Ma ntbagħatx: jibqa' fl-Abbozzi.",
+ "mail.accountName": "Isem tal-kont",
+ "mail.accountNameHint": "eż. Xogħol, Personali, Masters"
 }

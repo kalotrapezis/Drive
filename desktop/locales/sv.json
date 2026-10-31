@@ -2220,5 +2220,7 @@
  "mail.uses": "Mejl tar {size}",
  "assistant.mailSend": "Skicka till {to}",
  "assistant.mailSent": "Skickat till {to}.",
- "assistant.mailKept": "Inte skickat: det ligger kvar i Utkast."
+ "assistant.mailKept": "Inte skickat: det ligger kvar i Utkast.",
+ "mail.accountName": "Kontonamn",
+ "mail.accountNameHint": "t.ex. Jobb, Privat, Master"
 }

@@ -2220,5 +2220,7 @@
  "mail.uses": "Post võtab {size}",
  "assistant.mailSend": "Saada: {to}",
  "assistant.mailSent": "Saadetud: {to}.",
- "assistant.mailKept": "Ei saadetud: jääb Mustandite hulka."
+ "assistant.mailKept": "Ei saadetud: jääb Mustandite hulka.",
+ "mail.accountName": "Konto nimi",
+ "mail.accountNameHint": "nt Töö, Isiklik, Magistriõpe"
 }

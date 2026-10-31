@@ -2398,5 +2398,7 @@
  "mail.uses": "Paštas užima {size}",
  "assistant.mailSend": "Siųsti: {to}",
  "assistant.mailSent": "Išsiųsta: {to}.",
- "assistant.mailKept": "Neišsiųsta: lieka Juodraščiuose."
+ "assistant.mailKept": "Neišsiųsta: lieka Juodraščiuose.",
+ "mail.accountName": "Paskyros pavadinimas",
+ "mail.accountNameHint": "pvz., Darbas, Asmeninė, Magistrantūra"
 }

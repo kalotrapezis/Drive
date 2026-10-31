@@ -2220,5 +2220,7 @@
  "mail.uses": "Mail takes {size}",
  "assistant.mailSend": "Send to {to}",
  "assistant.mailSent": "Sent to {to}.",
- "assistant.mailKept": "Not sent: it stays in Drafts."
+ "assistant.mailKept": "Not sent: it stays in Drafts.",
+ "mail.accountName": "Account name",
+ "mail.accountNameHint": "e.g. Work, Personal, Masters"
 }

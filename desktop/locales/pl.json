@@ -2398,5 +2398,7 @@
  "mail.uses": "Poczta zajmuje {size}",
  "assistant.mailSend": "Wyślij: {to}",
  "assistant.mailSent": "Wysłano: {to}.",
- "assistant.mailKept": "Nie wysłano: zostaje w Szkicach."
+ "assistant.mailKept": "Nie wysłano: zostaje w Szkicach.",
+ "mail.accountName": "Nazwa konta",
+ "mail.accountNameHint": "np. Praca, Osobiste, Magisterka"
 }

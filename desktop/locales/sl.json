@@ -2398,5 +2398,7 @@
  "mail.uses": "Pošta zaseda {size}",
  "assistant.mailSend": "Pošlji: {to}",
  "assistant.mailSent": "Poslano: {to}.",
- "assistant.mailKept": "Ni poslano: ostane v Osnutkih."
+ "assistant.mailKept": "Ni poslano: ostane v Osnutkih.",
+ "mail.accountName": "Ime računa",
+ "mail.accountNameHint": "npr. Služba, Osebno, Magisterij"
 }

@@ -2279,5 +2279,7 @@
  "mail.uses": "El correo ocupa {size}",
  "assistant.mailSend": "Enviar a {to}",
  "assistant.mailSent": "Enviado a {to}.",
- "assistant.mailKept": "No enviado: se queda en Borradores."
+ "assistant.mailKept": "No enviado: se queda en Borradores.",
+ "mail.accountName": "Nombre de la cuenta",
+ "mail.accountNameHint": "p. ej. Trabajo, Personal, Máster"
 }

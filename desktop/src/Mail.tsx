@@ -88,7 +88,7 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
       <button key={r} className="sheet-row" onClick={() => { close(); away('move', r) }}><Icon name={ROLE_ICON[r]} />{t(`mail.role${r}`)}</button>)}
   </Modal>)
   const addAccount = () => setDialog(<AddAccount onClose={close} onDone={() => { close(); reload() }} />)
-  const manage = () => data && setDialog(<Accounts data={data} onClose={close} onAdd={addAccount}
+  const manage = () => data && setDialog(<Accounts data={data} onClose={close} onAdd={addAccount} onRenamed={reload}
     onRemove={a => setDialog(<Confirm title={t('mail.removeTitle', { name: a.name })} body={t('mail.removeBody')} action={t('common.remove')} danger onClose={close}
       onConfirm={() => window.drive.mail.remove(a.id).then(() => { close(); reload() }, e => say(errorText(e)))} />)} />)
   const filter = () => setDialog(<FilterDialog initial={view} accounts={data?.accounts ?? []} onClose={close}
@@ -308,7 +308,7 @@ function FilterDialog({ initial, accounts, onChange, onClose }: { initial: MailV
   )
 }
 
-function Accounts({ data, onAdd, onRemove, onClose }: { data: Data; onAdd: () => void; onRemove: (a: MailAccount) => void; onClose: () => void }) {
+function Accounts({ data, onAdd, onRemove, onRenamed, onClose }: { data: Data; onAdd: () => void; onRemove: (a: MailAccount) => void; onRenamed: () => void; onClose: () => void }) {
   return (
     <Modal onClose={onClose}>
       <h3>{t('mail.accounts')}</h3>
@@ -316,7 +316,12 @@ function Accounts({ data, onAdd, onRemove, onClose }: { data: Data; onAdd: () =>
         const s = data.status[a.id] ?? {}
         return <div key={a.id} className="sheet-row">
           <span className="mail-dot" style={{ background: a.color }} />
-          <span className="mail-acc-text"><strong>{a.name}{a.shadow && <span className="mail-shadow"> ⇄ {a.device}</span>}</strong><small>{a.address}{s.error ? ` · ${t(`mail.err_${s.error}`)}` : ''}</small>
+          <span className="mail-acc-text">
+            {a.shadow ? <strong>{a.name}<span className="mail-shadow"> ⇄ {a.device}</span></strong>
+              : <input className="mail-acc-name" defaultValue={a.name} aria-label={t('mail.accountName')} placeholder={t('mail.accountNameHint')} maxLength={40}
+                onBlur={e => { const v = e.target.value.trim(); if (v && v !== a.name) window.drive.mail.setAccount(a.id, { name: v }).then(onRenamed) }}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} />}
+            <small>{a.address}{s.error ? ` · ${t(`mail.err_${s.error}`)}` : ''}</small>
             {!a.shadow && <label className="mail-archive-by">{t('mail.archiveBy')}
               <select defaultValue={a.archiveBy ?? 'year'} onChange={e => window.drive.mail.setAccount(a.id, { archiveBy: e.target.value as 'year' })}>
                 <option value="year">{t('mail.byYear')}</option><option value="month">{t('mail.byMonth')}</option><option value="none">{t('mail.byNone')}</option>

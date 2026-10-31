@@ -2220,5 +2220,7 @@
  "mail.uses": "Posti vie {size}",
  "assistant.mailSend": "Lähetä: {to}",
  "assistant.mailSent": "Lähetetty: {to}.",
- "assistant.mailKept": "Ei lähetetty: se jää Luonnoksiin."
+ "assistant.mailKept": "Ei lähetetty: se jää Luonnoksiin.",
+ "mail.accountName": "Tilin nimi",
+ "mail.accountNameHint": "esim. Työ, Henkilökohtainen, Maisterin opinnot"
 }

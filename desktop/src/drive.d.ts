@@ -276,7 +276,7 @@ declare global {
         pickImage(): Promise<string | null>
         signatures(): Promise<Record<string, MailSignature>>
         setSignature(address: string, sig: MailSignature | null): Promise<void>
-        setAccount(id: string, changes: Partial<Pick<MailAccount, 'archiveBy' | 'serverClean' | 'localClean' | 'keepFavorites'>>): Promise<void>
+        setAccount(id: string, changes: Partial<Pick<MailAccount, 'name' | 'archiveBy' | 'serverClean' | 'localClean' | 'keepFavorites'>>): Promise<void>
         cleanPlan(id: string): Promise<MailCleanPlan>
         cleanRun(id: string): Promise<{ archive: number; server: number; local: number; bytes: number; errors: string[] }>
         garbage(): Promise<MailGarbage>

@@ -2309,5 +2309,7 @@
  "mail.uses": "Le courrier prend {size}",
  "assistant.mailSend": "Envoyer à {to}",
  "assistant.mailSent": "Envoyé à {to}.",
- "assistant.mailKept": "Non envoyé : il reste dans Brouillons."
+ "assistant.mailKept": "Non envoyé : il reste dans Brouillons.",
+ "mail.accountName": "Nom du compte",
+ "mail.accountNameHint": "p. ex. Travail, Personnel, Master"
 }
