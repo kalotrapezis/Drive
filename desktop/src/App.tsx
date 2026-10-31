@@ -125,6 +125,7 @@ export function App() {
   // "2 files from Xiaomi 15": its click opens Files at From phone
   useEffect(() => window.drive.files.onOpenFolder(folder => setPage({ kind: 'files', mode: 'browse', folder })), [])
   // "The map of Cyprus is over 3 months old": its click opens Settings › Maps
+  useEffect(() => window.drive.onOpenDevices(() => setPage({ kind: 'sync' })), [])
   useEffect(() => window.drive.onOpenSettings(start => setPage({ kind: 'settings', start, at: Date.now() })), [])
   // AI Assist from anywhere: a shortcut or `tetra --assistant` (main assistantCommand); talk and live go to the page
   const [assistCommand, setAssistCommand] = useState<{ what: string; at: number } | null>(null)

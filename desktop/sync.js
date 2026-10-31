@@ -36,6 +36,9 @@ const contentOf = rel => { const top = String(rel).split('/')[0]; return top ===
 /** How much mail a device keeps, in bytes (-1: all of it), as the mail engine knows them. */
 const MAIL_LIMITS = [5e8, 1e9, 2e9, 5e9, 1e10, -1]
 /** Mail's index grows while mail arrives: the version offered is set aside, or the phone's fetch a second later finds other bytes. */
+/** A device's storage, as it said: in use, as a whole percent, and past the 90 % line. */
+const used = d => Math.round((1 - d.free / d.size) * 100)
+const full = d => !!d.size && d.free != null && d.free / d.size <= 0.1
 const GROWING = /^Mail\/index(\.[A-Za-z0-9_-]{1,64})?\.jsonl$/
 const KEEPS = ['everything', 'nothing']
 /**
@@ -111,11 +114,12 @@ async function copyVerified(src, dest, expected) {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan); onSent({ device, paths }) after a burst of Send to computer. */
-  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, onCall = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null, data = null, soundHere = () => false, callAudio = null, mail = null }) {
+  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, onCall = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null, data = null, soundHere = () => false, callAudio = null, mail = null, onFull = null }) {
     // soundHere(): the phone is on this computer's Bluetooth; callAudio(received, send) → stop: its call sound both ways (callaudio.js)
     Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, onSent, onCall, port, beaconPort, trashItem, purgatory, data, soundHere, callAudio })
     // mail: { rule(mailDevice, row, name), sync(), credentials(account) } — main.js's mail engine, for a device's Mail row
     this.mail = mail
+    this.onFull = onFull // (deviceId, name, percent): a device filled past 90 %
     this.snapshots = new Map() // sha256 → { file, path, at }: a growing file as it was offered (GROWING)
     this.sentQuiet = 2000 // a share's files arrive one after another: one notification once they stop
     this.codes = new Map() // every code on screen stays valid until used or expired
@@ -1199,11 +1203,39 @@ class SyncServer {
   heard(deviceId, about) {
     if (!about || typeof about !== 'object') return
     const n = v => Number.isSafeInteger(v) && v >= 0 ? v : null
-    if (n(about.free) !== null && n(about.size)) this.db.prepare('UPDATE sync_devices SET storage_free = ?, storage_size = ?, storage_at = ? WHERE id = ?').run(about.free, about.size, Date.now(), deviceId)
+    if (n(about.free) !== null && n(about.size)) {
+      const was = this.db.prepare('SELECT name, storage_free AS free, storage_size AS size FROM sync_devices WHERE id = ?').get(deviceId)
+      this.db.prepare('UPDATE sync_devices SET storage_free = ?, storage_size = ?, storage_at = ? WHERE id = ?').run(about.free, about.size, Date.now(), deviceId)
+      // said once as it fills past the line, not at every sync while it stays there
+      if (full(about) && !(was?.size && full(was))) try { this.onFull?.(deviceId, was?.name ?? '', used(about)) } catch (e) { console.warn('[sync] full', e.message) }
+    }
     if (typeof about.mail === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(about.mail)) {
       const was = this.db.prepare('SELECT mail_device FROM sync_devices WHERE id = ?').get(deviceId)?.mail_device
       if (was !== about.mail) { this.db.prepare('UPDATE sync_devices SET mail_device = ? WHERE id = ?').run(about.mail, deviceId); this.mailRule(deviceId) }
     }
+  }
+
+  /**
+   * A device 90 % full (the user, 31 Oct, for "automatic": nothing leaves by itself; at 90 % Tetra suggests a move): what to
+   * move to this computer — photos, else files, older than two years, or one year when two would not bring it under 80 %;
+   * the size it frees is what this computer already holds of it (sync.movePreview), so it can go. Null when not full.
+   */
+  fullSuggestion(deviceId) {
+    const d = this.db.prepare('SELECT storage_free AS free, storage_size AS size FROM sync_devices WHERE id = ?').get(String(deviceId))
+    if (!d?.size || !full(d)) return null
+    const need = d.size * 0.2 - d.free // what it takes to be at 80 %
+    let best = null
+    for (const content of ['photos', 'files']) {
+      const row = this.connection(String(deviceId), content)
+      if (row.direction === 'off' || row.direction === 'receive' || (row.keep === 'nothing' && !row.keepAuto && row.keepDays <= 365)) continue
+      for (const days of [730, 365]) {
+        const p = this.movePreview(deviceId, { keepDays: days, keepFavorites: row.keepFavorites, content })
+        const s = { content, days, count: p.go, bytes: p.goBytes, used: used(d), enough: p.goBytes >= need }
+        if (s.enough) return s
+        if (s.bytes > (best?.bytes ?? 0)) best = s
+      }
+    }
+    return best ?? { content: 'mail', days: 730, count: null, bytes: null, used: used(d), enough: false }
   }
 
   holds(deviceId, kind, hashes, prune = true) {

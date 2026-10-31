@@ -571,6 +571,8 @@ app.whenReady().then(() => {
   sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, data: dataCounter, port: Number(process.env.DRIVE_PORT) || undefined,
     // a call answered on a client computer: its sound from and to the phone on this one's Bluetooth (callaudio.js)
     soundHere: () => !!calls?.bt.phones.some(p => p.connected),
+    // a phone or tablet filled past 90 %: said once, its click opens Devices, where its card suggests what to move
+    onFull: (id, name, pct) => notify(t('sync.fullTitle', { device: name, pct }), t('sync.fullBody'), () => win?.webContents.send('open-devices')),
     // a device's Mail row (its card's guide), the phone opening Mail, and «Χρήση και σε αυτή τη συσκευή» (MAIL_PLAN §15)
     mail: {
       rule: (device, row, name) => mail.setDevice(device, { name, off: row.direction === 'off', mode: row.direction === 'send' ? 'move' : 'copy',
@@ -984,6 +986,7 @@ app.whenReady().then(() => {
   ipcMain.handle('sync:moveToDrive', (_, id, options) => moveToDrive(id, options ?? {}))
   ipcMain.handle('sync:setConnection', (_, id, content, rules) => sync.setConnection(id, content, rules))
   ipcMain.handle('sync:movePreview', (_, id, options) => sync.movePreview(id, options ?? {}))
+  ipcMain.handle('sync:fullSuggestion', (_, id) => sync.fullSuggestion(id))
   ipcMain.handle('open-map', (_, lat, lon) => {
     if (![lat, lon].every(Number.isFinite) || Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error('Invalid location.')
     return shell.openExternal(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`)

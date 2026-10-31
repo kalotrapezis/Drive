@@ -1735,3 +1735,40 @@ test('«Χρήση και σε αυτή τη συσκευή»: an account\'s pas
     fs.rmSync(tmp, { recursive: true })
   }
 })
+
+test('a device 90 % full: said once, and the move suggested is two years, or one when two would not bring it under 80 % (31 Oct)', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-full-'))
+  const db = library.open(path.join(tmp, 'data'))
+  const said = []
+  const server = await new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0, onFull: (...a) => said.push(a) }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  const year = 365 * 86_400_000
+  try {
+    const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    server.completeSetup(paired.deviceId)
+    const report = free => server.heard(paired.deviceId, { free, size: 100e9 })
+    // photos the phone holds and this computer has: 12 GB from three years ago, 6 GB from eighteen months ago
+    const photo = (n, ago, size) => {
+      const sha = crypto.createHash('sha256').update(n).digest('hex')
+      db.prepare("INSERT INTO media(path, sha256, mime, is_video, size, mtime, taken_at) VALUES(?,?,'image/jpeg',0,?,1,1)").run(`${n}.jpg`, sha, size)
+      db.prepare("INSERT INTO device_holdings(device_id, kind, sha256, seen_at, size, taken_at) VALUES(?, 'photo', ?, ?, ?, ?)").run(paired.deviceId, sha, Date.now(), size, Date.now() - ago)
+    }
+    photo('old', 3 * year, 12e9); photo('older-than-a-year', 1.5 * year, 6e9)
+    report(20e9)
+    assert.equal(server.fullSuggestion(paired.deviceId), null, '80 % is not full')
+    report(9e9)
+    assert.deepEqual(said.map(s => s.slice(1)), [['Xiaomi 15', 91]], 'said as it crosses 90 %')
+    report(8e9)
+    assert.equal(said.length, 1, 'not again while it stays full')
+    // 9 GB free of 100: 11 GB more reach 80 %, and two years frees 12
+    report(9e9)
+    assert.deepEqual(server.fullSuggestion(paired.deviceId), { content: 'photos', days: 730, count: 1, bytes: 12e9, used: 91, enough: true })
+    // 5 GB free: 15 GB more; two years frees 12, not enough; one year frees 18
+    report(25e9); report(5e9)
+    assert.deepEqual(server.fullSuggestion(paired.deviceId), { content: 'photos', days: 365, count: 2, bytes: 18e9, used: 95, enough: true })
+    assert.equal(said.length, 2, 'said again: it had come back under the line')
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})

@@ -85,6 +85,8 @@ export interface VaultItem { id: string; sha256: string; name: string; rel_path:
 export interface PersonFace { id: string; sha256: string; quality: number; chosen: boolean; takenAt: number }
 export type SyncContent = 'photos' | 'files' | 'mail' | 'other'
 export interface SyncConnection { content: SyncContent; direction: 'off' | 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing'; keepDays?: number; keepFavorites?: boolean; keepAuto?: boolean; keepBytes?: number | null }
+/** A device 90 % full: what to move to this PC (sync.fullSuggestion); count and bytes are null for mail */
+export interface FullSuggestion { content: SyncContent; days: number; count: number | null; bytes: number | null; used: number; enough: boolean }
 export interface MovePreview { holds: number; onPc: number; go: number; goBytes: number; keep: number; notOnPc: number; lastSeen: number | null }
 /** A desktop client's server (client.js status). */
 export interface ClientStatus { name: string; lastSync: number | null; error: string | null; running: boolean; crown: boolean; mirror: boolean }
@@ -181,6 +183,7 @@ declare global {
         onDriveProgress(fn: (p: { done: number; total: number; copied: number; already: number }) => void): () => void
         setConnection(id: string, content: string, rules: { direction: string; keep: string; keepDays?: number; keepFavorites?: boolean; keepAuto?: boolean; keepBytes?: number | null }): Promise<SyncConnection>
         movePreview(id: string, options: { keepDays: number; keepFavorites: boolean; content?: string }): Promise<MovePreview>
+        fullSuggestion(id: string): Promise<FullSuggestion | null>
         setDriveRules(id: string, rules: Partial<DriveRules>): Promise<DriveRules>
         offloadPlan(id: string): Promise<OffloadPlan>
         moveToDrive(id: string, options?: { limit?: number }): Promise<{ moved: number; bytes: number; failed: string[]; total: number }>
@@ -360,6 +363,7 @@ declare global {
       setLocationEvery(v: 'off' | '30m' | '1d' | '1w'): Promise<void>
       mapsPhoneLocation(fresh?: boolean): Promise<{ lat: number; lng: number; accuracy: number; at: number; provider: string; device: string; error?: undefined } | { error: string }>
       onMapsChanged(cb: () => void): () => void
+      onOpenDevices(cb: () => void): () => void
       onOpenSettings(cb: (tab: string) => void): () => void
       onNotesChanged(cb: () => void): () => void
       notesSynced(): Promise<{ at: number; device: string } | null>

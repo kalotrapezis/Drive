@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { MovePreview, SyncConnection, SyncContent, SyncDevice } from './drive'
-import { formatBytes } from './timeline'
+import type { FullSuggestion, MovePreview, SyncConnection, SyncContent, SyncDevice } from './drive'
 import { Icon, type IconName } from './Icon'
 import { Modal } from './Dialogs'
 import { locale, t } from './i18n'
@@ -40,16 +39,17 @@ export function sentence(c: SyncConnection, device: string, here: string): strin
   return c.content === 'mail' ? t('sync.saysMirrorMail', { device, here, keep: keepText(k) }) : t('sync.saysMirror', { device, here })
 }
 
-/** The phone's own word for being nearly full: under a tenth free, or under 2 GB, as it said within two days. */
-const nearlyFull = (d: SyncDevice) => !!d.storageSize && d.storageFree != null && Date.now() - (d.storageAt ?? 0) < 2 * 86_400_000 &&
-  (d.storageFree / d.storageSize < 0.1 || d.storageFree < 2e9)
+/** 90 % full or more, as the device said within two days (the user: "when the storage reaches 90 %, suggest…"). */
+const nearlyFull = (d: SyncDevice) => !!d.storageSize && d.storageFree != null && Date.now() - (d.storageAt ?? 0) < 2 * 86_400_000 && d.storageFree / d.storageSize <= 0.1
 
 export function DeviceRules({ device, here, mailUsed, setDialog, onChange }: { device: SyncDevice; here: string; mailUsed?: number; setDialog: (d: ReactNode) => void; onChange: () => void }) {
   const rows = new Map(device.connections.map(c => [c.content, c]))
   const guide = (start?: { content: SyncContent; mode: Mode; keep: Keep }) =>
     setDialog(<DeviceGuide device={device} here={here} start={start} onClose={() => setDialog(null)} onDone={() => { setDialog(null); onChange() }} />)
-  // nearly full: the first of photos, files, mail not moved yet, moved off with what fits
-  const target = nearlyFull(device) ? APPLETS.find(a => a.content !== 'other' && rows.get(a.content) && modeOf(rows.get(a.content)!) !== 'move') : undefined
+  // 90 % full: the PC works out what to move (two years, or one when two is not enough) and the guide's map shows it
+  const full = nearlyFull(device)
+  const [hint, setHint] = useState<FullSuggestion | null>(null)
+  useEffect(() => { if (full) window.drive.sync.fullSuggestion(device.id).then(setHint, () => setHint(null)); else setHint(null) }, [full, device.storageFree])
   return (
     <>
       <ul className="device-says">
@@ -58,14 +58,16 @@ export function DeviceRules({ device, here, mailUsed, setDialog, onChange }: { d
           return <li key={a.content} className={modeOf(c) === 'off' ? 'off' : ''} style={{ '--c': a.color } as React.CSSProperties}>
             <Icon name={a.icon} size={18} />
             <span><b>{t(NAME[a.content])}:</b> {sentence(c, device.name, here)}
-              {a.content === 'mail' && !!mailUsed && modeOf(c) !== 'off' && <small> · {t('mail.uses', { size: formatBytes(mailUsed) })}</small>}</span>
+              {a.content === 'mail' && !!mailUsed && modeOf(c) !== 'off' && <small> · {t('mail.uses', { size: gb(mailUsed) })}</small>}</span>
           </li>
         })}
       </ul>
-      {nearlyFull(device) && <div className="device-full">
+      {full && <div className="device-full">
         <Icon name="warning" size={18} />
-        <span>{t('sync.nearlyFull', { device: device.name, free: gb(device.storageFree ?? 0) })}{target && ' ' + t(`sync.suggestMove_${target.content}`, { here })}</span>
-        {target && <button className="text-button" onClick={() => guide({ content: target.content, mode: 'move', keep: { auto: true } })}>{t('sync.suggestButton')}</button>}
+        <span>{t('sync.nearlyFull', { device: device.name, pct: hint?.used ?? Math.round((1 - (device.storageFree ?? 0) / (device.storageSize ?? 1)) * 100), free: gb(device.storageFree ?? 0) })}
+          {hint && ' ' + t(`sync.suggestMove_${hint.content}`, { here, span: span(hint.days) })}
+          {hint?.bytes ? ' ' + t('sync.suggestFrees', { size: gb(hint.bytes) }) : ''}</span>
+        {hint && <button className="text-button" onClick={() => guide({ content: hint.content, mode: 'move', keep: { days: hint.days } })}>{t('sync.suggestButton')}</button>}
       </div>}
       <button className="outline-button device-edit" onClick={() => guide()}><Icon name="edit" size={18} />{t('sync.editRules')}</button>
     </>
@@ -96,7 +98,7 @@ export function DeviceGuide({ device, here, start, onClose, onDone }: { device: 
   }
   const confirm = async () => {
     setBusy(true)
-    const days = 'days' in keep ? keep.days : 30, bytes = content !== 'mail' ? null : 'bytes' in keep ? keep.bytes : 'auto' in keep ? 1e9 : null
+    const days = 'days' in keep ? keep.days : 30, bytes = content !== 'mail' ? null : 'bytes' in keep ? keep.bytes : 'auto' in keep ? -1 : null
     const rules = mode === 'off' ? { direction: 'off', keep: 'everything' }
       : mode === 'mirror' ? { direction: 'both', keep: 'everything', keepAuto: 'auto' in keep && content === 'mail', keepBytes: bytes, keepDays: days }
       : { direction: 'send', keep: 'nothing', keepDays: days, keepFavorites: favorites, keepAuto: 'auto' in keep, keepBytes: bytes }
@@ -141,7 +143,7 @@ export function DeviceGuide({ device, here, start, onClose, onDone }: { device: 
         <div className="rule-options">
           {keepChoices(content, rows.get(content)).map(k => (
             <button key={JSON.stringify(k)} className={JSON.stringify(k) === JSON.stringify(keep) ? 'on' : ''} onClick={() => setKeep(k)}>
-              <span className="rule-label">{keepText(k)}{'auto' in k && <><br /><small>{t('sync.keepAutoHow', { device: device.name })}</small></>}</span>
+              <span className="rule-label">{keepText(k)}{'auto' in k && <><br /><small>{t('sync.keepAutoHow', { device: device.name, here })}</small></>}</span>
             </button>
           ))}
         </div>
@@ -161,10 +163,10 @@ export function DeviceGuide({ device, here, start, onClose, onDone }: { device: 
 }
 
 function keepChoices(content: SyncContent, row?: SyncConnection): Keep[] {
-  const list: Keep[] = [{ auto: true }, { days: 365 }, { days: 30 }]
+  const list: Keep[] = [{ auto: true }, { days: 730 }, { days: 365 }, { days: 30 }]
   if (content === 'mail') list.push(...GB.map(bytes => ({ bytes })))
   // a span chosen before the guide (3 months, say) stays offered as it is
-  if (row?.keepDays && ![30, 365].includes(row.keepDays) && !row.keepAuto && modeOf(row) === 'move') list.push({ days: row.keepDays })
+  if (row?.keepDays && ![30, 365, 730].includes(row.keepDays) && !row.keepAuto && modeOf(row) === 'move') list.push({ days: row.keepDays })
   return list
 }
 
@@ -200,7 +202,7 @@ function TransferMap({ device, here, content, mode, keep, favorites, color, icon
         <small>{mode === 'off' ? t('sync.mapNothing') : t('sync.mapAll', { what })}</small>
       </div>
       <p className="map-say">{mode === 'off' ? t('sync.saysOff') : mode === 'move' ? t('sync.mapMoveSay', { what, device: device.name, here, keep: keepText(keep) }) : t('sync.mapMirrorSay', { what, device: device.name, here })}</p>
-      {counted && (!p ? <span className="spinner" /> : <p className="map-say">{p.holds ? t('sync.mapNumbers', { go: p.go.toLocaleString(), size: formatBytes(p.goBytes), keep: p.keep.toLocaleString(), device: device.name, here })
+      {counted && (!p ? <span className="spinner" /> : <p className="map-say">{p.holds ? t('sync.mapNumbers', { go: p.go.toLocaleString(), size: gb(p.goBytes), keep: p.keep.toLocaleString(), device: device.name, here })
         : t(`sync.notListed${content === 'files' ? 'Files' : 'Photos'}`, { name: device.name })}</p>)}
     </div>
   )
