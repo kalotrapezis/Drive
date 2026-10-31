@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { MailAccount, MailAddress, MailCheck, MailCleanPlan, MailDevice, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
+import type { MailAccount, MailAddress, MailCheck, MailCleanPlan, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
 import { formatBytes } from './timeline'
 import { arrange, dayKey, DEFAULT_VIEW, type MailView } from './mailView'
 import { Confirm, Modal, errorText } from './Dialogs'
@@ -887,24 +887,5 @@ function PrivacyCard() {
       </div>
       <p className="muted">{t('mail.alwaysWarned')}</p>
     </section>
-  )
-}
-
-const LIMITS = [5e8, 1e9, 2e9, 5e9, 1e10, -1]
-/** A device card's mail (MAIL_PLAN §14): copy or move, how much it keeps, how much it takes now — set only here, the hub. */
-export function MailStorage({ dev, onChange }: { dev: MailDevice; onChange: (d: MailDevice) => void }) {
-  const set = (x: { mode?: 'copy' | 'move'; limit?: number }) => window.drive.mail.setDevice(dev.device, x).then(onChange)
-  return (
-    <div className="mail-storage">
-      <strong><Icon name="mail" size={16} /> {t('app.mail')}</strong>
-      <div className="segmented island">
-        {(['copy', 'move'] as const).map(m => <button key={m} className={dev.mode === m ? 'on' : ''} onClick={() => set({ mode: m })}>{t(m === 'copy' ? 'mail.copyMode' : 'mail.moveMode')}</button>)}
-      </div>
-      <small className="muted">{t(dev.mode === 'move' ? 'mail.moveHow' : 'mail.copyHow')}</small>
-      <label className="mail-archive-by">{t('mail.keepUpTo')}
-        <select value={dev.limit} onChange={e => set({ limit: Number(e.target.value) })}>
-          {LIMITS.map(l => <option key={l} value={l}>{l < 0 ? t('mail.everything') : `${(l / 1e9).toLocaleString(locale())} GB`}</option>)}</select></label>
-      {dev.usage && <small>{t('mail.uses', { size: formatBytes(dev.usage.used) })}</small>}
-    </div>
   )
 }

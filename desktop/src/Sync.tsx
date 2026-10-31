@@ -1,14 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { IconName } from './Icon'
-import type { Disk, Drive, DriveRules, DriveScan, HistoryRow, OffloadPlan, PurgatorySettings, SyncDevice, SyncFile, SyncOverview, SyncSelf, SyncStatus } from './drive'
+import type { Disk, Drive, DriveScan, HistoryRow, OffloadPlan, PurgatorySettings, SyncDevice, SyncFile, SyncOverview, SyncSelf, SyncStatus } from './drive'
 import { formatBytes } from './timeline'
 import { copiesColor } from './colors'
 import { Icon } from './Icon'
 import { Confirm, Modal } from './Dialogs'
 import { lang, t, tr } from './i18n'
 import { ClientCard, PairingKey } from './Role'
-import { MailStorage } from './Mail'
-import { DeviceRules } from './DeviceCard'
+import { DeviceRules, DriveRulesCard } from './DeviceCard'
 import type { MailDevice } from './drive'
 
 const LOCALE = lang() === 'en' ? 'en-GB' : lang()
@@ -524,107 +523,6 @@ export function OffloadDialog({ deviceId, onClose }: { deviceId: string; onClose
   )
 }
 
-/**
- * A drive's card (SYNC_PLAN.md D3): what is copied to it, and what it is for. A backup holds a copy of
- * everything; storage is also where photos go to live when this PC lets them go — oldest first, either to keep
- * this disk under a line (Offload on) or to keep only the last year / month / week here (Offload off).
- */
-function DriveCard({ device, disk, onChange, setDialog }: { device: SyncDevice; disk: Disk | null; onChange: () => void; setDialog: (d: ReactNode) => void }) {
-  const r = device.rules!
-  const [plan, setPlan] = useState<OffloadPlan | null>(null)
-  const [backing, setBacking] = useState('')
-  const [purgatoryHere, setPurgatoryHere] = useState<boolean | null>(null)
-  const [moving, setMoving] = useState('')
-  useEffect(() => { window.drive.purgatory.settings().then(s => setPurgatoryHere(s.location === device.id)) }, [device.id])
-  const placePurgatory = async (here: boolean) => {
-    setMoving(t('sync.movingPurgatory'))
-    const r = await window.drive.purgatory.setLocation(here ? device.id : null)
-    setPurgatoryHere(here)
-    setMoving(r.failed.length ? t('sync.movedFailed', { moved: r.moved, n: r.failed.length }) : r.waiting ? t('sync.movedWaiting', { moved: r.moved, n: r.waiting }) : '')
-    onChange()
-  }
-  // Again whenever the disk changes: after a Free space the card must not still offer what already went.
-  useEffect(() => { if (r.role === 'storage') window.drive.sync.offloadPlan(device.id).then(setPlan).catch(() => setPlan(null)) }, [device.id, JSON.stringify(r), disk?.free])
-  const set = async (changes: Partial<DriveRules>) => { await window.drive.sync.setDriveRules(device.id, changes); onChange() }
-  const copy = async (content: string, on: boolean) => {
-    await window.drive.sync.setConnection(device.id, content, { direction: on ? 'receive' : 'off', keep: 'everything' })
-    if (!device.set_up_at) await window.drive.sync.completeSetup(device.id)
-    onChange()
-  }
-  const backUp = async () => {
-    setBacking(t('sync.backingUp'))
-    try { const b = await window.drive.sync.backUpToDrive(device.id); setBacking(t(b.failed.length ? 'sync.copiedAlreadyFailed' : 'sync.copiedAlready', { copied: b.copied.toLocaleString(), already: b.already.toLocaleString(), n: b.failed.length })) }
-    catch (e) { setBacking(e instanceof Error ? e.message : String(e)) }
-    onChange()
-  }
-  const opt = (on: boolean, icon: IconName, label: string, click: () => void, note?: string) => (
-    <button className={on ? 'on' : ''} onClick={click}>
-      <span className="glyph"><Icon name={icon} size={18} /></span><span className="rule-label">{label}</span>{note && <span className="rule-note">{note}</span>}
-    </button>
-  )
-  return (
-    <>
-      {device.connections.map(c => {
-        const on = c.direction === 'receive' || c.direction === 'both'
-        const what = c.content === 'files' ? t('sync.driveFiles') : t('app.photos')
-        return (
-          <section key={c.content} className="connection-rules">
-            <h4><Icon name={c.content === 'files' ? 'folder' : 'photos'} size={18} />{what}</h4>
-            <div className="rule-options">
-              {opt(!on, 'block', t('common.off'), () => copy(c.content, false))}
-              {opt(on, 'arrowRight', t('sync.copyTo', { name: device.name }), () => copy(c.content, true))}
-            </div>
-          </section>
-        )
-      })}
-      <section className="connection-rules">
-        <h4><Icon name="database" size={18} />{t('sync.whatFor', { name: device.name })}</h4>
-        <div className="rule-options">
-          {opt(r.role === 'backup', 'copy', t('sync.roleBackup'), () => set({ role: 'backup' }), t('sync.roleBackupNote'))}
-          {opt(r.role === 'storage', 'moveTo', t('sync.kindStorage'), () => set({ role: 'storage' }), t('sync.roleStorageNote'))}
-        </div>
-        {r.role === 'storage' && (
-          <>
-            <div className="rule-options">
-              {opt(r.offload, 'moveTo', t('sync.offloadOn'), () => set({ offload: true }), t('sync.offloadOnNote'))}
-              {opt(!r.offload, 'photos', t('sync.offloadOff'), () => set({ offload: false }), t('sync.offloadOffNote'))}
-            </div>
-            {r.offload ? (
-              <label className="rule-hint drive-slider">{tr('sync.keepUnder', { pct: <b>{r.percent} %</b> })}{disk && ' ' + t('sync.nowPct', { pct: disk.percent })}
-                <input type="range" min={50} max={95} step={5} defaultValue={r.percent} onChange={e => set({ percent: Number(e.target.value) })} />
-              </label>
-            ) : (
-              <label className="rule-hint drive-window">{tr('sync.keepLastOnPc', {
-                n: <input className="field" type="number" min={1} max={1000} value={r.keep} onChange={e => set({ keep: Math.max(1, Number(e.target.value) || 1) })} />,
-                unit: <select className="field" value={r.unit} onChange={e => set({ unit: e.target.value as DriveRules['unit'] })}>
-                  {(['day', 'week', 'month', 'year'] as const).map(u => <option key={u} value={u}>{t(unitKey(u), { count: r.keep })}</option>)}
-                </select> })}
-              </label>
-            )}
-            <label className="rule-hint drive-window">{t('sync.onlyOnce')}
-              <select className="field" value={r.copies} onChange={e => set({ copies: Number(e.target.value) })}>
-                {[1, 2, 3].map(n => <option key={n} value={n}>{n}</option>)}
-              </select>
-              {t('sync.placesHold', { count: r.copies, name: device.name })}
-            </label>
-            <label className="rule-hint check-row"><input type="checkbox" checked={r.favorites} onChange={e => set({ favorites: e.target.checked })} /><span>{t('sync.favoritesAlwaysStay')}</span></label>
-            <p className="rule-hint">{plan ? (plan.count ? tr('sync.couldGoNow', { n: plan.count.toLocaleString(), size: <b>{formatBytes(plan.bytes)}</b> }) : t('sync.nothingToFreeNow')) : '…'}
-              {' '}{r.auto ? t('sync.goesByItself') : t('sync.alwaysAsked')}</p>
-            <label className="rule-hint check-row"><input type="checkbox" checked={r.auto} onChange={e => set({ auto: e.target.checked })} /><span>{t('sync.autoFree')}</span></label>
-            {!!plan?.count && <button className="filled-button" onClick={() => setDialog(<OffloadDialog deviceId={device.id} onClose={() => { setDialog(null); onChange() }} />)}>{t('sync.freeEllipsis', { size: formatBytes(plan.bytes) })}</button>}
-          </>
-        )}
-        <label className="rule-hint check-row"><input type="checkbox" checked={!!r.screenshots} onChange={e => set({ screenshots: e.target.checked })} /><span>{t('sync.backUpScreenshots')}</span></label>
-        {purgatoryHere !== null && <label className="rule-hint check-row"><input type="checkbox" checked={purgatoryHere} disabled={!!moving && moving.endsWith('…')}
-          onChange={e => placePurgatory(e.target.checked)} /><span>{t('sync.keepPurgatoryHere')}<br />{t('sync.keepPurgatoryHereSub')}</span></label>}
-        {moving && <p className="rule-hint">{moving}</p>}
-        <button className="text-button" onClick={backUp} disabled={backing === t('sync.backingUp')}>{t('sync.backUpNow')}</button>
-        {backing && <p className="rule-hint">{backing}</p>}
-      </section>
-    </>
-  )
-}
-
 export function SyncPage({ setDialog }: { setDialog: (d: ReactNode) => void }) {
   const [client, setClient] = useState<boolean | null>(null)
   useEffect(() => { window.drive.role.get().then(r => setClient(r.role === 'client')) }, [])
@@ -703,7 +601,8 @@ function ServerPage({ setDialog, client }: { setDialog: (d: ReactNode) => void; 
                 {!d.set_up_at && (
                   <p className="rule-hint risk">{t('sync.notSetUp')}</p>
                 )}
-                {d.volume_uuid && d.rules ? <DriveCard device={d} disk={status?.disk ?? null} onChange={load} setDialog={setDialog} />
+                {d.volume_uuid && d.rules ? <DriveRulesCard device={d} here={here} disk={status?.disk ?? null} onChange={load} setDialog={setDialog}
+                    onFree={() => setDialog(<OffloadDialog deviceId={d.id} onClose={() => { setDialog(null); load() }} />)} />
                   : <DeviceRules device={d} here={here} mailUsed={mailOf(d)?.usage?.used} setDialog={setDialog} onChange={() => { load(); loadMail() }} />}
                 <footer className="device-foot">
                   <small>{t('sync.paired', { when: when.format(d.paired_at) })}</small>
@@ -719,10 +618,6 @@ function ServerPage({ setDialog, client }: { setDialog: (d: ReactNode) => void; 
           </button>
         </div>
       )}
-      {(rest => rest.length > 0 && <div className="island mail-devices">
-        <h3>{t('mail.storageTitle')}</h3>
-        {rest.map(m => <div key={m.device}><strong>{m.name}</strong><MailStorage dev={m} onChange={loadMail} /></div>)}
-      </div>)((mail?.devices ?? []).filter(m => !devices.some(d => mailOf(d) === m)))}
       {!client && status && !status.error && <p className="hint">{t('sync.listening', { addresses: status.addresses.join(', ') || t('sync.thisComputer'), port: status.port })}</p>}
     </div>
   )
