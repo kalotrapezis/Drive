@@ -4,20 +4,20 @@
 Photos, files, notes, calendar, timers, maps, contacts, calls and data on Linux, in sync with your phone and tablet, with nothing uploaded anywhere.</p>
 
 <p align="center">
-  <a href="https://github.com/kalotrapezis/Drive/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="Assets/buttons/download-appimage.png" alt="Download the AppImage" width="420"></a>
-  <a href="https://github.com/kalotrapezis/Drive/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="Assets/buttons/download-deb.png" alt="Download the .deb" width="420"></a>
+  <a href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="Assets/buttons/download-appimage.png" alt="Download the AppImage" width="420"></a>
+  <a href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="Assets/buttons/download-deb.png" alt="Download the .deb" width="420"></a>
 </p>
 <p align="center">
-  <a href="https://github.com/kalotrapezis/Drive-Android"><img src="Assets/buttons/get-android.png" alt="Tetra for Android" width="420"></a>
+  <a href="https://github.com/kalotrapezis/Tetra-mobile"><img src="Assets/buttons/get-android.png" alt="Tetra for Android" width="420"></a>
 </p>
 
 ![Tetra on a computer, a tablet and a phone](Assets/cards/tetra-devices.jpg)
 
-The computer half of [Tetra for Android](https://github.com/kalotrapezis/Drive-Android): Photos, Files, Notes,
+The computer half of [Tetra for Android](https://github.com/kalotrapezis/Tetra-mobile): Photos, Files, Notes,
 Calendar, Timer, Maps\*, Contacts, Phone and Data on Linux, in sync with your phone and tablet over your own Wi-Fi.
 Faces, documents and search labels are analysed on this computer.
 
-**0.6.0 Beta 32** ([what's new](https://github.com/kalotrapezis/Drive/releases/tag/desktop-v0.6.0-beta.32)). A beta: keep
+**0.6.0 Beta 32** ([what's new](https://github.com/kalotrapezis/Tetra/releases/tag/desktop-v0.6.0-beta.32)). A beta: keep
 your own backups. Screenshots use invented sample data.
 
 ## What Tetra does for you
@@ -67,7 +67,7 @@ your own backups. Screenshots use invented sample data.
 Also here: **Devices**, to pair a phone or tablet by QR code with rules per device (send, both ways, or Move);
 **storage drives**, a USB disk as a verified backup or as storage that still shows in the library; and a Trash that
 waits 30 days, then 30 more in a purgatory, before anything is really gone. Each applet's screenshots, phone, tablet
-and computer apart, are on [the Tetra page](https://kalotrapezis.github.io/Drive-Android/).
+and computer apart, are on [the Tetra page](https://kalotrapezis.github.io/Tetra/).
 
 ## Fast
 
@@ -81,7 +81,7 @@ already quick (2–160 ms). Two froze the window, and no longer do:
 | Phone | 510–545 ms, busy 288–293 ms | 47–76 ms, never busy | sixty recent calls at first, more as the list's end nears |
 
 On the phone, the same week, Contacts went from 3.3 s to 0.19 s and the Phone from 2.3–2.8 s to 0.25 s: see
-[Tetra for Android](https://github.com/kalotrapezis/Drive-Android#fast).
+[Tetra for Android](https://github.com/kalotrapezis/Tetra-mobile#fast).
 
 ## Sync
 
@@ -99,7 +99,7 @@ sudo apt install ./local-drive-desktop_0.6.0-beta.32_amd64.deb
 Or make the AppImage executable and run it (`chmod +x Tetra-0.6.0-beta.32.AppImage`); it needs nothing else,
 not even `libfuse2`. Tetra keeps running in the tray when its window is closed, so phones can sync at any time.
 
-Then install [Tetra for Android](https://github.com/kalotrapezis/Drive-Android) on your phone or tablet and pair it
+Then install [Tetra for Android](https://github.com/kalotrapezis/Tetra-mobile) on your phone or tablet and pair it
 from **Devices**.
 
 ## Build
@@ -131,4 +131,4 @@ Tetra is free software under the [GNU GPL 3.0](LICENSE), and will stay free.
 
 Until September 2026 this repository held a C++/Qt desktop app with a browser-page interface. It was replaced by
 the Electron app in `desktop/` and removed on 26 September 2026. Its code, plans and safety specification are in the
-history, at commit [`1b71025`](https://github.com/kalotrapezis/Drive/tree/1b710253ee846a965f3524138332fda6ae37897a).
+history, at commit [`1b71025`](https://github.com/kalotrapezis/Tetra/tree/1b710253ee846a965f3524138332fda6ae37897a).

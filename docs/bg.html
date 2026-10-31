@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tetra</title>
+<meta name="description" content="Tetra: едно частно супер приложение за телефона, таблета и компютъра ви. Безплатен софтуер; нищо не напуска устройствата ви.">
+<meta property="og:title" content="Tetra">
+<meta property="og:description" content="Едно частно супер приложение за телефона, таблета и компютъра ви. Нищо не напуска устройствата ви.">
+<meta property="og:image" content="img/tetra-devices.jpg">
+<link rel="alternate" hreflang="bg" href="bg.html">
+<link rel="alternate" hreflang="cs" href="cs.html">
+<link rel="alternate" hreflang="da" href="da.html">
+<link rel="alternate" hreflang="de" href="de.html">
+<link rel="alternate" hreflang="el" href="el.html">
+<link rel="alternate" hreflang="en" href="index.html">
+<link rel="alternate" hreflang="es" href="es.html">
+<link rel="alternate" hreflang="et" href="et.html">
+<link rel="alternate" hreflang="fi" href="fi.html">
+<link rel="alternate" hreflang="fr" href="fr.html">
+<link rel="alternate" hreflang="ga" href="ga.html">
+<link rel="alternate" hreflang="hr" href="hr.html">
+<link rel="alternate" hreflang="hu" href="hu.html">
+<link rel="alternate" hreflang="it" href="it.html">
+<link rel="alternate" hreflang="lt" href="lt.html">
+<link rel="alternate" hreflang="lv" href="lv.html">
+<link rel="alternate" hreflang="mt" href="mt.html">
+<link rel="alternate" hreflang="nl" href="nl.html">
+<link rel="alternate" hreflang="pl" href="pl.html">
+<link rel="alternate" hreflang="pt" href="pt.html">
+<link rel="alternate" hreflang="ro" href="ro.html">
+<link rel="alternate" hreflang="sk" href="sk.html">
+<link rel="alternate" hreflang="sl" href="sl.html">
+<link rel="alternate" hreflang="sv" href="sv.html">
+<link rel="icon" href="img/tetra.png">
+<style>
+  :root { --bg: #0f1113; --card: #191c20; --line: #2a2e34; --text: #f4f6f8; --muted: #b0b7c0; --teal: #04d5cc;
+          --phone: #02505b; --violet: #822ad1; --blue: #177bfc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 system-ui, "Noto Sans", "Segoe UI", sans-serif; }
+  a { color: var(--teal); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 56px 0 24px; text-align: center;
+           /* the four corners lit in Tetra's colours, the icon in the middle */
+           background: radial-gradient(800px 520px at 0% 0%, rgba(149, 223, 107, .30) 0%, transparent 70%),
+                       radial-gradient(800px 520px at 100% 0%, rgba(23, 123, 252, .36) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 0% 100%, rgba(227, 20, 31, .30) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 100% 100%, rgba(254, 208, 10, .26) 0%, transparent 70%); }
+  header img.logo { width: 128px; height: 128px; filter: drop-shadow(0 0 28px rgba(255, 255, 255, .18)); }
+  h1 { font-size: clamp(40px, 7vw, 72px); margin: 8px 0 4px; letter-spacing: -1px; }
+  .lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; margin: 0 auto 28px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 0 0 32px; }
+  .btn { display: flex; align-items: center; gap: 14px; padding: 14px 22px 14px 14px; border-radius: 22px; color: #fff;
+         text-decoration: none; min-width: 270px; text-align: left; transition: transform .15s, filter .15s; }
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
+  .btn img { width: 52px; height: 52px; border-radius: 13px; }
+  .btn b { display: block; font-size: 20px; } .btn span { font-size: 14px; opacity: .85; }
+  .android { background: var(--phone); } .appimage { background: var(--violet); } .deb { background: var(--blue); }
+  .hero { width: 100%; border-radius: 22px; display: block; border: 1px solid var(--line); }
+  section { padding: 56px 0 8px; }
+  h2 { font-size: clamp(28px, 4vw, 40px); margin: 0 0 8px; text-align: center; }
+  .sub { color: var(--muted); max-width: 760px; margin: 0 auto; text-align: center; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 26px; }
+  .tile { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 22%, var(--card)) 0%, var(--card) 55%);
+          border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .tile img { width: 56px; height: 56px; border-radius: 14px; }
+  .tile h3 { margin: 12px 0 6px; font-size: 21px; } .tile p { margin: 0; color: var(--muted); font-size: 16px; }
+  .tile b { color: var(--text); }
+  .island { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; background: #000; border: 1px solid var(--line);
+            border-radius: 30px; padding: 8px; margin: 26px auto 22px; width: fit-content; max-width: 100%; }
+  .island button { font: inherit; font-size: 15px; font-weight: 600; color: var(--text); background: transparent; border: 0;
+                   border-radius: 999px; padding: 9px 18px; cursor: pointer; }
+  .island button:hover { background: #22262b; }
+  .island button[aria-selected="true"] { background: var(--c); color: var(--on); }
+  .island button:focus-visible { outline: 2px solid var(--c); outline-offset: 2px; }
+  [role="tabpanel"] > p { text-align: center; color: var(--muted); max-width: 760px; margin: 0 auto 18px; }
+  .shots { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; align-items: flex-start; }
+  .shots figure { margin: 0; text-align: center; }
+  .shots figure.phone { flex: 0 1 230px; }
+  .shots figure.wide { flex: 1 1 560px; max-width: 900px; }
+  .shots img { width: 100%; display: block; border-radius: 16px; border: 1px solid var(--line); background: #000; }
+  .shots figure.phone img { border-radius: 26px; border: 6px solid #08090a; outline: 1px solid var(--line); }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .note { text-align: center; color: #7d858f; font-size: 14px; }
+  .grid { display: grid; gap: 18px; margin-top: 22px; }
+  .grid img, .wide-img { width: 100%; border-radius: 18px; display: block; border: 1px solid var(--line); margin-top: 22px; }
+  /* A card: a picture without words and its words as HTML on it, so a translation changes only text. The text column
+     ends where the devices start (--x); cqi keeps it the picture's size. On a phone the words go above the picture. */
+  .card { position: relative; margin: 22px 0 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+          background: #0f1113; container-type: inline-size; }
+  .card .pic { position: relative; }
+  .card .pic > img { display: block; width: 100%; aspect-ratio: 16 / 9; }
+  .card figcaption { position: absolute; top: 0; bottom: 0; left: 5%; width: calc(var(--x, 40%) - 9%);
+                     display: flex; flex-direction: column; justify-content: center; }
+  .card figcaption .icon { width: 6cqi; height: 6cqi; border-radius: 1.4cqi; }
+  .card .pill { align-self: flex-start; margin: 1.6cqi 0 1.4cqi; padding: .35cqi 1.1cqi; border-radius: 999px; background: var(--c);
+                color: var(--on, #111); font-size: 1.3cqi; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+  .card h3 { margin: 0 0 1.2cqi; font-size: 3.5cqi; line-height: 1.12; hyphens: auto; overflow-wrap: break-word; }  /* long words (et, fi, de) */
+  .card figcaption p { margin: 0; color: var(--muted); font-size: 1.6cqi; line-height: 1.5; }
+  .card.top figcaption { bottom: auto; left: 0; width: 100%; top: 3%; align-items: center; text-align: center; }
+  .card.top figcaption p { max-width: 80%; }
+  .card .label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--text); font-weight: 700;
+                 font-size: max(10px, 1.6cqi); text-shadow: 0 1px 3px #000; }
+  .card .label.head { font-size: max(11px, 2.2cqi); }
+  .speed { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; margin-top: 22px;
+           display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; font-size: 15px; }
+  .speed b { font-weight: 600; }
+  .speed .bar { position: relative; height: 22px; margin-right: 9.5em; }  /* room for the numbers after the longest bar */
+  .speed .bar i { position: absolute; left: 0; top: 4px; height: 14px; border-radius: 7px; background: #3a4048; width: var(--b); }
+  .speed .bar i + i { background: var(--teal); width: var(--a); }
+  .speed .bar span { position: absolute; left: calc(var(--b) + 10px); top: 0; color: var(--muted); white-space: nowrap; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; margin-top: 26px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .panel h3 { margin: 0 0 6px; font-size: 24px; } .panel p { color: var(--muted); margin: 0 0 6px; }
+  .panel .btn { min-width: 0; margin-top: 12px; }
+  .lang { position: absolute; top: 16px; right: 16px; z-index: 2; text-align: left; }
+  .lang summary { list-style: none; cursor: pointer; background: rgba(0, 0, 0, .55); border: 1px solid var(--line); border-radius: 999px;
+                  padding: 6px 14px; font-size: 14px; font-weight: 700; }
+  .lang summary::-webkit-details-marker { display: none; }
+  .lang summary::after { content: " ▾"; }
+  .lang ul { position: absolute; right: 0; margin: 6px 0 0; padding: 6px; list-style: none; columns: 2; column-gap: 4px; width: max-content;
+             max-width: calc(100vw - 32px); background: #15181b; border: 1px solid var(--line); border-radius: 14px; }
+  .lang a { display: block; color: var(--text); text-decoration: none; font-size: 14px; padding: 5px 12px; border-radius: 8px; }
+  .lang a:hover { background: #22262b; }
+  .lang a[aria-current="page"] { background: var(--text); color: #111; }
+  header { position: relative; }
+  .buttons { align-items: stretch; }
+  .group { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 28px; background: rgba(0, 0, 0, .35);
+           border: 1px solid var(--line); }
+  .group h3 { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 18px; }
+  .group h3 img { width: 30px; height: 30px; }
+  .qr { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; text-align: left; }
+  .qr img { width: 92px; height: 92px; border-radius: 10px; }
+  .qr p { margin: 0; }
+  .btn img[src$=".svg"] { background: rgba(255, 255, 255, .1); padding: 6px; }
+  .faq { max-width: 820px; margin: 24px auto 0; display: grid; gap: 10px; }
+  .faq details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px; }
+  .faq summary { cursor: pointer; font-weight: 700; font-size: 18px; }
+  .faq ol, .faq p { color: var(--muted); margin: 10px 0 0; }
+  .faq li { margin: 4px 0; }
+  .faq b, .faq code { color: var(--text); }
+  footer { color: #7d858f; font-size: 14px; padding: 48px 0 40px; text-align: center; }
+  @media (max-width: 700px) {  /* a phone: the tabs would not fit, so every card one under the other, the words above */
+    .qr { display: none; }  /* already on the phone */
+    .island { display: none; }
+    [role="tabpanel"] { display: block !important; }
+    .card { display: flex; flex-direction: column-reverse; }
+    .card figcaption, .card.top figcaption { position: static; width: auto; padding: 18px 18px 6px; align-items: flex-start; text-align: left; }
+    .card.top figcaption p { max-width: none; }
+    .card figcaption .icon { width: 44px; height: 44px; border-radius: 11px; }
+    .card .pill { font-size: 12px; padding: 3px 10px; margin: 10px 0 8px; }
+    .card h3 { font-size: 24px; margin-bottom: 6px; }
+    .card figcaption p { font-size: 15px; }
+    .card:not(.top) .pic > img { aspect-ratio: 5 / 4; object-fit: cover; object-position: right; }
+    .speed { grid-template-columns: 1fr; gap: 2px; }
+    .card .label { white-space: normal; width: 24%; text-align: center; line-height: 1.2; }
+    .card .label.head { width: 46%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <details class="lang"><summary aria-label="Language">BG</summary><ul><li><a href="bg.html" hreflang="bg" lang="bg" aria-current="page">Български</a></li><li><a href="cs.html" hreflang="cs" lang="cs">Čeština</a></li><li><a href="da.html" hreflang="da" lang="da">Dansk</a></li><li><a href="de.html" hreflang="de" lang="de">Deutsch</a></li><li><a href="el.html" hreflang="el" lang="el">Ελληνικά</a></li><li><a href="index.html" hreflang="en" lang="en">English</a></li><li><a href="es.html" hreflang="es" lang="es">Español</a></li><li><a href="et.html" hreflang="et" lang="et">Eesti</a></li><li><a href="fi.html" hreflang="fi" lang="fi">Suomi</a></li><li><a href="fr.html" hreflang="fr" lang="fr">Français</a></li><li><a href="ga.html" hreflang="ga" lang="ga">Gaeilge</a></li><li><a href="hr.html" hreflang="hr" lang="hr">Hrvatski</a></li><li><a href="hu.html" hreflang="hu" lang="hu">Magyar</a></li><li><a href="it.html" hreflang="it" lang="it">Italiano</a></li><li><a href="lt.html" hreflang="lt" lang="lt">Lietuvių</a></li><li><a href="lv.html" hreflang="lv" lang="lv">Latviešu</a></li><li><a href="mt.html" hreflang="mt" lang="mt">Malti</a></li><li><a href="nl.html" hreflang="nl" lang="nl">Nederlands</a></li><li><a href="pl.html" hreflang="pl" lang="pl">Polski</a></li><li><a href="pt.html" hreflang="pt" lang="pt">Português</a></li><li><a href="ro.html" hreflang="ro" lang="ro">Română</a></li><li><a href="sk.html" hreflang="sk" lang="sk">Slovenčina</a></li><li><a href="sl.html" hreflang="sl" lang="sl">Slovenščina</a></li><li><a href="sv.html" hreflang="sv" lang="sv">Svenska</a></li></ul></details>
+  <div class="wrap">
+    <img class="logo" src="img/tetra.png" alt="">
+    <h1>Tetra</h1>
+    <p class="lead">Едно частно супер приложение за телефона, таблета и компютъра ви. Безплатен софтуер, без акаунт, без облак: нищо не напуска устройствата ви.</p>
+    <div class="buttons">
+      <div class="group"><h3><img src="img/android.svg" alt="">Android</h3>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Изтегляне за Android</b><span>APK · 0.6.0 beta 4 · Android 11+</span></div></a>
+        <div class="qr"><img src="img/qr-android.svg" alt="QR код за изтеглянето за Android"><p>Или го сканирайте с телефона си.<br><a href="#faq-install">Как се инсталира</a></p></div></div>
+      <div class="group"><h3><img src="img/linux.svg" alt="">Linux</h3>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>Linux AppImage</b><span>0.6.0 beta 32 · повечето дистрибуции</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>Linux .deb</b><span>Debian, Ubuntu, Mint</span></div></a></div>
+    </div>
+    <img class="hero" src="img/tetra-devices.jpg" alt="Tetra на компютър, таблет и телефон">
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Какво Tetra прави за вас</h2>
+    <div class="tiles">
+      <div class="tile" style="--c:#177BFC"><img src="img/icons/files.png" alt=""><h3>Файлове към и от компютъра за секунда</h3><p>Споделете всичко чрез <b>Изпрати към компютъра</b> на телефона или чрез <b>Изпрати към телефона</b> на компютъра. Минава през собствения ви Wi-Fi: без кабел, без облак. Ако компютърът е изключен, файлът се изпраща, когато се включи отново.</p></div>
+      <div class="tile" style="--c:#1A9AA8"><img src="img/icons/phone.png" alt=""><h3>Обаждане от компютъра</h3><p>Щракнете на компютъра върху номер в Контакти и телефонът ви го набира. Балонче за обаждане на екрана приема, задържа, заглушава, приключва и прехвърля звука към високоговорителя на телефона.</p></div>
+      <div class="tile" style="--c:#25C4FE"><img src="img/icons/maps.png" alt=""><h3>Карти на всяка държава, офлайн</h3><p>Изберете държава на компютъра: Tetra създава от OpenStreetMap картата, търсенето и маршрутите ѝ и ги изпраща на телефона и таблета ви. Маршрутите преминават границите на истинските пунктове, с указания на вашия език.</p></div>
+      <div class="tile" style="--c:#8E99A6"><img src="img/icons/settings.png" alt=""><h3>На вашия език, с ръководство</h3><p>Всичките 24 официални езика на ЕС. Ръководство при първото стартиране и по всяко време в Настройки показва стъпка по стъпка къде да докоснете и защо.</p></div>
+      <div class="tile" style="--c:#9AD01E"><img src="img/icons/data.png" alt=""><h3>Вашият пакет данни, под наблюдение</h3><p>Кажете веднъж на Tetra плана си. Той ви уведомява при 50 %, 80 % и 100 %, или при стъпките, които изберете, и прогнозира края на месеца, преди да стигнете до него.</p></div>
+      <div class="tile" style="--c:#F41879"><img src="img/icons/calendar.png" alt=""><h3>Календар и таймери, с ИИ</h3><p>Вградените skills позволяват на Claude, ChatGPT или на всеки асистент, който може да работи с компютъра ви, да импортира разписание, да планира седмицата ви или да стартира таймер. Те просто редактират файловете на календара и на таймерите.</p></div>
+      <div class="tile" style="--c:#FED00A"><img src="img/icons/notes.png" alt=""><h3>Бележки и списъци, подредени</h3><p>Пазете бележките и списъците си за пазаруване подредени с етикети и синхронизирани между телефона и компютъра. Всяка бележка е обикновен файл във вашата папка Tetra.</p></div>
+      <div class="tile" style="--c:#95DF6B"><img src="img/icons/gallery.png" alt=""><h3>Снимки, които знаят кой и къде</h3><p>Етикети, живи снимки и колекциите „Хора“ и „Документи“ от разпознаване на лица, което работи на устройството. Намирайте снимки по място*, и прехвърлете Google Photos (импорт Takeout на компютъра).</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/scanner.png" alt=""><h3>Сканирайте всяка страница чисто</h3><p>Филтрите и автоматичното изрязване намират и изправят страницата: всички инструменти, нужни за перфектно цифрово копие, за колкото страници искате.</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/pdf.png" alt=""><h3>Скрийте каквото трябва да остане лично</h3><p>Скривайте PDF файлове и снимки така, че скритата част да се премахва от самия файл, а не само да се покрива. Tetra намира очите на снимка и ги покрива с черни ленти или звезди, и намира текст за скриване.</p></div>
+      <div class="tile" style="--c:#FD7D12"><img src="img/icons/office.png" alt=""><h3>Office и PDF, достатъчно добри</h3><p>Word, Excel и PowerPoint се отварят и записват като себе си, достатъчно съвместими за ежедневна работа. PDF файловете се редактират както в Документи, а филмите и звуците в документите се възпроизвеждат. Разположение за телефон, което наистина можете да използвате.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/drive.png" alt=""><h3>Пазете вътрешния SSD лек</h3><p>Свържете външен диск с Tetra и той архивира всичко автоматично или премества по-старите снимки на него, така че собственият диск на компютъра да остане възможно най-празен.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/sync.png" alt=""><h3>Повече от едно копие, без абонамент</h3><p>Tetra показва на колко места се намира всеки файл: в телефона, таблета, компютъра или на USB диск, и кои файлове са само на едно място. Собствени архиви, без абонамент за облак, който да плащате.</p></div>
+    </div>
+    <p class="note">*Търсенето на снимки по място засега обхваща само Гърция.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Всяко приложение, на всеки екран</h2>
+    <p class="sub">Един Начало, една папка, същите приложения на Android и Linux. Вътре са и Скенер, Кодове и Текст.</p>
+    <div class="island" role="tablist" aria-label="Приложения">
+      <button role="tab" id="tab-home" aria-controls="panel-home" aria-selected="true" tabindex="0" style="--c:#8E99A6;--on:#111">Начало</button>
+      <button role="tab" id="tab-maps" aria-controls="panel-maps" aria-selected="false" tabindex="-1" style="--c:#25C4FE;--on:#111">Карти</button>
+      <button role="tab" id="tab-photos" aria-controls="panel-photos" aria-selected="false" tabindex="-1" style="--c:#95DF6B;--on:#111">Галерия</button>
+      <button role="tab" id="tab-files" aria-controls="panel-files" aria-selected="false" tabindex="-1" style="--c:#177BFC;--on:#fff">Файлове</button>
+      <button role="tab" id="tab-notes" aria-controls="panel-notes" aria-selected="false" tabindex="-1" style="--c:#FED00A;--on:#111">Бележки</button>
+      <button role="tab" id="tab-office" aria-controls="panel-office" aria-selected="false" tabindex="-1" style="--c:#FD7D12;--on:#111">Office</button>
+      <button role="tab" id="tab-calendar" aria-controls="panel-calendar" aria-selected="false" tabindex="-1" style="--c:#F41879;--on:#fff">Календар · Таймер</button>
+      <button role="tab" id="tab-contacts" aria-controls="panel-contacts" aria-selected="false" tabindex="-1" style="--c:#BE7E4D;--on:#fff">Контакти</button>
+      <button role="tab" id="tab-phone" aria-controls="panel-phone" aria-selected="false" tabindex="-1" style="--c:#1A9AA8;--on:#fff">Телефон</button>
+      <button role="tab" id="tab-backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1" style="--c:#2E9D4F;--on:#fff">Архив</button>
+      <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1" style="--c:#9AD01E;--on:#111">Данни</button>
+      <button role="tab" id="tab-guide" aria-controls="panel-guide" aria-selected="false" tabindex="-1" style="--c:#8E99A6;--on:#111">Ръководство · Настройки</button>
+    </div>
+    <div role="tabpanel" id="panel-home" aria-labelledby="tab-home">
+      <figure class="card top"><div class="pic"><img src="img/art/home.jpg" alt="" loading="lazy">
+        <span class="label" style="left:15.3%;top:94.5%">Групи</span><span class="label" style="left:38%;top:94.5%">Смесено</span>
+        <span class="label" style="left:60.9%;top:94.5%">Само икони</span><span class="label" style="left:83.7%;top:94.5%">Режим на редактиране</span></div>
+        <figcaption><h3>Начало, по ваш начин</h3><p>Групи, смесено или само икони. Плъзнете част към всяко поле, направете я голяма, средна или малка, или я скрийте.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-maps" aria-labelledby="tab-maps" hidden>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/builder.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Карти</span><h3>Карти на всяка държава, създадени от компютъра ви</h3><p>Изберете държава или регион в Настройки › Карти. Компютърът ви създава от OpenStreetMap картата, търсенето и маршрутите ѝ, а синхронизацията ги донася на телефона и таблета ви. Когато една карта е на три месеца, Tetra предлага да я създаде отново.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/borders.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Карти</span><h3>През граници</h3><p>С картата и на съседната държава маршрутът преминава границата на истинските пунктове, по главния път. Указания на вашия език, в километри или мили.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/maps.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Карти</span><h3>Офлайн, с навигация</h3><p>Търсене и места, маршрути с кола, пешком или с колело и гласово водене завой по завой, всичко на устройството. Без акаунт, без проследяване.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-photos" aria-labelledby="tab-photos" hidden>
+      <figure class="card" style="--c:#95DF6B"><div class="pic"><img src="img/art/photos.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/gallery.png" alt=""><span class="pill">Галерия</span><h3>Вашата галерия, на вашите устройства</h3><p>Хронология, колекции, хора, документи, открити за вас, карта и редактор. Лицата и етикетите се разпознават на устройството.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-files" aria-labelledby="tab-files" hidden>
+      <figure class="card" style="--c:#177BFC"><div class="pic"><img src="img/art/files.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/files.png" alt=""><span class="pill">Файлове</span><h3>Файлове, с икона за всеки вид</h3><p>Файлов мениджър за папката ви Tetra: етикети, любими, цветове на папките, Кошче, миниатюри и системни папки.</p></figcaption></figure>
+      <figure class="card top"><div class="pic"><img src="img/art/send.jpg" alt="" loading="lazy">
+        <span class="label head" style="left:25.6%;top:24.7%">От телефона към компютъра</span>
+        <span class="label head" style="left:74.4%;top:24.7%">От компютъра към телефона</span>
+        <span class="label" style="left:10.4%;top:89.1%">1. Сподели › Изпрати към компютъра</span><span class="label" style="left:35.6%;top:77.8%">2. На компютъра: Файлове › From phone</span>
+        <span class="label" style="left:64.4%;top:77.8%">1. На компютъра: Изпрати към телефона</span><span class="label" style="left:89.6%;top:89.1%">2. Файлове › From computer</span></div>
+        <figcaption><h3>Файлове в двете посоки, за секунда</h3><p>През собствения ви Wi-Fi: без кабел, без облак, без акаунт. Ако другата страна е изключена, файлът чака и се изпраща, когато се включи отново.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" hidden>
+      <figure class="card" style="--c:#FED00A"><div class="pic"><img src="img/art/notes.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/notes.png" alt=""><span class="pill">Бележки</span><h3>Бележки и списъци за проверка</h3><p>Цветове, етикети, закачания и история на всяка бележка. Клавишни комбинации на таблет. Синхронизират се с компютъра.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-office" aria-labelledby="tab-office" hidden>
+      <figure class="card" style="--c:#FD7D12"><div class="pic"><img src="img/art/office.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/office.png" alt=""><span class="pill">Office</span><h3>Word, Excel, PowerPoint и PDF</h3><p>Истински страници с линийки, лентата, диаграми и теми. Файловете се отварят и записват като себе си. PDF файловете се редактират както в Документи, с бележки, подписи, формуляри и скриване; филмите и звуците в документите се възпроизвеждат.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-calendar" aria-labelledby="tab-calendar" hidden>
+      <figure class="card" style="--c:#F41879;--on:#fff;--x:37%"><div class="pic"><img src="img/art/calendar.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/calendar.png" alt=""><span class="pill">Календар · Таймер</span><h3>Календар и таймери</h3><p>Обикновени iCalendar файлове: ден, седмица, месец и дневен ред, напомняния, рождени дни от Контакти. Таймерите звънят на всяко устройство.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-contacts" aria-labelledby="tab-contacts" hidden>
+      <figure class="card" style="--c:#BE7E4D;--on:#fff"><div class="pic"><img src="img/art/people.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/contacts.png" alt=""><span class="pill">Контакти · Телефон</span><h3>Контакти и обаждания</h3><p>Контактите ви като vCard файлове, с лица от Галерия. Клавиатура за набиране с Последни и проверка за спам; обаждане от компютъра през телефона.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" hidden>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/bubble.jpg" alt="" loading="lazy">
+        <span class="label" style="left:56.2%;top:69.3%">Някой се обажда</span><span class="label" style="left:83.1%;top:86.1%">В разговор, с отворена клавиатура</span></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Телефон</span><h3>Обаждания от компютъра</h3><p>Щракнете върху номер в Контакти и телефонът ви го набира. Когато някой се обади, балонче на екрана ви позволява да приемете, задържите, заглушите, въведете цифри, прехвърлите звука към високоговорителя на телефона или приключите, докато телефонът остава в джоба ви.</p></figcaption></figure>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/phone-tablet.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Телефон</span><h3>На таблет, два панела</h3><p>Последни вляво, клавиатурата винаги отворена вдясно. Номерата се четат по кода на вашата държава, стационарните се назовават по място от картите ви, а Блокиране на обаждания поддържа собствен списък.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-backup" aria-labelledby="tab-backup" hidden>
+      <figure class="card" style="--c:#2E9D4F;--on:#fff;--x:34%"><div class="pic"><img src="img/art/safety.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/sync.png" alt=""><span class="pill">Устройства · Дискове</span><h3>Повече от едно копие, без абонамент</h3><p>Tetra показва на колко места се намира всяка снимка и каква е само на едно място. Свържете USB диск за автоматични архиви или преместете старите снимки на него, за да пази SSD дискът на компютъра лек.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-data" aria-labelledby="tab-data" hidden>
+      <figure class="card" style="--c:#9AD01E"><div class="pic"><img src="img/art/data.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/data.png" alt=""><span class="pill">Данни</span><h3>Данни, Wi-Fi и сигнал</h3><p>Колко използва всяко приложение мобилни данни и Wi-Fi, предупреждения преди да свършат, и телефонът, таблетът и компютърът заедно.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-guide" aria-labelledby="tab-guide" hidden>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/guide.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Ръководство</span><h3>Ръководство, което ви показва</h3><p>При първото стартиране и в Настройки › Ръководство: къде да докоснете и защо, стъпка по стъпка. Снимките се движат, за да покажат какво се случва, а Опитайте задържа стъпката пред очите ви, докато я правите наистина.</p></figcaption></figure>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/languages.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Настройки</span><h3>На вашия език</h3><p>Всичките 24 официални езика на ЕС, на телефона и на компютъра. Tetra следва езика на системата, освен ако не изберете друг в Настройки › Облик.</p></figcaption></figure>
+    </div>
+    <p class="note">Екранните снимки използват измислени примерни данни.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Бързо, нарочно</h2>
+    <p class="sub">Всяко приложение беше измерено на телефон и преработено, докато се отваря мигновено. Време до показването на съдържанието на екрана, преди и сега:</p>
+    <div class="speed">
+      <b>Контакти, веднага след стартиране</b><div class="bar" style="--b:100%;--a:5.8%"><i></i><i></i><span>3.3 s → 190 ms</span></div>
+      <b>Телефон, веднага след стартиране</b><div class="bar" style="--b:75.8%;--a:7.6%"><i></i><i></i><span>2.5 s → 250 ms</span></div>
+      <b>Данни</b><div class="bar" style="--b:72.7%;--a:5.3%"><i></i><i></i><span>2.4 s → 175 ms</span></div>
+      <b>Стартът на Tetra</b><div class="bar" style="--b:28%;--a:6.2%"><i></i><i></i><span>924 ms → 205 ms</span></div>
+      <b>Office начало</b><div class="bar" style="--b:24.1%;--a:1.9%"><i></i><i></i><span>796 ms → 62 ms</span></div>
+      <b>Галерия</b><div class="bar" style="--b:19.5%;--a:9.7%"><i></i><i></i><span>643 ms → 320 ms</span></div>
+      <b>Бележки</b><div class="bar" style="--b:11.5%;--a:1.7%"><i></i><i></i><span>378 ms → 55 ms</span></div>
+      <b>Календар</b><div class="bar" style="--b:8.5%;--a:1%"><i></i><i></i><span>280 ms → 34 ms</span></div>
+      <b>Таймер</b><div class="bar" style="--b:7.2%;--a:1.4%"><i></i><i></i><span>236 ms → 45 ms</span></div>
+      <b>Файлове</b><div class="bar" style="--b:5%;--a:1.3%"><i></i><i></i><span>166 ms → 43 ms</span></div>
+    </div>
+    <p class="note">Сиво: преди · цвят: сега. На компютъра Галерия се отваря за 71 ms вместо за 741.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Вземете Tetra</h2>
+    <p class="sub">Инсталирайте го на телефона и на компютъра, свържете ги веднъж с QR код и те се синхронизират през собствения ви Wi-Fi.</p>
+    <div class="two">
+      <div class="panel">
+        <h3>Tetra за Android</h3>
+        <p>Телефони и таблети с Android 11 или по-нов.</p>
+        <a href="https://github.com/kalotrapezis/Tetra-mobile">Изходен код и подробности в GitHub</a>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Изтегляне на APK</b><span>0.6.0 beta 4</span></div></a>
+      </div>
+      <div class="panel">
+        <h3>Tetra за компютър</h3>
+        <p>Linux: AppImage за повечето дистрибуции или .deb за Debian, Ubuntu и Mint. Чака в системната област за телефона ви.</p>
+        <a href="https://github.com/kalotrapezis/Tetra">Изходен код и подробности в GitHub</a>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>AppImage</b><span>0.6.0 beta 32</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>.deb</b><span>0.6.0 beta 32</span></div></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Въпроси</h2>
+    <div class="faq">
+      <details id="faq-install" open><summary>Как да инсталирам Tetra извън Play Store?</summary><ol><li>На телефона си отворете тази страница или сканирайте QR кода и докоснете <b>Изтегляне за Android</b>.</li><li>Когато изтеглянето приключи, докоснете известието му или отворете <b>Файлове › Изтегляния</b> и докоснете <b>Tetra-…-arm64.apk</b>.</li><li>При първото изтегляне Android казва, че браузърът ви (или Файлове) няма право да инсталира приложения. Докоснете <b>Настройки</b>, включете <b>Разреши от този източник</b> и се върнете.</li><li>Докоснете <b>Инсталиране</b>. Ако Play Protect предупреди за непознато приложение, докоснете <b>Още подробности</b>, после <b>Инсталиране въпреки това</b>.</li><li>Докоснете <b>Отвори</b>. Ръководството на Tetra стартира и ви показва какво е къде.</li></ol><p>Всеки производител на телефони формулира тези стъпки малко по-различно, но стъпките са същите. Обновленията се инсталират по същия начин, върху старата версия, и запазват всичко.</p></details>
+      <details id="faq-safe"><summary>Безопасно ли е да инсталирам APK по този начин?</summary><p>Изтегляйте Tetra само от тази страница или от изданията му в GitHub. Всяко издание е подписано със същия ключ, а Android инсталира обновление само ако носи този подпис. Изходният код е публичен и всеки може да го прочете.</p></details>
+      <details id="faq-linux"><summary>Как да стартирам AppImage на Linux?</summary><p>Изтеглете го, щракнете с десния бутон върху него › <b>Свойства</b> › <b>Права</b> › <b>Разрешаване на изпълнение на файла като програма</b> (или изпълнете <code>chmod +x Tetra-*.AppImage</code>) и после щракнете два пъти. На Debian, Ubuntu и Mint .deb файлът се отваря в инсталатора на софтуер или се инсталира с <code>sudo apt install ./local-drive-desktop_*_amd64.deb</code>.</p></details>
+      <details id="faq-computer"><summary>Нужен ли ми е компютър?</summary><p>Не. Tetra работи самостоятелно на телефон или таблет. С приложението за компютър файловете ви се синхронизират през собствения ви Wi-Fi, а компютърът създава картите на всяка държава.</p></details>
+      <details id="faq-free"><summary>Струва ли нещо, или е нужен акаунт?</summary><p>Не. Tetra е безплатен софтуер (GPL 3.0): без акаунт, без реклами, без проследяване. Нищо не напуска устройствата ви.</p></details>
+      <details id="faq-files"><summary>Къде са файловете ми?</summary><p>В една папка: <b>Tetra</b> в паметта на телефона и <b>~/Tetra</b> на компютъра. Това са обикновени файлове: снимки, документи, бележки, календари (.ics) и контакти (.vcf), които могат да се отворят и с други приложения.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Tetra е безплатен софтуер (GPL 3.0) и бета версия: пазете собствени архиви. Екранните снимки използват измислени примерни данни. Изходен код: <a href="https://github.com/kalotrapezis/Tetra-mobile">Android</a> · <a href="https://github.com/kalotrapezis/Tetra">компютър</a></div>
+</footer>
+<script>
+  // The language: the one picked in the menu (remembered), else, on the English page, the browser's first language the
+  // site has. The browser's languages, not the country: no address leaves the visitor's computer, and a country can have several.
+  const langs = [...document.querySelectorAll('.lang a')].map(a => a.hreflang)
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { try { localStorage.setItem('lang', a.hreflang) } catch {} }))
+  let chosen = null; try { chosen = localStorage.getItem('lang') } catch {}
+  if (document.documentElement.lang === 'en' && !chosen) {
+    const want = navigator.languages.map(l => l.slice(0, 2).toLowerCase()).find(l => langs.includes(l))
+    if (want && want !== 'en') location.replace(want + '.html' + location.hash)
+  }
+  // The applet tabs: click, arrow keys, and #name in the address keep the chosen one; the language switch keeps it too.
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function show(tab, focus) {
+    tabs.forEach(t => { const on = t === tab; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on; });
+    if (focus) tab.focus();
+    history.replaceState(null, '', '#' + tab.id.slice(4));
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => show(t));
+    t.addEventListener('keydown', e => {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (d) { e.preventDefault(); show(tabs[(i + d + tabs.length) % tabs.length], true); }
+    });
+  });
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { a.href = a.getAttribute('href').split('#')[0] + location.hash }));
+  // a link to a question opens its answer
+  const open = () => { const d = document.getElementById(location.hash.slice(1)); if (d?.tagName === 'DETAILS') d.open = true }
+  addEventListener('hashchange', open); open()
+  const start = document.getElementById('tab-' + location.hash.slice(1));
+  if (start) show(start);
+</script>
+</body>
+</html>

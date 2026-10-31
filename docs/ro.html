@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tetra</title>
+<meta name="description" content="Tetra: o superaplicație privată pentru telefonul, tableta și computerul tău. Software liber; nimic nu părăsește dispozitivele tale.">
+<meta property="og:title" content="Tetra">
+<meta property="og:description" content="O superaplicație privată pentru telefonul, tableta și computerul tău. Nimic nu părăsește dispozitivele tale.">
+<meta property="og:image" content="img/tetra-devices.jpg">
+<link rel="alternate" hreflang="bg" href="bg.html">
+<link rel="alternate" hreflang="cs" href="cs.html">
+<link rel="alternate" hreflang="da" href="da.html">
+<link rel="alternate" hreflang="de" href="de.html">
+<link rel="alternate" hreflang="el" href="el.html">
+<link rel="alternate" hreflang="en" href="index.html">
+<link rel="alternate" hreflang="es" href="es.html">
+<link rel="alternate" hreflang="et" href="et.html">
+<link rel="alternate" hreflang="fi" href="fi.html">
+<link rel="alternate" hreflang="fr" href="fr.html">
+<link rel="alternate" hreflang="ga" href="ga.html">
+<link rel="alternate" hreflang="hr" href="hr.html">
+<link rel="alternate" hreflang="hu" href="hu.html">
+<link rel="alternate" hreflang="it" href="it.html">
+<link rel="alternate" hreflang="lt" href="lt.html">
+<link rel="alternate" hreflang="lv" href="lv.html">
+<link rel="alternate" hreflang="mt" href="mt.html">
+<link rel="alternate" hreflang="nl" href="nl.html">
+<link rel="alternate" hreflang="pl" href="pl.html">
+<link rel="alternate" hreflang="pt" href="pt.html">
+<link rel="alternate" hreflang="ro" href="ro.html">
+<link rel="alternate" hreflang="sk" href="sk.html">
+<link rel="alternate" hreflang="sl" href="sl.html">
+<link rel="alternate" hreflang="sv" href="sv.html">
+<link rel="icon" href="img/tetra.png">
+<style>
+  :root { --bg: #0f1113; --card: #191c20; --line: #2a2e34; --text: #f4f6f8; --muted: #b0b7c0; --teal: #04d5cc;
+          --phone: #02505b; --violet: #822ad1; --blue: #177bfc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 system-ui, "Noto Sans", "Segoe UI", sans-serif; }
+  a { color: var(--teal); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 56px 0 24px; text-align: center;
+           /* the four corners lit in Tetra's colours, the icon in the middle */
+           background: radial-gradient(800px 520px at 0% 0%, rgba(149, 223, 107, .30) 0%, transparent 70%),
+                       radial-gradient(800px 520px at 100% 0%, rgba(23, 123, 252, .36) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 0% 100%, rgba(227, 20, 31, .30) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 100% 100%, rgba(254, 208, 10, .26) 0%, transparent 70%); }
+  header img.logo { width: 128px; height: 128px; filter: drop-shadow(0 0 28px rgba(255, 255, 255, .18)); }
+  h1 { font-size: clamp(40px, 7vw, 72px); margin: 8px 0 4px; letter-spacing: -1px; }
+  .lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; margin: 0 auto 28px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 0 0 32px; }
+  .btn { display: flex; align-items: center; gap: 14px; padding: 14px 22px 14px 14px; border-radius: 22px; color: #fff;
+         text-decoration: none; min-width: 270px; text-align: left; transition: transform .15s, filter .15s; }
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
+  .btn img { width: 52px; height: 52px; border-radius: 13px; }
+  .btn b { display: block; font-size: 20px; } .btn span { font-size: 14px; opacity: .85; }
+  .android { background: var(--phone); } .appimage { background: var(--violet); } .deb { background: var(--blue); }
+  .hero { width: 100%; border-radius: 22px; display: block; border: 1px solid var(--line); }
+  section { padding: 56px 0 8px; }
+  h2 { font-size: clamp(28px, 4vw, 40px); margin: 0 0 8px; text-align: center; }
+  .sub { color: var(--muted); max-width: 760px; margin: 0 auto; text-align: center; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 26px; }
+  .tile { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 22%, var(--card)) 0%, var(--card) 55%);
+          border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .tile img { width: 56px; height: 56px; border-radius: 14px; }
+  .tile h3 { margin: 12px 0 6px; font-size: 21px; } .tile p { margin: 0; color: var(--muted); font-size: 16px; }
+  .tile b { color: var(--text); }
+  .island { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; background: #000; border: 1px solid var(--line);
+            border-radius: 30px; padding: 8px; margin: 26px auto 22px; width: fit-content; max-width: 100%; }
+  .island button { font: inherit; font-size: 15px; font-weight: 600; color: var(--text); background: transparent; border: 0;
+                   border-radius: 999px; padding: 9px 18px; cursor: pointer; }
+  .island button:hover { background: #22262b; }
+  .island button[aria-selected="true"] { background: var(--c); color: var(--on); }
+  .island button:focus-visible { outline: 2px solid var(--c); outline-offset: 2px; }
+  [role="tabpanel"] > p { text-align: center; color: var(--muted); max-width: 760px; margin: 0 auto 18px; }
+  .shots { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; align-items: flex-start; }
+  .shots figure { margin: 0; text-align: center; }
+  .shots figure.phone { flex: 0 1 230px; }
+  .shots figure.wide { flex: 1 1 560px; max-width: 900px; }
+  .shots img { width: 100%; display: block; border-radius: 16px; border: 1px solid var(--line); background: #000; }
+  .shots figure.phone img { border-radius: 26px; border: 6px solid #08090a; outline: 1px solid var(--line); }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .note { text-align: center; color: #7d858f; font-size: 14px; }
+  .grid { display: grid; gap: 18px; margin-top: 22px; }
+  .grid img, .wide-img { width: 100%; border-radius: 18px; display: block; border: 1px solid var(--line); margin-top: 22px; }
+  /* A card: a picture without words and its words as HTML on it, so a translation changes only text. The text column
+     ends where the devices start (--x); cqi keeps it the picture's size. On a phone the words go above the picture. */
+  .card { position: relative; margin: 22px 0 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+          background: #0f1113; container-type: inline-size; }
+  .card .pic { position: relative; }
+  .card .pic > img { display: block; width: 100%; aspect-ratio: 16 / 9; }
+  .card figcaption { position: absolute; top: 0; bottom: 0; left: 5%; width: calc(var(--x, 40%) - 9%);
+                     display: flex; flex-direction: column; justify-content: center; }
+  .card figcaption .icon { width: 6cqi; height: 6cqi; border-radius: 1.4cqi; }
+  .card .pill { align-self: flex-start; margin: 1.6cqi 0 1.4cqi; padding: .35cqi 1.1cqi; border-radius: 999px; background: var(--c);
+                color: var(--on, #111); font-size: 1.3cqi; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+  .card h3 { margin: 0 0 1.2cqi; font-size: 3.5cqi; line-height: 1.12; hyphens: auto; overflow-wrap: break-word; }  /* long words (et, fi, de) */
+  .card figcaption p { margin: 0; color: var(--muted); font-size: 1.6cqi; line-height: 1.5; }
+  .card.top figcaption { bottom: auto; left: 0; width: 100%; top: 3%; align-items: center; text-align: center; }
+  .card.top figcaption p { max-width: 80%; }
+  .card .label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--text); font-weight: 700;
+                 font-size: max(10px, 1.6cqi); text-shadow: 0 1px 3px #000; }
+  .card .label.head { font-size: max(11px, 2.2cqi); }
+  .speed { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; margin-top: 22px;
+           display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; font-size: 15px; }
+  .speed b { font-weight: 600; }
+  .speed .bar { position: relative; height: 22px; margin-right: 9.5em; }  /* room for the numbers after the longest bar */
+  .speed .bar i { position: absolute; left: 0; top: 4px; height: 14px; border-radius: 7px; background: #3a4048; width: var(--b); }
+  .speed .bar i + i { background: var(--teal); width: var(--a); }
+  .speed .bar span { position: absolute; left: calc(var(--b) + 10px); top: 0; color: var(--muted); white-space: nowrap; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; margin-top: 26px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .panel h3 { margin: 0 0 6px; font-size: 24px; } .panel p { color: var(--muted); margin: 0 0 6px; }
+  .panel .btn { min-width: 0; margin-top: 12px; }
+  .lang { position: absolute; top: 16px; right: 16px; z-index: 2; text-align: left; }
+  .lang summary { list-style: none; cursor: pointer; background: rgba(0, 0, 0, .55); border: 1px solid var(--line); border-radius: 999px;
+                  padding: 6px 14px; font-size: 14px; font-weight: 700; }
+  .lang summary::-webkit-details-marker { display: none; }
+  .lang summary::after { content: " ▾"; }
+  .lang ul { position: absolute; right: 0; margin: 6px 0 0; padding: 6px; list-style: none; columns: 2; column-gap: 4px; width: max-content;
+             max-width: calc(100vw - 32px); background: #15181b; border: 1px solid var(--line); border-radius: 14px; }
+  .lang a { display: block; color: var(--text); text-decoration: none; font-size: 14px; padding: 5px 12px; border-radius: 8px; }
+  .lang a:hover { background: #22262b; }
+  .lang a[aria-current="page"] { background: var(--text); color: #111; }
+  header { position: relative; }
+  .buttons { align-items: stretch; }
+  .group { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 28px; background: rgba(0, 0, 0, .35);
+           border: 1px solid var(--line); }
+  .group h3 { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 18px; }
+  .group h3 img { width: 30px; height: 30px; }
+  .qr { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; text-align: left; }
+  .qr img { width: 92px; height: 92px; border-radius: 10px; }
+  .qr p { margin: 0; }
+  .btn img[src$=".svg"] { background: rgba(255, 255, 255, .1); padding: 6px; }
+  .faq { max-width: 820px; margin: 24px auto 0; display: grid; gap: 10px; }
+  .faq details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px; }
+  .faq summary { cursor: pointer; font-weight: 700; font-size: 18px; }
+  .faq ol, .faq p { color: var(--muted); margin: 10px 0 0; }
+  .faq li { margin: 4px 0; }
+  .faq b, .faq code { color: var(--text); }
+  footer { color: #7d858f; font-size: 14px; padding: 48px 0 40px; text-align: center; }
+  @media (max-width: 700px) {  /* a phone: the tabs would not fit, so every card one under the other, the words above */
+    .qr { display: none; }  /* already on the phone */
+    .island { display: none; }
+    [role="tabpanel"] { display: block !important; }
+    .card { display: flex; flex-direction: column-reverse; }
+    .card figcaption, .card.top figcaption { position: static; width: auto; padding: 18px 18px 6px; align-items: flex-start; text-align: left; }
+    .card.top figcaption p { max-width: none; }
+    .card figcaption .icon { width: 44px; height: 44px; border-radius: 11px; }
+    .card .pill { font-size: 12px; padding: 3px 10px; margin: 10px 0 8px; }
+    .card h3 { font-size: 24px; margin-bottom: 6px; }
+    .card figcaption p { font-size: 15px; }
+    .card:not(.top) .pic > img { aspect-ratio: 5 / 4; object-fit: cover; object-position: right; }
+    .speed { grid-template-columns: 1fr; gap: 2px; }
+    .card .label { white-space: normal; width: 24%; text-align: center; line-height: 1.2; }
+    .card .label.head { width: 46%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <details class="lang"><summary aria-label="Language">RO</summary><ul><li><a href="bg.html" hreflang="bg" lang="bg">Български</a></li><li><a href="cs.html" hreflang="cs" lang="cs">Čeština</a></li><li><a href="da.html" hreflang="da" lang="da">Dansk</a></li><li><a href="de.html" hreflang="de" lang="de">Deutsch</a></li><li><a href="el.html" hreflang="el" lang="el">Ελληνικά</a></li><li><a href="index.html" hreflang="en" lang="en">English</a></li><li><a href="es.html" hreflang="es" lang="es">Español</a></li><li><a href="et.html" hreflang="et" lang="et">Eesti</a></li><li><a href="fi.html" hreflang="fi" lang="fi">Suomi</a></li><li><a href="fr.html" hreflang="fr" lang="fr">Français</a></li><li><a href="ga.html" hreflang="ga" lang="ga">Gaeilge</a></li><li><a href="hr.html" hreflang="hr" lang="hr">Hrvatski</a></li><li><a href="hu.html" hreflang="hu" lang="hu">Magyar</a></li><li><a href="it.html" hreflang="it" lang="it">Italiano</a></li><li><a href="lt.html" hreflang="lt" lang="lt">Lietuvių</a></li><li><a href="lv.html" hreflang="lv" lang="lv">Latviešu</a></li><li><a href="mt.html" hreflang="mt" lang="mt">Malti</a></li><li><a href="nl.html" hreflang="nl" lang="nl">Nederlands</a></li><li><a href="pl.html" hreflang="pl" lang="pl">Polski</a></li><li><a href="pt.html" hreflang="pt" lang="pt">Português</a></li><li><a href="ro.html" hreflang="ro" lang="ro" aria-current="page">Română</a></li><li><a href="sk.html" hreflang="sk" lang="sk">Slovenčina</a></li><li><a href="sl.html" hreflang="sl" lang="sl">Slovenščina</a></li><li><a href="sv.html" hreflang="sv" lang="sv">Svenska</a></li></ul></details>
+  <div class="wrap">
+    <img class="logo" src="img/tetra.png" alt="">
+    <h1>Tetra</h1>
+    <p class="lead">O superaplicație privată pentru telefonul, tableta și computerul tău. Software liber, fără cont, fără cloud: nimic nu părăsește dispozitivele tale.</p>
+    <div class="buttons">
+      <div class="group"><h3><img src="img/android.svg" alt="">Android</h3>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Descarcă pentru Android</b><span>APK · 0.6.0 beta 4 · Android 11+</span></div></a>
+        <div class="qr"><img src="img/qr-android.svg" alt="Cod QR pentru descărcarea Android"><p>Sau scanează-l cu telefonul.<br><a href="#faq-install">Cum îl instalezi</a></p></div></div>
+      <div class="group"><h3><img src="img/linux.svg" alt="">Linux</h3>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>Linux AppImage</b><span>0.6.0 beta 32 · majoritatea distribuțiilor</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>Linux .deb</b><span>Debian, Ubuntu, Mint</span></div></a></div>
+    </div>
+    <img class="hero" src="img/tetra-devices.jpg" alt="Tetra pe computer, tabletă și telefon">
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Ce face Tetra pentru tine</h2>
+    <div class="tiles">
+      <div class="tile" style="--c:#177BFC"><img src="img/icons/files.png" alt=""><h3>Fișiere de pe și pe PC în o secundă</h3><p>Trimite orice cu <b>Trimite la computer</b> din telefon sau cu <b>Trimite la telefon</b> din PC. Merge prin propria ta rețea Wi-Fi: fără cablu, fără cloud. Dacă computerul este plecat, se trimite când se întoarce.</p></div>
+      <div class="tile" style="--c:#1A9AA8"><img src="img/icons/phone.png" alt=""><h3>Sună de pe computer</h3><p>Apasă pe un număr din Contacte de pe PC și telefonul îl sună. Un balon de apel de pe ecran răspunde, pune în așteptare, dezactivează sunetul, închide și mută sunetul pe difuzorul telefonului.</p></div>
+      <div class="tile" style="--c:#25C4FE"><img src="img/icons/maps.png" alt=""><h3>Hărți ale oricărei țări, offline</h3><p>Alege o țară pe computer: Tetra face harta, căutarea și traseele din OpenStreetMap și le trimite pe telefonul și tableta ta. Traseele trec granițele prin punctele de trecere reale, cu indicații în limba ta.</p></div>
+      <div class="tile" style="--c:#8E99A6"><img src="img/icons/settings.png" alt=""><h3>În limba ta, cu un ghid</h3><p>Toate cele 24 de limbi oficiale ale UE. Un ghid la prima pornire, și oricând din Setări, arată pas cu pas unde să atingi și de ce.</p></div>
+      <div class="tile" style="--c:#9AD01E"><img src="img/icons/data.png" alt=""><h3>Planul tău de date, sub control</h3><p>Spune-i Tetrei o dată planul tău. Te anunță la 50 %, 80 % și 100 %, sau la pragurile pe care le alegi, și prevede sfârșitul lunii înainte să ajungi acolo.</p></div>
+      <div class="tile" style="--c:#F41879"><img src="img/icons/calendar.png" alt=""><h3>Calendar și temporizatoare, cu AI</h3><p>Abilitățile încorporate permit lui Claude, ChatGPT sau oricărui asistent care poate folosi computerul tău să importe un orar, să-ți planifice săptămâna sau să pornească un temporizator. Doar editează fișierele calendarului și ale temporizatoarelor.</p></div>
+      <div class="tile" style="--c:#FED00A"><img src="img/icons/notes.png" alt=""><h3>Notițe și liste, organizate</h3><p>Ține notițele și listele de cumpărături organizate cu etichete și sincronizate între telefon și computer. Fiecare notiță este un fișier simplu în folderul tău Tetra.</p></div>
+      <div class="tile" style="--c:#95DF6B"><img src="img/icons/gallery.png" alt=""><h3>Fotografii care știu cine și unde</h3><p>Etichete, fotografii live și colecțiile Persoane și Documente, din recunoaștere facială care rulează pe dispozitiv. Găsește fotografii după loc*, și adu-ți Google Photos (import Takeout pe computer).</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/scanner.png" alt=""><h3>Scanează curat orice pagină</h3><p>Filtrele și decuparea automată găsesc și îndreaptă pagina: toate uneltele de care ai nevoie pentru o copie digitală perfectă, pentru câte pagini vrei.</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/pdf.png" alt=""><h3>Ascunde ce trebuie să rămână privat</h3><p>Redactează PDF-uri și fotografii astfel încât partea ascunsă să fie eliminată din fișierul în sine, nu doar acoperită. Tetra găsește ochii dintr-o fotografie și îi acoperă cu bare negre sau stele și găsește textul de ascuns.</p></div>
+      <div class="tile" style="--c:#FD7D12"><img src="img/icons/office.png" alt=""><h3>Office și PDF, destul de bune</h3><p>Word, Excel și PowerPoint se deschid și se salvează în formatul lor, suficient de compatibile pentru munca de zi cu zi. PDF-urile se editează ca în Documente, iar filmele și sunetele din documente se redau. Un aspect pentru telefon pe care îl poți folosi cu adevărat.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/drive.png" alt=""><h3>Ușurează SSD-ul intern</h3><p>Asociază un disc extern cu Tetra și acesta face copii de rezervă automat pentru tot, sau mută fotografiile mai vechi pe el, ca discul computerului să rămână cât mai gol.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/sync.png" alt=""><h3>Mai mult de o copie, fără abonament</h3><p>Tetra arată în câte locuri se află fiecare fișier: pe telefon, pe tabletă, pe computer sau pe un stick USB, și ce există doar într-un singur loc. Propriile tale copii de rezervă, fără abonament de cloud de plătit.</p></div>
+    </div>
+    <p class="note">*Căutarea fotografiilor după loc acoperă deocamdată doar Grecia.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Fiecare aplicație, pe fiecare ecran</h2>
+    <p class="sub">Un singur Acasă, un singur folder, aceleași aplicații pe Android și Linux. Tot aici: Scanner, Coduri și Editor text.</p>
+    <div class="island" role="tablist" aria-label="Aplicații">
+      <button role="tab" id="tab-home" aria-controls="panel-home" aria-selected="true" tabindex="0" style="--c:#8E99A6;--on:#111">Acasă</button>
+      <button role="tab" id="tab-maps" aria-controls="panel-maps" aria-selected="false" tabindex="-1" style="--c:#25C4FE;--on:#111">Hărți</button>
+      <button role="tab" id="tab-photos" aria-controls="panel-photos" aria-selected="false" tabindex="-1" style="--c:#95DF6B;--on:#111">Foto</button>
+      <button role="tab" id="tab-files" aria-controls="panel-files" aria-selected="false" tabindex="-1" style="--c:#177BFC;--on:#fff">Fișiere</button>
+      <button role="tab" id="tab-notes" aria-controls="panel-notes" aria-selected="false" tabindex="-1" style="--c:#FED00A;--on:#111">Note</button>
+      <button role="tab" id="tab-office" aria-controls="panel-office" aria-selected="false" tabindex="-1" style="--c:#FD7D12;--on:#111">Office</button>
+      <button role="tab" id="tab-calendar" aria-controls="panel-calendar" aria-selected="false" tabindex="-1" style="--c:#F41879;--on:#fff">Calendar · Temporizator</button>
+      <button role="tab" id="tab-contacts" aria-controls="panel-contacts" aria-selected="false" tabindex="-1" style="--c:#BE7E4D;--on:#fff">Contacte</button>
+      <button role="tab" id="tab-phone" aria-controls="panel-phone" aria-selected="false" tabindex="-1" style="--c:#1A9AA8;--on:#fff">Telefon</button>
+      <button role="tab" id="tab-backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1" style="--c:#2E9D4F;--on:#fff">Copie de rezervă</button>
+      <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1" style="--c:#9AD01E;--on:#111">Date</button>
+      <button role="tab" id="tab-guide" aria-controls="panel-guide" aria-selected="false" tabindex="-1" style="--c:#8E99A6;--on:#111">Ghid · Setări</button>
+    </div>
+    <div role="tabpanel" id="panel-home" aria-labelledby="tab-home">
+      <figure class="card top"><div class="pic"><img src="img/art/home.jpg" alt="" loading="lazy">
+        <span class="label" style="left:15.3%;top:94.5%">Grupuri</span><span class="label" style="left:38%;top:94.5%">Amestec</span>
+        <span class="label" style="left:60.9%;top:94.5%">Doar pictograme</span><span class="label" style="left:83.7%;top:94.5%">Mod de editare</span></div>
+        <figcaption><h3>Acasă, cum vrei tu</h3><p>Grupuri, amestec sau doar pictograme. Trage o parte în orice celulă, fă-o mare, medie sau mică, sau ascunde-o.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-maps" aria-labelledby="tab-maps" hidden>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/builder.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Hărți</span><h3>Hărți ale oricărei țări, făcute de computerul tău</h3><p>Alege o țară sau o regiune în Setări › Hărți. Computerul tău face harta, căutarea și traseele din OpenStreetMap, iar sincronizarea le aduce pe telefon și pe tabletă. Când o hartă are trei luni, Tetra îți propune să o refacă.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/borders.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Hărți</span><h3>Peste granițe</h3><p>Dacă ai și harta țării vecine, un traseu trece granița prin punctele de trecere reale, pe drumul principal. Indicații în limba ta, în kilometri sau mile.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/maps.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Hărți</span><h3>Offline, cu navigare</h3><p>Căutare și locuri, trasee cu mașina, pe jos sau cu bicicleta și ghidaj vocal pas cu pas, totul pe dispozitiv. Fără cont, fără urmărire.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-photos" aria-labelledby="tab-photos" hidden>
+      <figure class="card" style="--c:#95DF6B"><div class="pic"><img src="img/art/photos.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/gallery.png" alt=""><span class="pill">Foto</span><h3>Galeria ta, pe dispozitivele tale</h3><p>Cronologie, colecții, persoane, documente găsite pentru tine, o hartă și un editor. Fețele și etichetele se calculează pe dispozitiv.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-files" aria-labelledby="tab-files" hidden>
+      <figure class="card" style="--c:#177BFC"><div class="pic"><img src="img/art/files.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/files.png" alt=""><span class="pill">Fișiere</span><h3>Fișiere, cu o pictogramă pentru fiecare tip</h3><p>Un manager de fișiere pentru folderul tău Tetra: etichete, preferate, culori de foldere, Coș de gunoi, miniaturi și foldere de sistem.</p></figcaption></figure>
+      <figure class="card top"><div class="pic"><img src="img/art/send.jpg" alt="" loading="lazy">
+        <span class="label head" style="left:25.6%;top:24.7%">De pe telefon pe computer</span>
+        <span class="label head" style="left:74.4%;top:24.7%">De pe computer pe telefon</span>
+        <span class="label" style="left:10.4%;top:89.1%">1. Trimite › Trimite la computer</span><span class="label" style="left:35.6%;top:77.8%">2. Pe PC: Fișiere › From phone</span>
+        <span class="label" style="left:64.4%;top:77.8%">1. Pe PC: Trimite la telefon</span><span class="label" style="left:89.6%;top:89.1%">2. Fișiere › From computer</span></div>
+        <figcaption><h3>Fișiere în ambele sensuri, într-o secundă</h3><p>Prin propria ta rețea Wi-Fi: fără cablu, fără cloud, fără cont. Dacă cealaltă parte este plecată, fișierul așteaptă și pleacă la întoarcere.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" hidden>
+      <figure class="card" style="--c:#FED00A"><div class="pic"><img src="img/art/notes.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/notes.png" alt=""><span class="pill">Note</span><h3>Notițe și liste de verificare</h3><p>Culori, etichete, fixări și istoricul fiecărei notițe. Scurtături de la tastatură pe tabletă. Se sincronizează cu computerul.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-office" aria-labelledby="tab-office" hidden>
+      <figure class="card" style="--c:#FD7D12"><div class="pic"><img src="img/art/office.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/office.png" alt=""><span class="pill">Office</span><h3>Word, Excel, PowerPoint și PDF</h3><p>Pagini reale cu rigle, panglica, grafice și teme. Fișierele se deschid și se salvează în formatul lor. PDF-urile se editează ca în Documente, cu notițe, semnături, formulare și redactare; filmele și sunetele din documente se redau.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-calendar" aria-labelledby="tab-calendar" hidden>
+      <figure class="card" style="--c:#F41879;--on:#fff;--x:37%"><div class="pic"><img src="img/art/calendar.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/calendar.png" alt=""><span class="pill">Calendar · Temporizator</span><h3>Calendar și temporizatoare</h3><p>Fișiere iCalendar simple: zi, săptămână, lună și agendă, mementouri, zile de naștere din Contacte. Temporizatoarele sună pe fiecare dispozitiv.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-contacts" aria-labelledby="tab-contacts" hidden>
+      <figure class="card" style="--c:#BE7E4D;--on:#fff"><div class="pic"><img src="img/art/people.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/contacts.png" alt=""><span class="pill">Contacte · Telefon</span><h3>Contacte și apeluri</h3><p>Contactele tale ca fișiere vCard, cu fețe din Foto. Un dialer cu Recente și verificare a spamului; sună de pe computer prin telefon.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" hidden>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/bubble.jpg" alt="" loading="lazy">
+        <span class="label" style="left:56.2%;top:69.3%">Cineva sună</span><span class="label" style="left:83.1%;top:86.1%">În apel, tastatura deschisă</span></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Telefon</span><h3>Apeluri pe computer</h3><p>Apasă pe un număr din Contacte și telefonul îl sună. Când sună cineva, un balon de pe ecran te lasă să răspunzi, să pui în așteptare, să dezactivezi sunetul, să tastezi cifre, să muți sunetul pe difuzorul telefonului sau să închizi, în timp ce telefonul rămâne în buzunar.</p></figcaption></figure>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/phone-tablet.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Telefon</span><h3>Pe tabletă, două panouri</h3><p>Recente în stânga, tastatura mereu deschisă în dreapta. Numerele sunt citite după codul țării, fixele sunt numite după locul din hărțile tale, iar Blocarea apelurilor ține o listă proprie.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-backup" aria-labelledby="tab-backup" hidden>
+      <figure class="card" style="--c:#2E9D4F;--on:#fff;--x:34%"><div class="pic"><img src="img/art/safety.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/sync.png" alt=""><span class="pill">Dispozitive · Discuri</span><h3>Mai mult de o copie, fără abonament</h3><p>Tetra arată în câte locuri se află fiecare fotografie și ce există doar într-un singur loc. Asociază un stick USB pentru copii automate, sau mută acolo fotografiile vechi ca să ții SSD-ul computerului ușor.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-data" aria-labelledby="tab-data" hidden>
+      <figure class="card" style="--c:#9AD01E"><div class="pic"><img src="img/art/data.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/data.png" alt=""><span class="pill">Date</span><h3>Date, Wi-Fi și semnal</h3><p>Cât consumă fiecare aplicație din date mobile și Wi-Fi, alerte de plan înainte să se termine, și telefonul, tableta și computerul împreună.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-guide" aria-labelledby="tab-guide" hidden>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/guide.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Ghid</span><h3>Un ghid care îți arată</h3><p>La prima pornire și în Setări › Ghid: unde să atingi și de ce, pas cu pas. Imaginile se mișcă ca să arate ce se întâmplă, iar Încearcă ține pasul în vedere cât timp îl faci pe bune.</p></figcaption></figure>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/languages.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Setări</span><h3>În limba ta</h3><p>Toate cele 24 de limbi oficiale ale UE, pe telefon și pe computer. Tetra urmează limba sistemului, dacă nu alegi alta în Setări › Aspect.</p></figcaption></figure>
+    </div>
+    <p class="note">Capturile de ecran folosesc date de probă inventate.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Rapidă, intenționat</h2>
+    <p class="sub">Fiecare aplicație a fost măsurată pe telefon și reluată până se deschide dintr-o clipită. Timpul până când ecranul arată conținutul, înainte și acum:</p>
+    <div class="speed">
+      <b>Contacte, imediat după pornire</b><div class="bar" style="--b:100%;--a:5.8%"><i></i><i></i><span>3.3 s → 190 ms</span></div>
+      <b>Telefon, imediat după pornire</b><div class="bar" style="--b:75.8%;--a:7.6%"><i></i><i></i><span>2.5 s → 250 ms</span></div>
+      <b>Date</b><div class="bar" style="--b:72.7%;--a:5.3%"><i></i><i></i><span>2.4 s → 175 ms</span></div>
+      <b>Acasă în Tetra</b><div class="bar" style="--b:28%;--a:6.2%"><i></i><i></i><span>924 ms → 205 ms</span></div>
+      <b>Acasă în Office</b><div class="bar" style="--b:24.1%;--a:1.9%"><i></i><i></i><span>796 ms → 62 ms</span></div>
+      <b>Foto</b><div class="bar" style="--b:19.5%;--a:9.7%"><i></i><i></i><span>643 ms → 320 ms</span></div>
+      <b>Note</b><div class="bar" style="--b:11.5%;--a:1.7%"><i></i><i></i><span>378 ms → 55 ms</span></div>
+      <b>Calendar</b><div class="bar" style="--b:8.5%;--a:1%"><i></i><i></i><span>280 ms → 34 ms</span></div>
+      <b>Temporizator</b><div class="bar" style="--b:7.2%;--a:1.4%"><i></i><i></i><span>236 ms → 45 ms</span></div>
+      <b>Fișiere</b><div class="bar" style="--b:5%;--a:1.3%"><i></i><i></i><span>166 ms → 43 ms</span></div>
+    </div>
+    <p class="note">Gri: înainte · culoare: acum. Pe computer, Foto se deschide din nou în 71 ms în loc de 741.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Obține Tetra</h2>
+    <p class="sub">Instalează-l pe telefon și pe computer, asociază-le o dată cu un cod QR, și se sincronizează prin propria ta rețea Wi-Fi.</p>
+    <div class="two">
+      <div class="panel">
+        <h3>Tetra pentru Android</h3>
+        <p>Telefoane și tablete cu Android 11 sau mai nou.</p>
+        <a href="https://github.com/kalotrapezis/Tetra-mobile">Sursa și detaliile pe GitHub</a>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Descarcă APK</b><span>0.6.0 beta 4</span></div></a>
+      </div>
+      <div class="panel">
+        <h3>Tetra pentru desktop</h3>
+        <p>Linux: un AppImage pentru majoritatea distribuțiilor, sau un .deb pentru Debian, Ubuntu și Mint. Așteaptă în tavă telefonul tău.</p>
+        <a href="https://github.com/kalotrapezis/Tetra">Sursa și detaliile pe GitHub</a>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>AppImage</b><span>0.6.0 beta 32</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>.deb</b><span>0.6.0 beta 32</span></div></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Întrebări</h2>
+    <div class="faq">
+      <details id="faq-install" open><summary>Cum instalez Tetra din afara Play Store?</summary><ol><li>Pe telefon, deschide această pagină sau scanează codul QR și atinge <b>Descarcă pentru Android</b>.</li><li>Când descărcarea se termină, atinge notificarea ei sau deschide <b>Fișiere › Descărcări</b> și atinge <b>Tetra-…-arm64.apk</b>.</li><li>Prima dată, Android spune că browserul (sau Fișierele) nu are voie să instaleze aplicații. Atinge <b>Setări</b>, activează <b>Permite din această sursă</b> și întoarce-te.</li><li>Atinge <b>Instalează</b>. Dacă Play Protect avertizează despre o aplicație necunoscută, atinge <b>Mai multe detalii</b>, apoi <b>Instalează oricum</b>.</li><li>Atinge <b>Deschide</b>. Ghidul Tetra pornește și te plimbă prin aplicație.</li></ol><p>Fiecare producător de telefoane numește pașii ăștia puțin diferit, dar pașii sunt aceiași. Actualizările se instalează la fel, peste versiunea veche, și păstrează totul.</p></details>
+      <details id="faq-safe"><summary>Este sigur să instalez un APK așa?</summary><p>Descarcă Tetra doar de pe această pagină sau din lansările de pe GitHub. Fiecare lansare este semnată cu aceeași cheie, iar Android instalează o actualizare doar dacă are semnătura aceea. Codul sursă este public, ca oricine să-l poată citi.</p></details>
+      <details id="faq-linux"><summary>Cum pornesc AppImage-ul pe Linux?</summary><p>Descarcă-l, dă clic dreapta pe el › <b>Proprietăți</b> › <b>Permisiuni</b> › <b>Permite executarea fișierului ca program</b> (sau rulează <code>chmod +x Tetra-*.AppImage</code>), apoi dă dublu clic pe el. Pe Debian, Ubuntu și Mint, .deb-ul se deschide în instalatorul de programe sau se instalează cu <code>sudo apt install ./local-drive-desktop_*_amd64.deb</code>.</p></details>
+      <details id="faq-computer"><summary>Am nevoie de un computer?</summary><p>Nu. Tetra funcționează singură pe telefon sau tabletă. Cu aplicația de desktop, fișierele tale se sincronizează prin propria ta rețea Wi-Fi, iar computerul face hărțile oricărei țări.</p></details>
+      <details id="faq-free"><summary>Costă ceva sau are nevoie de cont?</summary><p>Nu. Tetra este software liber (GPL 3.0): fără cont, fără reclame, fără urmărire. Nimic nu părăsește dispozitivele tale.</p></details>
+      <details id="faq-files"><summary>Unde sunt fișierele mele?</summary><p>Într-un singur folder: <b>Tetra</b> din memoria telefonului și <b>~/Tetra</b> de pe computer. Sunt fișiere simple, fotografii, documente, notițe, calendare (.ics) și contacte (.vcf), pe care le pot deschide și alte aplicații.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Tetra este software liber (GPL 3.0) și o versiune beta: păstrează-ți propriile copii de rezervă. Capturile de ecran folosesc date de probă inventate. Sursa: <a href="https://github.com/kalotrapezis/Tetra-mobile">Android</a> · <a href="https://github.com/kalotrapezis/Tetra">desktop</a></div>
+</footer>
+<script>
+  // The language: the one picked in the menu (remembered), else, on the English page, the browser's first language the
+  // site has. The browser's languages, not the country: no address leaves the visitor's computer, and a country can have several.
+  const langs = [...document.querySelectorAll('.lang a')].map(a => a.hreflang)
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { try { localStorage.setItem('lang', a.hreflang) } catch {} }))
+  let chosen = null; try { chosen = localStorage.getItem('lang') } catch {}
+  if (document.documentElement.lang === 'en' && !chosen) {
+    const want = navigator.languages.map(l => l.slice(0, 2).toLowerCase()).find(l => langs.includes(l))
+    if (want && want !== 'en') location.replace(want + '.html' + location.hash)
+  }
+  // The applet tabs: click, arrow keys, and #name in the address keep the chosen one; the language switch keeps it too.
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function show(tab, focus) {
+    tabs.forEach(t => { const on = t === tab; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on; });
+    if (focus) tab.focus();
+    history.replaceState(null, '', '#' + tab.id.slice(4));
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => show(t));
+    t.addEventListener('keydown', e => {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (d) { e.preventDefault(); show(tabs[(i + d + tabs.length) % tabs.length], true); }
+    });
+  });
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { a.href = a.getAttribute('href').split('#')[0] + location.hash }));
+  // a link to a question opens its answer
+  const open = () => { const d = document.getElementById(location.hash.slice(1)); if (d?.tagName === 'DETAILS') d.open = true }
+  addEventListener('hashchange', open); open()
+  const start = document.getElementById('tab-' + location.hash.slice(1));
+  if (start) show(start);
+</script>
+</body>
+</html>

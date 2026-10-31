@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tetra</title>
+<meta name="description" content="Tetra: en privat superapp för din telefon, surfplatta och dator. Fri programvara; inget lämnar dina enheter.">
+<meta property="og:title" content="Tetra">
+<meta property="og:description" content="En privat superapp för din telefon, surfplatta och dator. Inget lämnar dina enheter.">
+<meta property="og:image" content="img/tetra-devices.jpg">
+<link rel="alternate" hreflang="bg" href="bg.html">
+<link rel="alternate" hreflang="cs" href="cs.html">
+<link rel="alternate" hreflang="da" href="da.html">
+<link rel="alternate" hreflang="de" href="de.html">
+<link rel="alternate" hreflang="el" href="el.html">
+<link rel="alternate" hreflang="en" href="index.html">
+<link rel="alternate" hreflang="es" href="es.html">
+<link rel="alternate" hreflang="et" href="et.html">
+<link rel="alternate" hreflang="fi" href="fi.html">
+<link rel="alternate" hreflang="fr" href="fr.html">
+<link rel="alternate" hreflang="ga" href="ga.html">
+<link rel="alternate" hreflang="hr" href="hr.html">
+<link rel="alternate" hreflang="hu" href="hu.html">
+<link rel="alternate" hreflang="it" href="it.html">
+<link rel="alternate" hreflang="lt" href="lt.html">
+<link rel="alternate" hreflang="lv" href="lv.html">
+<link rel="alternate" hreflang="mt" href="mt.html">
+<link rel="alternate" hreflang="nl" href="nl.html">
+<link rel="alternate" hreflang="pl" href="pl.html">
+<link rel="alternate" hreflang="pt" href="pt.html">
+<link rel="alternate" hreflang="ro" href="ro.html">
+<link rel="alternate" hreflang="sk" href="sk.html">
+<link rel="alternate" hreflang="sl" href="sl.html">
+<link rel="alternate" hreflang="sv" href="sv.html">
+<link rel="icon" href="img/tetra.png">
+<style>
+  :root { --bg: #0f1113; --card: #191c20; --line: #2a2e34; --text: #f4f6f8; --muted: #b0b7c0; --teal: #04d5cc;
+          --phone: #02505b; --violet: #822ad1; --blue: #177bfc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 system-ui, "Noto Sans", "Segoe UI", sans-serif; }
+  a { color: var(--teal); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 56px 0 24px; text-align: center;
+           /* the four corners lit in Tetra's colours, the icon in the middle */
+           background: radial-gradient(800px 520px at 0% 0%, rgba(149, 223, 107, .30) 0%, transparent 70%),
+                       radial-gradient(800px 520px at 100% 0%, rgba(23, 123, 252, .36) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 0% 100%, rgba(227, 20, 31, .30) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 100% 100%, rgba(254, 208, 10, .26) 0%, transparent 70%); }
+  header img.logo { width: 128px; height: 128px; filter: drop-shadow(0 0 28px rgba(255, 255, 255, .18)); }
+  h1 { font-size: clamp(40px, 7vw, 72px); margin: 8px 0 4px; letter-spacing: -1px; }
+  .lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; margin: 0 auto 28px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 0 0 32px; }
+  .btn { display: flex; align-items: center; gap: 14px; padding: 14px 22px 14px 14px; border-radius: 22px; color: #fff;
+         text-decoration: none; min-width: 270px; text-align: left; transition: transform .15s, filter .15s; }
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
+  .btn img { width: 52px; height: 52px; border-radius: 13px; }
+  .btn b { display: block; font-size: 20px; } .btn span { font-size: 14px; opacity: .85; }
+  .android { background: var(--phone); } .appimage { background: var(--violet); } .deb { background: var(--blue); }
+  .hero { width: 100%; border-radius: 22px; display: block; border: 1px solid var(--line); }
+  section { padding: 56px 0 8px; }
+  h2 { font-size: clamp(28px, 4vw, 40px); margin: 0 0 8px; text-align: center; }
+  .sub { color: var(--muted); max-width: 760px; margin: 0 auto; text-align: center; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 26px; }
+  .tile { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 22%, var(--card)) 0%, var(--card) 55%);
+          border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .tile img { width: 56px; height: 56px; border-radius: 14px; }
+  .tile h3 { margin: 12px 0 6px; font-size: 21px; } .tile p { margin: 0; color: var(--muted); font-size: 16px; }
+  .tile b { color: var(--text); }
+  .island { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; background: #000; border: 1px solid var(--line);
+            border-radius: 30px; padding: 8px; margin: 26px auto 22px; width: fit-content; max-width: 100%; }
+  .island button { font: inherit; font-size: 15px; font-weight: 600; color: var(--text); background: transparent; border: 0;
+                   border-radius: 999px; padding: 9px 18px; cursor: pointer; }
+  .island button:hover { background: #22262b; }
+  .island button[aria-selected="true"] { background: var(--c); color: var(--on); }
+  .island button:focus-visible { outline: 2px solid var(--c); outline-offset: 2px; }
+  [role="tabpanel"] > p { text-align: center; color: var(--muted); max-width: 760px; margin: 0 auto 18px; }
+  .shots { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; align-items: flex-start; }
+  .shots figure { margin: 0; text-align: center; }
+  .shots figure.phone { flex: 0 1 230px; }
+  .shots figure.wide { flex: 1 1 560px; max-width: 900px; }
+  .shots img { width: 100%; display: block; border-radius: 16px; border: 1px solid var(--line); background: #000; }
+  .shots figure.phone img { border-radius: 26px; border: 6px solid #08090a; outline: 1px solid var(--line); }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .note { text-align: center; color: #7d858f; font-size: 14px; }
+  .grid { display: grid; gap: 18px; margin-top: 22px; }
+  .grid img, .wide-img { width: 100%; border-radius: 18px; display: block; border: 1px solid var(--line); margin-top: 22px; }
+  /* A card: a picture without words and its words as HTML on it, so a translation changes only text. The text column
+     ends where the devices start (--x); cqi keeps it the picture's size. On a phone the words go above the picture. */
+  .card { position: relative; margin: 22px 0 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+          background: #0f1113; container-type: inline-size; }
+  .card .pic { position: relative; }
+  .card .pic > img { display: block; width: 100%; aspect-ratio: 16 / 9; }
+  .card figcaption { position: absolute; top: 0; bottom: 0; left: 5%; width: calc(var(--x, 40%) - 9%);
+                     display: flex; flex-direction: column; justify-content: center; }
+  .card figcaption .icon { width: 6cqi; height: 6cqi; border-radius: 1.4cqi; }
+  .card .pill { align-self: flex-start; margin: 1.6cqi 0 1.4cqi; padding: .35cqi 1.1cqi; border-radius: 999px; background: var(--c);
+                color: var(--on, #111); font-size: 1.3cqi; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+  .card h3 { margin: 0 0 1.2cqi; font-size: 3.5cqi; line-height: 1.12; hyphens: auto; overflow-wrap: break-word; }  /* long words (et, fi, de) */
+  .card figcaption p { margin: 0; color: var(--muted); font-size: 1.6cqi; line-height: 1.5; }
+  .card.top figcaption { bottom: auto; left: 0; width: 100%; top: 3%; align-items: center; text-align: center; }
+  .card.top figcaption p { max-width: 80%; }
+  .card .label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--text); font-weight: 700;
+                 font-size: max(10px, 1.6cqi); text-shadow: 0 1px 3px #000; }
+  .card .label.head { font-size: max(11px, 2.2cqi); }
+  .speed { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; margin-top: 22px;
+           display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; font-size: 15px; }
+  .speed b { font-weight: 600; }
+  .speed .bar { position: relative; height: 22px; margin-right: 9.5em; }  /* room for the numbers after the longest bar */
+  .speed .bar i { position: absolute; left: 0; top: 4px; height: 14px; border-radius: 7px; background: #3a4048; width: var(--b); }
+  .speed .bar i + i { background: var(--teal); width: var(--a); }
+  .speed .bar span { position: absolute; left: calc(var(--b) + 10px); top: 0; color: var(--muted); white-space: nowrap; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; margin-top: 26px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .panel h3 { margin: 0 0 6px; font-size: 24px; } .panel p { color: var(--muted); margin: 0 0 6px; }
+  .panel .btn { min-width: 0; margin-top: 12px; }
+  .lang { position: absolute; top: 16px; right: 16px; z-index: 2; text-align: left; }
+  .lang summary { list-style: none; cursor: pointer; background: rgba(0, 0, 0, .55); border: 1px solid var(--line); border-radius: 999px;
+                  padding: 6px 14px; font-size: 14px; font-weight: 700; }
+  .lang summary::-webkit-details-marker { display: none; }
+  .lang summary::after { content: " ▾"; }
+  .lang ul { position: absolute; right: 0; margin: 6px 0 0; padding: 6px; list-style: none; columns: 2; column-gap: 4px; width: max-content;
+             max-width: calc(100vw - 32px); background: #15181b; border: 1px solid var(--line); border-radius: 14px; }
+  .lang a { display: block; color: var(--text); text-decoration: none; font-size: 14px; padding: 5px 12px; border-radius: 8px; }
+  .lang a:hover { background: #22262b; }
+  .lang a[aria-current="page"] { background: var(--text); color: #111; }
+  header { position: relative; }
+  .buttons { align-items: stretch; }
+  .group { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 28px; background: rgba(0, 0, 0, .35);
+           border: 1px solid var(--line); }
+  .group h3 { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 18px; }
+  .group h3 img { width: 30px; height: 30px; }
+  .qr { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; text-align: left; }
+  .qr img { width: 92px; height: 92px; border-radius: 10px; }
+  .qr p { margin: 0; }
+  .btn img[src$=".svg"] { background: rgba(255, 255, 255, .1); padding: 6px; }
+  .faq { max-width: 820px; margin: 24px auto 0; display: grid; gap: 10px; }
+  .faq details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px; }
+  .faq summary { cursor: pointer; font-weight: 700; font-size: 18px; }
+  .faq ol, .faq p { color: var(--muted); margin: 10px 0 0; }
+  .faq li { margin: 4px 0; }
+  .faq b, .faq code { color: var(--text); }
+  footer { color: #7d858f; font-size: 14px; padding: 48px 0 40px; text-align: center; }
+  @media (max-width: 700px) {  /* a phone: the tabs would not fit, so every card one under the other, the words above */
+    .qr { display: none; }  /* already on the phone */
+    .island { display: none; }
+    [role="tabpanel"] { display: block !important; }
+    .card { display: flex; flex-direction: column-reverse; }
+    .card figcaption, .card.top figcaption { position: static; width: auto; padding: 18px 18px 6px; align-items: flex-start; text-align: left; }
+    .card.top figcaption p { max-width: none; }
+    .card figcaption .icon { width: 44px; height: 44px; border-radius: 11px; }
+    .card .pill { font-size: 12px; padding: 3px 10px; margin: 10px 0 8px; }
+    .card h3 { font-size: 24px; margin-bottom: 6px; }
+    .card figcaption p { font-size: 15px; }
+    .card:not(.top) .pic > img { aspect-ratio: 5 / 4; object-fit: cover; object-position: right; }
+    .speed { grid-template-columns: 1fr; gap: 2px; }
+    .card .label { white-space: normal; width: 24%; text-align: center; line-height: 1.2; }
+    .card .label.head { width: 46%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <details class="lang"><summary aria-label="Language">SV</summary><ul><li><a href="bg.html" hreflang="bg" lang="bg">Български</a></li><li><a href="cs.html" hreflang="cs" lang="cs">Čeština</a></li><li><a href="da.html" hreflang="da" lang="da">Dansk</a></li><li><a href="de.html" hreflang="de" lang="de">Deutsch</a></li><li><a href="el.html" hreflang="el" lang="el">Ελληνικά</a></li><li><a href="index.html" hreflang="en" lang="en">English</a></li><li><a href="es.html" hreflang="es" lang="es">Español</a></li><li><a href="et.html" hreflang="et" lang="et">Eesti</a></li><li><a href="fi.html" hreflang="fi" lang="fi">Suomi</a></li><li><a href="fr.html" hreflang="fr" lang="fr">Français</a></li><li><a href="ga.html" hreflang="ga" lang="ga">Gaeilge</a></li><li><a href="hr.html" hreflang="hr" lang="hr">Hrvatski</a></li><li><a href="hu.html" hreflang="hu" lang="hu">Magyar</a></li><li><a href="it.html" hreflang="it" lang="it">Italiano</a></li><li><a href="lt.html" hreflang="lt" lang="lt">Lietuvių</a></li><li><a href="lv.html" hreflang="lv" lang="lv">Latviešu</a></li><li><a href="mt.html" hreflang="mt" lang="mt">Malti</a></li><li><a href="nl.html" hreflang="nl" lang="nl">Nederlands</a></li><li><a href="pl.html" hreflang="pl" lang="pl">Polski</a></li><li><a href="pt.html" hreflang="pt" lang="pt">Português</a></li><li><a href="ro.html" hreflang="ro" lang="ro">Română</a></li><li><a href="sk.html" hreflang="sk" lang="sk">Slovenčina</a></li><li><a href="sl.html" hreflang="sl" lang="sl">Slovenščina</a></li><li><a href="sv.html" hreflang="sv" lang="sv" aria-current="page">Svenska</a></li></ul></details>
+  <div class="wrap">
+    <img class="logo" src="img/tetra.png" alt="">
+    <h1>Tetra</h1>
+    <p class="lead">En privat superapp för din telefon, surfplatta och dator. Fri programvara, inget konto, ingen molntjänst: inget lämnar dina enheter.</p>
+    <div class="buttons">
+      <div class="group"><h3><img src="img/android.svg" alt="">Android</h3>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Ladda ner för Android</b><span>APK · 0.6.0 beta 4 · Android 11+</span></div></a>
+        <div class="qr"><img src="img/qr-android.svg" alt="QR-kod för nedladdningen av Android"><p>Eller skanna den med telefonen.<br><a href="#faq-install">Så installerar du den</a></p></div></div>
+      <div class="group"><h3><img src="img/linux.svg" alt="">Linux</h3>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>Linux AppImage</b><span>0.6.0 beta 32 · de flesta distributioner</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>Linux .deb</b><span>Debian, Ubuntu, Mint</span></div></a></div>
+    </div>
+    <img class="hero" src="img/tetra-devices.jpg" alt="Tetra på en dator, en surfplatta och en telefon">
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Vad Tetra gör för dig</h2>
+    <div class="tiles">
+      <div class="tile" style="--c:#177BFC"><img src="img/icons/files.png" alt=""><h3>Filer till och från datorn på en sekund</h3><p>Dela vad som helst till <b>Skicka till datorn</b> i telefonen, eller till <b>Skicka till telefon</b> på datorn. Det går över ditt eget Wi-Fi: ingen kabel, ingen molntjänst. Om datorn är borta går det när den är tillbaka.</p></div>
+      <div class="tile" style="--c:#1A9AA8"><img src="img/icons/phone.png" alt=""><h3>Ring från datorn</h3><p>Klicka på ett nummer i Kontakter på datorn så ringer telefonen upp det. En samtalsbubbla på skärmen svarar, parkerar, tystar, lägger på och flyttar ljudet till telefonens högtalare.</p></div>
+      <div class="tile" style="--c:#25C4FE"><img src="img/icons/maps.png" alt=""><h3>Kartor över alla länder, offline</h3><p>Välj ett land på datorn: Tetra gör kartan, sökningen och rutterna från OpenStreetMap och skickar dem till din telefon och surfplatta. Rutter korsar gränser vid de riktiga gränsövergångarna, med vägvisning på ditt språk.</p></div>
+      <div class="tile" style="--c:#8E99A6"><img src="img/icons/settings.png" alt=""><h3>På ditt språk, med en guide</h3><p>Alla 24 officiella språk i EU. En guide vid första starten, och när du vill i Inställningar, visar steg för steg var du ska trycka och varför.</p></div>
+      <div class="tile" style="--c:#9AD01E"><img src="img/icons/data.png" alt=""><h3>Din mobildata, under uppsikt</h3><p>Berätta för Tetra ditt abonnemang en gång. Det meddelar dig vid 50 %, 80 % och 100 %, eller vid de steg du väljer, och förutsäger slutet på månaden innan du kommer dit.</p></div>
+      <div class="tile" style="--c:#F41879"><img src="img/icons/calendar.png" alt=""><h3>Kalender och timers, med AI</h3><p>Inbyggda färdigheter gör att Claude, ChatGPT eller valfri assistent som kan använda din dator kan importera ett schema, planera din vecka eller starta en timer. De redigerar helt enkelt kalender- och timerfilerna.</p></div>
+      <div class="tile" style="--c:#FED00A"><img src="img/icons/notes.png" alt=""><h3>Anteckningar och listor, ordnade</h3><p>Håll dina anteckningar och inköpslistor ordnade med taggar och synkade mellan telefonen och datorn. Varje anteckning är en vanlig fil i din egen Tetra-mapp.</p></div>
+      <div class="tile" style="--c:#95DF6B"><img src="img/icons/gallery.png" alt=""><h3>Foton som vet vem och var</h3><p>Taggar, levande foton och samlingarna Personer och Dokument från ansiktsigenkänning som körs på enheten. Hitta foton efter plats*, och ta med dina Google Photos (Takeout-import på datorn).</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/scanner.png" alt=""><h3>Skanna vilken sida som helst, ren</h3><p>Filter och automatisk beskärning hittar och rättar sidan: alla verktyg du behöver för en perfekt digital kopia, för så många sidor du vill.</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/pdf.png" alt=""><h3>Dölj det som ska vara privat</h3><p>Maskera PDF-filer och foton så att den dolda delen tas bort från själva filen, inte bara täcks över. Tetra hittar ögonen i ett foto och täcker dem med svarta staplar eller stjärnor, och hittar text att dölja.</p></div>
+      <div class="tile" style="--c:#FD7D12"><img src="img/icons/office.png" alt=""><h3>Office och PDF, tillräckligt bra</h3><p>Word, Excel och PowerPoint öppnas och sparas som de är, tillräckligt kompatibelt för vardagligt arbete. PDF-filer redigeras på samma sätt som Dokument, och film och ljud i dokument spelas upp. En telefonlayout som du faktiskt kan använda.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/drive.png" alt=""><h3>Håll den interna SSD:n ledig</h3><p>Parkoppla en extern disk med Tetra så säkerhetskopierar den allt automatiskt, eller flyttar äldre foton dit så att datorns egen disk blir så tom som möjligt.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/sync.png" alt=""><h3>Mer än en kopia, ingen prenumeration</h3><p>Tetra visar hur många platser som har varje fil: telefonen, surfplattan, datorn eller en USB-disk, och vad som bara finns på en plats. Dina egna säkerhetskopior, utan molnabonnemang att betala för.</p></div>
+    </div>
+    <p class="note">*Sökning efter foton på plats täcker bara Grekland just nu.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Varje app, på varje skärm</h2>
+    <p class="sub">En Start, en mapp, samma appar på Android och Linux. Även inne: Skanner, Koder och Textredigerare.</p>
+    <div class="island" role="tablist" aria-label="Appar">
+      <button role="tab" id="tab-home" aria-controls="panel-home" aria-selected="true" tabindex="0" style="--c:#8E99A6;--on:#111">Start</button>
+      <button role="tab" id="tab-maps" aria-controls="panel-maps" aria-selected="false" tabindex="-1" style="--c:#25C4FE;--on:#111">Kartor</button>
+      <button role="tab" id="tab-photos" aria-controls="panel-photos" aria-selected="false" tabindex="-1" style="--c:#95DF6B;--on:#111">Foton</button>
+      <button role="tab" id="tab-files" aria-controls="panel-files" aria-selected="false" tabindex="-1" style="--c:#177BFC;--on:#fff">Filer</button>
+      <button role="tab" id="tab-notes" aria-controls="panel-notes" aria-selected="false" tabindex="-1" style="--c:#FED00A;--on:#111">Anteckningar</button>
+      <button role="tab" id="tab-office" aria-controls="panel-office" aria-selected="false" tabindex="-1" style="--c:#FD7D12;--on:#111">Office</button>
+      <button role="tab" id="tab-calendar" aria-controls="panel-calendar" aria-selected="false" tabindex="-1" style="--c:#F41879;--on:#fff">Kalender · Timer</button>
+      <button role="tab" id="tab-contacts" aria-controls="panel-contacts" aria-selected="false" tabindex="-1" style="--c:#BE7E4D;--on:#fff">Kontakter</button>
+      <button role="tab" id="tab-phone" aria-controls="panel-phone" aria-selected="false" tabindex="-1" style="--c:#1A9AA8;--on:#fff">Telefon</button>
+      <button role="tab" id="tab-backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1" style="--c:#2E9D4F;--on:#fff">Säkerhetskopia</button>
+      <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1" style="--c:#9AD01E;--on:#111">Data</button>
+      <button role="tab" id="tab-guide" aria-controls="panel-guide" aria-selected="false" tabindex="-1" style="--c:#8E99A6;--on:#111">Guide · Inställningar</button>
+    </div>
+    <div role="tabpanel" id="panel-home" aria-labelledby="tab-home">
+      <figure class="card top"><div class="pic"><img src="img/art/home.jpg" alt="" loading="lazy">
+        <span class="label" style="left:15.3%;top:94.5%">Grupper</span><span class="label" style="left:38%;top:94.5%">Blandat</span>
+        <span class="label" style="left:60.9%;top:94.5%">Bara ikoner</span><span class="label" style="left:83.7%;top:94.5%">Redigeringsläge</span></div>
+        <figcaption><h3>Start, på ditt sätt</h3><p>Grupper, blandat eller bara ikoner. Dra en del till vilken ruta som helst, gör den stor, mellanstor eller liten, eller dölj den.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-maps" aria-labelledby="tab-maps" hidden>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/builder.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Kartor</span><h3>Kartor över alla länder, gjorda av din dator</h3><p>Välj ett land eller en region i Inställningar › Kartor. Datorn gör kartan, sökningen och rutterna från OpenStreetMap, och synk för dem till din telefon och surfplatta. När en karta är tre månader gammal erbjuder Tetra att göra om den.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/borders.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Kartor</span><h3>Över gränserna</h3><p>Med grannlandets karta också korsar en rutt vid de riktiga gränsövergångarna, på huvudvägen. Vägvisning på ditt språk, i kilometer eller miles.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/maps.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Kartor</span><h3>Offline, med navigering</h3><p>Sök och platser, rutter med bil, till fots eller med cykel, och röstvägledning sväng för sväng, allt på enheten. Inget konto, ingen spårning.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-photos" aria-labelledby="tab-photos" hidden>
+      <figure class="card" style="--c:#95DF6B"><div class="pic"><img src="img/art/photos.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/gallery.png" alt=""><span class="pill">Foton</span><h3>Dina foton, på dina enheter</h3><p>Tidslinje, samlingar, personer, dokument som hittats åt dig, en karta och en redigerare. Ansikten och etiketter tas fram på enheten.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-files" aria-labelledby="tab-files" hidden>
+      <figure class="card" style="--c:#177BFC"><div class="pic"><img src="img/art/files.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/files.png" alt=""><span class="pill">Filer</span><h3>Filer, med en ikon för varje slag</h3><p>En filhanterare för din Tetra-mapp: taggar, favoriter, mappfärger, papperskorgen, miniatyrbilder och systemmappar.</p></figcaption></figure>
+      <figure class="card top"><div class="pic"><img src="img/art/send.jpg" alt="" loading="lazy">
+        <span class="label head" style="left:25.6%;top:24.7%">Från telefonen till datorn</span>
+        <span class="label head" style="left:74.4%;top:24.7%">Från datorn till telefonen</span>
+        <span class="label" style="left:10.4%;top:89.1%">1. Dela › Skicka till datorn</span><span class="label" style="left:35.6%;top:77.8%">2. På datorn: Filer › From phone</span>
+        <span class="label" style="left:64.4%;top:77.8%">1. På datorn: Skicka till telefon</span><span class="label" style="left:89.6%;top:89.1%">2. Filer › From computer</span></div>
+        <figcaption><h3>Filer åt båda hållen, på en sekund</h3><p>Över ditt eget Wi-Fi: ingen kabel, ingen molntjänst, inget konto. Om den andra sidan är borta väntar filen och går när den är tillbaka.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" hidden>
+      <figure class="card" style="--c:#FED00A"><div class="pic"><img src="img/art/notes.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/notes.png" alt=""><span class="pill">Anteckningar</span><h3>Anteckningar och checklistor</h3><p>Färger, etiketter, nålar och historik för varje anteckning. Tangentbordsgenvägar på surfplattan. De synkas med datorn.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-office" aria-labelledby="tab-office" hidden>
+      <figure class="card" style="--c:#FD7D12"><div class="pic"><img src="img/art/office.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/office.png" alt=""><span class="pill">Office</span><h3>Word, Excel, PowerPoint och PDF</h3><p>Riktiga sidor med linjaler, verktygsfältet, diagram och teman. Filer öppnas och sparas som de är. PDF-filer redigeras på samma sätt som Dokument, med anteckningar, signaturer, formulär och maskering; film och ljud i dokument spelas upp.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-calendar" aria-labelledby="tab-calendar" hidden>
+      <figure class="card" style="--c:#F41879;--on:#fff;--x:37%"><div class="pic"><img src="img/art/calendar.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/calendar.png" alt=""><span class="pill">Kalender · Timer</span><h3>Kalender och timers</h3><p>Vanliga iCalendar-filer: dag, vecka, månad och agenda, påminnelser, födelsedagar från Kontakter. Timers ringer på varje enhet.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-contacts" aria-labelledby="tab-contacts" hidden>
+      <figure class="card" style="--c:#BE7E4D;--on:#fff"><div class="pic"><img src="img/art/people.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/contacts.png" alt=""><span class="pill">Kontakter · Telefon</span><h3>Kontakter och samtal</h3><p>Dina kontakter som vCard-filer, med ansikten från Foton. En ringfunktion med Senaste och spamkontroll; ring från datorn via telefonen.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" hidden>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/bubble.jpg" alt="" loading="lazy">
+        <span class="label" style="left:56.2%;top:69.3%">Någon ringer</span><span class="label" style="left:83.1%;top:86.1%">I ett samtal, med knappsatsen öppen</span></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Telefon</span><h3>Samtal på datorn</h3><p>Klicka på ett nummer i Kontakter så ringer telefonen upp det. När någon ringer låter en bubbla på skärmen dig svara, parkera, tysta, skriva siffror, flytta ljudet till telefonens högtalare eller lägga på, medan telefonen stannar i fickan.</p></figcaption></figure>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/phone-tablet.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Telefon</span><h3>På surfplatta, två paneler</h3><p>Senaste till vänster, knappsatsen alltid öppen till höger. Nummer läses av med ditt lands landskod, fasta nummer får namn efter plats från dina kartor, och Samtalsblockering håller en egen lista.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-backup" aria-labelledby="tab-backup" hidden>
+      <figure class="card" style="--c:#2E9D4F;--on:#fff;--x:34%"><div class="pic"><img src="img/art/safety.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/sync.png" alt=""><span class="pill">Enheter · Diskar</span><h3>Mer än en kopia, ingen prenumeration</h3><p>Tetra visar hur många platser som har varje foto, och vad som bara finns på en plats. Parkoppla en USB-disk för automatiska säkerhetskopior, eller flytta gamla foton dit så att datorns SSD förblir ledig.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-data" aria-labelledby="tab-data" hidden>
+      <figure class="card" style="--c:#9AD01E"><div class="pic"><img src="img/art/data.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/data.png" alt=""><span class="pill">Data</span><h3>Data, Wi-Fi och signal</h3><p>Hur mycket varje app använder på mobildata och Wi-Fi, varningar för abonnemanget innan det tar slut, och telefonen, surfplattan och datorn tillsammans.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-guide" aria-labelledby="tab-guide" hidden>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/guide.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Guide</span><h3>En guide som visar dig</h3><p>Vid första starten och i Inställningar › Guide: var du ska trycka och varför, steg för steg. Bilderna rör sig för att visa vad som händer, och Prova håller steget i sikte medan du gör det på riktigt.</p></figcaption></figure>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/languages.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Inställningar</span><h3>På ditt språk</h3><p>Alla 24 officiella språk i EU, på telefonen och datorn. Tetra följer systemspråket om du inte väljer ett annat i Inställningar › Utseende.</p></figcaption></figure>
+    </div>
+    <p class="note">Skärmbilder använder påhittad exempeldata.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Snabb, med flit</h2>
+    <p class="sub">Varje app mättes på en telefon och förbättrades tills den öppnas på ett ögonblick. Tid tills skärmen visar sitt innehåll, före och nu:</p>
+    <div class="speed">
+      <b>Kontakter, direkt efter start</b><div class="bar" style="--b:100%;--a:5.8%"><i></i><i></i><span>3.3 s → 190 ms</span></div>
+      <b>Telefon, direkt efter start</b><div class="bar" style="--b:75.8%;--a:7.6%"><i></i><i></i><span>2.5 s → 250 ms</span></div>
+      <b>Data</b><div class="bar" style="--b:72.7%;--a:5.3%"><i></i><i></i><span>2.4 s → 175 ms</span></div>
+      <b>Tetras start</b><div class="bar" style="--b:28%;--a:6.2%"><i></i><i></i><span>924 ms → 205 ms</span></div>
+      <b>Office-start</b><div class="bar" style="--b:24.1%;--a:1.9%"><i></i><i></i><span>796 ms → 62 ms</span></div>
+      <b>Foton</b><div class="bar" style="--b:19.5%;--a:9.7%"><i></i><i></i><span>643 ms → 320 ms</span></div>
+      <b>Anteckningar</b><div class="bar" style="--b:11.5%;--a:1.7%"><i></i><i></i><span>378 ms → 55 ms</span></div>
+      <b>Kalender</b><div class="bar" style="--b:8.5%;--a:1%"><i></i><i></i><span>280 ms → 34 ms</span></div>
+      <b>Timer</b><div class="bar" style="--b:7.2%;--a:1.4%"><i></i><i></i><span>236 ms → 45 ms</span></div>
+      <b>Filer</b><div class="bar" style="--b:5%;--a:1.3%"><i></i><i></i><span>166 ms → 43 ms</span></div>
+    </div>
+    <p class="note">Grått: före · färg: nu. På datorn öppnas Foton igen på 71 ms i stället för 741.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Hämta Tetra</h2>
+    <p class="sub">Installera den på telefonen och datorn, parkoppla dem en gång med en QR-kod, så synkas de över ditt eget Wi-Fi.</p>
+    <div class="two">
+      <div class="panel">
+        <h3>Tetra för Android</h3>
+        <p>Telefoner och surfplattor med Android 11 eller nyare.</p>
+        <a href="https://github.com/kalotrapezis/Tetra-mobile">Källa och detaljer på GitHub</a>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Ladda ner APK</b><span>0.6.0 beta 4</span></div></a>
+      </div>
+      <div class="panel">
+        <h3>Tetra för datorn</h3>
+        <p>Linux: en AppImage för de flesta distributioner, eller en .deb för Debian, Ubuntu och Mint. Den väntar i meddelandefältet på din telefon.</p>
+        <a href="https://github.com/kalotrapezis/Tetra">Källa och detaljer på GitHub</a>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>AppImage</b><span>0.6.0 beta 32</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>.deb</b><span>0.6.0 beta 32</span></div></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Frågor</h2>
+    <div class="faq">
+      <details id="faq-install" open><summary>Hur installerar jag Tetra utanför Play Butik?</summary><ol><li>Öppna den här sidan i telefonen eller skanna QR-koden och tryck på <b>Ladda ner för Android</b>.</li><li>När nedladdningen är klar trycker du på aviseringen, eller öppnar <b>Filer › Nedladdningar</b> och trycker på <b>Tetra-…-arm64.apk</b>.</li><li>Första gången säger Android att din webbläsare (eller Filer) inte får installera appar. Tryck på <b>Inställningar</b>, slå på <b>Tillåt från den här källan</b> och gå tillbaka.</li><li>Tryck på <b>Installera</b>. Om Play Protect varnar för en okänd app trycker du på <b>Mer information</b> och sedan på <b>Installera ändå</b>.</li><li>Tryck på <b>Öppna</b>. Tetras guide startar och visar dig runt.</li></ol><p>Varje telefontillverkare formulerar stegen något annorlunda, men stegen är desamma. Uppdateringar installeras på samma sätt, över den gamla versionen, och allt behålls.</p></details>
+      <details id="faq-safe"><summary>Är det säkert att installera en APK-fil så här?</summary><p>Ladda ner Tetra bara från den här sidan eller från dess GitHub-utgåvor. Varje utgåva är signerad med samma nyckel, och Android installerar en uppdatering bara om den har den signaturen. Källkoden är offentlig så att vem som helst kan läsa den.</p></details>
+      <details id="faq-linux"><summary>Hur startar jag AppImage på Linux?</summary><p>Ladda ner den, högerklicka på den › <b>Egenskaper</b> › <b>Behörigheter</b> › <b>Tillåt att filen körs som ett program</b> (eller kör <code>chmod +x Tetra-*.AppImage</code>) och dubbelklicka sedan på den. På Debian, Ubuntu och Mint öppnas .deb i din programinstallerare, eller så installeras den med <code>sudo apt install ./local-drive-desktop_*_amd64.deb</code>.</p></details>
+      <details id="faq-computer"><summary>Behöver jag en dator?</summary><p>Nej. Tetra fungerar på egen hand på en telefon eller surfplatta. Med datorappen synkas dina filer över ditt eget Wi-Fi, och datorn gör kartorna för vilket land som helst.</p></details>
+      <details id="faq-free"><summary>Kostar det något, eller behövs ett konto?</summary><p>Nej. Tetra är fri programvara (GPL 3.0): inget konto, inga annonser, ingen spårning. Inget lämnar dina enheter.</p></details>
+      <details id="faq-files"><summary>Var finns mina filer?</summary><p>I en mapp: <b>Tetra</b> i telefonens lagring och <b>~/Tetra</b> på datorn. Det är vanliga filer, foton, dokument, anteckningar, kalendrar (.ics) och kontakter (.vcf) som även andra appar kan öppna.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Tetra är fri programvara (GPL 3.0) och en beta: behåll egna säkerhetskopior. Skärmbilder använder påhittad exempeldata. Källa: <a href="https://github.com/kalotrapezis/Tetra-mobile">Android</a> · <a href="https://github.com/kalotrapezis/Tetra">datorn</a></div>
+</footer>
+<script>
+  // The language: the one picked in the menu (remembered), else, on the English page, the browser's first language the
+  // site has. The browser's languages, not the country: no address leaves the visitor's computer, and a country can have several.
+  const langs = [...document.querySelectorAll('.lang a')].map(a => a.hreflang)
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { try { localStorage.setItem('lang', a.hreflang) } catch {} }))
+  let chosen = null; try { chosen = localStorage.getItem('lang') } catch {}
+  if (document.documentElement.lang === 'en' && !chosen) {
+    const want = navigator.languages.map(l => l.slice(0, 2).toLowerCase()).find(l => langs.includes(l))
+    if (want && want !== 'en') location.replace(want + '.html' + location.hash)
+  }
+  // The applet tabs: click, arrow keys, and #name in the address keep the chosen one; the language switch keeps it too.
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function show(tab, focus) {
+    tabs.forEach(t => { const on = t === tab; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on; });
+    if (focus) tab.focus();
+    history.replaceState(null, '', '#' + tab.id.slice(4));
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => show(t));
+    t.addEventListener('keydown', e => {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (d) { e.preventDefault(); show(tabs[(i + d + tabs.length) % tabs.length], true); }
+    });
+  });
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { a.href = a.getAttribute('href').split('#')[0] + location.hash }));
+  // a link to a question opens its answer
+  const open = () => { const d = document.getElementById(location.hash.slice(1)); if (d?.tagName === 'DETAILS') d.open = true }
+  addEventListener('hashchange', open); open()
+  const start = document.getElementById('tab-' + location.hash.slice(1));
+  if (start) show(start);
+</script>
+</body>
+</html>
