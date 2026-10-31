@@ -198,6 +198,14 @@ function parseMailto(url) {
   return out
 }
 
+/** [name] in [dir], or «name (2).ext», «name (3).ext»…: never a file that is already there. */
+function freeName(dir, name) {
+  const ext = path.extname(name), base = name.slice(0, name.length - ext.length)
+  let to = path.join(dir, name)
+  for (let i = 2; fs.existsSync(to); i++) to = path.join(dir, `${base} (${i})${ext}`)
+  return to
+}
+
 /** A server on this computer (the tests' own): the only one allowed to speak without TLS. */
 const loopback = host => /^(127\.|::1$|localhost$)/.test(String(host))
 function client(server, user, auth) {
@@ -1078,11 +1086,50 @@ class Mail extends EventEmitter {
   /** Every mail of the accounts here that is still on its server (the assistant's view). */
   accountsMails() { const ids = new Set(this.allAccounts().map(a => a.id)); return [...this.view()].filter(e => !e.gone && ids.has(e.account)) }
 
-  /** A folder's mails, of one account or all; never the gone ones. */
-  list(role, account = null) {
+  /** A folder's mails, of one account or all; never the gone ones. [local]: the archive here instead (localMails). */
+  list(role, account = null, { local = false } = {}) {
+    if (local) return this.localMails(account, role)
     const ids = new Set(this.allAccounts().map(a => a.id))
     return [...this.view()].filter(e => e.folder === role && !e.gone && ids.has(e.account) && (!account || e.account === account))
   }
+
+  /**
+   * The archive on this computer (the user, 31 Oct: "the mail app to be the file manager… to find what I deleted by mistake"):
+   * every mail whose file is here, gone from the server or not, of accounts removed from Tetra too. Read from the index and
+   * the files alone; no server is asked.
+   */
+  localMails(account = null, role = null) {
+    return [...this.view()].filter(e => e.file && (!account || e.account === account) && (!role || e.folder === role))
+  }
+  /** «Αποθήκευση» in Mail's folder list: each account (a removed one by its address), its folders, how many, how many only here. */
+  localFolders() {
+    const accs = new Map(this.allAccounts().map(a => [a.id, { id: a.id, name: a.name, color: a.color, roles: {} }]))
+    for (const e of this.view()) {
+      if (!e.file) continue
+      if (!accs.has(e.account)) accs.set(e.account, { id: e.account, name: e.account, color: '#9e9e9e', roles: {} })
+      const r = accs.get(e.account).roles[e.folder] ??= { total: 0, local: 0 }
+      r.total++; if (e.gone) r.local++
+    }
+    return [...accs.values()].filter(a => Object.keys(a.roles).length)
+  }
+  /** The names of a mail's attachments, as they are on disk beside it. */
+  attachmentsOf(e) { try { return e.file ? fs.readdirSync(path.join(this.root, e.file.slice(0, -4) + '.files')) : [] } catch { return [] } }
+  /**
+   * A copy of a mail (its .eml) or of one of its attachments into [dir] (Files › Documents, or a place the user chose), never
+   * over a file there: « (2)», « (3)»… The full path it got.
+   */
+  exportTo(dir, id, attachment = null) {
+    const e = this.entry(id)
+    if (!e?.file) throw Object.assign(new Error('This mail is not on this computer'), { reason: 'other' })
+    const from = attachment == null ? path.join(this.root, e.file) : this.inside(`${e.file.slice(0, -4)}.files/${path.basename(String(attachment))}`)
+    if (!from || !fs.existsSync(from)) throw Object.assign(new Error(`No attachment called ${attachment}`), { reason: 'other' })
+    fs.mkdirSync(dir, { recursive: true })
+    const to = freeName(dir, path.basename(from))
+    fs.copyFileSync(from, to, fs.constants.COPYFILE_EXCL)
+    return to
+  }
+  /** Files › Documents, where an export goes (the user: "copy it to Tetra/Documents for me to find"). */
+  documents() { return path.join(this.filesRoot ?? path.join(require('node:os').homedir(), 'Tetra', 'Files'), 'Documents') }
 
   /** A mail to read: its text, the HTML with its inline pictures, and its attachments on disk. */
   /** [images]: load this mail's pictures from the web this once («Εμφάνιση εικόνων»); always for an allowed sender. */
@@ -1111,4 +1158,4 @@ class Mail extends EventEmitter {
   }
 }
 
-module.exports = { Mail, Index, ROLES, OPS, CHECKS, parseMailto, MICROSOFT, detect, check, parseConfig, roles, places, mailName, clean, userName, reason }
+module.exports = { Mail, Index, ROLES, OPS, CHECKS, parseMailto, freeName, MICROSOFT, detect, check, parseConfig, roles, places, mailName, clean, userName, reason }

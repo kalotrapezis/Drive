@@ -2501,5 +2501,13 @@
  "mail.defaultOther": "El. pašto nuorodas (mailto:) dabar atidaro {app}.",
  "mail.defaultNone": "Šiuo metu el. pašto nuorodų (mailto:) neatidaro jokia programėlė.",
  "mail.makeDefault": "Padaryti Tetra numatytąja",
- "mail.mailtoNoAccount": "Norėdami parašyti šį laišką, pirmiausia pridėkite paskyrą programėlėje „Paštas“."
+ "mail.mailtoNoAccount": "Norėdami parašyti šį laišką, pirmiausia pridėkite paskyrą programėlėje „Paštas“.",
+ "mail.localHint": "Šiame kompiuteryje laikomas paštas, įskaitant tai, kas ištrinta iš serverio",
+ "mail.localOnly": "tik čia",
+ "mail.localOnlyN": "Tik čia (ištrinta iš serverio): {n}",
+ "mail.exportMail": "Eksportuoti laišką",
+ "mail.exportFile": "Eksportuoti į aplanką „Dokumentai“",
+ "mail.saveAs": "Įrašyti kaip…",
+ "mail.exported": "Nukopijuota: {name}",
+ "mail.show": "Rodyti"
 }

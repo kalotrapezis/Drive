@@ -2501,5 +2501,13 @@
  "mail.defaultOther": "E-poštne povezave (mailto:) zdaj odpira {app}.",
  "mail.defaultNone": "Trenutno e-poštnih povezav (mailto:) ne odpira nobena aplikacija.",
  "mail.makeDefault": "Nastavi Tetra kot privzeto",
- "mail.mailtoNoAccount": "Za pisanje tega sporočila najprej dodajte račun v aplikaciji Pošta."
+ "mail.mailtoNoAccount": "Za pisanje tega sporočila najprej dodajte račun v aplikaciji Pošta.",
+ "mail.localHint": "Pošta, shranjena v tem računalniku, vključno s tisto, izbrisano s strežnika",
+ "mail.localOnly": "samo tukaj",
+ "mail.localOnlyN": "Samo tukaj (izbrisano s strežnika): {n}",
+ "mail.exportMail": "Izvozi sporočilo",
+ "mail.exportFile": "Izvozi v Dokumente",
+ "mail.saveAs": "Shrani kot…",
+ "mail.exported": "Kopirano: {name}",
+ "mail.show": "Pokaži"
 }

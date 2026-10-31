@@ -2323,5 +2323,13 @@
  "mail.defaultOther": "Az e-mail hivatkozásokat (mailto:) most a(z) {app} nyitja meg.",
  "mail.defaultNone": "Jelenleg egyetlen alkalmazás sem nyitja meg az e-mail hivatkozásokat (mailto:).",
  "mail.makeDefault": "A Tetra legyen az alapértelmezett",
- "mail.mailtoNoAccount": "A levél megírásához előbb adj hozzá egy fiókot a Levelek alkalmazásban."
+ "mail.mailtoNoAccount": "A levél megírásához előbb adj hozzá egy fiókot a Levelek alkalmazásban.",
+ "mail.localHint": "Az ezen a számítógépen tárolt levelek, a szerverről törölteket is beleértve",
+ "mail.localOnly": "csak itt",
+ "mail.localOnlyN": "Csak itt (a szerverről törölve): {n}",
+ "mail.exportMail": "Levél exportálása",
+ "mail.exportFile": "Exportálás a Dokumentumok mappába",
+ "mail.saveAs": "Mentés másként…",
+ "mail.exported": "Másolva: {name}",
+ "mail.show": "Megjelenítés"
 }

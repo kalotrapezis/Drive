@@ -2323,5 +2323,13 @@
  "mail.defaultOther": "Sähköpostilinkit (mailto:) avautuvat nyt sovelluksessa {app}.",
  "mail.defaultNone": "Mikään sovellus ei avaa nyt sähköpostilinkkejä (mailto:).",
  "mail.makeDefault": "Aseta Tetra oletukseksi",
- "mail.mailtoNoAccount": "Kirjoittaaksesi tämän viestin lisää ensin tili Posti-sovelluksessa."
+ "mail.mailtoNoAccount": "Kirjoittaaksesi tämän viestin lisää ensin tili Posti-sovelluksessa.",
+ "mail.localHint": "Tällä PC:llä säilytettävä posti, myös palvelimelta poistettu",
+ "mail.localOnly": "vain täällä",
+ "mail.localOnlyN": "Vain täällä (poistettu palvelimelta): {n}",
+ "mail.exportMail": "Vie viesti",
+ "mail.exportFile": "Vie kansioon Asiakirjat",
+ "mail.saveAs": "Tallenna nimellä…",
+ "mail.exported": "Kopioitu: {name}",
+ "mail.show": "Näytä"
 }

@@ -2411,5 +2411,13 @@
  "mail.defaultOther": "Poveznice e-pošte (mailto:) sada otvara {app}.",
  "mail.defaultNone": "Trenutačno nijedna aplikacija ne otvara poveznice e-pošte (mailto:).",
  "mail.makeDefault": "Postavi Tetra kao zadanu",
- "mail.mailtoNoAccount": "Za pisanje ove poruke najprije dodajte račun u aplikaciji Pošta."
+ "mail.mailtoNoAccount": "Za pisanje ove poruke najprije dodajte račun u aplikaciji Pošta.",
+ "mail.localHint": "Pošta pohranjena na ovom računalu, uključujući ono što je izbrisano s poslužitelja",
+ "mail.localOnly": "samo ovdje",
+ "mail.localOnlyN": "Samo ovdje (izbrisano s poslužitelja): {n}",
+ "mail.exportMail": "Izvezi poruku",
+ "mail.exportFile": "Izvezi u Dokumente",
+ "mail.saveAs": "Spremi kao…",
+ "mail.exported": "Kopirano: {name}",
+ "mail.show": "Prikaži"
 }

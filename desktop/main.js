@@ -1325,7 +1325,22 @@ app.whenReady().then(() => {
   // Mail, read-only (mail.js). The password is checked against the server before it is kept, encrypted, in settings.
   const isAddress = a => typeof a === 'string' && a.length < 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)
   ipcMain.handle('mail:accounts', () => ({ accounts: mail.allAccounts(), folders: mail.folders(), status: mail.status() })) // with the phones' own accounts (shadow)
-  ipcMain.handle('mail:list', (_, role, account) => mail.list(String(role), account ? String(account) : null))
+  ipcMain.handle('mail:list', (_, role, account, local) => mail.list(String(role), account ? String(account) : null, { local: !!local }))
+  // «Αποθήκευση» in Mail: the archive on this computer, and copies out of it (the user, 31 Oct)
+  ipcMain.handle('mail:localFolders', () => mail.localFolders())
+  ipcMain.handle('mail:export', (_, id, attachment) => mailCall(() => mail.exportTo(mail.documents(), String(id), attachment ?? null)))
+  ipcMain.handle('mail:saveAs', async (_, id, attachment) => {
+    const e = mail.entry(String(id))
+    if (!e?.file) throw new Error(t('mail.fileGone'))
+    const name = attachment ?? path.basename(e.file)
+    const r = await dialog.showSaveDialog(win, { defaultPath: path.join(mail.documents(), path.basename(String(name))) })
+    if (r.canceled || !r.filePath) return null
+    const from = attachment == null ? mail.inside(e.file) : mail.inside(`${e.file.slice(0, -4)}.files/${path.basename(String(attachment))}`)
+    if (!from) throw new Error(t('mail.fileGone'))
+    fs.copyFileSync(from, r.filePath) // the system's dialog already asked before replacing a file
+    return r.filePath
+  })
+  ipcMain.handle('mail:showFile', (_, full) => { if (typeof full === 'string' && path.isAbsolute(full) && fs.existsSync(full)) shell.showItemInFolder(full) })
   ipcMain.handle('mail:open', (_, id, images) => mail.open(String(id), { images: images === true }))
   // step 6: the clean-up and its first-run check, the garbage scan, filters, the spam filter, remote pictures
   const care = require('./mailclean')

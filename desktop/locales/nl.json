@@ -2323,5 +2323,13 @@
  "mail.defaultOther": "Maillinks (mailto:) openen nu in {app}.",
  "mail.defaultNone": "Er is nu geen app die maillinks (mailto:) opent.",
  "mail.makeDefault": "Tetra als standaard instellen",
- "mail.mailtoNoAccount": "Om deze mail te schrijven, voeg je eerst een account toe in Mail."
+ "mail.mailtoNoAccount": "Om deze mail te schrijven, voeg je eerst een account toe in Mail.",
+ "mail.localHint": "De mail die op deze pc staat, ook wat van de server is verwijderd",
+ "mail.localOnly": "alleen hier",
+ "mail.localOnlyN": "Alleen hier (van de server verwijderd): {n}",
+ "mail.exportMail": "Mail exporteren",
+ "mail.exportFile": "Exporteren naar Documenten",
+ "mail.saveAs": "Opslaan als…",
+ "mail.exported": "Gekopieerd: {name}",
+ "mail.show": "Tonen"
 }

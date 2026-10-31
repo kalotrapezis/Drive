@@ -2412,5 +2412,13 @@
  "mail.defaultOther": "Linkurile de e-mail (mailto:) se deschid acum în {app}.",
  "mail.defaultNone": "Acum nicio aplicație nu deschide linkurile de e-mail (mailto:).",
  "mail.makeDefault": "Setează Tetra ca implicită",
- "mail.mailtoNoAccount": "Pentru a scrie acest mesaj, adaugă mai întâi un cont în Poștă."
+ "mail.mailtoNoAccount": "Pentru a scrie acest mesaj, adaugă mai întâi un cont în Poștă.",
+ "mail.localHint": "Poșta păstrată pe acest PC, inclusiv cea ștearsă de pe server",
+ "mail.localOnly": "doar aici",
+ "mail.localOnlyN": "Doar aici (șterse de pe server): {n}",
+ "mail.exportMail": "Exportă mesajul",
+ "mail.exportFile": "Exportă în Documente",
+ "mail.saveAs": "Salvează ca…",
+ "mail.exported": "Copiat: {name}",
+ "mail.show": "Afișează"
 }

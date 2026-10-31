@@ -2501,5 +2501,13 @@
  "mail.defaultOther": "Il-links tal-email (mailto:) issa jinfetħu f’{app}.",
  "mail.defaultNone": "Bħalissa ebda applikazzjoni ma tiftaħ il-links tal-email (mailto:).",
  "mail.makeDefault": "Agħmel lil Tetra l-predefinita",
- "mail.mailtoNoAccount": "Biex tikteb din l-email, l-ewwel żid kont fil-Posta."
+ "mail.mailtoNoAccount": "Biex tikteb din l-email, l-ewwel żid kont fil-Posta.",
+ "mail.localHint": "Il-posta miżmuma fuq dan il-PC, inkluż dik imħassra mis-server",
+ "mail.localOnly": "hawn biss",
+ "mail.localOnlyN": "Hawn biss (imħassra mis-server): {n}",
+ "mail.exportMail": "Esporta l-email",
+ "mail.exportFile": "Esporta fid-Dokumenti",
+ "mail.saveAs": "Ħżen bħala…",
+ "mail.exported": "Ikkopjat: {name}",
+ "mail.show": "Uri"
 }

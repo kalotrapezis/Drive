@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { MailAccount, MailAddress, MailCheck, MailCompose, MailStorageInfo, MailCleanPlan, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
+import type { MailAccount, MailAddress, MailCheck, MailCompose, MailLocalAccount, MailStorageInfo, MailCleanPlan, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
 import { formatBytes } from './timeline'
 import { arrange, dayKey, DEFAULT_VIEW, type MailView } from './mailView'
 import { Confirm, Modal, errorText } from './Dialogs'
@@ -11,6 +11,7 @@ import { locale, t } from './i18n'
 // delete, spam and move go to the server (step 3); New, Reply, Forward and drafts are step 4.
 
 type Data = { accounts: MailAccount[]; folders: MailFolder[]; status: Record<string, MailState> }
+const ROLES: MailRole[] = ['Inbox', 'Drafts', 'Sent', 'Archive', 'Spam', 'Trash']
 const ROLE_ICON: Record<MailRole, IconName> = { Inbox: 'mail', Drafts: 'edit', Sent: 'arrowRight', Archive: 'archive', Spam: 'warning', Trash: 'trash' }
 const PAGE = 300 // rows drawn at a time; "Περισσότερα" draws the next
 const stored = (key: string) => { try { return localStorage.getItem(key) } catch { return null } }
@@ -82,9 +83,11 @@ function MailBar({ items, children }: { items: BarItem[]; children: ReactNode })
   )
 }
 
-export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode) => void; say: (s: string) => void; compose?: (MailCompose & { at: number }) | null }) {
+export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode) => void; say: (s: string, action?: () => void, label?: string) => void; compose?: (MailCompose & { at: number }) | null }) {
   const [data, setData] = useState<Data | null>(null)
-  const [where, setWhere] = useState<{ role: MailRole; account: string | null }>({ role: 'Inbox', account: null })
+  // local: «Αποθήκευση», the archive on this computer (gone from the server too), read only towards the server
+  const [where, setWhere] = useState<{ role: MailRole; account: string | null; local?: boolean }>({ role: 'Inbox', account: null })
+  const [locals, setLocals] = useState<MailLocalAccount[] | null>(null)
   const [expanded, setExpanded] = useState<Set<MailRole>>(() => new Set(['Inbox']))
   const [mails, setMails] = useState<MailEntry[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
@@ -92,7 +95,7 @@ export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode
   const composer = useRef<ComposeApi | null>(null)
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(PAGE)
-  const viewKey = `mail.view.${where.role}.${where.account ?? '*'}` // the Filter's choice, kept per folder
+  const viewKey = `mail.view.${where.local ? 'local.' : ''}${where.role}.${where.account ?? '*'}` // the Filter's choice, kept per folder
   const [view, setView] = useState<MailView>(DEFAULT_VIEW)
   useEffect(() => { try { setView({ ...DEFAULT_VIEW, ...JSON.parse(stored(viewKey) || '{}') }) } catch { setView(DEFAULT_VIEW) } }, [viewKey])
   const close = () => setDialog(null)
@@ -101,7 +104,8 @@ export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode
   whereRef.current = where
   const reload = () => {
     window.drive.mail.accounts().then(setData)
-    window.drive.mail.list(whereRef.current.role, whereRef.current.account).then(setMails)
+    window.drive.mail.list(whereRef.current.role, whereRef.current.account, whereRef.current.local).then(setMails)
+    if (whereRef.current.local) window.drive.mail.localFolders().then(setLocals)
   }
   useEffect(() => { setLimit(PAGE); reload() }, [where])
   useEffect(() => { window.drive.mail.sync() }, []) // Mail opened: a look for new mail now (the user, 31 Oct)
@@ -128,7 +132,7 @@ export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode
     .then(d => { setDraft(null); setTimeout(() => { setOpenId(null); setDraft(d) }) }, e => say(errorText(e))) // a fresh Compose, the old one saved as it goes
   const open = (m: MailEntry) => {
     if (m.folder === 'Drafts') { write(m.id, 'edit'); return } // a draft opens to be written on
-    setDraft(null); setOpenId(m.id); if (!m.seen) act('read', [m.id])
+    setDraft(null); setOpenId(m.id); if (!m.seen && !where.local) act('read', [m.id])
   }
   const moveTo = () => current && setDialog(<Modal onClose={close}>
     <h3>{t('mail.moveTo')}</h3>
@@ -186,13 +190,13 @@ export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode
           { key: 'replyAll', rank: 3, label: t('mail.replyAll'), icon: 'replyAll', onClick: () => write(current.id, 'replyAll') },
           { key: 'forward', rank: 3, label: t('mail.forward'), icon: 'mailForward', onClick: () => write(current.id, 'forward') },
           { key: 'forwardAttached', rank: 5, label: t('mail.forwardAttached'), icon: 'attach', onClick: () => write(current.id, 'forwardAttached') },
-          ...(current.folder !== 'Archive' ? [{ key: 'archive', rank: 2, label: t('mail.archive'), icon: 'archive', onClick: () => away('archive'), sep: true }] as BarItem[] : []),
+          ...(where.local ? [] : [...(current.folder !== 'Archive' ? [{ key: 'archive', rank: 2, label: t('mail.archive'), icon: 'archive', onClick: () => away('archive'), sep: true }] as BarItem[] : []),
           { key: 'delete', rank: 2, label: t('common.delete'), icon: 'trash', onClick: () => away('delete'), sep: current.folder === 'Archive' },
           current.folder === 'Spam'
             ? { key: 'notSpam', rank: 4, label: t('mail.notSpam'), icon: 'mail', onClick: () => away('notSpam') }
             : { key: 'spam', rank: 4, label: t('mail.spam'), icon: 'warning', onClick: () => away('spam') },
           { key: 'read', rank: 4, label: t(current.seen ? 'mail.markUnread' : 'mail.markRead'), icon: current.seen ? 'visibilityOff' : 'visibility', onClick: () => act(current.seen ? 'unread' : 'read', [current.id]) },
-          { key: 'move', rank: 5, label: t('common.move'), icon: 'moveTo', onClick: moveTo },
+          { key: 'move', rank: 5, label: t('common.move'), icon: 'moveTo', onClick: moveTo }] as BarItem[]),
         ] as BarItem[] : []),
       ]}>
         <label className="mail-search"><Icon name="search" size={18} />
@@ -207,20 +211,32 @@ export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode
           {data?.folders.filter(f => f.role === 'Inbox' || sum(f, 'total')).map(f => {
             const open = expanded.has(f.role)
             return <div key={f.role}>
-              <div className={`mail-folder ${where.role === f.role && !where.account ? 'on' : ''}`}>
+              <div className={`mail-folder ${where.role === f.role && !where.account && !where.local ? 'on' : ''}`}>
                 <button className={`mail-twisty ${open ? 'open' : ''}`} aria-label={f.role} onClick={() => setExpanded(s => { const n = new Set(s); if (open) n.delete(f.role); else n.add(f.role); return n })}><Icon name="forward" size={16} /></button>
                 <button className="mail-folder-name" onClick={() => setWhere({ role: f.role, account: null })}><Icon name={ROLE_ICON[f.role]} size={18} /><span>{t(`mail.role${f.role}`)}</span></button>
                 <Count unread={sum(f, 'unread')} orange={sum(f, 'orange')} />
               </div>
               {open && f.accounts.filter(a => accounts.has(a.id)).map(a => {
                 const acc = accounts.get(a.id)!
-                return <button key={a.id} className={`mail-folder sub ${acc.shadow ? 'shadow' : ''} ${where.role === f.role && where.account === a.id ? 'on' : ''}`} onClick={() => setWhere({ role: f.role, account: a.id })}>
+                return <button key={a.id} className={`mail-folder sub ${acc.shadow ? 'shadow' : ''} ${where.role === f.role && where.account === a.id && !where.local ? 'on' : ''}`} onClick={() => setWhere({ role: f.role, account: a.id })}>
                   <span className="mail-dot" style={{ background: acc.color }} /><span className="mail-folder-label">{acc.name}</span>
                   {acc.shadow && <span className="mail-shadow" title={acc.device}>⇄ {acc.device}</span>}<Count unread={a.unread} orange={a.orange} />
                 </button>
               })}
             </div>
           })}
+          <div className="mail-folder mail-local-head">
+            <button className={`mail-twisty ${locals ? 'open' : ''}`} aria-label={t('mail.storage')} onClick={() => locals ? setLocals(null) : window.drive.mail.localFolders().then(setLocals)}><Icon name="forward" size={16} /></button>
+            <button className="mail-folder-name" title={t('mail.localHint')} onClick={() => { if (!locals) window.drive.mail.localFolders().then(setLocals); setWhere({ role: 'Inbox', account: null, local: true }) }}>
+              <Icon name="storage" size={18} /><span>{t('mail.storage')}</span></button>
+          </div>
+          {locals?.map(a => <div key={a.id}>
+            <div className="mail-local-acc"><span className="mail-dot" style={{ background: a.color }} /><span className="mail-folder-label">{a.name}</span></div>
+            {ROLES.filter(r => a.roles[r]).map(r => <button key={r} className={`mail-folder sub ${where.local && where.role === r && where.account === a.id ? 'on' : ''}`} onClick={() => setWhere({ role: r, account: a.id, local: true })}>
+              <Icon name={ROLE_ICON[r]} size={16} /><span className="mail-folder-label">{t(`mail.role${r}`)}</span>
+              <span className="mail-local-n" title={a.roles[r]!.local ? t('mail.localOnlyN', { n: a.roles[r]!.local }) : undefined}>{a.roles[r]!.total.toLocaleString(locale())}{a.roles[r]!.local ? ` · ${a.roles[r]!.local.toLocaleString(locale())}` : ''}</span>
+            </button>)}
+          </div>)}
           <div className="mail-folders-foot">
             {data?.accounts.map(a => {
               const s = data.status[a.id] ?? {}, total = data.folders.reduce((n, f) => n + (f.accounts.find(x => x.id === a.id)?.total ?? 0), 0)
@@ -239,7 +255,7 @@ export function MailPage({ setDialog, say, compose }: { setDialog: (d: ReactNode
             shown += rows.length
             return <section key={g.key}>
               <h4 className="mail-group">{view.group === 'day' ? dayText(g.key) : view.group === 'account' ? accounts.get(g.key)?.name ?? g.key : g.key}</h4>
-              {rows.map(m => <MailRow key={m.id} m={m} on={m.id === openId} color={where.account ? null : accounts.get(m.account)?.color ?? null} onOpen={() => open(m)} onHeart={accounts.get(m.account)?.shadow ? undefined : () => act(m.flagged ? 'unfavorite' : 'favorite', [m.id])} />)}
+              {rows.map(m => <MailRow key={m.id} m={m} on={m.id === openId} color={where.account ? null : accounts.get(m.account)?.color ?? null} onOpen={() => open(m)} onHeart={accounts.get(m.account)?.shadow || where.local ? undefined : () => act(m.flagged ? 'unfavorite' : 'favorite', [m.id])} />)}
             </section>
           })}
           {groups.reduce((n, g) => n + g.mails.length, 0) > limit && <button className="text-button mail-more" onClick={() => setLimit(l => l + PAGE)}>{t('mail.more')}</button>}
@@ -264,7 +280,7 @@ function MailRow({ m, on, color, onOpen, onHeart }: { m: MailEntry; on: boolean;
         <span className="mail-time">{timeText(m.date)}</span>
         <span className={`mail-state ${m.saved ? 'green' : 'orange'}`} title={m.saved ? t('mail.local') : t('mail.serverOnly')} />
       </span>
-      <span className="mail-subject">{m.subject || t('mail.noSubject')}</span>
+      <span className="mail-subject">{m.gone && <span className="mail-local-mark">{t('mail.localOnly')}</span>}{m.subject || t('mail.noSubject')}</span>
       {m.snippet && <span className="mail-snippet">{m.snippet}</span>}
       <button className={`mail-heart ${m.flagged ? 'on' : ''}`} title={t('mail.favorite')} aria-pressed={m.flagged} disabled={!onHeart} onClick={e => { e.stopPropagation(); onHeart?.() }}><Icon name={m.flagged ? 'heartFill' : 'heart'} size={18} /></button>
     </div>
@@ -276,7 +292,7 @@ function MailRow({ m, on, color, onOpen, onHeart }: { m: MailEntry; on: boolean;
 const RISKY = /\.(exe|msi|bat|cmd|com|scr|pif|vbs|vbe|js|jse|wsf|wsh|ps1|psm1|jar|sh|run|bin|appimage|desktop|deb|rpm|apk|lnk|reg|hta|cpl|docm|xlsm|pptm|dotm|xltm|iso|img)$/i
 const hostOf = (u: string) => { try { return new URL(/^https?:/i.test(u) ? u : `http://${u}`).hostname.replace(/^www\./, '').toLowerCase() } catch { return '' } }
 
-function Reader({ id, color, say, setDialog }: { id: string; color?: string; say: (s: string) => void; setDialog: (d: ReactNode) => void }) {
+function Reader({ id, color, say, setDialog }: { id: string; color?: string; say: (s: string, action?: () => void, label?: string) => void; setDialog: (d: ReactNode) => void }) {
   const [m, setM] = useState<MailOpened | null>(null)
   const frame = useRef<HTMLIFrameElement>(null)
   const load = (images = false) => window.drive.mail.open(id, images).then(setM, e => say(errorText(e)))
@@ -288,6 +304,10 @@ function Reader({ id, color, say, setDialog }: { id: string; color?: string; say
     if (RISKY.test(a.name)) setDialog(<Confirm title={t('mail.riskyTitle')} body={t('mail.riskyBody', { name: a.name })} action={t('mail.openAnyway')} danger onClose={close} onConfirm={() => { close(); go() }} />)
     else go()
   }
+  // a copy out of the archive (the user, 31 Oct): into Files › Documents, never over a file there, or where the user says
+  const exported = (full: string) => say(t('mail.exported', { name: full.split('/').pop() ?? full }), () => window.drive.mail.showFile(full), t('mail.show'))
+  const exportTo = (attachment: string | null) => window.drive.mail.exportFile(id, attachment).then(exported, e => say(errorText(e)))
+  const saveAs = (attachment: string | null) => window.drive.mail.saveAs(id, attachment).then(p => p && exported(p), e => say(errorText(e)))
   /** A link whose words name one place and whose address goes to another (phishing, §9c): said before it opens. */
   const follow = (a: HTMLAnchorElement) => {
     const shown = (a.textContent ?? '').trim(), go = () => window.drive.mail.openLink(a.href)
@@ -314,12 +334,20 @@ function Reader({ id, color, say, setDialog }: { id: string; color?: string; say
         <div>
           <div className="mail-head-from">{m.from || m.fromAddress} {m.from && <small>&lt;{m.fromAddress}&gt;</small>}</div>
           <div className="mail-head-meta">{t('mail.to', { to: m.to })} · {new Date(m.date).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' })} ·{' '}
-            <span className={m.saved ? 'green' : 'orange'}>{m.saved ? t('mail.local') : t('mail.serverOnly')}</span></div>
+            <span className={m.saved ? 'green' : 'orange'}>{m.saved ? t('mail.local') : t('mail.serverOnly')}</span>{m.gone && <> · <span className="mail-local-mark">{t('mail.localOnly')}</span></>}</div>
         </div>
       </div>
+      {!m.missing && <div className="mail-exports">
+        <button className="text-button" onClick={() => exportTo(null)}><Icon name="folderDocuments" size={18} />{t('mail.exportMail')}</button>
+        <button className="text-button" onClick={() => saveAs(null)}><Icon name="save" size={18} />{t('mail.saveAs')}</button>
+      </div>}
       {m.attachments.length > 0 && <div className="mail-files">
-        {m.attachments.map(a => <button key={a.file} className={`chip ${RISKY.test(a.name) ? 'risky' : ''}`} onClick={() => openFile(a)}>
-          <Icon name={RISKY.test(a.name) ? 'warning' : 'file'} size={16} /> {a.name} · {sizeText(a.size)}</button>)}
+        {m.attachments.map(a => <span key={a.file} className="mail-file">
+          <button className={`chip ${RISKY.test(a.name) ? 'risky' : ''}`} onClick={() => openFile(a)}>
+            <Icon name={RISKY.test(a.name) ? 'warning' : 'file'} size={16} /> {a.name} · {sizeText(a.size)}</button>
+          <button className="round flat small" title={t('mail.exportFile')} onClick={() => exportTo(a.name)}><Icon name="folderDocuments" size={16} /></button>
+          <button className="round flat small" title={t('mail.saveAs')} onClick={() => saveAs(a.name)}><Icon name="save" size={16} /></button>
+        </span>)}
       </div>}
       {m.remote && <div className="mail-images-bar">
         <span>{t('mail.imagesBlocked')}</span>

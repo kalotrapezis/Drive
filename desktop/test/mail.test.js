@@ -458,3 +458,30 @@ test('mail: a mailto: link (RFC 6068) — several recipients, an encoded Greek s
   assert.deepEqual(parseMailto('mailto:x@y.gr?subject=%E0%A4%A').subject, '%E0%A4%A', 'a broken escape is kept as written')
   assert.equal(parseMailto('https://example.com'), null)
 })
+
+test('mail: «Αποθήκευση» lists every mail kept here, one deleted from the server too; an export never overwrites, Greek and emoji names kept', async () => {
+  const dir = tmp()
+  const folders = { INBOX: { validity: 1, next: 3, msgs: { 1: message('Κρατημένο 📎', 'kept'), 2: message('Ακόμα στον server', 'live') } } }
+  const c = memoryServer(folders)
+  const mail = new Mail(dir, { secret: () => 'x', connect: () => c })
+  const acc = { id: 'me@sch.gr', name: 'Work', server: {} }
+  try {
+    mail.saveAccounts([acc])
+    await mail.headers(c, acc, 'Inbox', 'INBOX'); await mail.bodies(c, acc, 'Inbox', 'INBOX', { stop: false })
+    delete folders.INBOX.msgs[1]
+    await mail.headers(c, acc, 'Inbox', 'INBOX')
+    assert.deepEqual(mail.list('Inbox').map(m => m.subject), ['Ακόμα στον server'])
+    const local = mail.list('Inbox', null, { local: true })
+    assert.deepEqual(local.map(m => [m.subject, !!m.gone]).sort(), [['Ακόμα στον server', false], ['Κρατημένο 📎', true]])
+    mail.remove('me@sch.gr') // an account removed from Tetra: its archive is still there to browse
+    assert.deepEqual(mail.localFolders(), [{ id: 'me@sch.gr', name: 'me@sch.gr', color: '#9e9e9e', roles: { Inbox: { total: 2, local: 1 } } }])
+    const out = path.join(dir, 'Έγγραφα'), kept = local.find(m => m.gone)
+    const first = mail.exportTo(out, kept.id), second = mail.exportTo(out, kept.id)
+    assert.match(path.basename(first), /Κρατημένο 📎\.eml$/)
+    assert.equal(path.basename(second), path.basename(first).replace(/\.eml$/, ' (2).eml'))
+    assert.deepEqual(fs.readFileSync(first), fs.readFileSync(path.join(dir, kept.file)))
+    assert.throws(() => mail.exportTo(out, kept.id, '../../accounts.json'), /No attachment/)
+    assert.throws(() => mail.exportTo(out, 'nope'), /not on this computer/)
+    mail.index.flush()
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})

@@ -233,7 +233,11 @@ contextBridge.exposeInMainWorld('drive', {
   // Mail (mail.js), read-only: the passwords never come here, the window only hands a new one over once
   mail: {
     accounts: () => ipcRenderer.invoke('mail:accounts'),
-    list: (role, account) => ipcRenderer.invoke('mail:list', role, account),
+    list: (role, account, local) => ipcRenderer.invoke('mail:list', role, account, local),
+    localFolders: () => ipcRenderer.invoke('mail:localFolders'),
+    exportFile: (id, attachment) => ipcRenderer.invoke('mail:export', id, attachment),
+    saveAs: (id, attachment) => ipcRenderer.invoke('mail:saveAs', id, attachment),
+    showFile: full => ipcRenderer.invoke('mail:showFile', full),
     open: (id, images) => ipcRenderer.invoke('mail:open', id, images),
     detect: address => ipcRenderer.invoke('mail:detect', address),
     add: (address, server, pass) => ipcRenderer.invoke('mail:add', address, server, pass),

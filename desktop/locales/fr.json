@@ -2412,5 +2412,13 @@
  "mail.defaultOther": "Les liens de courrier (mailto:) s’ouvrent maintenant dans {app}.",
  "mail.defaultNone": "Aucune application n’ouvre actuellement les liens de courrier (mailto:).",
  "mail.makeDefault": "Définir Tetra par défaut",
- "mail.mailtoNoAccount": "Pour écrire ce message, ajoutez d’abord un compte dans Courrier."
+ "mail.mailtoNoAccount": "Pour écrire ce message, ajoutez d’abord un compte dans Courrier.",
+ "mail.localHint": "Le courrier conservé sur ce PC, y compris ce qui a été supprimé du serveur",
+ "mail.localOnly": "ici seulement",
+ "mail.localOnlyN": "Ici seulement (supprimés du serveur) : {n}",
+ "mail.exportMail": "Exporter le message",
+ "mail.exportFile": "Exporter vers Documents",
+ "mail.saveAs": "Enregistrer sous…",
+ "mail.exported": "Copié : {name}",
+ "mail.show": "Afficher"
 }

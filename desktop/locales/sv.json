@@ -2323,5 +2323,13 @@
  "mail.defaultOther": "Mejllänkar (mailto:) öppnas nu i {app}.",
  "mail.defaultNone": "Ingen app öppnar mejllänkar (mailto:) just nu.",
  "mail.makeDefault": "Gör Tetra till standard",
- "mail.mailtoNoAccount": "För att skriva det här mejlet, lägg först till ett konto i Mejl."
+ "mail.mailtoNoAccount": "För att skriva det här mejlet, lägg först till ett konto i Mejl.",
+ "mail.localHint": "Mejlen som finns på den här datorn, även det som raderats från servern",
+ "mail.localOnly": "bara här",
+ "mail.localOnlyN": "Bara här (raderade från servern): {n}",
+ "mail.exportMail": "Exportera mejl",
+ "mail.exportFile": "Exportera till Dokument",
+ "mail.saveAs": "Spara som…",
+ "mail.exported": "Kopierad: {name}",
+ "mail.show": "Visa"
 }

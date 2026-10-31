@@ -2323,5 +2323,13 @@
  "mail.defaultOther": "E-posti linke (mailto:) avab praegu {app}.",
  "mail.defaultNone": "E-posti linke (mailto:) ei ava praegu ükski rakendus.",
  "mail.makeDefault": "Tee Tetra vaikerakenduseks",
- "mail.mailtoNoAccount": "Selle kirja kirjutamiseks lisage esmalt rakenduses Post konto."
+ "mail.mailtoNoAccount": "Selle kirja kirjutamiseks lisage esmalt rakenduses Post konto.",
+ "mail.localHint": "Sellel arvutil hoitav post, ka see, mis serverist kustutati",
+ "mail.localOnly": "ainult siin",
+ "mail.localOnlyN": "Ainult siin (serverist kustutatud): {n}",
+ "mail.exportMail": "Ekspordi kiri",
+ "mail.exportFile": "Ekspordi kausta Dokumendid",
+ "mail.saveAs": "Salvesta kui…",
+ "mail.exported": "Kopeeritud: {name}",
+ "mail.show": "Näita"
 }

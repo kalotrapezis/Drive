@@ -2590,5 +2590,13 @@
  "mail.defaultOther": "Osclaíonn {app} naisc ríomhphoist (mailto:) anois.",
  "mail.defaultNone": "Níl aip ar bith ag oscailt naisc ríomhphoist (mailto:) anois.",
  "mail.makeDefault": "Déan Tetra mar réamhshocrú",
- "mail.mailtoNoAccount": "Chun an ríomhphost seo a scríobh, cuir cuntas leis i Ríomhphost ar dtús."
+ "mail.mailtoNoAccount": "Chun an ríomhphost seo a scríobh, cuir cuntas leis i Ríomhphost ar dtús.",
+ "mail.localHint": "An ríomhphost atá á choinneáil ar an PC seo, an ríomhphost a scriosadh den fhreastalaí san áireamh",
+ "mail.localOnly": "anseo amháin",
+ "mail.localOnlyN": "Anseo amháin (scriosta den fhreastalaí): {n}",
+ "mail.exportMail": "Easpórtáil ríomhphost",
+ "mail.exportFile": "Easpórtáil chuig Doiciméid",
+ "mail.saveAs": "Sábháil mar…",
+ "mail.exported": "Cóipeáilte: {name}",
+ "mail.show": "Taispeáin"
 }

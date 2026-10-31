@@ -2412,5 +2412,13 @@
  "mail.defaultOther": "E-pasta saites (mailto:) tagad atver {app}.",
  "mail.defaultNone": "Pašlaik e-pasta saites (mailto:) neatver neviena lietotne.",
  "mail.makeDefault": "Iestatīt Tetra kā noklusējuma",
- "mail.mailtoNoAccount": "Lai uzrakstītu šo vēstuli, vispirms pievienojiet kontu lietotnē „Pasts”."
+ "mail.mailtoNoAccount": "Lai uzrakstītu šo vēstuli, vispirms pievienojiet kontu lietotnē „Pasts”.",
+ "mail.localHint": "Šajā datorā glabātais pasts, ieskaitot to, kas izdzēsts no servera",
+ "mail.localOnly": "tikai šeit",
+ "mail.localOnlyN": "Tikai šeit (izdzēsts no servera): {n}",
+ "mail.exportMail": "Eksportēt vēstuli",
+ "mail.exportFile": "Eksportēt mapē „Dokumenti”",
+ "mail.saveAs": "Saglabāt kā…",
+ "mail.exported": "Nokopēts: {name}",
+ "mail.show": "Rādīt"
 }

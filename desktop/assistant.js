@@ -240,6 +240,11 @@ const SCHEMA = [
   fn('mail_send', 'Write a mail and make it ready to send. Tetra keeps it as a draft and shows it with a Send button: it goes only when the user presses Send or says yes. Before that, read back to the user who it goes to, the subject and the text.', ['text'],
     { to: STRINGS('Who it goes to: contacts\' names or email addresses.'), subject: p('string', 'The subject; leave out for a reply.'), text: p('string', 'The mail\'s text, as the user wants it, in their language; greeting and closing included.'),
       reply_to: p('integer', 'To answer a mail from the last mail list: its number (then "to" and "subject" may be left out).'), from: p('string', 'The user\'s own account to send from, if said: its name (Work, Personal…) or address.') }),
+  fn('mail_find_local', 'Search the mail kept on this computer («Αποθήκευση»), including mail already deleted from the server: by words in the sender, subject or text, an attachment\'s name, dates. A numbered list: date, sender, subject, attachments, and "only on this computer" for deleted ones. Then mail_read or mail_export by its number.', [],
+    { query: p('string', 'Words in the sender, subject or text.'), attachment: p('string', 'Words in an attachment\'s file name ("τιμολόγιο", "pdf").'), from: p('string', 'The sender: a name or an address.'),
+      after: p('string', 'Only mail from this day on, YYYY-MM-DD.'), before: p('string', 'Only mail before this day, YYYY-MM-DD.'), account: p('string', 'One account: its name (Work, Personal…) or address.') }),
+  fn('mail_export', 'Copy a mail from the last mail list, or one of its attachments, to Files › Documents on this computer (a copy; nothing is deleted, nothing is sent). Do it when the user asks to copy, export or save it; then say the exact place it went.', ['choice'],
+    { choice: p('integer', 'The mail\'s number in the last list.'), attachment: p('string', 'The attachment\'s file name, or words of it; leave out to copy the whole mail (.eml).') }),
   fn('mail_status', 'Each mail account: unread mail in the Inbox, mail not yet saved on this computer, and whether syncing works.', []),
   fn('web_search', 'Search the web for current facts, news, opening hours, prices.', ['query'], { query: p('string', 'What to search for.') }),
   fn('make_image', 'Draw a picture from a description.', ['prompt'], { prompt: p('string', 'What the picture shows, in detail.') }),
@@ -251,7 +256,7 @@ const TOOL_APP = {
   notes_search: 'notes', note_open: 'notes', note_new: 'notes', shopping_list: 'notes', files_find: 'files', file_open: 'files',
   contacts_find: 'contacts', relation_remember: 'contacts', relation_forget: 'contacts', my_card: 'contacts', contact_call: 'phone',
   navigate: 'maps', youtube: 'web', web_search: 'web', make_image: 'web',
-  mail_new: 'mail', mail_important: 'mail', mail_search: 'mail', mail_read: 'mail', mail_needs_answer: 'mail', mail_send: 'mail', mail_status: 'mail',
+  mail_new: 'mail', mail_important: 'mail', mail_search: 'mail', mail_read: 'mail', mail_needs_answer: 'mail', mail_send: 'mail', mail_status: 'mail', mail_find_local: 'mail', mail_export: 'mail',
 }
 
 const pad = n => String(n).padStart(2, '0')
@@ -377,6 +382,49 @@ class Tools {
       && (!people || people.has(String(e.fromAddress).toLowerCase()) || (e.to ?? []).some(x => people.has(String(x).toLowerCase())))
       && (!q || q.split(/\s+/).every(w => plain(`${e.from} ${e.fromAddress} ${e.subject} ${e.snippet}`).includes(w)))).sort((x, y) => y.date - x.date).slice(0, 15)
     return this.mailList(hits, 'No mail found.')
+  }
+  /**
+   * The archive here, gone mail included (the user, 31 Oct: "find what I deleted by mistake… copy it to Tetra/Documents").
+   * Sender, subject, first lines and attachment names first; when words find too little, whole texts too, the newest 300.
+   */
+  async mail_find_local(a) {
+    if (!this.mail) return { forModel: 'Mail is not set up in Tetra.' }
+    const day = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s ?? '')); return m ? new Date(+m[1], m[2] - 1, +m[3]).getTime() : null }
+    const after = day(a.after), before = day(a.before), words = plain(a.query ?? '').split(/\s+/).filter(Boolean), file = plain(a.attachment ?? '').split(/\s+/).filter(Boolean)
+    const from = plain(a.from ?? ''), accs = this.mail.allAccounts()
+    const only = a.account ? accs.find(x => x.address === String(a.account).toLowerCase().trim() || plain(x.name) === plain(a.account)) : null
+    if (a.account && !only) return { forModel: `No mail account called ${a.account}: the accounts are ${accs.map(x => x.name).join(', ')}.` }
+    const names = new Map()
+    const files = e => names.get(e.id) ?? names.set(e.id, this.mail.attachmentsOf(e)).get(e.id)
+    const pool = this.mail.localMails(only?.id).filter(e => (after == null || e.date >= after) && (before == null || e.date < before)
+      && (!from || plain(`${e.from} ${e.fromAddress}`).includes(from)) && (!file.length || file.every(w => plain(files(e).join(' ')).includes(w)))).sort((x, y) => y.date - x.date)
+    const said = e => plain(`${e.from} ${e.fromAddress} ${e.subject} ${e.snippet} ${files(e).join(' ')}`)
+    let hits = pool.filter(e => words.every(w => said(e).includes(w)))
+    if (words.length && hits.length < 15) {
+      const { simpleParser } = require('mailparser'), seen = new Set(hits)
+      for (const e of pool.filter(e => !seen.has(e)).slice(0, 300)) {
+        if (hits.length >= 15) break
+        try { const m = await simpleParser(require('node:fs').readFileSync(require('node:path').join(this.mail.root, e.file))); if (words.every(w => plain(`${said(e)} ${m.text ?? ''}`).includes(w))) hits.push(e) } catch {}
+      }
+    }
+    hits = hits.slice(0, 15)
+    this.lists.mail = hits
+    if (!hits.length) return { forModel: 'Nothing found in the mail kept on this computer.' }
+    return { forModel: hits.map((e, i) => `${this.mailLine(e, i)}${files(e).length ? ` · files: ${files(e).join(', ')}` : ''}${e.gone ? ' · only on this computer (deleted from the server)' : ''}`).join('\n') }
+  }
+  /** A copy into Files › Documents, on the user's word: nothing is deleted or sent, so no other yes is asked. */
+  mail_export(a) {
+    return this.pick(this.lists.mail ?? [], a, e => {
+      if (!e.file) return { forModel: 'That mail is not saved on this computer, so there is nothing to copy.' }
+      let name = null
+      if (a.attachment) {
+        const list = this.mail.attachmentsOf(e), w = plain(a.attachment).split(/\s+/).filter(Boolean)
+        name = list.find(n => plain(n) === plain(a.attachment)) ?? list.find(n => w.every(x => plain(n).includes(x)))
+        if (!name) return { forModel: list.length ? `No attachment like "${a.attachment}"; this mail has: ${list.join(', ')}.` : 'This mail has no attachments.' }
+      }
+      const to = this.mail.exportTo(this.mail.documents(), e.id, name)
+      return { forModel: `Copied ${name ? `the attachment ${name}` : 'the whole mail'} to ${to.replace(require('node:os').homedir(), '~')} (Files › Documents).` }
+    })
   }
   async mail_read(a) {
     return this.pick(this.lists.mail, a, async e => {
@@ -608,6 +656,7 @@ Someone known by a job or role ("πάρε την κομμώτρια"): contacts_
 "Κλείσε ραντεβού" without a time: calendar_free first, offer two or three times, then calendar_add the one chosen.
 "Πάμε εκεί", "βάλε προορισμό": navigate; "there" is the last place in this conversation; for a contact's home, navigate with contact.
 A song or a video: youtube. "Κάνε σημείωση": note_new.
+Mail kept on this computer, deleted mail too ("βρες το email που έσβησα", "το συνημμένο από τον Γιώργο"): mail_find_local; "αντέγραψέ το στα Έγγραφα": mail_export, then say where it went.
 Mail: "νέα μηνύματα;" mail_new. "Τι σημαντικό έχω", "τι θέλει απάντηση ή κάποια ενέργεια": mail_important, then mail_read the ones that matter and say in a few words what each wants.
 "Βρες το μέιλ από τη Μαρία": mail_search with contact; "βρες το τιμολόγιο": mail_search with query. To read or summarise one: mail_read.
 "Στείλε μέιλ στον Νίκο ότι…": mail_send. Read back who, subject and text in one or two sentences; it goes only after the user's yes, which Tetra hears itself. Never say it was sent. You never move or delete mail.

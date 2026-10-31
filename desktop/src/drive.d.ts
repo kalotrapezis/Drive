@@ -8,6 +8,8 @@ export interface AiSettings { enabled: boolean; apps: Record<string, boolean>; c
 export interface MailStorageInfo { root: string; bytes: number; mails: number; accounts: { id: string; name: string; address: string; color: string; path: string; bytes: number; mails: number }[] }
 /** A mailto: link's fields (mail.parseMailto), for a new mail */
 export interface MailCompose { to: string[]; cc: string[]; bcc: string[]; subject: string; body: string }
+/** «Αποθήκευση»: an account's folders in the archive on this computer, how many mails and how many only here (gone from the server) */
+export interface MailLocalAccount { id: string; name: string; color: string; roles: Partial<Record<MailRole, { total: number; local: number }>> }
 export type MailCheck = 'push' | 5 | 15 | 30 | 'manual'
 export type MailRole = 'Inbox' | 'Drafts' | 'Sent' | 'Archive' | 'Spam' | 'Trash'
 export interface MailAddress { name: string; address: string }
@@ -30,7 +32,7 @@ export interface MailFilter { id: string; name: string; on: boolean; match: 'all
 export interface MailDevice { device: string; name: string; mode: 'copy' | 'move'; limit: number; setAt?: number; setBy?: string; usage: { used: number; files: number; at: number } | null }
 export interface MailPrivacy { images: 'ask' | 'always'; senders: string[] }
 export interface MailEntry { id: string; account: string; folder: MailRole; uid: number; date: number; from: string; fromAddress: string; to: string[]
-  subject: string; seen: boolean; flagged: boolean; size: number; attachments: number; snippet: string; saved: boolean; file?: string }
+  subject: string; seen: boolean; flagged: boolean; size: number; attachments: number; snippet: string; saved: boolean; file?: string; gone?: boolean } // gone: deleted from the server, kept here (Αποθήκευση)
 export interface MailFolder { role: MailRole; accounts: { id: string; unread: number; total: number; orange: number }[] }
 export interface MailState { busy?: boolean; error?: string | null; detail?: string | null; synced?: number }
 export interface MailOpened extends Omit<MailEntry, 'to'> { missing?: boolean; remote?: boolean; to: string; cc: string; html: string; attachments: { name: string; size: number; file: string }[] }
@@ -271,7 +273,11 @@ declare global {
       }
       mail: {
         accounts(): Promise<{ accounts: MailAccount[]; folders: MailFolder[]; status: Record<string, MailState> }>
-        list(role: MailRole, account: string | null): Promise<MailEntry[]>
+        list(role: MailRole, account: string | null, local?: boolean): Promise<MailEntry[]>
+        localFolders(): Promise<MailLocalAccount[]>
+        exportFile(id: string, attachment?: string | null): Promise<string>
+        saveAs(id: string, attachment?: string | null): Promise<string | null>
+        showFile(full: string): Promise<void>
         open(id: string, images?: boolean): Promise<MailOpened | null>
         detect(address: string): Promise<{ server: MailServer; how: string } | null>
         add(address: string, server: MailServer, pass: string): Promise<MailAddResult>

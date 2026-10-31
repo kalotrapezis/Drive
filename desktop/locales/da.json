@@ -2323,5 +2323,13 @@
  "mail.defaultOther": "Mail-links (mailto:) åbnes nu i {app}.",
  "mail.defaultNone": "Ingen app åbner mail-links (mailto:) lige nu.",
  "mail.makeDefault": "Gør Tetra til standard",
- "mail.mailtoNoAccount": "For at skrive denne mail skal du først tilføje en konto i Mail."
+ "mail.mailtoNoAccount": "For at skrive denne mail skal du først tilføje en konto i Mail.",
+ "mail.localHint": "Mail gemt på denne pc, også det, der er slettet fra serveren",
+ "mail.localOnly": "kun her",
+ "mail.localOnlyN": "Kun her (slettet fra serveren): {n}",
+ "mail.exportMail": "Eksportér mail",
+ "mail.exportFile": "Eksportér til Dokumenter",
+ "mail.saveAs": "Gem som…",
+ "mail.exported": "Kopieret: {name}",
+ "mail.show": "Vis"
 }

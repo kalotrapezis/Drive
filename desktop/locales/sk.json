@@ -2501,5 +2501,13 @@
  "mail.defaultOther": "E-mailové odkazy (mailto:) teraz otvára {app}.",
  "mail.defaultNone": "E-mailové odkazy (mailto:) teraz neotvára žiadna aplikácia.",
  "mail.makeDefault": "Nastaviť Tetra ako predvolenú",
- "mail.mailtoNoAccount": "Na napísanie tejto správy najprv pridajte účet v aplikácii Pošta."
+ "mail.mailtoNoAccount": "Na napísanie tejto správy najprv pridajte účet v aplikácii Pošta.",
+ "mail.localHint": "Pošta uložená v tomto počítači vrátane toho, čo bolo vymazané zo servera",
+ "mail.localOnly": "len tu",
+ "mail.localOnlyN": "Len tu (vymazané zo servera): {n}",
+ "mail.exportMail": "Exportovať správu",
+ "mail.exportFile": "Exportovať do Dokumentov",
+ "mail.saveAs": "Uložiť ako…",
+ "mail.exported": "Skopírované: {name}",
+ "mail.show": "Zobraziť"
 }

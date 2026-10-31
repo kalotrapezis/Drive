@@ -2323,5 +2323,13 @@
  "mail.defaultOther": "E-Mail-Links (mailto:) öffnen sich jetzt in {app}.",
  "mail.defaultNone": "Keine App öffnet gerade E-Mail-Links (mailto:).",
  "mail.makeDefault": "Tetra zum Standard machen",
- "mail.mailtoNoAccount": "Um diese E-Mail zu schreiben, füge zuerst in E-Mail ein Konto hinzu."
+ "mail.mailtoNoAccount": "Um diese E-Mail zu schreiben, füge zuerst in E-Mail ein Konto hinzu.",
+ "mail.localHint": "Die auf diesem PC gespeicherte E-Mail, auch was vom Server gelöscht wurde",
+ "mail.localOnly": "nur hier",
+ "mail.localOnlyN": "Nur hier (vom Server gelöscht): {n}",
+ "mail.exportMail": "E-Mail exportieren",
+ "mail.exportFile": "In Dokumente exportieren",
+ "mail.saveAs": "Speichern unter…",
+ "mail.exported": "Kopiert: {name}",
+ "mail.show": "Anzeigen"
 }

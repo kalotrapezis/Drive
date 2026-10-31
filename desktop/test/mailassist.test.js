@@ -94,3 +94,39 @@ test('assistant: new mail, what is important, mail from a contact, and a mail to
     mail.index.flush()
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
+
+test('assistant: finds mail kept on this computer, deleted from the server too, by an attachment or the text, and copies it to Documents', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mailassist-local-'))
+  try {
+    const day = n => new Date(Date.now() - n * 86_400_000)
+    const folders = { INBOX: { validity: 7, next: 3, msgs: {
+      1: message('Τιμολόγιο Οκτωβρίου', 'inv', { attach: true, date: day(40), from: { name: 'ΔΕΗ', address: 'bills@dei.gr' } }),
+      2: message('Καλημέρα', 'hi', { date: day(1), from: { name: 'Μαρία', address: 'maria@x.gr' }, body: 'Ο κωδικός της πόρτας είναι 4417.' }) } } }
+    const c = memoryServer(folders)
+    const mail = new Mail(dir, { secret: () => 'x', connect: () => c })
+    mail.filesRoot = path.join(dir, 'Files')
+    const acc = { id: 'me@sch.gr', address: 'me@sch.gr', server: {} }
+    mail.saveAccounts([acc])
+    await mail.headers(c, acc, 'Inbox', 'INBOX'); await mail.bodies(c, acc, 'Inbox', 'INBOX', { stop: false })
+    delete folders.INBOX.msgs[1] // deleted from the server by mistake
+    await mail.headers(c, acc, 'Inbox', 'INBOX')
+    const tools = new Tools({ mail, allowed: () => true })
+
+    assert.match((await tools.run('mail_search', { query: 'τιμολογιο' })).forModel, /No mail found/, 'the live view no longer has it')
+    const found = await tools.run('mail_find_local', { attachment: 'guide' })
+    assert.match(found.forModel, /^1\. .*ΔΕΗ <bills@dei\.gr> · Τιμολόγιο Οκτωβρίου .*files: Guide\.pdf · only on this computer/)
+    assert.match((await tools.run('mail_find_local', { query: 'κωδικος πορτας' })).forModel, /Καλημέρα/, 'found in the whole text')
+    assert.match((await tools.run('mail_find_local', { after: new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10), query: 'τιμολογιο' })).forModel, /Nothing found/)
+
+    await tools.run('mail_find_local', { from: 'ΔΕΗ' })
+    const one = await tools.run('mail_export', { choice: 1, attachment: 'guide' })
+    assert.match(one.forModel, /Copied the attachment Guide\.pdf to .*Documents\/Guide\.pdf/)
+    const two = await tools.run('mail_export', { choice: 1, attachment: 'Guide.pdf' })
+    assert.match(two.forModel, /Guide \(2\)\.pdf/, 'never over the first copy')
+    assert.match((await tools.run('mail_export', { choice: 1 })).forModel, /Copied the whole mail to .*Τιμολόγιο Οκτωβρίου\.eml/)
+    assert.match((await tools.run('mail_export', { choice: 1, attachment: 'xlsx' })).forModel, /No attachment like "xlsx"; this mail has: Guide\.pdf/)
+    const docs = fs.readdirSync(path.join(dir, 'Files', 'Documents'))
+    assert.equal(docs.length, 3); assert.ok(docs.includes('Guide.pdf') && docs.includes('Guide (2).pdf') && docs.some(n => n.endsWith('Τιμολόγιο Οκτωβρίου.eml')))
+    assert.match((await new Tools({ mail, allowed: app => app !== 'mail' }).run('mail_find_local', {})).forModel, /switched AI Assist off for mail/)
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})

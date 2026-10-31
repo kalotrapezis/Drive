@@ -1480,3 +1480,12 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .mail-store-path { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 .mail-store .outline-button { justify-self: start; display: flex; align-items: center; gap: 8px; }
 .mail-store-total { margin-top: 8px !important; }
+/* «Αποθήκευση» in Mail: the archive on this computer, at the bottom of the folders (the user, 31 Oct) */
+.mail-local-head { margin-top: 10px; border-top: 1px solid var(--island-2); padding-top: 6px; border-radius: 0; }
+.mail-local-acc { display: flex; align-items: center; gap: 8px; padding: 6px 10px 2px 38px; font-size: 13px; color: var(--muted); }
+.mail-local-n { font-size: 12px; color: var(--muted); }
+.mail-local-mark { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #d9822b33; color: #e0a43a; vertical-align: 1px; }
+.mail-exports { display: flex; flex-wrap: wrap; gap: 4px; margin: -6px 0 10px; }
+.mail-exports .text-button { display: flex; align-items: center; gap: 6px; }
+.mail-file { display: inline-flex; align-items: center; gap: 2px; }
+.mail-file .round.small { width: 30px; height: 30px; }

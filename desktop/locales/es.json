@@ -2382,5 +2382,13 @@
  "mail.defaultOther": "Los enlaces de correo (mailto:) se abren ahora en {app}.",
  "mail.defaultNone": "Ninguna aplicación abre ahora los enlaces de correo (mailto:).",
  "mail.makeDefault": "Hacer de Tetra la aplicación predeterminada",
- "mail.mailtoNoAccount": "Para escribir este correo, primero añade una cuenta en Correo."
+ "mail.mailtoNoAccount": "Para escribir este correo, primero añade una cuenta en Correo.",
+ "mail.localHint": "El correo guardado en este PC, incluido lo que se borró del servidor",
+ "mail.localOnly": "solo aquí",
+ "mail.localOnlyN": "Solo aquí (borrados del servidor): {n}",
+ "mail.exportMail": "Exportar correo",
+ "mail.exportFile": "Exportar a Documentos",
+ "mail.saveAs": "Guardar como…",
+ "mail.exported": "Copiado: {name}",
+ "mail.show": "Mostrar"
 }

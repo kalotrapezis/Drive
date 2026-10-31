@@ -2412,5 +2412,13 @@
  "mail.defaultOther": "As ligações de correio (mailto:) abrem agora em {app}.",
  "mail.defaultNone": "Nenhuma aplicação abre agora as ligações de correio (mailto:).",
  "mail.makeDefault": "Tornar o Tetra a predefinição",
- "mail.mailtoNoAccount": "Para escrever este correio, adicione primeiro uma conta em Correio."
+ "mail.mailtoNoAccount": "Para escrever este correio, adicione primeiro uma conta em Correio.",
+ "mail.localHint": "O correio guardado neste PC, incluindo o que foi eliminado do servidor",
+ "mail.localOnly": "só aqui",
+ "mail.localOnlyN": "Só aqui (eliminados do servidor): {n}",
+ "mail.exportMail": "Exportar correio",
+ "mail.exportFile": "Exportar para Documentos",
+ "mail.saveAs": "Guardar como…",
+ "mail.exported": "Copiado: {name}",
+ "mail.show": "Mostrar"
 }

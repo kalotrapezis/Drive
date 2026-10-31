@@ -2501,5 +2501,13 @@
  "mail.defaultOther": "Linki e-mail (mailto:) otwiera teraz {app}.",
  "mail.defaultNone": "Obecnie żadna aplikacja nie otwiera linków e-mail (mailto:).",
  "mail.makeDefault": "Ustaw Tetra jako domyślną",
- "mail.mailtoNoAccount": "Aby napisać tę wiadomość, najpierw dodaj konto w aplikacji Poczta."
+ "mail.mailtoNoAccount": "Aby napisać tę wiadomość, najpierw dodaj konto w aplikacji Poczta.",
+ "mail.localHint": "Poczta przechowywana na tym komputerze, także ta usunięta z serwera",
+ "mail.localOnly": "tylko tutaj",
+ "mail.localOnlyN": "Tylko tutaj (usunięte z serwera): {n}",
+ "mail.exportMail": "Eksportuj wiadomość",
+ "mail.exportFile": "Eksportuj do Dokumentów",
+ "mail.saveAs": "Zapisz jako…",
+ "mail.exported": "Skopiowano: {name}",
+ "mail.show": "Pokaż"
 }

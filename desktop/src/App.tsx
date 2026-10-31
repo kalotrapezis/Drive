@@ -63,7 +63,7 @@ export function App() {
   // The photos the viewer pages through when it was opened from a map group; null is every item.
   const [scope, setScope] = useState<string[] | null>(null)
   const [dialog, setDialog] = useState<ReactNode>(null)
-  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null)
+  const [toast, setToast] = useState<{ text: string; undo?: () => void; label?: string } | null>(null)
   const [people, setPeople] = useState<Person[]>([])
   const [names, setNames] = useState<Record<string, string[]>>({})
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
@@ -179,7 +179,8 @@ export function App() {
   useEffect(() => { if (scoped?.length === 0) { setOpen(null); setScope(null) } }, [scoped])
 
   const picked = items.filter(m => selected.has(m.id))
-  const say = (text: string, undo?: () => void) => setToast({ text, undo })
+  /** A line at the bottom; [undo] a button on it, «Αναίρεση» or [label] («Εμφάνιση» after an export). */
+  const say = (text: string, undo?: () => void, label?: string) => setToast({ text, undo, label })
   const close = () => setDialog(null)
 
   async function run(fn: () => Promise<unknown>, done?: string) {
@@ -496,7 +497,7 @@ export function App() {
       {dialog}
       {!nas && <TimerBell />}
       {toast && <div className="island toast" role="status">{toast.text}
-        {toast.undo && <button className="text-button" onClick={() => { const u = toast.undo!; setToast(null); u() }}>{t('common.undo')}</button>}</div>}
+        {toast.undo && <button className="text-button" onClick={() => { const u = toast.undo!; setToast(null); u() }}>{toast.label ?? t('common.undo')}</button>}</div>}
     </div>
   )
 }

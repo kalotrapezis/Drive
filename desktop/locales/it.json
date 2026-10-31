@@ -2412,5 +2412,13 @@
  "mail.defaultOther": "I link di posta (mailto:) ora si aprono in {app}.",
  "mail.defaultNone": "Al momento nessuna app apre i link di posta (mailto:).",
  "mail.makeDefault": "Imposta Tetra come predefinita",
- "mail.mailtoNoAccount": "Per scrivere questa email, aggiungi prima un account in Posta."
+ "mail.mailtoNoAccount": "Per scrivere questa email, aggiungi prima un account in Posta.",
+ "mail.localHint": "La posta conservata su questo PC, compresa quella eliminata dal server",
+ "mail.localOnly": "solo qui",
+ "mail.localOnlyN": "Solo qui (eliminati dal server): {n}",
+ "mail.exportMail": "Esporta messaggio",
+ "mail.exportFile": "Esporta in Documenti",
+ "mail.saveAs": "Salva con nome…",
+ "mail.exported": "Copiato: {name}",
+ "mail.show": "Mostra"
 }
