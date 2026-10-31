@@ -14,7 +14,7 @@ Photos, files, notes, calendar, timers, maps, contacts, calls and data on Linux,
 ![Tetra on a computer, a tablet and a phone](Assets/cards/tetra-devices.jpg)
 
 The computer half of [Tetra for Android](https://github.com/kalotrapezis/Tetra-mobile): Photos, Files, Notes,
-Calendar, Timer, Maps\*, Contacts, Phone and Data on Linux, in sync with your phone and tablet over your own Wi-Fi.
+Calendar, Timer, Maps\*, Contacts, Phone, Data and Mail on Linux, in sync with your phone and tablet over your own Wi-Fi.
 Faces, documents and search labels are analysed on this computer.
 
 **0.6.0 Beta 32** ([what's new](https://github.com/kalotrapezis/Tetra/releases/tag/desktop-v0.6.0-beta.32)). A beta: keep
@@ -33,7 +33,7 @@ your own backups. Screenshots use invented sample data.
   in Settings › Guide, shows where to click and why.
 - **Your data plan, watched.** The phone's and the tablet's usage beside this computer's; the phone notifies you at 50 %,
   80 % and 100 % of your plan, or at any steps you choose.
-- **Calendar and timers, with AI.** Your calendars and timers are plain files in `~/Tetra/Files`, and Tetra comes with
+- **Calendar and timers, and AI if you want it.** Your calendars and timers are plain files in `~/Tetra/Files`, and Tetra comes with
   skills for them (*Share with Claude*). Ask Claude, ChatGPT or any assistant that can use your computer to import a
   timetable, plan your week or set a timer; the result reaches your phone with the next sync.
 - **Notes and lists, organised.** Notes and shopping lists with tags, the same on the phone and here. Each note is a
@@ -44,6 +44,12 @@ your own backups. Screenshots use invented sample data.
   older photos onto it so the computer's own disk stays as empty as possible.
 - **More than one copy, no subscription.** Tetra shows how many places hold each file, the phone, the tablet, the
   computer or a USB drive, and what still lives in only one. Your own backups, with no cloud plan to pay for.
+- **Mail, kept on this computer.** Every mail and attachment is saved as an ordinary file in `.System/Mail`: green when
+  it is saved here, orange when it is only on the server. Storage browses every stored mail, even ones deleted from the
+  server, and exports a mail or an attachment to Documents. Gmail (with an app password), school and Microsoft accounts
+  work; Microsoft needs a one-time app registration. Tetra can be the default email app.
+- **AI Assist, off until you switch it on.** It uses Mistral with your own key. One switch turns all AI off, and off means
+  nothing is sent anywhere; a switch per app decides what it may see.
 - **Maps that work offline.** Search, save places, lists and trips, and plan routes by car, on foot or by bike.
 
 <sub>\* Finding photos by place covers Greece only for now.</sub>
@@ -64,7 +70,7 @@ your own backups. Screenshots use invented sample data.
 ![A guide that shows you](Assets/cards/card-guide.jpg)
 ![In your language](Assets/cards/card-languages.jpg)
 
-Also here: **Devices**, to pair a phone or tablet by QR code with rules per device (send, both ways, or Move);
+Also here: **Devices**, to pair a phone or tablet by QR code, with a rule per app (off, a mirror, or a move, and how much stays on the device);
 **storage drives**, a USB disk as a verified backup or as storage that still shows in the library; and a Trash that
 waits 30 days, then 30 more in a purgatory, before anything is really gone. Each applet's screenshots, phone, tablet
 and computer apart, are on [the Tetra page](https://kalotrapezis.github.io/Tetra/).

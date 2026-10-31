@@ -93,6 +93,9 @@ NEW = {
     'guide': ('#8E99A6', [('d-guide-f3.png', 800, 'pc', 660, 80), ('t-guide-files.png', 520, 'tablet', 1010, 500)]),
     'languages': ('#8E99A6', [('t-language.png', 760, 'tablet', 810, 150), ('p-home-de.png', 250, 'phone', 680, 300)]),
     'phone-tablet': ('#1A9AA8', [('t-phone.png', 880, 'tablet', 680, 170)]),
+    'mail': ('#E8029A', [('d-mail.png', 820, 'pc', 640, 110), ('p-mail-storage.png', 250, 'phone', 1300, 230)]),
+    'devices': ('#2E9D4F', [('d-devices.png', 860, 'pc', 660, 130)]),
+    'ai': ('#FD6A04', [('d-ai-settings.png', 800, 'pc', 640, 110), ('p-ai-settings.png', 250, 'phone', 1300, 230)]),
 }
 
 def make_new(shots):
