@@ -366,7 +366,8 @@ test('mail: «Έλεγχος για νέα» — by hand, a look only when asked
     mail.syncNow() // Sync pressed, Mail opened, Tetra to the front, or the phone opening Mail
     await until(() => mail.list('Inbox').length === 2)
     assert.equal(c.events.filter(x => x === 'connect').length, 2)
-    mail.setCheck('push')
+    // a phone's choice, arriving by sync: the loops follow it as they do one made here
+    fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ check: 'push', setBy: '24129PN74G' }))
     await until(() => c.events.includes('idle'))
   } finally { mail.stopAll(); await new Promise(r => setTimeout(r, 100)); fs.rmSync(dir, { recursive: true, force: true }) }
 })

@@ -331,7 +331,7 @@ class Mail extends EventEmitter {
   /** Out of Tetra; its mail stays on disk and in the index (added again, nothing is fetched twice). */
   remove(id) { this.stop(id); this.saveAccounts(this.accounts().filter(a => a.id !== id)); delete this.state[id]; this.changed() }
 
-  startAll() { for (const a of this.accounts()) this.start(a); this.watchRequests() }
+  startAll() { this.checking = this.check(); for (const a of this.accounts()) this.start(a); this.watchRequests() }
   start(acc) {
     if (this.live.has(acc.id)) return
     const run = { acc, stop: false, client: null, wake: null }
@@ -344,7 +344,7 @@ class Mail extends EventEmitter {
     this.live.delete(id); run.stop = true; run.wake?.('stop')
     run.client?.logout().catch(() => run.client?.close())
   }
-  stopAll() { for (const id of [...this.live.keys()]) this.stop(id); for (const w of this.watchers ?? []) w.close(); clearInterval(this.retry); this.index.flush() }
+  stopAll() { for (const id of [...this.live.keys()]) this.stop(id); for (const w of this.watchers ?? []) w.close(); clearInterval(this.retry); clearTimeout(this.settling); this.index.flush() }
   /** archiveBy (year, month, none) and the like, kept in accounts.json. */
   setAccount(id, changes) {
     const list = this.accounts(), a = list.find(x => x.id === id)
@@ -370,8 +370,15 @@ class Mail extends EventEmitter {
     try { was = JSON.parse(fs.readFileSync(file, 'utf8')) } catch {}
     fs.mkdirSync(this.root, { recursive: true })
     fs.writeFileSync(part(file), JSON.stringify({ ...was, check, setAt: Date.now(), setBy: 'desktop' }, null, 2)); fs.renameSync(part(file), file)
-    for (const acc of this.accounts()) if (this.live.has(acc.id)) { this.stop(acc.id); this.start(acc) } // the new way from now
+    this.checked()
     return check
+  }
+  /** The check as settings.json says it now (set here, or by a phone, arriving by sync): the accounts' loops the new way. */
+  checked() {
+    const check = this.check()
+    if (check === this.checking) return
+    this.checking = check
+    for (const acc of this.accounts()) if (this.live.has(acc.id)) { this.stop(acc.id); this.start(acc) }
   }
   /** Another pass soon; remembered when it comes between two passes, so it is never lost. */
   kick(id, what = 'all') { const run = this.live.get(id); if (!run) return; run.again = run.again === 'all' ? 'all' : what; run.wake?.(what) }
@@ -738,6 +745,7 @@ class Mail extends EventEmitter {
     let again = null
     try {
       this.watchers.push(fs.watch(this.root, (_, name) => {
+        if (name === 'settings.json') { clearTimeout(this.settling); this.settling = setTimeout(() => this.checked(), 1000); return } // a phone's «Έλεγχος για νέα»
         if (!/^(index\..+\.jsonl|accounts\..+\.json)$/.test(String(name ?? ''))) return
         clearTimeout(again); again = setTimeout(() => { this.loadForeign(); this.changed() }, 1000)
       }))
