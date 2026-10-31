@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { MailAccount, MailAddress, MailCleanPlan, MailDevice, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import type { MailAccount, MailAddress, MailCheck, MailCleanPlan, MailDevice, MailDraft, MailDraftKind, MailEntry, MailFilter, MailFolder, MailGarbage, MailOp, MailOpened, MailPrivacy, MailRole, MailServer, MailSignature, MailState } from './drive'
 import { formatBytes } from './timeline'
 import { arrange, dayKey, DEFAULT_VIEW, type MailView } from './mailView'
 import { Confirm, Modal, errorText } from './Dialogs'
@@ -35,6 +35,53 @@ function Count({ unread, orange }: { unread: number; orange: number }) {
   return <span className={`mail-count ${orange ? 'orange' : 'green'}`} title={orange ? t('mail.nOnlyServer', { count: orange }) : t('mail.local')}>{unread || '•'}</span>
 }
 
+type BarItem = { key: string; rank: number; icon: IconName; label: string; onClick: () => void; cls?: string; sep?: boolean; wide?: boolean }
+const SEARCH_MIN = 170, MORE = 52 // the search box's least width, and the ⋯ button's
+/**
+ * The action bar as wide as the window lets it be (the user, 31 Oct: "add a more button to the menu if it shrinks too much"):
+ * every item is measured once, then those of the lowest importance (highest rank) go under «⋯ Περισσότερα», in their order.
+ */
+function MailBar({ items, children }: { items: BarItem[]; children: ReactNode }) {
+  const bar = useRef<HTMLDivElement>(null)
+  const widths = useRef(new Map<string, number>())
+  const sig = items.map(i => `${i.key}:${i.label}`).join()
+  const [m, setM] = useState<{ sig: string; shown: Set<string> } | null>(null)
+  const [open, setOpen] = useState(false)
+  const shown = m?.sig === sig ? m.shown : null // null: everything drawn, to be measured
+  useLayoutEffect(() => {
+    if (shown || !bar.current) return
+    for (const b of bar.current.querySelectorAll<HTMLElement>('[data-key]')) widths.current.set(b.dataset.key!, b.offsetWidth + 4 + (b.previousElementSibling?.classList.contains('mail-bar-sep') ? 13 : 0))
+    const room = bar.current.clientWidth - 16 - SEARCH_MIN, w = (i: BarItem) => widths.current.get(i.key) ?? 52
+    const all = items.reduce((n, i) => n + w(i), 0)
+    const keep = new Set<string>()
+    let used = MORE
+    if (all <= room) items.forEach(i => keep.add(i.key))
+    else for (const i of [...items].sort((a, b) => a.rank - b.rank)) { if (used + w(i) > room) break; used += w(i); keep.add(i.key) }
+    setM({ sig, shown: keep })
+  }, [shown, sig])
+  useEffect(() => { const ro = new ResizeObserver(() => setM(null)); if (bar.current) ro.observe(bar.current); return () => ro.disconnect() }, [])
+  const hidden = shown ? items.filter(i => !shown.has(i.key)) : []
+  let any = false
+  return (
+    <div className="mail-bar island" ref={bar}>
+      {items.filter(i => !shown || shown.has(i.key)).map(i => {
+        const sep = i.sep && any; any = true
+        return <span key={i.key} className="mail-bar-slot">{sep && <span className="mail-bar-sep" />}
+          <button data-key={i.key} className={`mail-bar-item ${i.wide || i.cls === 'new' || i.cls === 'send' ? '' : 'act'} ${i.cls ?? ''}`} title={i.label} onClick={i.onClick}>
+            <Icon name={i.icon} size={20} /><span>{i.label}</span></button></span>
+      })}
+      {hidden.length > 0 && <div className="mail-more-menu">
+        <button className={`mail-bar-item ${open ? 'on' : ''}`} title={t('mail.moreActions')} aria-expanded={open} onClick={() => setOpen(o => !o)}><Icon name="more" size={20} /></button>
+        {open && <><div className="mail-more-scrim" onClick={() => setOpen(false)} />
+          <div className="island menu-body mail-more-list" role="menu">
+            {hidden.map(i => <button key={i.key} role="menuitem" className="sheet-row" onClick={() => { setOpen(false); i.onClick() }}><Icon name={i.icon} size={20} />{i.label}</button>)}
+          </div></>}
+      </div>}
+      {children}
+    </div>
+  )
+}
+
 export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void; say: (s: string) => void }) {
   const [data, setData] = useState<Data | null>(null)
   const [where, setWhere] = useState<{ role: MailRole; account: string | null }>({ role: 'Inbox', account: null })
@@ -57,6 +104,7 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
     window.drive.mail.list(whereRef.current.role, whereRef.current.account).then(setMails)
   }
   useEffect(() => { setLimit(PAGE); reload() }, [where])
+  useEffect(() => { window.drive.mail.sync() }, []) // Mail opened: a look for new mail now (the user, 31 Oct)
   // while the first download runs main says so twice a second; the list is read again at most every two
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -106,37 +154,35 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
   let shown = 0
   return (
     <div className="mail-page">
-      <div className="mail-bar island">
-        <button className="mail-bar-item new" onClick={() => write(null, 'new')}><Icon name="add" size={20} /><span>{t('mail.new')}</span></button>
-        <button className="mail-bar-item act" title={t('mail.sync')} onClick={() => window.drive.mail.sync()}><Icon name="refresh" size={20} /><span>{t('mail.sync')}</span></button>
-        <button className={`mail-bar-item act ${filtered ? 'on' : ''}`} title={t('mail.filter')} onClick={filter}><Icon name="filter" size={20} /><span>{t('mail.filter')}</span></button>
-        <button className="mail-bar-item act" title={t('mail.accounts')} onClick={manage}><Icon name="person" size={20} /><span>{t('mail.accounts')}</span></button>
-        {draft && <>
-          <span className="mail-bar-sep" />
-          <button className="mail-bar-item send" onClick={() => composer.current?.send()}><Icon name="send" size={20} /><span>{t('mail.send')}</span></button>
-          <button className="mail-bar-item" onClick={() => composer.current?.save()}><Icon name="save" size={20} /><span>{t('mail.saveDraft')}</span></button>
-          <button className="mail-bar-item act" title={t('mail.attach')} onClick={() => composer.current?.attach()}><Icon name="attach" size={20} /><span>{t('mail.attach')}</span></button>
-          <button className="mail-bar-item act" title={t('mail.ccBcc')} onClick={() => composer.current?.cc()}><Icon name="person" size={20} /><span>{t('mail.ccBcc')}</span></button>
-          <button className="mail-bar-item act" title={t('mail.discard')} onClick={() => composer.current?.discard()}><Icon name="deleteForever" size={20} /><span>{t('mail.discard')}</span></button>
-        </>}
-        {current && !draft && !accounts.get(current.account)?.shadow && <>
-          <span className="mail-bar-sep" />
-          <button className="mail-bar-item act" title={t('mail.reply')} onClick={() => write(current.id, 'reply')}><Icon name="reply" size={20} /><span>{t('mail.reply')}</span></button>
-          <button className="mail-bar-item act" title={t('mail.replyAll')} onClick={() => write(current.id, 'replyAll')}><Icon name="replyAll" size={20} /><span>{t('mail.replyAll')}</span></button>
-          <button className="mail-bar-item act" title={t('mail.forward')} onClick={() => write(current.id, 'forward')}><Icon name="mailForward" size={20} /><span>{t('mail.forward')}</span></button>
-          <button className="mail-bar-item act" title={t('mail.forwardAttached')} onClick={() => write(current.id, 'forwardAttached')}><Icon name="attach" size={20} /><span>{t('mail.forwardAttached')}</span></button>
-          <span className="mail-bar-sep" />
-          {current.folder !== 'Archive' && <button className="mail-bar-item act" title={t('mail.archive')} onClick={() => away('archive')}><Icon name="archive" size={20} /><span>{t('mail.archive')}</span></button>}
-          <button className="mail-bar-item act" title={t('common.delete')} onClick={() => away('delete')}><Icon name="trash" size={20} /><span>{t('common.delete')}</span></button>
-          {current.folder === 'Spam'
-            ? <button className="mail-bar-item act" title={t('mail.notSpam')} onClick={() => away('notSpam')}><Icon name="mail" size={20} /><span>{t('mail.notSpam')}</span></button>
-            : <button className="mail-bar-item act" title={t('mail.spam')} onClick={() => away('spam')}><Icon name="warning" size={20} /><span>{t('mail.spam')}</span></button>}
-          <button className="mail-bar-item act" title={t(current.seen ? 'mail.markUnread' : 'mail.markRead')} onClick={() => act(current.seen ? 'unread' : 'read', [current.id])}><Icon name={current.seen ? 'visibilityOff' : 'visibility'} size={20} /><span>{t(current.seen ? 'mail.markUnread' : 'mail.markRead')}</span></button>
-          <button className="mail-bar-item act" title={t('common.move')} onClick={moveTo}><Icon name="moveTo" size={20} /><span>{t('common.move')}</span></button>
-        </>}
+      <MailBar items={[
+        { key: 'new', rank: 0, cls: 'new', icon: 'add', label: t('mail.new'), onClick: () => write(null, 'new') },
+        { key: 'sync', rank: 7, icon: 'refresh', label: t('mail.sync'), onClick: () => window.drive.mail.sync() },
+        { key: 'filter', rank: 6, cls: filtered ? 'on' : '', icon: 'filter', label: t('mail.filter'), onClick: filter },
+        { key: 'accounts', rank: 8, icon: 'person', label: t('mail.accounts'), onClick: manage },
+        ...(draft ? [
+          { key: 'send', rank: 0, cls: 'send', label: t('mail.send'), icon: 'send', onClick: () => composer.current?.send(), sep: true, wide: true },
+          { key: 'save', rank: 1, label: t('mail.saveDraft'), icon: 'save', onClick: () => composer.current?.save(), wide: true },
+          { key: 'attach', rank: 2, label: t('mail.attach'), icon: 'attach', onClick: () => composer.current?.attach() },
+          { key: 'cc', rank: 4, label: t('mail.ccBcc'), icon: 'person', onClick: () => composer.current?.cc() },
+          { key: 'discard', rank: 3, label: t('mail.discard'), icon: 'deleteForever', onClick: () => composer.current?.discard() },
+        ] as BarItem[] : []),
+        ...(current && !draft && !accounts.get(current.account)?.shadow ? [
+          { key: 'reply', rank: 1, label: t('mail.reply'), icon: 'reply', onClick: () => write(current.id, 'reply'), sep: true },
+          { key: 'replyAll', rank: 3, label: t('mail.replyAll'), icon: 'replyAll', onClick: () => write(current.id, 'replyAll') },
+          { key: 'forward', rank: 3, label: t('mail.forward'), icon: 'mailForward', onClick: () => write(current.id, 'forward') },
+          { key: 'forwardAttached', rank: 5, label: t('mail.forwardAttached'), icon: 'attach', onClick: () => write(current.id, 'forwardAttached') },
+          ...(current.folder !== 'Archive' ? [{ key: 'archive', rank: 2, label: t('mail.archive'), icon: 'archive', onClick: () => away('archive'), sep: true }] as BarItem[] : []),
+          { key: 'delete', rank: 2, label: t('common.delete'), icon: 'trash', onClick: () => away('delete'), sep: current.folder === 'Archive' },
+          current.folder === 'Spam'
+            ? { key: 'notSpam', rank: 4, label: t('mail.notSpam'), icon: 'mail', onClick: () => away('notSpam') }
+            : { key: 'spam', rank: 4, label: t('mail.spam'), icon: 'warning', onClick: () => away('spam') },
+          { key: 'read', rank: 4, label: t(current.seen ? 'mail.markUnread' : 'mail.markRead'), icon: current.seen ? 'visibilityOff' : 'visibility', onClick: () => act(current.seen ? 'unread' : 'read', [current.id]) },
+          { key: 'move', rank: 5, label: t('common.move'), icon: 'moveTo', onClick: moveTo },
+        ] as BarItem[] : []),
+      ]}>
         <label className="mail-search"><Icon name="search" size={18} />
           <input value={query} placeholder={t('mail.search')} onChange={e => { setQuery(e.target.value); setLimit(PAGE) }} /></label>
-      </div>
+      </MailBar>
       {data?.accounts.some(a => !a.shadow && !a.cleanConfirmed && (a.serverClean.on !== false || a.localClean.on)) && <div className="mail-banner island">
         <span>{t('mail.cleanBanner')}</span>
         <button className="text-button" onClick={() => setDialog(<CleanCheck accounts={data.accounts.filter(a => !a.shadow && !a.cleanConfirmed)} onClose={() => { close(); reload() }} />)}>{t('mail.check')}</button>
@@ -678,7 +724,25 @@ export function CleanCheck({ accounts, onClose }: { accounts: MailAccount[]; onC
 
 /** Settings › Αλληλογραφία: signatures, archive and clean-up, filters, spam, privacy (MAIL_PLAN §9c). */
 export function MailSettings() {
-  return <><MailSignatures /><CleanCard /><FiltersCard /><SpamCard /><PrivacyCard /><MicrosoftCard /></>
+  return <><CheckCard /><MailSignatures /><CleanCard /><FiltersCard /><SpamCard /><PrivacyCard /><MicrosoftCard /></>
+}
+
+/** «Έλεγχος για νέα» (the user, 31 Oct: "how often does it check for new mails?"): every account on this computer. */
+function CheckCard() {
+  const [check, setCheck] = useState<MailCheck | null>(null)
+  useEffect(() => { window.drive.mail.check().then(setCheck) }, [])
+  if (check === null) return null
+  const set = (c: MailCheck) => window.drive.mail.setCheck(c).then(setCheck)
+  return (
+    <section className="settings-card island">
+      <h3><Icon name="refresh" size={20} />{t('mail.checkTitle')}</h3>
+      <div className="segmented mail-every">
+        {(['push', 5, 15, 30, 'manual'] as MailCheck[]).map(c => <button key={c} className={check === c ? 'on' : ''} onClick={() => set(c)}>
+          {c === 'push' ? t('mail.checkPush') : c === 'manual' ? t('mail.checkManual') : t('mail.checkMinutes', { n: c })}</button>)}
+      </div>
+      <p className="muted">{t(check === 'push' ? 'mail.checkPushHow' : check === 'manual' ? 'mail.checkManualHow' : 'mail.checkEveryHow', { n: typeof check === 'number' ? check : 0 })}</p>
+    </section>
+  )
 }
 
 /** The Microsoft app's id (MAIL_PLAN §13): registered once by the user; Hotmail and Microsoft 365 sign in through it. */

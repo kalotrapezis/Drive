@@ -1336,10 +1336,26 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .mail-summary > div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--hover); }
 .mail-summary > div:last-child { border-bottom: 0; }
 .mail-summary > div > span:last-child { color: var(--muted); text-align: right; display: flex; align-items: center; gap: 6px; }
-.mail-bar { overflow-x: auto; scrollbar-width: none; }
+.mail-bar { overflow: visible; flex-wrap: nowrap; min-width: 0; position: relative; z-index: 5; }
+.mail-bar-slot { display: contents; }
+.mail-more-menu { position: relative; flex: none; }
+.mail-more-scrim { position: fixed; inset: 0; z-index: 4; }
+.mail-more-list { top: 52px; left: 0; right: auto; width: 260px; padding: 8px 14px; }
+.mail-more-list .sheet-row { display: flex; align-items: center; gap: 12px; }
+.mail-search { min-width: 170px; flex: 1 1 auto; max-width: 420px; }
 .mail-bar-sep { width: 1px; height: 24px; background: var(--island-2); margin: 0 6px; flex: none; }
 .mail-bar-item { flex: none; }
 @media (max-width: 1500px) { .mail-bar-item.act span { display: none; } }
+/* narrower windows (the user, 31 Oct: the whole app down to ~800 px): the folders become a rail of icons, the columns give way */
+@media (max-width: 1250px) { .mail-columns { grid-template-columns: minmax(150px, 200px) minmax(220px, 320px) minmax(280px, 1fr); } }
+@media (max-width: 1050px) {
+  .mail-columns { grid-template-columns: 60px minmax(200px, 280px) minmax(260px, 1fr); gap: 8px; }
+  .mail-folders { padding: 8px 4px; }
+  .mail-folder-name span, .mail-twisty, .mail-folder.sub, .mail-folders-foot, .mail-folder .mail-count { display: none; }
+  .mail-folder { justify-content: center; padding: 0; }
+  .mail-folder-name { flex: none; justify-content: center; padding: 10px; }
+  .mail-reader { padding: 16px 16px 24px; }
+}
 .mail-row { cursor: pointer; }
 .mail-heart { border-radius: 50%; width: 32px; height: 32px; display: grid; place-items: center; right: 4px; }
 .mail-heart:hover { background: var(--hover); opacity: 1; }
@@ -1415,3 +1431,43 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .mail-acc-name:focus { border-bottom-style: solid; border-color: var(--accent); }
 .ai-master { font-size: 15px; color: var(--text); }
 .ai-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0 12px; }
+
+/* A device's card (DeviceCard.tsx, the user 31 Oct): a sentence per applet in its colour, one Edit button; the guide's four steps */
+.device-grid { grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); align-items: start; }
+.device-card { min-width: 0; overflow-wrap: anywhere; }
+.device-card .rule-options .rule-label { white-space: normal; }
+.device-says { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; }
+.device-says li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; font-size: 14px; line-height: 1.4;
+  background: color-mix(in srgb, var(--c) 14%, transparent); border-left: 4px solid var(--c); }
+.device-says li > svg { color: var(--c); flex: none; margin-top: 1px; }
+.device-says li b { color: var(--c); font-weight: 600; }
+.device-says li.off { background: none; border-left-color: var(--island-2); color: var(--muted); }
+.device-says li.off b, .device-says li.off > svg { color: var(--muted); }
+.device-full { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 14px; background: #d9822b22; color: #e0a43a; font-size: 14px; }
+.device-full span { flex: 1 1 200px; }
+.device-edit { justify-self: center; display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.guide-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0 0 18px; font-size: 13px; color: var(--muted); }
+.guide-steps li { padding: 4px 10px; border-radius: 999px; background: var(--island-2); }
+.guide-steps li.on { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+.guide-steps li.done { color: var(--text); text-decoration: none; }
+.guide-steps li { text-decoration: none !important; }
+.applet-pick .glyph { color: var(--c); }
+.transfer-map { border: 2px solid color-mix(in srgb, var(--c) 45%, transparent); display: grid; grid-template-columns: 1fr minmax(110px, 1.2fr) 1fr; align-items: center; gap: 8px; padding: 18px 12px; border-radius: 18px; background: var(--island-2); text-align: center; }
+.map-end { display: grid; justify-items: center; gap: 4px; }
+.map-end small, .map-way small { color: var(--muted); font-size: 13px; }
+.map-way { display: grid; justify-items: center; gap: 2px; color: var(--c); }
+.map-arrow { width: 100%; max-width: 160px; height: 24px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.map-way.off { color: var(--muted); }
+.map-say { grid-column: 1 / -1; margin: 8px 0 0 !important; text-align: left; color: var(--text) !important; }
+.mail-every { margin-top: 4px; }
+@media (max-width: 560px) { .transfer-map { grid-template-columns: 1fr; } .map-arrow { rotate: 90deg; width: 60px; } }
+/* The window under 1000 px (the user, 31 Oct: the whole app down to ~800 px): the side menu keeps its icons, each named on hover */
+@media (max-width: 1000px) {
+  .rail { width: 64px; padding: 16px 6px; overflow-y: auto; scrollbar-width: none; }
+  .brand { justify-content: center; padding: 4px 0 16px; font-size: 0; }
+  .brand .alpha-badge, .brand .beta-badge, .rail-progress, .rail-foot > :not(button), .rail-group { display: none; }
+  .nav-item { justify-content: center; padding: 12px 0; font-size: 0; position: relative; }
+  .nav-item .badge-count { position: absolute; font-size: 11px; translate: 12px -10px; }
+  .rail-foot { justify-content: center; padding: 0; }
+}
+.mail-more-list { left: auto; right: 0; z-index: 6; }

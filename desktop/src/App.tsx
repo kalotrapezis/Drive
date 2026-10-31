@@ -282,7 +282,7 @@ export function App() {
   }
 
   const nav = (target: Page, active: boolean, icon: IconName, label: string) => (
-    <button className={`nav-item ${active ? 'active' : ''}`} onClick={() => setPage(target)}><Icon name={icon} /><span>{label}</span></button>
+    <button className={`nav-item ${active ? 'active' : ''}`} title={label} onClick={() => setPage(target)}><Icon name={icon} /><span>{label}</span></button>
   )
   const filesMode = page.kind === 'files' && !(page.mode === 'browse' && page.folder.startsWith('Trash')) ? page.mode : null
   const inFilesTrash = page.kind === 'files' && page.mode === 'browse' && page.folder.startsWith('Trash')
@@ -433,7 +433,7 @@ export function App() {
           </div>
         )}
         <div className="rail-bottom">
-          <button className={`nav-item ${page.kind === 'notifications' ? 'active' : ''}`} onClick={() => setPage({ kind: 'notifications' })}>
+          <button className={`nav-item ${page.kind === 'notifications' ? 'active' : ''}`} title={t('app.notifications')} onClick={() => setPage({ kind: 'notifications' })}>
             <Icon name="bell" /><span>{t('app.notifications')}</span>{unread > 0 && <span className="badge-count">{unread}</span>}</button>
           {nav({ kind: 'settings' }, page.kind === 'settings', 'settings', t('app.settings'))}
         </div>

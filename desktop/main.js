@@ -571,6 +571,20 @@ app.whenReady().then(() => {
   sync = new SyncServer({ db, documents, people, files, notes, onNotes: () => win?.webContents.send('notes-changed'), onNotesSynced: s => win?.webContents.send('notes-synced', s), dataDir: DATA_DIR, photosRoot: PHOTOS_ROOT, trashItem: f => shell.trashItem(f), purgatory, data: dataCounter, port: Number(process.env.DRIVE_PORT) || undefined,
     // a call answered on a client computer: its sound from and to the phone on this one's Bluetooth (callaudio.js)
     soundHere: () => !!calls?.bt.phones.some(p => p.connected),
+    // a device's Mail row (its card's guide), the phone opening Mail, and «Χρήση και σε αυτή τη συσκευή» (MAIL_PLAN §15)
+    mail: {
+      rule: (device, row, name) => mail.setDevice(device, { name, off: row.direction === 'off', mode: row.direction === 'send' ? 'move' : 'copy',
+        limit: row.keepBytes ?? -1, keepDays: row.keepBytes == null && !row.keepAuto && row.direction !== 'off' ? row.keepDays : null, auto: row.keepAuto }),
+      sync: () => mail.syncNow(),
+      credentials: id => {
+        const acc = mail.accounts().find(a => a.id === id)
+        if (!acc) return null
+        const base = { account: acc.id, address: acc.address, name: acc.name, server: acc.server, smtp: acc.smtp, provider: acc.provider ?? null }
+        if (acc.auth === 'microsoft') return { ...base, signIn: 'microsoft' } // the phone signs in itself: no token leaves this computer
+        const password = mailSecret(acc.id)
+        return password ? { ...base, user: acc.server.user, password } : null
+      },
+    },
     callAudio: async (received, send) => {
       const d = await callaudio.bluez()
       if (!d.source || !d.sink) throw new Error('The phone\'s call sound is not on this computer\'s Bluetooth.')
@@ -1315,6 +1329,8 @@ app.whenReady().then(() => {
   ipcMain.handle('mail:junk', () => { const j = mail.junk(); return { on: j.on, nSpam: j.nSpam, nHam: j.nHam, ready: j.ready() } })
   ipcMain.handle('mail:setJunk', (_, on) => { const j = mail.junk(); j.on = !!on; j.save() })
   ipcMain.handle('mail:privacy', () => mail.privacy())
+  ipcMain.handle('mail:check', () => mail.check())
+  ipcMain.handle('mail:setCheck', (_, c) => mail.setCheck(c))
   ipcMain.handle('mail:setPrivacy', (_, p) => mail.setPrivacy(p))
   ipcMain.handle('mail:detect', (_, address) => isAddress(address) ? detectMail(address.trim().toLowerCase()) : null)
   ipcMain.handle('mail:add', async (_, address, server, pass) => {
@@ -1448,6 +1464,9 @@ app.whenReady().then(() => {
     else if (p.selectionText.trim()) items.push({ role: 'copy', label: t('common.copy') })
     if (items.length) Menu.buildFromTemplate(items).popup({ window: win })
   })
+  // Tetra brought to the front: a look for new mail now (the user, 31 Oct), at most once a minute
+  let mailLooked = 0
+  win.on('focus', () => { if (Date.now() - mailLooked > 60_000) { mailLooked = Date.now(); mail?.syncNow() } })
   watchCalendar()
   watchContacts()
   setTimeout(linkContactFaces, 30_000); setInterval(linkContactFaces, 5 * 60_000) // Photos' names and portraits, as they change or arrive from the phone

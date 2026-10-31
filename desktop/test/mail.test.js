@@ -342,3 +342,31 @@ test('mail: each device\'s mail storage is read and set here in the phone\'s own
     assert.ok(mail.usedHere().used > 0)
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
+
+test('mail: «Έλεγχος για νέα» — by hand, a look only when asked, with no connection kept in between; at once is IDLE', async () => {
+  const dir = tmp()
+  const folders = { INBOX: { validity: 1, next: 2, msgs: { 1: message('Πρώτο', 'one') } } }
+  const c = memoryServer(folders)
+  const mail = new Mail(dir, { secret: () => 'x', connect: () => c })
+  const until = async ok => { const end = Date.now() + 5000; while (!ok()) { if (Date.now() > end) throw new Error(JSON.stringify(c.events)); await new Promise(r => setTimeout(r, 20)) } }
+  try {
+    assert.equal(mail.check(), 'push', 'at once, unless said otherwise')
+    assert.throws(() => mail.setCheck(7))
+    mail.setCheck('manual')
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8')).check, 'manual')
+    mail.saveAccounts([{ id: 'a@b.gr', server: { host: 'x', user: 'a' }, serverClean: { on: false }, localClean: { on: false } }])
+    mail.startAll()
+    await until(() => mail.status()['a@b.gr']?.synced)
+    await until(() => c.events.includes('logout'))
+    assert.equal(c.events.filter(x => x === 'connect').length, 1)
+    assert.ok(!c.events.includes('idle'), 'no IDLE by hand')
+    folders.INBOX.msgs[2] = message('Δεύτερο', 'two')
+    await new Promise(r => setTimeout(r, 300))
+    assert.equal(mail.list('Inbox').length, 1, 'nothing looked for unasked')
+    mail.syncNow() // Sync pressed, Mail opened, Tetra to the front, or the phone opening Mail
+    await until(() => mail.list('Inbox').length === 2)
+    assert.equal(c.events.filter(x => x === 'connect').length, 2)
+    mail.setCheck('push')
+    await until(() => c.events.includes('idle'))
+  } finally { mail.stopAll(); await new Promise(r => setTimeout(r, 100)); fs.rmSync(dir, { recursive: true, force: true }) }
+})

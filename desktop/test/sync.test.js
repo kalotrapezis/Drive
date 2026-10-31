@@ -373,7 +373,8 @@ test('drive files: the computer asks only for what it lacks, and follows a move 
   const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
   const sha = b => crypto.createHash('sha256').update(b).digest('hex')
   try {
-    const { token } = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    const { token, deviceId } = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    server.completeSetup(deviceId) // a device not set up yet is asked for nothing (its rows are Off)
     const pdf = Buffer.from('%PDF-1.4 scanned receipt'), pdfHash = sha(pdf)
     const manifest = json => call('POST', '/files/manifest', { token, json })
 
@@ -760,8 +761,10 @@ test('the other direction: what this computer offers, and a connection that says
 
     // Out of the box a pairing is Send & receive, so it is offered.
     assert.deepEqual(server.connections(device), [
-      { content: 'photos', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true },
-      { content: 'files', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true },
+      { content: 'photos', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true, keepAuto: false, keepBytes: null },
+      { content: 'files', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true, keepAuto: false, keepBytes: null },
+      { content: 'mail', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true, keepAuto: false, keepBytes: 1e9 },
+      { content: 'other', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true, keepAuto: false, keepBytes: null },
     ])
     let r = await call('POST', '/library/manifest', { token, json: { hashes: [] } })
     assert.deepEqual(r.body.send, [{ sha256: jpgHash, path: 'DCIM/Camera', name: 'computer.jpg', size: jpg.length, modified: 1 }])
@@ -816,14 +819,14 @@ test('the other direction: what this computer offers, and a connection that says
 
     // Two-way and "keep nothing after sending" cannot both be true.
     assert.deepEqual(server.setConnection(device, 'photos', { direction: 'both', keep: 'nothing' }),
-      { content: 'photos', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true })
+      { content: 'photos', direction: 'both', keep: 'everything', keepDays: 30, keepFavorites: true, keepAuto: false, keepBytes: null })
 
     // One direction can be a Move, and the device is told so — it is the one that acts on it.
     // A Move keeps a window on the device (never everything, or it is a Copy), and the device is told it.
     assert.deepEqual(server.setConnection(device, 'photos', { direction: 'send', keep: 'nothing', keepDays: 90, keepFavorites: false }),
-      { content: 'photos', direction: 'send', keep: 'nothing', keepDays: 90, keepFavorites: false })
+      { content: 'photos', direction: 'send', keep: 'nothing', keepDays: 90, keepFavorites: false, keepAuto: false, keepBytes: null })
     assert.deepEqual((await call('GET', '/connections', { token })).body.connections.find(c => c.content === 'photos'),
-      { content: 'photos', direction: 'send', keep: 'nothing', keepDays: 90, keepFavorites: false })
+      { content: 'photos', direction: 'send', keep: 'nothing', keepDays: 90, keepFavorites: false, keepAuto: false, keepBytes: null })
     assert.equal(server.setConnection(device, 'photos', { direction: 'send', keep: 'nothing', keepDays: 0 }).keepDays, 90, 'no zero window')
 
     // Off is a real answer: nothing crosses, and the device is not even told there is something new.
@@ -895,6 +898,9 @@ test('the computer can only say "there is something new"; the phone it says it t
     const only = db.prepare('SELECT id FROM sync_devices').get().id
     server.setConnection(only, 'photos', { direction: 'send', keep: 'everything' })
     server.setConnection(only, 'files', { direction: 'send', keep: 'everything' })
+    // Mail and Others have rows of their own now (31 Oct), copies to the device until said otherwise
+    server.setConnection(only, 'mail', { direction: 'off', keep: 'everything' })
+    server.setConnection(only, 'other', { direction: 'off', keep: 'everything' })
     await server.nudge()
     assert.deepEqual(asked, [])
   } finally {
@@ -1607,6 +1613,124 @@ test('Send to phone: the files go to the paired phone, verified there, and only 
     assert.deepEqual(got, [])
   } finally {
     await new Promise(r => phone.close(r))
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('mail, files and the apps\' folders each obey their own row on the device card (31 Oct)', async () => {
+  // The user: "mail and files are one thing" — Mail followed Files. Now Off for Mail stops mail and nothing else.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-applets-'))
+  const root = path.join(tmp, 'Drive')
+  fs.mkdirSync(path.join(root, 'Notes'), { recursive: true })
+  const db = library.open(path.join(tmp, 'data'))
+  const files = new Files(db, root)
+  const rules = []
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
+    dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0, mail: { rule: (...a) => rules.push(a) } }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  try {
+    fs.writeFileSync(path.join(root, 'Notes', 'a.txt'), 'note')
+    for (const [rel, text] of [['Mail/accounts.json', '[]'], ['Calendar/Personal/e.ics', 'BEGIN:VCALENDAR'], ['Mail/a@b.gr/Inbox/2026/2026-10-31 0900 x - y.eml', 'Subject: y']]) {
+      fs.mkdirSync(path.dirname(files.disk(rel)), { recursive: true }); fs.writeFileSync(files.disk(rel), text)
+    }
+    const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    server.setConnection(paired.deviceId, 'files', { direction: 'both', keep: 'everything' })
+    server.completeSetup(paired.deviceId)
+    // Mail and Others had no rows: they start as Files was, a copy
+    assert.deepEqual(server.connections(paired.deviceId).map(c => [c.content, c.direction]), [['photos', 'both'], ['files', 'both'], ['mail', 'both'], ['other', 'both']])
+    const offered = async () => (await call('POST', '/files/manifest', { token: paired.token, json: { files: [], device: { mail: '24129PN74G', free: 1e9, size: 128e9 } } })).body.have.map(h => h.path).sort()
+    assert.deepEqual(await offered(), ['Calendar/Personal/e.ics', 'Mail/a@b.gr/Inbox/2026/2026-10-31 0900 x - y.eml', 'Mail/accounts.json', 'Notes/a.txt'])
+    const d = server.devices().find(x => x.id === paired.deviceId)
+    assert.deepEqual([d.storageFree, d.storageSize, d.mailDevice], [1e9, 128e9, '24129PN74G'], 'the phone said its storage and its mail name')
+    assert.equal(rules.at(-1)[0], '24129PN74G', 'a new mail name gets its Mail row written at once')
+
+    server.setConnection(paired.deviceId, 'mail', { direction: 'off', keep: 'everything' })
+    assert.deepEqual(rules.at(-1).slice(0, 2), ['24129PN74G', { content: 'mail', direction: 'off', keep: 'everything', keepDays: 30, keepFavorites: true, keepAuto: false, keepBytes: 1e9 }])
+    assert.deepEqual(await offered(), ['Calendar/Personal/e.ics', 'Notes/a.txt'], 'Mail off: no mail, the rest as it was')
+    assert.equal((await call('GET', '/mail/file?path=Mail%2Faccounts.json', { token: paired.token, raw: true })).status, 403)
+    server.setConnection(paired.deviceId, 'mail', { direction: 'both', keep: 'everything', keepBytes: 2e9 })
+    server.setConnection(paired.deviceId, 'files', { direction: 'off', keep: 'everything' })
+    assert.deepEqual(await offered(), ['Calendar/Personal/e.ics', 'Mail/a@b.gr/Inbox/2026/2026-10-31 0900 x - y.eml', 'Mail/accounts.json'], 'Files off: mail and the calendar still come')
+    assert.equal(server.connection(paired.deviceId, 'mail').keepBytes, 2e9)
+    assert.throws(() => server.setConnection(paired.deviceId, 'mail', { direction: 'receive', keep: 'everything' }))
+    assert.throws(() => server.setConnection(paired.deviceId, 'other', { direction: 'send', keep: 'nothing' }))
+    // a drive's card stays photos and Drive files
+    const drive = server.addDrive({ uuid: 'abcd-1234', label: 'T7' })
+    assert.deepEqual(drive.connections.map(c => c.content), ['photos', 'files'])
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('the mail index, growing while mail arrives, is fetched as it was offered (31 Oct: the phones had accounts, no mail)', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-growing-'))
+  const root = path.join(tmp, 'Drive')
+  fs.mkdirSync(root, { recursive: true })
+  const db = library.open(path.join(tmp, 'data'))
+  const files = new Files(db, root)
+  const server = await new SyncServer({ db, documents: new Documents(db), people: new People(db, path.join(tmp, 'data')), files,
+    dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0 }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex')
+  const rel = 'Mail/index.jsonl'
+  try {
+    fs.mkdirSync(path.dirname(files.disk(rel)), { recursive: true })
+    const v1 = Buffer.from('{"id":"a"}\n'), v2 = Buffer.concat([v1, Buffer.from('{"id":"b"}\n')]), v3 = Buffer.concat([v2, Buffer.from('{"id":"c"}\n')])
+    fs.writeFileSync(files.disk(rel), v1)
+    const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    server.setConnection(paired.deviceId, 'files', { direction: 'both', keep: 'everything' })
+    server.completeSetup(paired.deviceId)
+    const manifest = list => call('POST', '/files/manifest', { token: paired.token, json: { files: list } })
+    const fetch = h => call('GET', `/file/${h}?path=${encodeURIComponent(rel)}`, { token: paired.token, raw: true })
+    let offer = (await manifest([])).body.have.find(h => h.path === rel)
+    assert.equal(offer.sha256, sha(v1))
+    fs.appendFileSync(files.disk(rel), '{"id":"b"}\n') // a new mail between the offer and the fetch
+    let got = await fetch(offer.sha256)
+    assert.equal(got.status, 200, 'what was offered, not "not what is here any more"')
+    assert.deepEqual(got.body, v1)
+    // the phone holds v1; the next offer is the newer version, in place of it (no "index (2).jsonl")
+    offer = (await manifest([{ path: rel, sha256: sha(v1), size: v1.length }])).body.have.find(h => h.path === rel)
+    assert.deepEqual([offer.sha256, offer.replaces], [sha(v2), sha(v1)])
+    fs.appendFileSync(files.disk(rel), '{"id":"c"}\n')
+    got = await fetch(offer.sha256)
+    assert.deepEqual(got.body, v2)
+    offer = (await manifest([{ path: rel, sha256: sha(v2), size: v2.length }])).body.have.find(h => h.path === rel)
+    assert.deepEqual([offer.sha256, offer.replaces], [sha(v3), sha(v2)])
+    assert.equal((await fetch(sha(Buffer.from('never offered')))).status, 404)
+  } finally {
+    await server.stop()
+    fs.rmSync(tmp, { recursive: true })
+  }
+})
+
+test('«Χρήση και σε αυτή τη συσκευή»: an account\'s password only inside the pinned TLS, never with Mail off; the phone opening Mail asks for a look', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'drive-sync-credentials-'))
+  const db = library.open(path.join(tmp, 'data'))
+  let looked = 0
+  const accounts = { 'a@sch.gr': { account: 'a@sch.gr', address: 'a@sch.gr', user: 'a', password: 'secret' }, 'b@outlook.com': { account: 'b@outlook.com', address: 'b@outlook.com', signIn: 'microsoft' } }
+  const server = await new SyncServer({ db, dataDir: path.join(tmp, 'data'), photosRoot: path.join(tmp, 'Photos'), port: 0,
+    mail: { sync: () => looked++, credentials: id => accounts[id] ?? null } }).start()
+  const call = (m, u, o) => request(server.port, server.fingerprint, m, u, o)
+  try {
+    const paired = (await call('POST', '/pair', { json: { code: server.startPairing().code, name: 'Xiaomi 15' } })).body
+    const ask = account => call('POST', '/mail/credentials', { token: paired.token, json: { account } })
+    assert.equal((await call('POST', '/mail/credentials', { json: { account: 'a@sch.gr' } })).status, 401, 'no token, nothing')
+    assert.equal((await ask('a@sch.gr')).status, 403, 'not set up: Mail is off')
+    server.completeSetup(paired.deviceId)
+    server.setConnection(paired.deviceId, 'mail', { direction: 'both', keep: 'everything' })
+    assert.equal((await ask('a@sch.gr')).body.password, 'secret')
+    assert.equal((await ask('b@outlook.com')).body.signIn, 'microsoft')
+    assert.equal((await ask('c@x.gr')).status, 404)
+    assert.ok(db.prepare("SELECT 1 FROM history WHERE action = 'gave the password' AND name = 'a@sch.gr'").get(), 'kept in the history')
+    assert.equal((await call('POST', '/mail/sync', { token: paired.token })).body.ok, true)
+    assert.equal(looked, 1)
+    server.setConnection(paired.deviceId, 'mail', { direction: 'off', keep: 'everything' })
+    assert.equal((await ask('a@sch.gr')).status, 403)
+    assert.equal((await call('POST', '/mail/sync', { token: paired.token })).body.off, true)
+    assert.equal(looked, 1)
+  } finally {
     await server.stop()
     fs.rmSync(tmp, { recursive: true })
   }

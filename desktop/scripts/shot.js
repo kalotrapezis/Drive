@@ -6,6 +6,8 @@ const [out, js] = process.argv.slice(process.argv.findIndex(a => a.endsWith('sho
 app.whenReady().then(() => setTimeout(async () => {
   const win = BrowserWindow.getAllWindows()[0]
   if (process.env.SHOT_CONSOLE) win.webContents.on('console-message', e => console.log('[page]', e.message))
+  // SHOT_SIZE=1280x900: the window at that size, for the layout at narrower widths
+  if (process.env.SHOT_SIZE) { const [w, h] = process.env.SHOT_SIZE.split('x').map(Number); win.setSize(w, h); await new Promise(r => setTimeout(r, 800)) }
   if (js) { await win.webContents.executeJavaScript(js).catch(console.error); await new Promise(r => setTimeout(r, 1500)) }
   win.webContents.invalidate() // a hidden, idle window paints nothing new otherwise and capturePage waits forever
   require('node:fs').writeFileSync(out, (await win.webContents.capturePage()).toPNG())

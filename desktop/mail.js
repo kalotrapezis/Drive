@@ -25,6 +25,8 @@ const ROLES = ['Inbox', 'Drafts', 'Sent', 'Archive', 'Spam', 'Trash']
 const SPECIAL = { '\\Inbox': 'Inbox', '\\Sent': 'Sent', '\\Drafts': 'Drafts', '\\Archive': 'Archive', '\\Junk': 'Spam', '\\Trash': 'Trash' }
 const COLORS = ['#e5534b', '#4f8ff7', '#e0a43a', '#3fb27f', '#b77ce6', '#e57ab0', '#3bb8c4']
 const EVERY = 15 * 60_000 // a full look at every folder; new mail in the Inbox comes at once by IDLE
+/** «Έλεγχος για νέα» (Settings › Αλληλογραφία): 'push' is IDLE plus the quarter-hour look; minutes poll; 'manual' only when asked. */
+const CHECKS = ['push', 5, 15, 30, 'manual']
 
 const GMAIL = { host: 'imap.gmail.com', port: 993, secure: true, users: ['%EMAILADDRESS%'], provider: 'google', smtp: { host: 'smtp.gmail.com', port: 465, secure: true } }
 const MICROSOFT = { host: 'outlook.office365.com', port: 993, secure: true, users: ['%EMAILADDRESS%'], provider: 'microsoft', smtp: { host: 'smtp.office365.com', port: 587, secure: false } }
@@ -173,9 +175,12 @@ function reason(e) {
 const failure = e => Object.assign(new Error(e?.responseText || e?.message || String(e)), { reason: e?.reason ?? reason(e) })
 
 /** [auth]: a password, or { accessToken } for an account signed in with Microsoft (XOAUTH2). */
+/** A server on this computer (the tests' own): the only one allowed to speak without TLS. */
+const loopback = host => /^(127\.|::1$|localhost$)/.test(String(host))
 function client(server, user, auth) {
   const { ImapFlow } = require('imapflow')
-  const c = new ImapFlow({ host: server.host, port: server.port, secure: server.secure, auth: typeof auth === 'string' ? { user, pass: auth } : { user, accessToken: auth.accessToken },
+  // not TLS from the start (143): STARTTLS is required, never skipped when a server (or someone between) does not offer it
+  const c = new ImapFlow({ host: server.host, port: server.port, secure: server.secure, doSTARTTLS: server.secure || loopback(server.host) ? undefined : true, auth: typeof auth === 'string' ? { user, pass: auth } : { user, accessToken: auth.accessToken },
     logger: false, maxIdleTime: 10 * 60_000 })
   c.on('error', () => {}) // a dropped connection also ends in 'close', which the account's loop waits for
   return c
@@ -264,11 +269,17 @@ class Mail extends EventEmitter {
     return [...ids].sort().map(device => ({ mode: 'copy', limit: 1e9, name: device, ...read(`${device}.json`), device, usage: read(`${device}.usage.json`) }))
   }
   foreignDevices() { try { return fs.readdirSync(this.root).map(n => /^(?:index|accounts)\.([A-Za-z0-9_-]{1,64})\.jsonl?$/.exec(n)?.[1]).filter(Boolean) } catch { return [] } }
-  setDevice(device, { mode, limit } = {}) {
+  /**
+   * Written from the device card's Mail row (sync.js, the guide): off (nothing of Mail crosses), mode, and how much stays —
+   * limit in bytes, or keepDays (the last year / month), or auto (from the device's free storage; limit is then the fallback).
+   */
+  setDevice(device, { mode, limit, name, off, keepDays, auto } = {}) {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(device))) throw new Error(`Not a device: ${device}`)
     const was = this.devices().find(d => d.device === device) ?? { mode: 'copy', limit: 1e9, name: device }
-    const value = { device, name: was.name ?? device, mode: ['copy', 'move'].includes(mode) ? mode : was.mode,
-      limit: [5e8, 1e9, 2e9, 5e9, 1e10, -1].includes(limit) ? limit : was.limit, setAt: Date.now(), setBy: 'desktop' }
+    const value = { device, name: typeof name === 'string' && name ? name.slice(0, 80) : was.name ?? device, mode: ['copy', 'move'].includes(mode) ? mode : was.mode,
+      limit: [5e8, 1e9, 2e9, 5e9, 1e10, -1].includes(limit) ? limit : was.limit,
+      off: typeof off === 'boolean' ? off : !!was.off, keepDays: keepDays === null || Number.isInteger(keepDays) ? keepDays ?? null : was.keepDays ?? null,
+      auto: typeof auto === 'boolean' ? auto : !!was.auto, setAt: Date.now(), setBy: 'desktop' }
     const file = path.join(this.root, 'devices', `${device}.json`)
     fs.mkdirSync(path.dirname(file), { recursive: true })
     fs.writeFileSync(part(file), JSON.stringify(value, null, 2)); fs.renameSync(part(file), file)
@@ -350,6 +361,18 @@ class Mail extends EventEmitter {
     this.saveAccounts(list); this.changed()
   }
   syncNow() { for (const id of this.live.keys()) this.kick(id) }
+  /** How often to look for new mail, every account, in settings.json (synced: a phone may follow it for what it fetches). */
+  check() { try { const c = JSON.parse(fs.readFileSync(path.join(this.root, 'settings.json'), 'utf8')).check; return CHECKS.includes(c) ? c : 'push' } catch { return 'push' } }
+  setCheck(check) {
+    if (!CHECKS.includes(check)) throw new Error(`Not a check: ${check}`)
+    const file = path.join(this.root, 'settings.json')
+    let was = {}
+    try { was = JSON.parse(fs.readFileSync(file, 'utf8')) } catch {}
+    fs.mkdirSync(this.root, { recursive: true })
+    fs.writeFileSync(part(file), JSON.stringify({ ...was, check, setAt: Date.now(), setBy: 'desktop' }, null, 2)); fs.renameSync(part(file), file)
+    for (const acc of this.accounts()) if (this.live.has(acc.id)) { this.stop(acc.id); this.start(acc) } // the new way from now
+    return check
+  }
   /** Another pass soon; remembered when it comes between two passes, so it is never lost. */
   kick(id, what = 'all') { const run = this.live.get(id); if (!run) return; run.again = run.again === 'all' ? 'all' : what; run.wake?.(what) }
 
@@ -360,7 +383,15 @@ class Mail extends EventEmitter {
   async loop(run) {
     let delay = 30_000
     while (!run.stop) {
-      try { await this.session(run); delay = 30_000 } catch (e) {
+      try {
+        if (await this.session(run) === 'polled') { // not push: no connection kept; the next look when it is time, or asked
+          const check = this.check()
+          if (!run.again) await sleep(check === 'manual' ? 2 ** 31 - 1 : check * 60_000, run)
+          run.again = null
+          continue
+        }
+        delay = 30_000
+      } catch (e) {
         if (run.stop) break
         const f = failure(e)
         console.warn('[mail]', run.acc.id, f.message)
@@ -395,6 +426,7 @@ class Mail extends EventEmitter {
       this.setState(acc.id, { busy: false, synced: Date.now() })
       this.requests().catch(() => {}) // a phone's actions that waited for the connection
       if (run.stop) return
+      if (this.check() !== 'push') { await c.logout().catch(() => c.close()); return 'polled' }
       if (boxes.Inbox) { await c.mailboxOpen(boxes.Inbox, { readOnly: true }); c.idle().catch(() => {}) } // at once, not after imapflow's 15 s
       // shortcut: mail arriving while another folder is open waits for the quarter-hour look; enough for one person
       const onNew = () => this.kick(acc.id, 'inbox')
@@ -827,7 +859,7 @@ class Mail extends EventEmitter {
     const to = [...(draft.to ?? []), ...(draft.cc ?? []), ...(draft.bcc ?? [])].map(a => String(a?.address ?? '')).filter(a => /^[^\s@<>]+@[^\s@<>]+$/.test(a))
     if (!to.length) throw Object.assign(new Error('No one to send it to'), { reason: 'noRecipients' })
     const login = await this.login(acc), smtp = await this.smtpFor(acc)
-    const transport = this.smtp({ host: smtp.host, port: smtp.port, secure: smtp.secure, connectionTimeout: 20_000,
+    const transport = this.smtp({ host: smtp.host, port: smtp.port, secure: smtp.secure, requireTLS: !smtp.secure && !loopback(smtp.host), connectionTimeout: 20_000,
       auth: typeof login === 'string' ? { user: acc.server.user, pass: login } : { type: 'OAuth2', user: acc.server.user, accessToken: login.accessToken } })
     try { await transport.sendMail({ envelope: { from: acc.address, to }, raw }) } catch (e) { throw failure(e) } finally { transport.close?.() }
     await this.keep(acc, 'Sent', raw, draft)
@@ -1005,4 +1037,4 @@ class Mail extends EventEmitter {
   }
 }
 
-module.exports = { Mail, Index, ROLES, OPS, MICROSOFT, detect, check, parseConfig, roles, places, mailName, clean, userName, reason }
+module.exports = { Mail, Index, ROLES, OPS, CHECKS, MICROSOFT, detect, check, parseConfig, roles, places, mailName, clean, userName, reason }

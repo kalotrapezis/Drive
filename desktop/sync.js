@@ -12,6 +12,7 @@ const crypto = require('node:crypto')
 const library = require('./library')
 const drives = require('./drives')
 const history = require('./history')
+const system = require('./system')
 const { isCallLog, mergeCallLog } = require('./files')
 const { t } = require('./i18n')
 
@@ -26,8 +27,16 @@ const PAIRING_MS = 10 * 60 * 1000
 const MAX_HAVE = 5000
 const MAX_KNOWN = 50000 // the phone's whole library in one question; chunking it would change the answer
 const MAX_SEND = 2000 // one answer's worth; the next sync continues where this one stopped
-const CONTENTS = ['photos', 'files']
+/** A device card's applets (the guide, 31 Oct): Photos, Files, Mail, and Others — the apps' folders (calendar, contacts, phone, data…). */
+const CONTENTS = ['photos', 'files', 'mail', 'other']
+const DRIVE_CONTENTS = ['photos', 'files'] // a drive is a backup of photos and Drive files only
 const DIRECTIONS = ['off', 'send', 'receive', 'both']
+/** Which row a Drive path obeys: the mail archive its own (31 Oct: "mail and files are one thing"), the apps' folders Others, the rest Files. */
+const contentOf = rel => { const top = String(rel).split('/')[0]; return top === 'Mail' ? 'mail' : top !== 'Trash' && system.SHARED[top] ? 'other' : 'files' }
+/** How much mail a device keeps, in bytes (-1: all of it), as the mail engine knows them. */
+const MAIL_LIMITS = [5e8, 1e9, 2e9, 5e9, 1e10, -1]
+/** Mail's index grows while mail arrives: the version offered is set aside, or the phone's fetch a second later finds other bytes. */
+const GROWING = /^Mail\/index(\.[A-Za-z0-9_-]{1,64})?\.jsonl$/
 const KEEPS = ['everything', 'nothing']
 /**
  * What a drive is for, and when this computer lets photos go to it (SYNC_PLAN.md D3). Every choice is the
@@ -102,9 +111,12 @@ async function copyVerified(src, dest, expected) {
 
 class SyncServer {
   /** onReceived(receipt) runs after each verified file (e.g. to schedule a rescan); onSent({ device, paths }) after a burst of Send to computer. */
-  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, onCall = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null, data = null, soundHere = () => false, callAudio = null }) {
+  constructor({ db, documents, people, files, notes = null, onNotes = () => {}, onNotesSynced = () => {}, dataDir, photosRoot, onReceived = () => {}, onSent = () => {}, onCall = () => {}, port = PORT, beaconPort = BEACON_PORT, trashItem = null, purgatory = null, data = null, soundHere = () => false, callAudio = null, mail = null }) {
     // soundHere(): the phone is on this computer's Bluetooth; callAudio(received, send) → stop: its call sound both ways (callaudio.js)
     Object.assign(this, { db, documents, people, files, notes, onNotes, onNotesSynced, notesSynced: null, dataDir, photosRoot, onReceived, onSent, onCall, port, beaconPort, trashItem, purgatory, data, soundHere, callAudio })
+    // mail: { rule(mailDevice, row, name), sync(), credentials(account) } — main.js's mail engine, for a device's Mail row
+    this.mail = mail
+    this.snapshots = new Map() // sha256 → { file, path, at }: a growing file as it was offered (GROWING)
     this.sentQuiet = 2000 // a share's files arrive one after another: one notification once they stop
     this.codes = new Map() // every code on screen stays valid until used or expired
     db.exec(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
@@ -161,6 +173,14 @@ class SyncServer {
     const connCols = db.prepare('PRAGMA table_info(sync_connections)').all().map(c => c.name)
     if (!connCols.includes('keep_days')) db.exec('ALTER TABLE sync_connections ADD COLUMN keep_days INTEGER NOT NULL DEFAULT 30')
     if (!connCols.includes('keep_favorites')) db.exec('ALTER TABLE sync_connections ADD COLUMN keep_favorites INTEGER NOT NULL DEFAULT 1')
+    // What stays on the device, as the guide asks it (31 Oct): automatic from its free storage, or N bytes (Mail)
+    if (!connCols.includes('keep_auto')) db.exec('ALTER TABLE sync_connections ADD COLUMN keep_auto INTEGER NOT NULL DEFAULT 0')
+    if (!connCols.includes('keep_bytes')) db.exec('ALTER TABLE sync_connections ADD COLUMN keep_bytes INTEGER')
+    // What a phone says of itself at each sync: its free storage (the card suggests moving old things when nearly full)
+    // and its name in Mail/devices/ (Mail's own device id, the phone's model)
+    for (const [name, type] of [['storage_free', 'INTEGER'], ['storage_size', 'INTEGER'], ['storage_at', 'INTEGER'], ['mail_device', 'TEXT']]) {
+      if (!db.prepare('PRAGMA table_info(sync_devices)').all().some(c => c.name === name)) db.exec(`ALTER TABLE sync_devices ADD COLUMN ${name} ${type}`)
+    }
     // Photos taken off a drive by hand, in its collection: backup never puts them back until they are added again.
     db.exec('CREATE TABLE IF NOT EXISTS drive_removed (device_id TEXT NOT NULL, sha256 TEXT NOT NULL, removed_at INTEGER NOT NULL, PRIMARY KEY(device_id, sha256))')
     // Photos deleted on this computer on purpose (its Trash, or Delete in a drive's collection): no device sends them back.
@@ -542,6 +562,7 @@ class SyncServer {
 
   devices() {
     return this.db.prepare(`SELECT d.id, d.name, d.paired_at, d.last_seen, d.kind, d.volume_uuid, d.set_up_at, d.rules,
+        d.storage_free AS storageFree, d.storage_size AS storageSize, d.storage_at AS storageAt, d.mail_device AS mailDevice,
         (SELECT COUNT(*) FROM sync_receipts r WHERE r.device_id = d.id AND r.kind = 'photo') AS received,
         (SELECT COUNT(*) FROM sync_receipts r WHERE r.device_id = d.id AND r.kind = 'file') AS filesReceived,
         -- What the device holds, as it last said (a drive: as its last backup found it), not what it once sent.
@@ -754,7 +775,7 @@ class SyncServer {
     let asked = 0
     const devices = this.db.prepare('SELECT id, peer_fp, peer_hosts, peer_port, peer_token FROM sync_devices WHERE peer_fp IS NOT NULL AND peer_token IS NOT NULL').all()
     await Promise.all(devices.map(async d => {
-      const ways = [this.connection(d.id, 'photos').direction, this.connection(d.id, 'files').direction]
+      const ways = this.connections(d.id).map(c => c.direction)
       if (ways.every(w => w === 'send' || w === 'off')) return // nothing here is for that device
       if ((await this.reach(d))?.status === 200) asked++
     }))
@@ -995,15 +1016,22 @@ class SyncServer {
    * be true, so Keep is forced back to everything whenever the direction is 'both' (SYNC_PLAN.md 6j).
    */
   connection(deviceId, content) {
-    const row = this.db.prepare('SELECT direction, keep, keep_days, keep_favorites FROM sync_connections WHERE device_id = ? AND content = ?').get(deviceId, content)
-    if (row) return { content, direction: row.direction, keep: row.direction === 'both' ? 'everything' : row.keep, keepDays: row.keep_days, keepFavorites: !!row.keep_favorites }
+    const row = this.db.prepare('SELECT direction, keep, keep_days, keep_favorites, keep_auto, keep_bytes FROM sync_connections WHERE device_id = ? AND content = ?').get(deviceId, content)
+    if (row) return { content, direction: row.direction, keep: row.direction === 'both' ? 'everything' : row.keep, keepDays: row.keep_days, keepFavorites: !!row.keep_favorites,
+      keepAuto: !!row.keep_auto, keepBytes: row.keep_bytes } // Mail kept by a span has no bytes
     // A device that has not been set up yet gets Off, not Send & receive: the answer to "what should cross"
     // is the person's, and until it is given the honest default is "nothing".
     const setUp = this.db.prepare('SELECT set_up_at FROM sync_devices WHERE id = ?').get(deviceId)?.set_up_at
-    const direction = setUp ? 'both' : 'off'
-    this.db.prepare('INSERT INTO sync_connections(device_id, content, direction, keep, updated_at) VALUES(?,?,?,?,?)')
-      .run(deviceId, content, direction, 'everything', Date.now())
-    return { content, direction, keep: 'everything', keepDays: 30, keepFavorites: true }
+    let direction = setUp ? 'both' : 'off'
+    // Mail and Others went with Files until they had rows of their own: they go as Files does, a copy (never a Move), and
+    // before the device is set up without a row of their own, so that setting Files up decides them too
+    const inherits = content === 'mail' || content === 'other'
+    const files = inherits && this.db.prepare("SELECT direction FROM sync_connections WHERE device_id = ? AND content = 'files'").get(deviceId)?.direction
+    if (inherits) direction = !files || files === 'off' ? (files ? 'off' : direction) : content === 'other' && files === 'receive' ? 'receive' : 'both'
+    if (inherits && !setUp) return { content, direction, keep: 'everything', keepDays: 30, keepFavorites: true, keepAuto: false, keepBytes: content === 'mail' ? 1e9 : null }
+    this.db.prepare('INSERT INTO sync_connections(device_id, content, direction, keep, keep_bytes, updated_at) VALUES(?,?,?,?,?,?)')
+      .run(deviceId, content, direction, 'everything', content === 'mail' ? 1e9 : null, Date.now())
+    return { content, direction, keep: 'everything', keepDays: 30, keepFavorites: true, keepAuto: false, keepBytes: content === 'mail' ? 1e9 : null }
   }
 
   /** The rules have been answered: the device may sync from now on. */
@@ -1012,21 +1040,65 @@ class SyncServer {
     return this.devices().find(d => d.id === String(deviceId)) ?? null
   }
 
-  connections(deviceId) { return CONTENTS.map(c => this.connection(deviceId, c)) }
+  connections(deviceId) {
+    const drive = this.db.prepare('SELECT volume_uuid FROM sync_devices WHERE id = ?').get(deviceId)?.volume_uuid
+    return (drive ? DRIVE_CONTENTS : CONTENTS).map(c => this.connection(deviceId, c))
+  }
 
-  setConnection(deviceId, content, { direction, keep, keepDays, keepFavorites }) {
+  setConnection(deviceId, content, { direction, keep, keepDays, keepFavorites, keepAuto, keepBytes }) {
     if (!CONTENTS.includes(content)) throw new Error('Unknown content.')
     if (!DIRECTIONS.includes(direction)) throw new Error('Unknown direction.')
+    // Mail always lets the device's own requests and outbox up, so it has no "to the device only"; Others are never moved off it
+    if ((content === 'mail' && direction === 'receive') || (content === 'other' && direction === 'send')) throw new Error(`${content} cannot be ${direction}.`)
     const kept = direction === 'both' ? 'everything' : (KEEPS.includes(keep) ? keep : 'everything')
     const old = this.connection(String(deviceId), content)
     const days = Number.isInteger(keepDays) && keepDays >= 1 && keepDays <= 36500 ? keepDays : old.keepDays
     const favorites = typeof keepFavorites === 'boolean' ? keepFavorites : old.keepFavorites
-    this.db.prepare(`INSERT INTO sync_connections(device_id, content, direction, keep, keep_days, keep_favorites, updated_at) VALUES(?,?,?,?,?,?,?)
+    const auto = typeof keepAuto === 'boolean' ? keepAuto : old.keepAuto
+    const bytes = keepBytes === null || MAIL_LIMITS.includes(keepBytes) ? keepBytes : old.keepBytes
+    this.db.prepare(`INSERT INTO sync_connections(device_id, content, direction, keep, keep_days, keep_favorites, keep_auto, keep_bytes, updated_at) VALUES(?,?,?,?,?,?,?,?,?)
       ON CONFLICT(device_id, content) DO UPDATE SET direction = excluded.direction, keep = excluded.keep, keep_days = excluded.keep_days,
-        keep_favorites = excluded.keep_favorites, updated_at = excluded.updated_at`)
-      .run(String(deviceId), content, direction, kept, days, favorites ? 1 : 0, Date.now())
-    if (kept !== old.keep || days !== old.keepDays) history.record(this.db, { action: kept === 'nothing' ? `Move, keeping ${days} days` : 'Copy', kind: content, device: String(deviceId) })
-    return this.connection(String(deviceId), content)
+        keep_favorites = excluded.keep_favorites, keep_auto = excluded.keep_auto, keep_bytes = excluded.keep_bytes, updated_at = excluded.updated_at`)
+      .run(String(deviceId), content, direction, kept, days, favorites ? 1 : 0, auto ? 1 : 0, bytes, Date.now())
+    if (kept !== old.keep || days !== old.keepDays || direction !== old.direction) history.record(this.db, { action: direction === 'off' ? 'Off' : kept === 'nothing' ? (auto ? 'Move, keeping what fits' : `Move, keeping ${days} days`) : 'Copy', kind: content, device: String(deviceId) })
+    const now = this.connection(String(deviceId), content)
+    if (content === 'mail') this.mailRule(String(deviceId))
+    return now
+  }
+
+  /** The device's Mail row, also as Mail/devices/<its mail id>.json, the file the phone's mail reads (MAIL_PLAN §14). */
+  mailRule(deviceId) {
+    const d = this.db.prepare('SELECT name, mail_device FROM sync_devices WHERE id = ?').get(deviceId)
+    if (!d?.mail_device || !this.mail?.rule) return
+    try { this.mail.rule(d.mail_device, this.connection(deviceId, 'mail'), d.name) } catch (e) { console.warn('[sync] mail rule', e.message) }
+  }
+
+  /** The Drive answer, path by path, as each path's own row allows: what goes to the device, and what it may send. */
+  byContent(deviceId, answer) {
+    const rows = Object.fromEntries(CONTENTS.map(c => [c, this.connection(deviceId, c)]))
+    const gives = rel => { const r = rows[contentOf(rel)]; return contentOf(rel) === 'mail' ? r.direction !== 'off' : r.direction === 'receive' || r.direction === 'both' }
+    const takes = rel => { const r = rows[contentOf(rel)]; return contentOf(rel) === 'mail' ? r.direction !== 'off' : r.direction === 'send' || r.direction === 'both' }
+    return { ...answer, want: answer.want.filter(takes), have: answer.have.filter(h => gives(h.path)), moveTo: answer.moveTo.filter(m => gives(m.from) && gives(m.to)) }
+  }
+
+  /**
+   * A growing file as it is now, set aside under its hash for ten minutes, so the device's fetch gets what it was offered
+   * (31 Oct: the 13 MB mail index changed between the offer and the fetch, every time — the phones had accounts, no mail).
+   */
+  async snapshot(deviceId, item) {
+    const dir = path.join(this.dataDir, 'sync', 'offered')
+    for (const [sha, s] of this.snapshots) if (Date.now() - s.at > 10 * 60_000) { this.snapshots.delete(sha); fsp.rm(s.file, { force: true }).catch(() => {}) }
+    await fsp.mkdir(dir, { recursive: true })
+    const tmp = path.join(dir, `.${crypto.randomUUID()}.part`)
+    await fsp.copyFile(this.files.resolve(item.path, false), tmp)
+    const hash = crypto.createHash('sha256')
+    for await (const chunk of fs.createReadStream(tmp)) hash.update(chunk)
+    const sha256 = hash.digest('hex'), file = path.join(dir, sha256)
+    await fsp.rename(tmp, file)
+    this.snapshots.set(sha256, { file, path: item.path, at: Date.now() })
+    // offered as these bytes: the next sync knows them as the version both hold (files.reconcile's file_offered)
+    if (sha256 !== item.sha256) this.db.prepare('UPDATE file_offered SET sha256 = ? WHERE device_id = ? AND path = ?').run(sha256, deviceId, item.path)
+    return { ...item, sha256, size: (await fsp.stat(file)).size }
   }
 
   /**
@@ -1120,6 +1192,20 @@ class SyncServer {
    * ponytail: a day is a guess, and a stale row overcounts copies. Good enough to *show* — each device's
    * numbers are displayed "as of" its last sync — but a release (6ac) must demand a sweep newer than itself.
    */
+  /**
+   * What the device said of itself with its list: { free, size } of its storage, and mail — its name in Mail/devices/.
+   * Both optional (an older phone says neither); a new mail name gets the device's Mail row written for it at once.
+   */
+  heard(deviceId, about) {
+    if (!about || typeof about !== 'object') return
+    const n = v => Number.isSafeInteger(v) && v >= 0 ? v : null
+    if (n(about.free) !== null && n(about.size)) this.db.prepare('UPDATE sync_devices SET storage_free = ?, storage_size = ?, storage_at = ? WHERE id = ?').run(about.free, about.size, Date.now(), deviceId)
+    if (typeof about.mail === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(about.mail)) {
+      const was = this.db.prepare('SELECT mail_device FROM sync_devices WHERE id = ?').get(deviceId)?.mail_device
+      if (was !== about.mail) { this.db.prepare('UPDATE sync_devices SET mail_device = ? WHERE id = ?').run(about.mail, deviceId); this.mailRule(deviceId) }
+    }
+  }
+
   holds(deviceId, kind, hashes, prune = true) {
     if (!hashes.length) return
     const now = Date.now()
@@ -1441,18 +1527,38 @@ class SyncServer {
       // Name, size and date of each, so a Move can be shown in numbers before it is chosen (movePreview).
       const describe = this.db.prepare("UPDATE device_holdings SET name = ?, size = ?, taken_at = ? WHERE device_id = ? AND kind = 'file' AND sha256 = ?")
       for (const f of list) if (f && isHash(f.sha256)) describe.run(String(f.path ?? '').slice(0, 300) || null, Number(f.size) || null, Number(f.modified) || null, device.id, f.sha256)
-      const rule = this.connection(device.id, 'files')
+      this.heard(device.id, body.device)
+      // the Trash and the calendars' deletions are followed by Others' row now (events are Others'), never on a Move
+      const rule = this.connection(device.id, 'other')
       // scope: a part of Drive alone (the Calendar's changes, at once); its memory only, the rest untouched
-      const answer = await this.files.reconcile(list, device.id, { followTrash: !(rule.direction === 'send' && rule.keep === 'nothing'), scope })
-      // 'want' and 'moved' are what this computer does; 'have' and 'moveTo' are what it offers the device.
-      const direction = this.connection(device.id, 'files').direction
-      return this.send(res, 200, direction === 'send' || direction === 'off' ? { ...answer, have: [], moveTo: [] } : answer)
+      const answer = await this.files.reconcile(list, device.id, { followTrash: rule.direction !== 'off' && !(rule.direction === 'send' && rule.keep === 'nothing'), scope })
+      // 'want' and 'moved' are what this computer does; 'have' and 'moveTo' are what it offers the device — each path by its own row
+      const out = this.byContent(device.id, answer)
+      out.have = await Promise.all(out.have.map(h => GROWING.test(h.path) ? this.snapshot(device.id, h).catch(() => h) : h))
+      return this.send(res, 200, out)
     }
     // One file of the mail archive by its path alone (Mail/<address>/…): a phone keeps only recent mail and fetches an older
     // one, or one it let go to free space (then sync no longer offers it), when it is opened (MAIL_PLAN §2).
+    // The phone opened Mail: look for new mail now, not at the next quarter hour (the user, 31 Oct)
+    if (req.method === 'POST' && url.pathname === '/mail/sync') {
+      if (this.connection(device.id, 'mail').direction === 'off') return this.send(res, 200, { off: true })
+      this.mail?.sync?.()
+      return this.send(res, 200, { ok: true })
+    }
+    // «Χρήση και σε αυτή τη συσκευή»: an account of this computer's, made the phone's own. Its password goes only here, inside
+    // the TLS pinned at pairing, never into the synced files; a Microsoft account signs in again on the phone (no token leaves).
+    if (req.method === 'POST' && url.pathname === '/mail/credentials') {
+      const b = await this.json(req, 4096)
+      if (this.connection(device.id, 'mail').direction === 'off') return this.send(res, 403, { error: 'Mail is off for this device.' })
+      const given = this.mail?.credentials?.(String(b.account ?? ''))
+      if (!given) return this.send(res, 404, { error: 'No such account here.' })
+      if (!given.signIn) history.record(this.db, { action: 'gave the password', kind: 'mail', name: given.address, device: device.id })
+      return this.send(res, 200, given)
+    }
     if (req.method === 'GET' && url.pathname === '/mail/file') {
       const rel = url.searchParams.get('path') ?? ''
       if (!this.files || !safeRel(rel) || !rel.startsWith('Mail/')) return this.send(res, 400, { error: 'Invalid path.' })
+      if (this.connection(device.id, 'mail').direction === 'off') return this.send(res, 403, { error: 'Mail is off for this device.' })
       const absolute = this.files.resolve(rel, false)
       if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) return this.send(res, 404, { error: 'Not in the archive.' })
       return this.sendFile(res, absolute)
@@ -1462,7 +1568,12 @@ class SyncServer {
       const rel = url.searchParams.get('path') ?? ''
       if (!this.files || !safeRel(rel) || rel === '') return this.send(res, 400, { error: 'Invalid path.' })
       const absolute = this.files.resolve(rel, false)
-      if (await this.files.hash(rel) !== file[1]) return this.send(res, 404, { error: 'That is not what is here any more.' })
+      if (await this.files.hash(rel) !== file[1]) {
+        const kept = this.snapshots.get(file[1])
+        if (kept?.path !== rel || !fs.existsSync(kept.file)) return this.send(res, 404, { error: 'That is not what is here any more.' })
+        history.record(this.db, { action: 'sent', kind: 'file', name: rel, sha256: file[1], device: device.id })
+        return this.sendFile(res, kept.file, file[1])
+      }
       history.record(this.db, { action: 'sent', kind: 'file', name: rel, sha256: file[1], device: device.id })
       return this.sendFile(res, absolute, file[1])
     }
@@ -1773,4 +1884,4 @@ class SyncServer {
   }
 }
 
-module.exports = { SyncServer, identity, lanAddresses, broadcastAddresses, PORT, BEACON_PORT, FROM_PHONE, fitName, pairAsk, pairProof, plainPhrase, safeRel, safeName, isHash }
+module.exports = { SyncServer, contentOf, identity, lanAddresses, broadcastAddresses, PORT, BEACON_PORT, FROM_PHONE, fitName, pairAsk, pairProof, plainPhrase, safeRel, safeName, isHash }

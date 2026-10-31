@@ -242,6 +242,8 @@ contextBridge.exposeInMainWorld('drive', {
     setMsClient: id => ipcRenderer.invoke('mail:setMsClient', id),
     remove: id => ipcRenderer.invoke('mail:remove', id),
     sync: () => ipcRenderer.invoke('mail:sync'),
+    check: () => ipcRenderer.invoke('mail:check'),
+    setCheck: c => ipcRenderer.invoke('mail:setCheck', c),
     act: (op, ids, to) => ipcRenderer.invoke('mail:act', op, ids, to),
     draftFor: (id, kind, account) => ipcRenderer.invoke('mail:draftFor', id, kind, account),
     saveDraft: d => ipcRenderer.invoke('mail:saveDraft', d),

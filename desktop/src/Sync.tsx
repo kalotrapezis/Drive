@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { IconName } from './Icon'
-import type { Disk, Drive, DriveRules, DriveScan, HistoryRow, MovePreview, OffloadPlan, PurgatorySettings, SyncConnection, SyncDevice, SyncFile, SyncOverview, SyncSelf, SyncStatus } from './drive'
+import type { Disk, Drive, DriveRules, DriveScan, HistoryRow, OffloadPlan, PurgatorySettings, SyncDevice, SyncFile, SyncOverview, SyncSelf, SyncStatus } from './drive'
 import { formatBytes } from './timeline'
 import { copiesColor } from './colors'
 import { Icon } from './Icon'
@@ -8,6 +8,7 @@ import { Confirm, Modal } from './Dialogs'
 import { lang, t, tr } from './i18n'
 import { ClientCard, PairingKey } from './Role'
 import { MailStorage } from './Mail'
+import { DeviceRules } from './DeviceCard'
 import type { MailDevice } from './drive'
 
 const LOCALE = lang() === 'en' ? 'en-GB' : lang()
@@ -32,57 +33,6 @@ function PairingCode() {
         {pair && ' ' + t('sync.codeAddress', { hosts: pair.payload.hosts.join(', ') || t('sync.noNetwork'), port: pair.payload.port })}</p>
       {pair && left > 0 && <PairingKey value={pair.payload.key} />}
     </div>
-  )
-}
-
-/**
- * The rules between this computer and one device, for one kind of content (SYNC_PLAN.md 6j).
- *
- * Direction and retention are deliberately two separate controls: the old app's map let a user state a
- * contradiction by making one control say both, and that is the mistake this card exists to avoid. Direction is
- * written from the *device's* side, because the device is the one that reads the row and obeys it.
- *
- * Retention is shown, not offered: Keep Everything — a Copy — is the only one built. A Move deletes on the
- * source after a verified receipt, and until that is implemented an editable control here would be a promise
- * nothing keeps.
- */
-function Rules({ device, connection, here, onChange, setDialog }: { device: SyncDevice; connection: SyncConnection; here: string; onChange: () => void; setDialog: (d: ReactNode) => void }) {
-  const what = connection.content === 'files' ? t('app.files') : t('app.photos')
-  const It = connection.content === 'files' ? 'Files' : 'Photos' // the keys' ending
-  const set = async (direction: string) => {
-    await window.drive.sync.setConnection(device.id, connection.content, { direction, keep: 'everything' })
-    onChange()
-  }
-  // One way to this computer is a Move, never a plain copy — keeping everything on both is what Both ways is for
-  // (asked 2026-09-25). So it is never chosen in one click: first what it will do, and how much stays.
-  const isMove = connection.direction === 'send' && connection.keep === 'nothing'
-  const chooseMove = () => setDialog(<MoveDialog device={device} connection={connection} here={here}
-    onClose={() => setDialog(null)} onDone={() => { setDialog(null); onChange() }} />)
-  const directions = [
-    { value: 'off', icon: 'block', flip: false, label: t('common.off'), hint: t(`sync.ruleOff${It}`) },
-    { value: 'send', icon: 'arrowRight', flip: false, label: `${device.name} → ${here}`, hint: t(`sync.ruleSend${It}`, { device: device.name, here }) },
-    { value: 'receive', icon: 'arrowRight', flip: true, label: `${here} → ${device.name}`, hint: t(`sync.ruleReceive${It}`, { device: device.name, here }) },
-    { value: 'both', icon: 'swap', flip: false, label: t('sync.bothWays'), hint: t(`sync.ruleBoth${It}`) },
-  ] as const
-  const chosen = directions.find(d => d.value === connection.direction)
-  return (
-    <section className="connection-rules">
-      <h4><Icon name={connection.content === 'files' ? 'folder' : 'photos'} size={18} />{what}</h4>
-      <div className="rule-options">
-        {directions.map(d => (
-          <button key={d.value} className={connection.direction === d.value ? 'on' : ''} onClick={() => d.value === 'send' ? chooseMove() : set(d.value)}>
-            <span className={d.flip ? 'glyph flip' : 'glyph'}><Icon name={d.icon} size={18} /></span>
-            <span className="rule-label">{d.label}</span>
-            {d.value === 'send' && <span className="rule-note">{t('common.move')}</span>}
-          </button>
-        ))}
-      </div>
-      <p className="rule-hint">
-        {chosen?.hint}
-        {isMove && <> {tr(`sync.moveWindow${It}${connection.keepFavorites !== false ? 'Fav' : ''}`, { device: device.name, span: <b>{spanOf(connection.keepDays ?? 30)}</b>, here })} <button className="link" onClick={chooseMove}>{t('sync.change')}</button></>}
-        {connection.direction === 'send' && !isMove && <> {t('sync.oldCopy')} <button className="link" onClick={chooseMove}>{t('sync.chooseWhatStays')}</button></>}
-      </p>
-    </section>
   )
 }
 
@@ -450,56 +400,6 @@ function AddDrive({ onClose, onDone }: { onClose: () => void; onDone: () => void
 
 const day = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', year: 'numeric' })
 
-/** "3 months", "1 year", "10 days": a number of days in the largest unit it divides into. */
-function spanOf(days: number) {
-  const [unit, per] = [...UNITS].reverse().find(([, n]) => days % n === 0) ?? UNITS[0]
-  return t(spanKey(unit), { count: days / per })
-}
-
-/**
- * Before a device's photos become a Move (asked 2026-09-25): what will happen, in numbers, and how much stays on
- * the device. A Move always keeps a window — keeping everything would be a Copy. Nothing changes until Start.
- */
-function MoveDialog({ device, connection, here, onClose, onDone }: { device: SyncDevice; connection: SyncConnection; here: string; onClose: () => void; onDone: () => void }) {
-  const [keepDays, setKeepDays] = useState(connection.keep === 'nothing' ? connection.keepDays ?? 30 : 30)
-  const [keepFavorites, setKeepFavorites] = useState(connection.keepFavorites ?? true)
-  const [p, setP] = useState<MovePreview | null>(null)
-  const files = connection.content === 'files'
-  const It = files ? 'Files' : 'Photos', What = files ? t('app.files') : t('app.photos')
-  useEffect(() => { window.drive.sync.movePreview(device.id, { keepDays, keepFavorites, content: connection.content }).then(setP) }, [keepDays, keepFavorites])
-  const start = async () => {
-    await window.drive.sync.setConnection(device.id, connection.content, { direction: 'send', keep: 'nothing', keepDays, keepFavorites })
-    if (!device.set_up_at) await window.drive.sync.completeSetup(device.id)
-    onDone()
-  }
-  const Here = here[0].toUpperCase() + here.slice(1)
-  return (
-    <Modal onClose={onClose}>
-      <h3>{t(`sync.moveTitle${It}`, { device: device.name, here })}</h3>
-      <ol className="move-steps">
-        <li>{t(`sync.moveStep1${It}`, { device: device.name, here, Here })}</li>
-        <li>{tr('sync.moveKeepsLast', { device: device.name, days: <span className="drive-window"><Days days={keepDays} onChange={setKeepDays} /></span> })}
-          <label className="check-row"><input type="checkbox" checked={keepFavorites} onChange={e => setKeepFavorites(e.target.checked)} /><span>{t('sync.everyFavorite')}</span></label></li>
-        <li>{t(`sync.moveStep3${It}`, { device: device.name, here })}</li>
-        <li>{t('sync.moveStep4', { device: device.name, Here })}</li>
-      </ol>
-      {!p ? <span className="spinner" /> : (
-        <>
-          <div className="file-row head" style={{ marginTop: 10 }}><span>{p.lastSeen ? t('sync.onDeviceAsOf', { name: device.name, when: when.format(p.lastSeen) }) : t('sync.onDevice', { name: device.name })}</span><span>{What}</span><span>{t('sync.colSize')}</span></div>
-          <div className="file-row"><span>{t('sync.wouldMoveTo', { here })}</span><span>{p.go.toLocaleString()}</span><span>{formatBytes(p.goBytes)}</span></div>
-          <div className="file-row"><span>{t('sync.stayOn', { name: device.name })}</span><span>{p.keep.toLocaleString()}</span><span /></div>
-          {p.notOnPc > 0 && <div className="file-row"><span>{t('sync.notHereYet', { here })}</span><span>{p.notOnPc.toLocaleString()}</span><span /></div>}
-          {p.holds === 0 && <p className="rule-hint">{t(`sync.notListed${It}`, { name: device.name })}</p>}
-        </>
-      )}
-      <p className="rule-hint">{t('sync.moveMeans', { here, device: device.name })}</p>
-      <div className="dialog-actions">
-        <button onClick={onClose}>{t('common.cancel')}</button>
-        <button className="filled-button" onClick={start}>{t('sync.startMove')}</button>
-      </div>
-    </Modal>
-  )
-}
 
 /** What went where, newest first (asked 2026-09-25: "a manifest of what goes and what comes"). */
 function HistoryDialog({ here, onClose }: { here: string; onClose: () => void }) {
@@ -742,7 +642,7 @@ function ServerPage({ setDialog, client }: { setDialog: (d: ReactNode) => void; 
   const loadMail = () => window.drive.mail.devices().then(setMail, () => {})
   useEffect(() => { loadMail(); const t = setInterval(loadMail, 30_000); return () => clearInterval(t) }, [])
   const key = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
-  const mailOf = (d: SyncDevice) => mail?.devices.find(m => key(m.name) === key(d.name) || key(m.device) === key(d.name))
+  const mailOf = (d: SyncDevice) => mail?.devices.find(m => m.device === d.mailDevice) ?? mail?.devices.find(m => key(m.name) === key(d.name) || key(m.device) === key(d.name))
   const close = () => { setDialog(null); load() }
   const add = () => setDialog(client ? <AddDrive onClose={() => setDialog(null)} onDone={close} /> : <AddDevice onClose={() => setDialog(null)} onDone={close} setDialog={setDialog} />)
   const forget = (d: SyncDevice) => setDialog(<Confirm title={t('sync.forgetTitle', { name: d.name })} action={t('sync.forgetDevice')} danger onClose={close}
@@ -804,9 +704,7 @@ function ServerPage({ setDialog, client }: { setDialog: (d: ReactNode) => void; 
                   <p className="rule-hint risk">{t('sync.notSetUp')}</p>
                 )}
                 {d.volume_uuid && d.rules ? <DriveCard device={d} disk={status?.disk ?? null} onChange={load} setDialog={setDialog} />
-                  : d.connections?.map(c => <Rules key={c.content} device={d} connection={c} here={here} setDialog={setDialog}
-                  onChange={async () => { if (!d.set_up_at) await window.drive.sync.completeSetup(d.id); load() }} />)}
-                {(m => m && <MailStorage dev={m} onChange={loadMail} />)(mailOf(d))}
+                  : <DeviceRules device={d} here={here} mailUsed={mailOf(d)?.usage?.used} setDialog={setDialog} onChange={() => { load(); loadMail() }} />}
                 <footer className="device-foot">
                   <small>{t('sync.paired', { when: when.format(d.paired_at) })}</small>
                   <button className="text-button" onClick={() => forget(d)}>{t('sync.forget')}</button>

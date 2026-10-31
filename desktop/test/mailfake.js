@@ -24,7 +24,8 @@ function memoryServer(folders) {
   const env = m => ({ date: m.date ?? new Date('2026-10-31T07:12:00Z'), subject: m.subject, messageId: m.messageId, from: [m.from ?? { name: 'Γραμματεία', address: 's@x.gr' }], to: m.to ?? [] })
   const c = {
     calls: [],
-    async connect() {}, async logout() {}, close() {}, usable: true,
+    async connect() { c.events.push('connect') }, async logout() { c.events.push('logout') }, close() {}, usable: true,
+    events: [], once() {}, on() {}, off() {}, async idle() { c.events.push('idle') },
     async list() { return Object.keys(folders).map(p => ({ path: p, delimiter: '/', specialUse: folders[p].use })) },
     get mailbox() { return { uidValidity: BigInt(box().validity), exists: Object.keys(box().msgs).length } },
     async mailboxOpen(p) { open = p },

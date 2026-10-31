@@ -4,6 +4,7 @@ import type { Media } from './timeline'
 /** The AI switch (ai.js): on or off, and per app; shared by every device. */
 export interface AiSettings { enabled: boolean; apps: Record<string, boolean>; chosen: boolean }
 /** Mail (mail.js): accounts.json, a line of index.jsonl, the unified folders' counts, an opened mail. */
+export type MailCheck = 'push' | 5 | 15 | 30 | 'manual'
 export type MailRole = 'Inbox' | 'Drafts' | 'Sent' | 'Archive' | 'Spam' | 'Trash'
 export interface MailAddress { name: string; address: string }
 export interface MailAttachment { name: string; file?: string; path?: string; type?: string; size?: number }
@@ -82,7 +83,8 @@ export interface VaultStatus { configured: boolean; unlocked: boolean; count: nu
 export interface VaultItem { id: string; sha256: string; name: string; rel_path: string; mime: string; is_video: number; size: number; taken_at: number; has_thumb: number }
 
 export interface PersonFace { id: string; sha256: string; quality: number; chosen: boolean; takenAt: number }
-export interface SyncConnection { content: 'photos' | 'files'; direction: 'off' | 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing'; keepDays?: number; keepFavorites?: boolean }
+export type SyncContent = 'photos' | 'files' | 'mail' | 'other'
+export interface SyncConnection { content: SyncContent; direction: 'off' | 'send' | 'receive' | 'both'; keep: 'everything' | 'nothing'; keepDays?: number; keepFavorites?: boolean; keepAuto?: boolean; keepBytes?: number | null }
 export interface MovePreview { holds: number; onPc: number; go: number; goBytes: number; keep: number; notOnPc: number; lastSeen: number | null }
 /** A desktop client's server (client.js status). */
 export interface ClientStatus { name: string; lastSync: number | null; error: string | null; running: boolean; crown: boolean; mirror: boolean }
@@ -91,7 +93,7 @@ export interface OffloadPlan { deviceId: string; name: string; rules: DriveRules
 export interface Disk { size: number; free: number; percent: number }
 export interface HistoryRow { id: number; at: number; device: string | null; deviceName: string | null; action: string; kind: string | null; name: string | null; sha256: string | null; size: number | null; detail: string | null }
 export interface PurgatorySettings { trashDays: number; purgatoryDays: number; location?: string; summary?: { driveId: string; items: number; bytes: number; oldest: number | null }[] }
-export interface SyncDevice { id: string; name: string; kind: string | null; volume_uuid: string | null; rules: DriveRules | null; set_up_at: number | null; paired_at: number; last_seen: number | null; received: number; filesReceived: number; holdsPhotos: number; holdsFiles: number | null; connections: SyncConnection[] }
+export interface SyncDevice { id: string; name: string; kind: string | null; volume_uuid: string | null; rules: DriveRules | null; set_up_at: number | null; paired_at: number; last_seen: number | null; received: number; filesReceived: number; holdsPhotos: number; holdsFiles: number | null; connections: SyncConnection[]; storageFree?: number | null; storageSize?: number | null; storageAt?: number | null; mailDevice?: string | null }
 export interface SyncOverview {
   here: { files: number; bytes: number }
   stored?: { name: string; files: number }[]
@@ -177,7 +179,7 @@ declare global {
         addDrive(drive: { uuid: string; label: string }): Promise<SyncDevice>
         backUpToDrive(id: string): Promise<{ copied: number; already: number; failed: string[]; total: number }>
         onDriveProgress(fn: (p: { done: number; total: number; copied: number; already: number }) => void): () => void
-        setConnection(id: string, content: string, rules: { direction: string; keep: string; keepDays?: number; keepFavorites?: boolean }): Promise<SyncConnection>
+        setConnection(id: string, content: string, rules: { direction: string; keep: string; keepDays?: number; keepFavorites?: boolean; keepAuto?: boolean; keepBytes?: number | null }): Promise<SyncConnection>
         movePreview(id: string, options: { keepDays: number; keepFavorites: boolean; content?: string }): Promise<MovePreview>
         setDriveRules(id: string, rules: Partial<DriveRules>): Promise<DriveRules>
         offloadPlan(id: string): Promise<OffloadPlan>
@@ -273,6 +275,8 @@ declare global {
         setMsClient(id: string): Promise<void>
         remove(id: string): Promise<void>
         sync(): Promise<void>
+        check(): Promise<MailCheck>
+        setCheck(c: MailCheck): Promise<MailCheck>
         act(op: MailOp, ids: string[], to?: MailRole): Promise<void>
         draftFor(id: string | null, kind: MailDraftKind, account?: string): Promise<MailDraft>
         saveDraft(d: MailDraft): Promise<{ messageId: string; server: boolean }>

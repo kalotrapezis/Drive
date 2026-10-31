@@ -22,6 +22,13 @@
 > (PKCE + loopback), XOAUTH2 for IMAP/SMTP; the client id is the setting `mailMicrosoftClientId`, registration steps in
 > MAIL_PLAN §13. AI Assist: mail_search, mail_read, mail_needs_answer, mail_status, `MAIL_REPORT`. Tests include
 > `test/mailcycle.test.js` (real local IMAP + SMTP: hoodiecrow-imap, smtp-server, dev dependencies only).
+> **Device cards (same day, evening):** a phone's card is one sentence per applet (Photos, Mail, Files, Others) in its
+> colour and «Επεξεργασία», a four-step guide (`src/DeviceCard.tsx`). `sync_connections` has four contents now; `contentOf`
+> in sync.js sends each Drive path by its own row (Mail no longer rides on Files). The mail index is offered as a snapshot
+> (`sync.snapshot`, ten minutes): it grew between offer and fetch, so phones never got it — the accounts showed, no mail.
+> Phones report `device: { free, size, mail }`; POST /mail/sync, POST /mail/credentials (MAIL_PLAN §16). Mail's
+> `settings.json` `check` (push / 5 / 15 / 30 / manual). STARTTLS is required on plain IMAP/SMTP ports. Under 1000 px the
+> side menu is icons; Mail's bar puts what does not fit under ⋯.
 
 > **Calendar (18 Oct 2026, branch `calendar`, worktree Drive-worktrees/calendar; not merged, not pushed).** The plan is
 > Drive-Android's Plan.md § Calendar. The desktop part: `desktop/calendar.js` reads and writes `~/Tetra/Files/Calendar`
