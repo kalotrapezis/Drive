@@ -2035,7 +2035,6 @@
  "mail.port": "Port",
  "mail.continue": "Jätka",
  "mail.signIn": "Logi sisse",
- "mail.microsoftLater": "See on Microsofti konto (Hotmail, Outlook, Microsoft 365). Microsofti kontoga sisselogimine tuleb Tetra hilisemas versioonis.",
  "mail.googleHow": "Google tahab rakenduse parooli, mitte sinu tavalist parooli. Vajuta „Ava Google“, tee rakenduse parool, kopeeri see ja tule tagasi: Tetra leiab selle ise üles.",
  "mail.passwordHow": "Sinu posti parool. Tetra hoiab seda ainult selle arvuti võtmerõngas.",
  "mail.openGoogle": "Ava Google",
@@ -2201,5 +2200,14 @@
  "mail.allowedSenders": "Laadi pilte alati neilt",
  "mail.noneYet": "Pole veel kedagi",
  "mail.alwaysWarned": "Tetra hoiatab alati enne programme käivitada võiva faili avamist ning siis, kui lingi tekst ja selle tegelik aadress erinevad.",
- "mail.cleanBanner": "Automaatne koristus ootab, kuni oled näinud, mida see teeb."
+ "mail.cleanBanner": "Automaatne koristus ootab, kuni oled näinud, mida see teeb.",
+ "mail.msHow": "Microsofti enda leht avatakse brauseris. Logi seal sisse nagu alati, vajadusel telefonikoodiga; Tetra ei näe sinu parooli kunagi. Seejärel tule siia tagasi.",
+ "mail.msSignIn": "Logi sisse Microsoftiga",
+ "mail.msWaiting": "Ootan Microsofti…",
+ "mail.err_noClient": "Microsoftiga sisselogimine vajab esmalt Tetra rakenduse ID-d: Seaded › Post › Microsofti sisselogimine.",
+ "mail.err_approval": "Sinu organisatsioon peab Tetra kõigepealt heaks kiitma. Palu selle IT-l „Tetra Mail“ heaks kiita või edasta see kiri Gmaili.",
+ "mail.badClient": "See pole rakenduse ID: see näeb välja nagu 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Microsofti sisselogimine",
+ "mail.msClientHow": "Hotmaili, Outlooki ja Microsoft 365 jaoks: Application (client) ID rakendusel, mille registreerisid kord Microsoftis (sammud on failis MAIL_PLAN.md).",
+ "mail.msSaved": "Salvestatud."
 }

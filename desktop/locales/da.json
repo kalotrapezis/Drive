@@ -2035,7 +2035,6 @@
  "mail.port": "Port",
  "mail.continue": "Fortsæt",
  "mail.signIn": "Log ind",
- "mail.microsoftLater": "Dette er en Microsoft-konto (Hotmail, Outlook, Microsoft 365). Login med Microsoft kommer i en senere version af Tetra.",
  "mail.googleHow": "Google vil have en app-adgangskode, ikke din sædvanlige. Tryk på Åbn Google, lav en app-adgangskode, kopiér den og kom tilbage: Tetra finder den selv.",
  "mail.passwordHow": "Din mailadgangskode. Tetra gemmer den kun i denne computers nøglering.",
  "mail.openGoogle": "Åbn Google",
@@ -2201,5 +2200,14 @@
  "mail.allowedSenders": "Indlæs altid billeder fra",
  "mail.noneYet": "Ingen endnu",
  "mail.alwaysWarned": "Tetra advarer altid, før den åbner en fil, der kan køre programmer, og når et links tekst og dets rigtige adresse er forskellige.",
- "mail.cleanBanner": "Den automatiske oprydning venter, til du har set, hvad den vil gøre."
+ "mail.cleanBanner": "Den automatiske oprydning venter, til du har set, hvad den vil gøre.",
+ "mail.msHow": "Microsofts egen side åbner i browseren. Log ind der som altid, med din telefonkode, hvis du bruger en; Tetra ser aldrig din adgangskode. Kom derefter tilbage hertil.",
+ "mail.msSignIn": "Log ind med Microsoft",
+ "mail.msWaiting": "Venter på Microsoft…",
+ "mail.err_noClient": "Login med Microsoft kræver først Tetras app-id: Indstillinger › Mail › Microsoft-login.",
+ "mail.err_approval": "Din organisation skal først godkende Tetra. Bed dens it-afdeling om at godkende »Tetra Mail«, eller videresend denne mail til Gmail.",
+ "mail.badClient": "Det er ikke et app-id: det ser ud som 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Microsoft-login",
+ "mail.msClientHow": "Til Hotmail, Outlook og Microsoft 365: Application (client) ID for den app, du én gang har registreret hos Microsoft (trinnene står i MAIL_PLAN.md).",
+ "mail.msSaved": "Gemt."
 }

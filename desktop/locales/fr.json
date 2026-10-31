@@ -2123,7 +2123,6 @@
  "mail.port": "Port",
  "mail.continue": "Continuer",
  "mail.signIn": "Se connecter",
- "mail.microsoftLater": "Ceci est un compte Microsoft (Hotmail, Outlook, Microsoft 365). La connexion avec Microsoft arrivera dans une prochaine version de Tetra.",
  "mail.googleHow": "Google demande un mot de passe d'application, pas votre mot de passe habituel. Cliquez sur « Ouvrir Google », créez un mot de passe d'application, copiez-le et revenez : Tetra le trouve tout seul.",
  "mail.passwordHow": "Le mot de passe de votre courrier. Tetra ne le garde que dans le trousseau de cet ordinateur.",
  "mail.openGoogle": "Ouvrir Google",
@@ -2290,5 +2289,14 @@
  "mail.allowedSenders": "Toujours charger les images de",
  "mail.noneYet": "Personne pour l'instant",
  "mail.alwaysWarned": "Tetra avertit toujours avant d'ouvrir un fichier qui peut exécuter des programmes, et quand le texte d'un lien et son adresse réelle diffèrent.",
- "mail.cleanBanner": "Le nettoyage automatique attend que vous ayez vu ce qu'il va faire."
+ "mail.cleanBanner": "Le nettoyage automatique attend que vous ayez vu ce qu'il va faire.",
+ "mail.msHow": "La page propre à Microsoft s'ouvre dans le navigateur. Connectez-vous-y comme d'habitude, avec le code de votre téléphone si vous en utilisez un ; Tetra ne voit jamais votre mot de passe. Revenez ensuite ici.",
+ "mail.msSignIn": "Se connecter avec Microsoft",
+ "mail.msWaiting": "En attente de Microsoft…",
+ "mail.err_noClient": "La connexion avec Microsoft a d'abord besoin de l'identifiant d'application de Tetra : Paramètres › Courrier › Connexion Microsoft.",
+ "mail.err_approval": "Votre organisation doit d'abord approuver Tetra. Demandez à son service informatique d'approuver « Tetra Mail », ou transférez ce message vers Gmail.",
+ "mail.badClient": "Ce n'est pas un identifiant d'application : il ressemble à 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Connexion Microsoft",
+ "mail.msClientHow": "Pour Hotmail, Outlook et Microsoft 365 : l'Application (client) ID de l'application que vous avez enregistrée une fois chez Microsoft (les étapes sont dans MAIL_PLAN.md).",
+ "mail.msSaved": "Enregistré."
 }

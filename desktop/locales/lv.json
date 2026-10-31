@@ -2123,7 +2123,6 @@
  "mail.port": "Ports",
  "mail.continue": "Turpināt",
  "mail.signIn": "Pieteikties",
- "mail.microsoftLater": "Šis ir Microsoft konts (Hotmail, Outlook, Microsoft 365). Pieteikšanās ar Microsoft būs pieejama vēlākā Tetra versijā.",
  "mail.googleHow": "Google vēlas lietotnes paroli, nevis jūsu parasto paroli. Nospiediet „Atvērt Google”, izveidojiet lietotnes paroli, nokopējiet to un atgriezieties: Tetra to atradīs pati.",
  "mail.passwordHow": "Jūsu pasta parole. Tetra to glabā tikai šī datora atslēgu saišķī.",
  "mail.openGoogle": "Atvērt Google",
@@ -2290,5 +2289,14 @@
  "mail.allowedSenders": "Vienmēr ielādēt attēlus no",
  "mail.noneYet": "Pagaidām neviena",
  "mail.alwaysWarned": "Tetra vienmēr brīdina pirms tāda faila atvēršanas, kas var palaist programmas, un kad saites teksts un tās īstā adrese atšķiras.",
- "mail.cleanBanner": "Automātiskā tīrīšana gaida, līdz redzēsiet, ko tā darīs."
+ "mail.cleanBanner": "Automātiskā tīrīšana gaida, līdz redzēsiet, ko tā darīs.",
+ "mail.msHow": "Paša Microsoft lapa atveras pārlūkā. Pieteikšanās tur kā vienmēr, ar tālruņa kodu, ja to izmantojat; Tetra nekad neredz jūsu paroli. Pēc tam atgriezieties šeit.",
+ "mail.msSignIn": "Pieteikties ar Microsoft",
+ "mail.msWaiting": "Gaida Microsoft…",
+ "mail.err_noClient": "Pieteikšanās ar Microsoft vispirms nepieciešams Tetra lietotnes ID: Iestatījumi › Pasts › Pieteikšanās Microsoft.",
+ "mail.err_approval": "Jūsu organizācijai vispirms jāapstiprina Tetra. Palūdziet tās IT apstiprināt „Tetra Mail” vai pārsūtiet šo vēstuli uz Gmail.",
+ "mail.badClient": "Tas nav lietotnes ID: tas izskatās kā 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Pieteikšanās Microsoft",
+ "mail.msClientHow": "Hotmail, Outlook un Microsoft 365: tās lietotnes Application (client) ID, ko reizi reģistrējāt Microsoft (soļi ir failā MAIL_PLAN.md).",
+ "mail.msSaved": "Saglabāts."
 }

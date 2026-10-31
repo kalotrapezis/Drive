@@ -2123,7 +2123,6 @@
  "mail.port": "Porta",
  "mail.continue": "Continuar",
  "mail.signIn": "Iniciar sessão",
- "mail.microsoftLater": "Esta é uma conta Microsoft (Hotmail, Outlook, Microsoft 365). O início de sessão com a Microsoft chega numa versão posterior do Tetra.",
  "mail.googleHow": "A Google quer uma palavra-passe de aplicação, não a sua habitual. Prima «Abrir o Google», crie uma palavra-passe de aplicação, copie-a e volte: o Tetra encontra-a sozinho.",
  "mail.passwordHow": "A palavra-passe do seu correio. O Tetra guarda-a apenas no chaveiro deste computador.",
  "mail.openGoogle": "Abrir o Google",
@@ -2290,5 +2289,14 @@
  "mail.allowedSenders": "Carregar sempre imagens de",
  "mail.noneYet": "Ninguém ainda",
  "mail.alwaysWarned": "O Tetra avisa sempre antes de abrir um ficheiro que pode executar programas, e quando o texto de uma ligação e o seu endereço real são diferentes.",
- "mail.cleanBanner": "A limpeza automática espera até ver o que ela vai fazer."
+ "mail.cleanBanner": "A limpeza automática espera até ver o que ela vai fazer.",
+ "mail.msHow": "A página da própria Microsoft abre no navegador. Inicie sessão aí como sempre, com o código do telemóvel se usar um; o Tetra nunca vê a sua palavra-passe. Depois volte aqui.",
+ "mail.msSignIn": "Iniciar sessão com a Microsoft",
+ "mail.msWaiting": "A aguardar a Microsoft…",
+ "mail.err_noClient": "Iniciar sessão com a Microsoft precisa primeiro do ID de aplicação do Tetra: Definições › Correio › Início de sessão Microsoft.",
+ "mail.err_approval": "A sua organização tem de aprovar primeiro o Tetra. Peça ao departamento de TI que aprove o «Tetra Mail», ou reencaminhe esta mensagem para o Gmail.",
+ "mail.badClient": "Isto não é um ID de aplicação: parece-se com 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Início de sessão Microsoft",
+ "mail.msClientHow": "Para Hotmail, Outlook e Microsoft 365: o Application (client) ID da aplicação que registou uma vez na Microsoft (os passos estão em MAIL_PLAN.md).",
+ "mail.msSaved": "Guardado."
 }

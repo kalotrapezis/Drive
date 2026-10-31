@@ -2035,7 +2035,6 @@
  "mail.port": "Portti",
  "mail.continue": "Jatka",
  "mail.signIn": "Kirjaudu",
- "mail.microsoftLater": "Tämä on Microsoft-tili (Hotmail, Outlook, Microsoft 365). Microsoft-kirjautuminen tulee Tetran myöhemmässä versiossa.",
  "mail.googleHow": "Google haluaa sovelluskohtaisen salasanan, ei tavallista salasanaasi. Paina Avaa Google, luo sovelluskohtainen salasana, kopioi se ja palaa tänne: Tetra löytää sen itse.",
  "mail.passwordHow": "Postisi salasana. Tetra säilyttää sen vain tämän tietokoneen avainnippussa.",
  "mail.openGoogle": "Avaa Google",
@@ -2201,5 +2200,14 @@
  "mail.allowedSenders": "Lataa kuvat aina näiltä",
  "mail.noneYet": "Ei vielä ketään",
  "mail.alwaysWarned": "Tetra varoittaa aina ennen ohjelmia ajavan tiedoston avaamista ja kun linkin teksti ja sen todellinen osoite eroavat.",
- "mail.cleanBanner": "Automaattinen siivous odottaa, kunnes olet nähnyt, mitä se tekee."
+ "mail.cleanBanner": "Automaattinen siivous odottaa, kunnes olet nähnyt, mitä se tekee.",
+ "mail.msHow": "Microsoftin oma sivu avautuu selaimessa. Kirjaudu siellä kuten aina, puhelimen koodilla jos käytät sellaista; Tetra ei koskaan näe salasanaasi. Palaa sitten tänne.",
+ "mail.msSignIn": "Kirjaudu Microsoftilla",
+ "mail.msWaiting": "Odotetaan Microsoftia…",
+ "mail.err_noClient": "Microsoft-kirjautuminen tarvitsee ensin Tetran sovellustunnuksen: Asetukset › Posti › Microsoft-kirjautuminen.",
+ "mail.err_approval": "Organisaatiosi täytyy ensin hyväksyä Tetra. Pyydä sen IT-osastoa hyväksymään ”Tetra Mail” tai välitä tämä viesti Gmailiin.",
+ "mail.badClient": "Tuo ei ole sovellustunnus: se näyttää tältä 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Microsoft-kirjautuminen",
+ "mail.msClientHow": "Hotmailia, Outlookia ja Microsoft 365:tä varten: Application (client) ID sovellukselle, jonka rekisteröit kerran Microsoftille (vaiheet ovat tiedostossa MAIL_PLAN.md).",
+ "mail.msSaved": "Tallennettu."
 }

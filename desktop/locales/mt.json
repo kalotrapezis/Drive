@@ -2211,7 +2211,6 @@
  "mail.port": "Port",
  "mail.continue": "Kompli",
  "mail.signIn": "Idħol",
- "mail.microsoftLater": "Dan huwa kont Microsoft (Hotmail, Outlook, Microsoft 365). L-idħol b'Microsoft ġej f'verżjoni aktar tard ta' Tetra.",
  "mail.googleHow": "Google trid password tal-app, mhux dik tas-soltu. Agħfas “Iftaħ Google”, agħmel password tal-app, ikkopjaha u erġa' lura: Tetra issibha waħedha.",
  "mail.passwordHow": "Il-password tal-posta tiegħek. Tetra iżżommha biss fil-keyring ta' dan il-kompjuter.",
  "mail.openGoogle": "Iftaħ Google",
@@ -2379,5 +2378,14 @@
  "mail.allowedSenders": "Dejjem ġib l-istampi minn",
  "mail.noneYet": "Ħadd għadu",
  "mail.alwaysWarned": "Tetra dejjem twissi qabel ma tiftaħ fajl li jista' jmexxi programmi, u meta l-kliem tal-link u l-indirizz reali tiegħu jkunu differenti.",
- "mail.cleanBanner": "It-tindif awtomatiku jistenna sakemm tara x'se jagħmel."
+ "mail.cleanBanner": "It-tindif awtomatiku jistenna sakemm tara x'se jagħmel.",
+ "mail.msHow": "Il-paġna stess ta' Microsoft tinfetaħ fil-browser. Idħol hemm bħas-soltu, bil-kodiċi tat-telefon jekk tuża wieħed; Tetra qatt ma tara l-password tiegħek. Imbagħad erġa' lura hawn.",
+ "mail.msSignIn": "Idħol b'Microsoft",
+ "mail.msWaiting": "Qed nistenna lil Microsoft…",
+ "mail.err_noClient": "L-idħol b'Microsoft l-ewwel jeħtieġ l-ID tal-app ta' Tetra: Settings › Posta › Idħol Microsoft.",
+ "mail.err_approval": "L-organizzazzjoni tiegħek trid l-ewwel tapprova lil Tetra. Itlob lill-IT tagħha japprova “Tetra Mail”, jew għaddi dan l-imejl 'l quddiem lejn Gmail.",
+ "mail.badClient": "Dan mhuwiex ID ta' app: jidher bħal 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Idħol Microsoft",
+ "mail.msClientHow": "Għal Hotmail, Outlook u Microsoft 365: l-Application (client) ID tal-app li rreġistrajt darba ma' Microsoft (il-passi huma f'MAIL_PLAN.md).",
+ "mail.msSaved": "Maħżun."
 }

@@ -2123,7 +2123,6 @@
  "mail.port": "Porta",
  "mail.continue": "Continua",
  "mail.signIn": "Accedi",
- "mail.microsoftLater": "Questo è un account Microsoft (Hotmail, Outlook, Microsoft 365). L'accesso con Microsoft arriverà in una versione successiva di Tetra.",
  "mail.googleHow": "Google vuole una password per app, non quella che usi di solito. Premi «Apri Google», crea una password per app, copiala e torna qui: Tetra la trova da solo.",
  "mail.passwordHow": "La password della tua posta. Tetra la conserva solo nel portachiavi di questo computer.",
  "mail.openGoogle": "Apri Google",
@@ -2290,5 +2289,14 @@
  "mail.allowedSenders": "Carica sempre le immagini da",
  "mail.noneYet": "Ancora nessuno",
  "mail.alwaysWarned": "Tetra avvisa sempre prima di aprire un file che può eseguire programmi, e quando il testo di un collegamento e il suo indirizzo reale sono diversi.",
- "mail.cleanBanner": "La pulizia automatica aspetta che tu abbia visto cosa farà."
+ "mail.cleanBanner": "La pulizia automatica aspetta che tu abbia visto cosa farà.",
+ "mail.msHow": "La pagina di Microsoft si apre nel browser. Accedi lì come sempre, con il codice sul telefono se lo usi; Tetra non vede mai la tua password. Poi torna qui.",
+ "mail.msSignIn": "Accedi con Microsoft",
+ "mail.msWaiting": "In attesa di Microsoft…",
+ "mail.err_noClient": "L'accesso con Microsoft ha prima bisogno dell'ID app di Tetra: Impostazioni › Posta › Accesso Microsoft.",
+ "mail.err_approval": "La tua organizzazione deve prima approvare Tetra. Chiedi al suo reparto IT di approvare «Tetra Mail», oppure inoltra questo messaggio a Gmail.",
+ "mail.badClient": "Questo non è un ID app: assomiglia a 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Accesso Microsoft",
+ "mail.msClientHow": "Per Hotmail, Outlook e Microsoft 365: l'Application (client) ID dell'app che hai registrato una volta presso Microsoft (i passaggi sono in MAIL_PLAN.md).",
+ "mail.msSaved": "Salvato."
 }

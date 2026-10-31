@@ -16,6 +16,12 @@
 > **Step 4 (same day):** writing. `mail.send/saveDraft/discardDraft/draftFor` (nodemailer's MailComposer + SMTP;
 > `smtp` per account), Sent and Drafts copies kept as `local` index lines until the server's copy takes the file over;
 > `signatures.json`; the phone's `Mail/outbox/` (MAIL_PLAN §12). UI: Compose in the third column, Settings › Αλληλογραφία.
+> **Steps 6, 5, 7 (same day):** `mailclean.js` — clean-up by age (server only for green mail; nothing until the first-run
+> «Έλεγχος αρχειοθέτησης» was run once, `cleanConfirmed`, then daily), the garbage scan and sweep, filters
+> (`filters.json`), the naive-Bayes spam filter (`junk.json`), `privacy.json` (pictures). `msauth.js` — Microsoft OAuth
+> (PKCE + loopback), XOAUTH2 for IMAP/SMTP; the client id is the setting `mailMicrosoftClientId`, registration steps in
+> MAIL_PLAN §13. AI Assist: mail_search, mail_read, mail_needs_answer, mail_status, `MAIL_REPORT`. Tests include
+> `test/mailcycle.test.js` (real local IMAP + SMTP: hoodiecrow-imap, smtp-server, dev dependencies only).
 
 > **Calendar (18 Oct 2026, branch `calendar`, worktree Drive-worktrees/calendar; not merged, not pushed).** The plan is
 > Drive-Android's Plan.md § Calendar. The desktop part: `desktop/calendar.js` reads and writes `~/Tetra/Files/Calendar`

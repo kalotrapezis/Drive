@@ -2211,7 +2211,6 @@
  "mail.port": "Prievadas",
  "mail.continue": "Tęsti",
  "mail.signIn": "Prisijungti",
- "mail.microsoftLater": "Tai „Microsoft“ paskyra (Hotmail, Outlook, Microsoft 365). Prisijungimas per „Microsoft“ atsiras vėlesnėje Tetra versijoje.",
  "mail.googleHow": "„Google“ nori programos slaptažodžio, o ne jūsų įprasto slaptažodžio. Paspauskite „Atidaryti Google“, sukurkite programos slaptažodį, nukopijuokite jį ir grįžkite: Tetra jį suras pati.",
  "mail.passwordHow": "Jūsų pašto slaptažodis. Tetra jį laiko tik šio kompiuterio raktinėje.",
  "mail.openGoogle": "Atidaryti Google",
@@ -2379,5 +2378,14 @@
  "mail.allowedSenders": "Visada įkelti paveikslėlius iš",
  "mail.noneYet": "Kol kas nieko",
  "mail.alwaysWarned": "Tetra visada įspėja prieš atidarydama failą, galintį paleisti programas, ir kai nuorodos tekstas ir tikrasis jos adresas skiriasi.",
- "mail.cleanBanner": "Automatinis valymas laukia, kol pamatysite, ką jis darys."
+ "mail.cleanBanner": "Automatinis valymas laukia, kol pamatysite, ką jis darys.",
+ "mail.msHow": "Pačios Microsoft puslapis atsidaro naršyklėje. Prisijunkite ten kaip visada, su telefono kodu, jei jį naudojate; Tetra niekada nemato jūsų slaptažodžio. Tada grįžkite čia.",
+ "mail.msSignIn": "Prisijungti per Microsoft",
+ "mail.msWaiting": "Laukiama Microsoft…",
+ "mail.err_noClient": "Prisijungimui per Microsoft pirmiausia reikia Tetra programos ID: Nustatymai › Paštas › Prisijungimas prie Microsoft.",
+ "mail.err_approval": "Jūsų organizacija pirmiausia turi patvirtinti Tetra. Paprašykite jos IT patvirtinti „Tetra Mail“ arba persiųskite šį laišką į Gmail.",
+ "mail.badClient": "Tai nėra programos ID: jis atrodo kaip 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Prisijungimas prie Microsoft",
+ "mail.msClientHow": "Hotmail, Outlook ir Microsoft 365: programos, kurią kartą užregistravote Microsoft, Application (client) ID (veiksmai aprašyti MAIL_PLAN.md).",
+ "mail.msSaved": "Išsaugota."
 }

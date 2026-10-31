@@ -2211,7 +2211,6 @@
  "mail.port": "Port",
  "mail.continue": "Pokračovať",
  "mail.signIn": "Prihlásiť sa",
- "mail.microsoftLater": "Toto je účet Microsoft (Hotmail, Outlook, Microsoft 365). Prihlásenie cez Microsoft príde v neskoršej verzii Tetra.",
  "mail.googleHow": "Google chce heslo aplikácie, nie vaše obvyklé heslo. Stlačte „Otvoriť Google“, vytvorte heslo aplikácie, skopírujte ho a vráťte sa: Tetra ho nájde sama.",
  "mail.passwordHow": "Vaše heslo k pošte. Tetra ho ukladá iba do kľúčenky tohto počítača.",
  "mail.openGoogle": "Otvoriť Google",
@@ -2379,5 +2378,14 @@
  "mail.allowedSenders": "Vždy načítať obrázky od",
  "mail.noneYet": "Zatiaľ nikoho",
  "mail.alwaysWarned": "Tetra vždy varuje pred otvorením súboru, ktorý môže spúšťať programy, a keď sa text odkazu líši od jeho skutočnej adresy.",
- "mail.cleanBanner": "Automatické upratovanie počká, kým neuvidíte, čo urobí."
+ "mail.cleanBanner": "Automatické upratovanie počká, kým neuvidíte, čo urobí.",
+ "mail.msHow": "V prehliadači sa otvorí stránka samotnej Microsoft. Prihláste sa tam ako vždy, s kódom z telefónu, ak ho používate; Tetra heslo nikdy nevidí. Potom sa vráťte sem.",
+ "mail.msSignIn": "Prihlásiť sa cez Microsoft",
+ "mail.msWaiting": "Čaká sa na Microsoft…",
+ "mail.err_noClient": "Prihlásenie cez Microsoft najprv potrebuje ID aplikácie Tetra: Nastavenia › Pošta › Prihlásenie do Microsoftu.",
+ "mail.err_approval": "Vaša organizácia musí Tetra najprv schváliť. Požiadajte jej IT, aby schválilo „Tetra Mail“, alebo tento e-mail presmerujte na Gmail.",
+ "mail.badClient": "Toto nie je ID aplikácie: vyzerá ako 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Prihlásenie do Microsoftu",
+ "mail.msClientHow": "Pre Hotmail, Outlook a Microsoft 365: Application (client) ID aplikácie, ktorú ste raz zaregistrovali v Microsofte (postup je v MAIL_PLAN.md).",
+ "mail.msSaved": "Uložené."
 }

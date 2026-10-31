@@ -2299,7 +2299,6 @@
  "mail.port": "Port",
  "mail.continue": "Lean ar aghaidh",
  "mail.signIn": "Sínigh isteach",
- "mail.microsoftLater": "Is cuntas Microsoft é seo (Hotmail, Outlook, Microsoft 365). Beidh sínigh isteach le Microsoft ar fáil i leagan níos déanaí de Tetra.",
  "mail.googleHow": "Teastaíonn pasfhocal feidhmchláir ó Google, ní do ghnáthphasfhocal. Brúigh “Oscail Google”, déan pasfhocal feidhmchláir, cóipeáil é agus tar ar ais: aimsíonn Tetra é leis féin.",
  "mail.passwordHow": "Pasfhocal do phoist. Ní choinníonn Tetra é ach in eochairshlabhra an ríomhaire seo.",
  "mail.openGoogle": "Oscail Google",
@@ -2468,5 +2467,14 @@
  "mail.allowedSenders": "Luchtaigh pictiúir i gcónaí ó",
  "mail.noneYet": "Duine ar bith fós",
  "mail.alwaysWarned": "Tugann Tetra rabhadh i gcónaí sula n-osclaíonn sé comhad ar féidir leis cláir a rith, agus nuair a bhíonn focail an naisc agus a fhíorsheoladh difriúil.",
- "mail.cleanBanner": "Fanann an glanadh uathoibríoch go bhfeicfidh tú cad a dhéanfaidh sé."
+ "mail.cleanBanner": "Fanann an glanadh uathoibríoch go bhfeicfidh tú cad a dhéanfaidh sé.",
+ "mail.msHow": "Osclaíonn leathanach Microsoft féin sa bhrabhsálaí. Sínigh isteach ansin mar is gnách, le cód do fhóin má úsáideann tú ceann; ní fheiceann Tetra do phasfhocal choíche. Ansin tar ar ais anseo.",
+ "mail.msSignIn": "Sínigh isteach le Microsoft",
+ "mail.msWaiting": "Ag fanacht le Microsoft…",
+ "mail.err_noClient": "Teastaíonn ID feidhmchláir Tetra ar dtús le síniú isteach le Microsoft: Socruithe › Ríomhphost › Síniú isteach Microsoft.",
+ "mail.err_approval": "Caithfidh d'eagraíocht Tetra a cheadú ar dtús. Iarr ar a TF “Tetra Mail” a cheadú, nó seol an ríomhphost seo ar aghaidh chuig Gmail.",
+ "mail.badClient": "Ní ID feidhmchláir é sin: tá cuma air mar 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Síniú isteach Microsoft",
+ "mail.msClientHow": "Do Hotmail, Outlook agus Microsoft 365: Application (client) ID an fheidhmchláir a chlárú tú uair amháin le Microsoft (tá na céimeanna i MAIL_PLAN.md).",
+ "mail.msSaved": "Sábháilte."
 }

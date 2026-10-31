@@ -2093,7 +2093,6 @@
  "mail.port": "Puerto",
  "mail.continue": "Continuar",
  "mail.signIn": "Iniciar sesión",
- "mail.microsoftLater": "Esta es una cuenta de Microsoft (Hotmail, Outlook, Microsoft 365). Iniciar sesión con Microsoft llegará en una versión posterior de Tetra.",
  "mail.googleHow": "Google quiere una contraseña de aplicación, no la habitual. Pulsa «Abrir Google», crea una contraseña de aplicación, cópiala y vuelve: Tetra la encuentra sola.",
  "mail.passwordHow": "Tu contraseña del correo. Tetra la guarda solo en el llavero de este ordenador.",
  "mail.openGoogle": "Abrir Google",
@@ -2260,5 +2259,14 @@
  "mail.allowedSenders": "Cargar siempre imágenes de",
  "mail.noneYet": "Nadie todavía",
  "mail.alwaysWarned": "Tetra siempre avisa antes de abrir un archivo que puede ejecutar programas, y cuando el texto de un enlace y su dirección real no coinciden.",
- "mail.cleanBanner": "La limpieza automática espera a que veas lo que va a hacer."
+ "mail.cleanBanner": "La limpieza automática espera a que veas lo que va a hacer.",
+ "mail.msHow": "La página de Microsoft se abre en el navegador. Inicia sesión allí como siempre, con el código del móvil si lo usas; Tetra nunca ve tu contraseña. Después vuelve aquí.",
+ "mail.msSignIn": "Iniciar sesión con Microsoft",
+ "mail.msWaiting": "Esperando a Microsoft…",
+ "mail.err_noClient": "Iniciar sesión con Microsoft necesita antes el id de aplicación de Tetra: Ajustes › Correo › Inicio de sesión de Microsoft.",
+ "mail.err_approval": "Tu organización debe aprobar Tetra primero. Pide a su departamento de TI que apruebe «Tetra Mail», o reenvía este correo a Gmail.",
+ "mail.badClient": "Eso no es un id de aplicación: tiene un aspecto como 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Inicio de sesión de Microsoft",
+ "mail.msClientHow": "Para Hotmail, Outlook y Microsoft 365: el Application (client) ID de la aplicación que registraste una vez en Microsoft (los pasos están en MAIL_PLAN.md).",
+ "mail.msSaved": "Guardado."
 }

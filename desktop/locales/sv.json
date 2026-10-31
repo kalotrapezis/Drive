@@ -2035,7 +2035,6 @@
  "mail.port": "Port",
  "mail.continue": "Fortsätt",
  "mail.signIn": "Logga in",
- "mail.microsoftLater": "Det här är ett Microsoft-konto (Hotmail, Outlook, Microsoft 365). Inloggning med Microsoft kommer i en senare version av Tetra.",
  "mail.googleHow": "Google vill ha ett applösenord, inte ditt vanliga lösenord. Tryck på Öppna Google, skapa ett applösenord, kopiera det och kom tillbaka: Tetra hittar det själv.",
  "mail.passwordHow": "Ditt mejllösenord. Tetra sparar det bara i den här datorns nyckelring.",
  "mail.openGoogle": "Öppna Google",
@@ -2201,5 +2200,14 @@
  "mail.allowedSenders": "Ladda alltid bilder från",
  "mail.noneYet": "Ingen ännu",
  "mail.alwaysWarned": "Tetra varnar alltid innan en fil som kan köra program öppnas, och när en länks text och dess verkliga adress skiljer sig åt.",
- "mail.cleanBanner": "Den automatiska städningen väntar tills du har sett vad den kommer att göra."
+ "mail.cleanBanner": "Den automatiska städningen väntar tills du har sett vad den kommer att göra.",
+ "mail.msHow": "Microsofts egen sida öppnas i webbläsaren. Logga in där som vanligt, med din telefonkod om du använder en; Tetra ser aldrig ditt lösenord. Kom sedan tillbaka hit.",
+ "mail.msSignIn": "Logga in med Microsoft",
+ "mail.msWaiting": "Väntar på Microsoft…",
+ "mail.err_noClient": "Inloggning med Microsoft behöver först Tetras app-id: Inställningar › Mejl › Microsoft-inloggning.",
+ "mail.err_approval": "Din organisation måste först godkänna Tetra. Be dess IT att godkänna ”Tetra Mail”, eller vidarebefordra det här mejlet till Gmail.",
+ "mail.badClient": "Det är inte ett app-id: det ser ut som 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Microsoft-inloggning",
+ "mail.msClientHow": "För Hotmail, Outlook och Microsoft 365: Application (client) ID för appen som du en gång har registrerat hos Microsoft (stegen finns i MAIL_PLAN.md).",
+ "mail.msSaved": "Sparat."
 }

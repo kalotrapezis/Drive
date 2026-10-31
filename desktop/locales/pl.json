@@ -2211,7 +2211,6 @@
  "mail.port": "Port",
  "mail.continue": "Dalej",
  "mail.signIn": "Zaloguj się",
- "mail.microsoftLater": "To konto Microsoft (Hotmail, Outlook, Microsoft 365). Logowanie przez Microsoft pojawi się w późniejszej wersji Tetra.",
  "mail.googleHow": "Google chce hasła aplikacji, a nie twojego zwykłego hasła. Naciśnij „Otwórz Google”, utwórz hasło aplikacji, skopiuj je i wróć: Tetra znajdzie je sama.",
  "mail.passwordHow": "Hasło do twojej poczty. Tetra przechowuje je tylko w pęku kluczy tego komputera.",
  "mail.openGoogle": "Otwórz Google",
@@ -2379,5 +2378,14 @@
  "mail.allowedSenders": "Zawsze wczytuj obrazy od",
  "mail.noneYet": "Jeszcze nikogo",
  "mail.alwaysWarned": "Tetra zawsze ostrzega przed otwarciem pliku, który może uruchamiać programy, oraz gdy tekst linku różni się od jego prawdziwego adresu.",
- "mail.cleanBanner": "Automatyczne sprzątanie czeka, aż zobaczysz, co zrobi."
+ "mail.cleanBanner": "Automatyczne sprzątanie czeka, aż zobaczysz, co zrobi.",
+ "mail.msHow": "Strona samej Microsoft otworzy się w przeglądarce. Zaloguj się tam jak zawsze, kodem z telefonu, jeśli go używasz; Tetra nigdy nie widzi twojego hasła. Potem wróć tutaj.",
+ "mail.msSignIn": "Zaloguj się przez Microsoft",
+ "mail.msWaiting": "Czekam na Microsoft…",
+ "mail.err_noClient": "Logowanie przez Microsoft potrzebuje najpierw identyfikatora aplikacji Tetra: Ustawienia › Poczta › Logowanie Microsoft.",
+ "mail.err_approval": "Twoja organizacja musi najpierw zatwierdzić Tetra. Poproś jej dział IT o zatwierdzenie „Tetra Mail” albo prześlij tę wiadomość dalej na Gmail.",
+ "mail.badClient": "To nie jest identyfikator aplikacji: wygląda tak 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Logowanie Microsoft",
+ "mail.msClientHow": "Dla Hotmail, Outlook i Microsoft 365: Application (client) ID aplikacji zarejestrowanej raz w Microsoft (kroki są w MAIL_PLAN.md).",
+ "mail.msSaved": "Zapisano."
 }

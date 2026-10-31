@@ -2035,7 +2035,6 @@
  "mail.port": "Poort",
  "mail.continue": "Doorgaan",
  "mail.signIn": "Inloggen",
- "mail.microsoftLater": "Dit is een Microsoft-account (Hotmail, Outlook, Microsoft 365). Inloggen met Microsoft komt in een latere versie van Tetra.",
  "mail.googleHow": "Google wil een app-wachtwoord, niet je gewone wachtwoord. Druk op Google openen, maak een app-wachtwoord, kopieer het en kom terug: Tetra vindt het vanzelf.",
  "mail.passwordHow": "Het wachtwoord van je mail. Tetra bewaart het alleen in de sleutelhanger van deze computer.",
  "mail.openGoogle": "Google openen",
@@ -2201,5 +2200,14 @@
  "mail.allowedSenders": "Altijd afbeeldingen laden van",
  "mail.noneYet": "Nog niemand",
  "mail.alwaysWarned": "Tetra waarschuwt altijd voordat het een bestand opent dat programma's kan uitvoeren, en wanneer de woorden van een link en het echte adres verschillen.",
- "mail.cleanBanner": "Het automatische opruimen wacht tot je hebt gezien wat het gaat doen."
+ "mail.cleanBanner": "Het automatische opruimen wacht tot je hebt gezien wat het gaat doen.",
+ "mail.msHow": "De eigen pagina van Microsoft opent in de browser. Log daar in zoals altijd, met je telefooncode als je die gebruikt; Tetra ziet je wachtwoord nooit. Kom daarna hier terug.",
+ "mail.msSignIn": "Inloggen met Microsoft",
+ "mail.msWaiting": "Wachten op Microsoft…",
+ "mail.err_noClient": "Inloggen met Microsoft heeft eerst de app-id van Tetra nodig: Instellingen › Mail › Microsoft-login.",
+ "mail.err_approval": "Je organisatie moet Tetra eerst goedkeuren. Vraag de IT-afdeling om “Tetra Mail” goed te keuren, of stuur deze mail door naar Gmail.",
+ "mail.badClient": "Dat is geen app-id: hij ziet eruit als 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Microsoft-login",
+ "mail.msClientHow": "Voor Hotmail, Outlook en Microsoft 365: de Application (client) ID van de app die je eenmalig bij Microsoft hebt geregistreerd (de stappen staan in MAIL_PLAN.md).",
+ "mail.msSaved": "Opgeslagen."
 }

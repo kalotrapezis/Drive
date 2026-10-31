@@ -2122,7 +2122,6 @@
  "mail.port": "Port",
  "mail.continue": "Nastavi",
  "mail.signIn": "Prijava",
- "mail.microsoftLater": "Ovo je Microsoftov račun (Hotmail, Outlook, Microsoft 365). Prijava putem Microsofta stiže u kasnijoj verziji Tetre.",
  "mail.googleHow": "Google traži lozinku za aplikaciju, a ne vašu uobičajenu lozinku. Pritisnite „Otvori Google”, napravite lozinku za aplikaciju, kopirajte je i vratite se: Tetra je pronalazi sama.",
  "mail.passwordHow": "Lozinka vaše pošte. Tetra je čuva samo u privjesku ključeva ovog računala.",
  "mail.openGoogle": "Otvori Google",
@@ -2289,5 +2288,14 @@
  "mail.allowedSenders": "Uvijek učitaj slike od",
  "mail.noneYet": "Još nikoga",
  "mail.alwaysWarned": "Tetra uvijek upozorava prije otvaranja datoteke koja može pokretati programe i kada se tekst poveznice razlikuje od njezine stvarne adrese.",
- "mail.cleanBanner": "Automatsko čišćenje čeka dok ne vidite što će napraviti."
+ "mail.cleanBanner": "Automatsko čišćenje čeka dok ne vidite što će napraviti.",
+ "mail.msHow": "Microsoftova stranica otvara se u pregledniku. Prijavite se tamo kao i uvijek, kodom s telefona ako ga koristite; Tetra nikada ne vidi vašu lozinku. Zatim se vratite ovamo.",
+ "mail.msSignIn": "Prijava s Microsoftom",
+ "mail.msWaiting": "Čeka se Microsoft…",
+ "mail.err_noClient": "Prijava s Microsoftom prvo treba ID aplikacije Tetre: Postavke › Pošta › Microsoftova prijava.",
+ "mail.err_approval": "Vaša organizacija mora prvo odobriti Tetru. Zamolite njezin IT da odobri „Tetra Mail”, ili proslijedite ovu poruku na Gmail.",
+ "mail.badClient": "To nije ID aplikacije: izgleda kao 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Microsoftova prijava",
+ "mail.msClientHow": "Za Hotmail, Outlook i Microsoft 365: Application (client) ID aplikacije koju ste jednom registrirali kod Microsofta (koraci su u MAIL_PLAN.md).",
+ "mail.msSaved": "Spremljeno."
 }

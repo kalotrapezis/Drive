@@ -2123,7 +2123,6 @@
  "mail.port": "Port",
  "mail.continue": "Continuă",
  "mail.signIn": "Conectare",
- "mail.microsoftLater": "Acesta este un cont Microsoft (Hotmail, Outlook, Microsoft 365). Conectarea cu Microsoft vine într-o versiune ulterioară a Tetra.",
  "mail.googleHow": "Google vrea o parolă de aplicație, nu parola ta obișnuită. Apasă „Deschide Google”, creează o parolă de aplicație, copiaz-o și revino: Tetra o găsește singură.",
  "mail.passwordHow": "Parola poștei tale. Tetra o păstrează doar în portchei-ul acestui calculator.",
  "mail.openGoogle": "Deschide Google",
@@ -2290,5 +2289,14 @@
  "mail.allowedSenders": "Încarcă mereu imagini de la",
  "mail.noneYet": "Încă nimeni",
  "mail.alwaysWarned": "Tetra avertizează mereu înainte să deschidă un fișier care poate rula programe, și când cuvintele unui link și adresa lui reală diferă.",
- "mail.cleanBanner": "Curățenia automată așteaptă până vezi ce va face."
+ "mail.cleanBanner": "Curățenia automată așteaptă până vezi ce va face.",
+ "mail.msHow": "Pagina Microsoft însăși se deschide în browser. Conectează-te acolo ca de obicei, cu codul de pe telefon dacă folosești unul; Tetra nu îți vede niciodată parola. Apoi revino aici.",
+ "mail.msSignIn": "Conectare cu Microsoft",
+ "mail.msWaiting": "Aștept Microsoft…",
+ "mail.err_noClient": "Conectarea cu Microsoft are nevoie mai întâi de ID-ul de aplicație al Tetra: Setări › Poștă › Conectare Microsoft.",
+ "mail.err_approval": "Organizația ta trebuie să aprobe mai întâi Tetra. Cere departamentului ei IT să aprobe „Tetra Mail” sau redirecționează acest mesaj către Gmail.",
+ "mail.badClient": "Acesta nu este un ID de aplicație: arată ca 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Conectare Microsoft",
+ "mail.msClientHow": "Pentru Hotmail, Outlook și Microsoft 365: Application (client) ID al aplicației pe care ai înregistrat-o o dată la Microsoft (pașii sunt în MAIL_PLAN.md).",
+ "mail.msSaved": "Salvat."
 }

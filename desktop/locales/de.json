@@ -2035,7 +2035,6 @@
  "mail.port": "Port",
  "mail.continue": "Weiter",
  "mail.signIn": "Anmelden",
- "mail.microsoftLater": "Dies ist ein Microsoft-Konto (Hotmail, Outlook, Microsoft 365). Die Anmeldung mit Microsoft kommt in einer späteren Version von Tetra.",
  "mail.googleHow": "Google verlangt ein App-Passwort, nicht Ihr übliches Passwort. Klicken Sie auf „Google öffnen“, erstellen Sie ein App-Passwort, kopieren Sie es und kommen Sie zurück: Tetra findet es von selbst.",
  "mail.passwordHow": "Ihr E-Mail-Passwort. Tetra speichert es nur im Schlüsselbund dieses Computers.",
  "mail.openGoogle": "Google öffnen",
@@ -2201,5 +2200,14 @@
  "mail.allowedSenders": "Bilder immer laden von",
  "mail.noneYet": "Noch niemand",
  "mail.alwaysWarned": "Tetra warnt immer, bevor es eine Datei öffnet, die Programme ausführen kann, und wenn der Text eines Links und seine echte Adresse nicht übereinstimmen.",
- "mail.cleanBanner": "Das automatische Aufräumen wartet, bis Sie gesehen haben, was es tun wird."
+ "mail.cleanBanner": "Das automatische Aufräumen wartet, bis Sie gesehen haben, was es tun wird.",
+ "mail.msHow": "Die eigene Seite von Microsoft öffnet sich im Browser. Melden Sie sich dort an wie immer, mit Ihrem Handy-Code, falls Sie einen nutzen; Tetra sieht Ihr Passwort nie. Danach kommen Sie hierher zurück.",
+ "mail.msSignIn": "Mit Microsoft anmelden",
+ "mail.msWaiting": "Warte auf Microsoft…",
+ "mail.err_noClient": "Die Anmeldung mit Microsoft braucht zuerst die App-ID von Tetra: Einstellungen › E-Mail › Microsoft-Anmeldung.",
+ "mail.err_approval": "Ihre Organisation muss Tetra zuerst genehmigen. Bitten Sie deren IT, „Tetra Mail“ zu genehmigen, oder leiten Sie diese E-Mail an Gmail weiter.",
+ "mail.badClient": "Das ist keine App-ID: Sie sieht aus wie 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Microsoft-Anmeldung",
+ "mail.msClientHow": "Für Hotmail, Outlook und Microsoft 365: die Application (client) ID der App, die Sie einmal bei Microsoft registriert haben (die Schritte stehen in MAIL_PLAN.md).",
+ "mail.msSaved": "Gespeichert."
 }

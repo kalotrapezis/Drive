@@ -2035,7 +2035,6 @@
  "mail.port": "Порт",
  "mail.continue": "Напред",
  "mail.signIn": "Вход",
- "mail.microsoftLater": "Това е акаунт в Microsoft (Hotmail, Outlook, Microsoft 365). Влизането с Microsoft идва в по-нова версия на Tetra.",
  "mail.googleHow": "Google иска парола за приложение, не обичайната ви парола. Натиснете „Отваряне на Google“, направете парола за приложение, копирайте я и се върнете: Tetra я намира сам.",
  "mail.passwordHow": "Паролата за пощата ви. Tetra я пази само в ключодържателя на този компютър.",
  "mail.openGoogle": "Отваряне на Google",
@@ -2201,5 +2200,14 @@
  "mail.allowedSenders": "Винаги снимки от",
  "mail.noneYet": "Още никого",
  "mail.alwaysWarned": "Tetra винаги предупреждава, преди да отвори файл, който може да изпълнява програми, и когато думите на връзката и истинският ѝ адрес се различават.",
- "mail.cleanBanner": "Автоматичното почистване чака, докато видите какво ще направи."
+ "mail.cleanBanner": "Автоматичното почистване чака, докато видите какво ще направи.",
+ "mail.msHow": "Страницата на самата Microsoft се отваря в браузъра. Влезте там както обикновено, с кода от телефона, ако го ползвате; Tetra никога не вижда паролата ви. После се върнете тук.",
+ "mail.msSignIn": "Вход с Microsoft",
+ "mail.msWaiting": "Чакам Microsoft…",
+ "mail.err_noClient": "Влизането с Microsoft първо изисква идентификатора на приложението на Tetra: Настройки › Поща › Вход с Microsoft.",
+ "mail.err_approval": "Организацията ви първо трябва да одобри Tetra. Помолете нейния ИТ отдел да одобри „Tetra Mail“ или препратете този имейл към Gmail.",
+ "mail.badClient": "Това не е идентификатор на приложение: изглежда като 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Вход с Microsoft",
+ "mail.msClientHow": "За Hotmail, Outlook и Microsoft 365: Application (client) ID на приложението, което веднъж сте регистрирали в Microsoft (стъпките са в MAIL_PLAN.md).",
+ "mail.msSaved": "Запазено."
 }

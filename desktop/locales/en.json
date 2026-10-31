@@ -2035,7 +2035,6 @@
  "mail.port": "Port",
  "mail.continue": "Continue",
  "mail.signIn": "Sign in",
- "mail.microsoftLater": "This is a Microsoft account (Hotmail, Outlook, Microsoft 365). Signing in with Microsoft comes in a later version of Tetra.",
  "mail.googleHow": "Google wants an app password, not your usual one. Press Open Google, make an app password, copy it and come back: Tetra finds it by itself.",
  "mail.passwordHow": "Your mail password. Tetra keeps it only in this computer's keyring.",
  "mail.openGoogle": "Open Google",
@@ -2201,5 +2200,14 @@
  "mail.allowedSenders": "Always load pictures from",
  "mail.noneYet": "No one yet",
  "mail.alwaysWarned": "Tetra always warns before opening a file that can run programs, and when a link's words and its real address differ.",
- "mail.cleanBanner": "The automatic clean-up waits until you have seen what it will do."
+ "mail.cleanBanner": "The automatic clean-up waits until you have seen what it will do.",
+ "mail.msHow": "Microsoft's own page opens in the browser. Sign in there as always, with your phone code if you use one; Tetra never sees your password. Then come back here.",
+ "mail.msSignIn": "Sign in with Microsoft",
+ "mail.msWaiting": "Waiting for Microsoft…",
+ "mail.err_noClient": "Signing in with Microsoft needs Tetra's app id first: Settings › Mail › Microsoft sign-in.",
+ "mail.err_approval": "Your organisation must approve Tetra first. Ask its IT to approve “Tetra Mail”, or forward this mail to Gmail.",
+ "mail.badClient": "That is not an app id: it looks like 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Microsoft sign-in",
+ "mail.msClientHow": "For Hotmail, Outlook and Microsoft 365: the Application (client) ID of the app you registered with Microsoft once (the steps are in MAIL_PLAN.md).",
+ "mail.msSaved": "Saved."
 }

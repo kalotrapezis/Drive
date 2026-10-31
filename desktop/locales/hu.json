@@ -2035,7 +2035,6 @@
  "mail.port": "Port",
  "mail.continue": "Tovább",
  "mail.signIn": "Bejelentkezés",
- "mail.microsoftLater": "Ez egy Microsoft-fiók (Hotmail, Outlook, Microsoft 365). A Microsoftos bejelentkezés a Tetra egy későbbi verziójában érkezik.",
  "mail.googleHow": "A Google alkalmazásjelszót kér, nem a szokásos jelszavadat. Nyomd meg a „Google megnyitása” gombot, készíts alkalmazásjelszót, másold ki, és gyere vissza: a Tetra magától megtalálja.",
  "mail.passwordHow": "A leveled jelszava. A Tetra csak ennek a számítógépnek a kulcstartójában őrzi.",
  "mail.openGoogle": "Google megnyitása",
@@ -2201,5 +2200,14 @@
  "mail.allowedSenders": "Képek betöltése mindig tőle",
  "mail.noneYet": "Még senki",
  "mail.alwaysWarned": "A Tetra mindig figyelmeztet, mielőtt megnyitna egy programokat futtatni képes fájlt, és ha egy hivatkozás szövege és valódi címe eltér.",
- "mail.cleanBanner": "Az automatikus takarítás megvárja, amíg megnézed, mit fog tenni."
+ "mail.cleanBanner": "Az automatikus takarítás megvárja, amíg megnézed, mit fog tenni.",
+ "mail.msHow": "A Microsoft saját oldala megnyílik a böngészőben. Jelentkezz be ott, mint mindig, a telefonos kóddal, ha használsz ilyet; a Tetra sosem látja a jelszavadat. Utána gyere vissza ide.",
+ "mail.msSignIn": "Bejelentkezés Microsofttal",
+ "mail.msWaiting": "Várakozás a Microsoftra…",
+ "mail.err_noClient": "A Microsoftos bejelentkezéshez először a Tetra alkalmazásazonosítója kell: Beállítások › Levelek › Microsoft-bejelentkezés.",
+ "mail.err_approval": "A szervezetednek előbb jóvá kell hagynia a Tetrát. Kérd meg az informatikusait, hogy hagyják jóvá a „Tetra Mail” alkalmazást, vagy továbbítsd ezt a levelet Gmailre.",
+ "mail.badClient": "Ez nem alkalmazásazonosító: így néz ki: 1a2b3c4d-1234-5678-9abc-def012345678.",
+ "mail.msTitle": "Microsoft-bejelentkezés",
+ "mail.msClientHow": "Hotmailhez, Outlookhoz és Microsoft 365-höz: annak az alkalmazásnak az Application (client) ID-ja, amelyet egyszer regisztráltál a Microsoftnál (a lépések a MAIL_PLAN.md fájlban vannak).",
+ "mail.msSaved": "Mentve."
 }
