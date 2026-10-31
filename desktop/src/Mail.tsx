@@ -822,7 +822,7 @@ function PrivacyCard() {
 }
 
 const LIMITS = [5e8, 1e9, 2e9, 5e9, 1e10, -1]
-/** A device card's mail (MAIL_PLAN §14): copy or move, how much it keeps, how much it takes now — set from here or there. */
+/** A device card's mail (MAIL_PLAN §14): copy or move, how much it keeps, how much it takes now — set only here, the hub. */
 export function MailStorage({ dev, onChange }: { dev: MailDevice; onChange: (d: MailDevice) => void }) {
   const set = (x: { mode?: 'copy' | 'move'; limit?: number }) => window.drive.mail.setDevice(dev.device, x).then(onChange)
   return (

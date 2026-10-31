@@ -250,9 +250,9 @@ class Mail extends EventEmitter {
   allAccounts() { return [...this.accounts(), ...this.shadows()] }
 
   /**
-   * Mail on each device (MAIL_PLAN §14): devices/<device>.json — { mode: copy | move, limit (bytes, -1 everything) },
-   * written whole by whichever side the user changed it on, the later setAt winning — and devices/<device>.usage.json,
-   * written by the device itself. No file is copy, 1 GB. A device is known by any of its files here.
+   * Mail on each device (MAIL_PLAN §14): devices/<device>.json — { mode: copy | move, limit (bytes, -1 everything) } —
+   * written only here, the hub, as for files and photos (the user, 31 Oct); the device reads it at each sync and shows it.
+   * devices/<device>.usage.json is the device's own. No file is copy, 1 GB. A device is known by any of its files here.
    */
   devices() {
     const dir = path.join(this.root, 'devices'), ids = new Set()
