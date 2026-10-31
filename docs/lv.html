@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="lv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tetra</title>
+<meta name="description" content="Tetra: viena privāta superlietotne jūsu tālrunim, planšetdatoram un datoram. Brīvā programmatūra; nekas neatstāj jūsu ierīces.">
+<meta property="og:title" content="Tetra">
+<meta property="og:description" content="Viena privāta superlietotne jūsu tālrunim, planšetdatoram un datoram. Nekas neatstāj jūsu ierīces.">
+<meta property="og:image" content="img/tetra-devices.jpg">
+<link rel="alternate" hreflang="bg" href="bg.html">
+<link rel="alternate" hreflang="cs" href="cs.html">
+<link rel="alternate" hreflang="da" href="da.html">
+<link rel="alternate" hreflang="de" href="de.html">
+<link rel="alternate" hreflang="el" href="el.html">
+<link rel="alternate" hreflang="en" href="index.html">
+<link rel="alternate" hreflang="es" href="es.html">
+<link rel="alternate" hreflang="et" href="et.html">
+<link rel="alternate" hreflang="fi" href="fi.html">
+<link rel="alternate" hreflang="fr" href="fr.html">
+<link rel="alternate" hreflang="ga" href="ga.html">
+<link rel="alternate" hreflang="hr" href="hr.html">
+<link rel="alternate" hreflang="hu" href="hu.html">
+<link rel="alternate" hreflang="it" href="it.html">
+<link rel="alternate" hreflang="lt" href="lt.html">
+<link rel="alternate" hreflang="lv" href="lv.html">
+<link rel="alternate" hreflang="mt" href="mt.html">
+<link rel="alternate" hreflang="nl" href="nl.html">
+<link rel="alternate" hreflang="pl" href="pl.html">
+<link rel="alternate" hreflang="pt" href="pt.html">
+<link rel="alternate" hreflang="ro" href="ro.html">
+<link rel="alternate" hreflang="sk" href="sk.html">
+<link rel="alternate" hreflang="sl" href="sl.html">
+<link rel="alternate" hreflang="sv" href="sv.html">
+<link rel="icon" href="img/tetra.png">
+<style>
+  :root { --bg: #0f1113; --card: #191c20; --line: #2a2e34; --text: #f4f6f8; --muted: #b0b7c0; --teal: #04d5cc;
+          --phone: #02505b; --violet: #822ad1; --blue: #177bfc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 system-ui, "Noto Sans", "Segoe UI", sans-serif; }
+  a { color: var(--teal); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 56px 0 24px; text-align: center;
+           /* the four corners lit in Tetra's colours, the icon in the middle */
+           background: radial-gradient(800px 520px at 0% 0%, rgba(149, 223, 107, .30) 0%, transparent 70%),
+                       radial-gradient(800px 520px at 100% 0%, rgba(23, 123, 252, .36) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 0% 100%, rgba(227, 20, 31, .30) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 100% 100%, rgba(254, 208, 10, .26) 0%, transparent 70%); }
+  header img.logo { width: 128px; height: 128px; filter: drop-shadow(0 0 28px rgba(255, 255, 255, .18)); }
+  h1 { font-size: clamp(40px, 7vw, 72px); margin: 8px 0 4px; letter-spacing: -1px; }
+  .lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; margin: 0 auto 28px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 0 0 32px; }
+  .btn { display: flex; align-items: center; gap: 14px; padding: 14px 22px 14px 14px; border-radius: 22px; color: #fff;
+         text-decoration: none; min-width: 270px; text-align: left; transition: transform .15s, filter .15s; }
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
+  .btn img { width: 52px; height: 52px; border-radius: 13px; }
+  .btn b { display: block; font-size: 20px; } .btn span { font-size: 14px; opacity: .85; }
+  .android { background: var(--phone); } .appimage { background: var(--violet); } .deb { background: var(--blue); }
+  .hero { width: 100%; border-radius: 22px; display: block; border: 1px solid var(--line); }
+  section { padding: 56px 0 8px; }
+  h2 { font-size: clamp(28px, 4vw, 40px); margin: 0 0 8px; text-align: center; }
+  .sub { color: var(--muted); max-width: 760px; margin: 0 auto; text-align: center; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 26px; }
+  .tile { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 22%, var(--card)) 0%, var(--card) 55%);
+          border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .tile img { width: 56px; height: 56px; border-radius: 14px; }
+  .tile h3 { margin: 12px 0 6px; font-size: 21px; } .tile p { margin: 0; color: var(--muted); font-size: 16px; }
+  .tile b { color: var(--text); }
+  .island { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; background: #000; border: 1px solid var(--line);
+            border-radius: 30px; padding: 8px; margin: 26px auto 22px; width: fit-content; max-width: 100%; }
+  .island button { font: inherit; font-size: 15px; font-weight: 600; color: var(--text); background: transparent; border: 0;
+                   border-radius: 999px; padding: 9px 18px; cursor: pointer; }
+  .island button:hover { background: #22262b; }
+  .island button[aria-selected="true"] { background: var(--c); color: var(--on); }
+  .island button:focus-visible { outline: 2px solid var(--c); outline-offset: 2px; }
+  [role="tabpanel"] > p { text-align: center; color: var(--muted); max-width: 760px; margin: 0 auto 18px; }
+  .shots { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; align-items: flex-start; }
+  .shots figure { margin: 0; text-align: center; }
+  .shots figure.phone { flex: 0 1 230px; }
+  .shots figure.wide { flex: 1 1 560px; max-width: 900px; }
+  .shots img { width: 100%; display: block; border-radius: 16px; border: 1px solid var(--line); background: #000; }
+  .shots figure.phone img { border-radius: 26px; border: 6px solid #08090a; outline: 1px solid var(--line); }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .note { text-align: center; color: #7d858f; font-size: 14px; }
+  .grid { display: grid; gap: 18px; margin-top: 22px; }
+  .grid img, .wide-img { width: 100%; border-radius: 18px; display: block; border: 1px solid var(--line); margin-top: 22px; }
+  /* A card: a picture without words and its words as HTML on it, so a translation changes only text. The text column
+     ends where the devices start (--x); cqi keeps it the picture's size. On a phone the words go above the picture. */
+  .card { position: relative; margin: 22px 0 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+          background: #0f1113; container-type: inline-size; }
+  .card .pic { position: relative; }
+  .card .pic > img { display: block; width: 100%; aspect-ratio: 16 / 9; }
+  .card figcaption { position: absolute; top: 0; bottom: 0; left: 5%; width: calc(var(--x, 40%) - 9%);
+                     display: flex; flex-direction: column; justify-content: center; }
+  .card figcaption .icon { width: 6cqi; height: 6cqi; border-radius: 1.4cqi; }
+  .card .pill { align-self: flex-start; margin: 1.6cqi 0 1.4cqi; padding: .35cqi 1.1cqi; border-radius: 999px; background: var(--c);
+                color: var(--on, #111); font-size: 1.3cqi; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+  .card h3 { margin: 0 0 1.2cqi; font-size: 3.5cqi; line-height: 1.12; hyphens: auto; overflow-wrap: break-word; }  /* long words (et, fi, de) */
+  .card figcaption p { margin: 0; color: var(--muted); font-size: 1.6cqi; line-height: 1.5; }
+  .card.top figcaption { bottom: auto; left: 0; width: 100%; top: 3%; align-items: center; text-align: center; }
+  .card.top figcaption p { max-width: 80%; }
+  .card .label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--text); font-weight: 700;
+                 font-size: max(10px, 1.6cqi); text-shadow: 0 1px 3px #000; }
+  .card .label.head { font-size: max(11px, 2.2cqi); }
+  .speed { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; margin-top: 22px;
+           display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; font-size: 15px; }
+  .speed b { font-weight: 600; }
+  .speed .bar { position: relative; height: 22px; margin-right: 9.5em; }  /* room for the numbers after the longest bar */
+  .speed .bar i { position: absolute; left: 0; top: 4px; height: 14px; border-radius: 7px; background: #3a4048; width: var(--b); }
+  .speed .bar i + i { background: var(--teal); width: var(--a); }
+  .speed .bar span { position: absolute; left: calc(var(--b) + 10px); top: 0; color: var(--muted); white-space: nowrap; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; margin-top: 26px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .panel h3 { margin: 0 0 6px; font-size: 24px; } .panel p { color: var(--muted); margin: 0 0 6px; }
+  .panel .btn { min-width: 0; margin-top: 12px; }
+  .lang { position: absolute; top: 16px; right: 16px; z-index: 2; text-align: left; }
+  .lang summary { list-style: none; cursor: pointer; background: rgba(0, 0, 0, .55); border: 1px solid var(--line); border-radius: 999px;
+                  padding: 6px 14px; font-size: 14px; font-weight: 700; }
+  .lang summary::-webkit-details-marker { display: none; }
+  .lang summary::after { content: " ▾"; }
+  .lang ul { position: absolute; right: 0; margin: 6px 0 0; padding: 6px; list-style: none; columns: 2; column-gap: 4px; width: max-content;
+             max-width: calc(100vw - 32px); background: #15181b; border: 1px solid var(--line); border-radius: 14px; }
+  .lang a { display: block; color: var(--text); text-decoration: none; font-size: 14px; padding: 5px 12px; border-radius: 8px; }
+  .lang a:hover { background: #22262b; }
+  .lang a[aria-current="page"] { background: var(--text); color: #111; }
+  header { position: relative; }
+  .buttons { align-items: stretch; }
+  .group { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 28px; background: rgba(0, 0, 0, .35);
+           border: 1px solid var(--line); }
+  .group h3 { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 18px; }
+  .group h3 img { width: 30px; height: 30px; }
+  .qr { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; text-align: left; }
+  .qr img { width: 92px; height: 92px; border-radius: 10px; }
+  .qr p { margin: 0; }
+  .btn img[src$=".svg"] { background: rgba(255, 255, 255, .1); padding: 6px; }
+  .faq { max-width: 820px; margin: 24px auto 0; display: grid; gap: 10px; }
+  .faq details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px; }
+  .faq summary { cursor: pointer; font-weight: 700; font-size: 18px; }
+  .faq ol, .faq p { color: var(--muted); margin: 10px 0 0; }
+  .faq li { margin: 4px 0; }
+  .faq b, .faq code { color: var(--text); }
+  footer { color: #7d858f; font-size: 14px; padding: 48px 0 40px; text-align: center; }
+  @media (max-width: 700px) {  /* a phone: the tabs would not fit, so every card one under the other, the words above */
+    .qr { display: none; }  /* already on the phone */
+    .island { display: none; }
+    [role="tabpanel"] { display: block !important; }
+    .card { display: flex; flex-direction: column-reverse; }
+    .card figcaption, .card.top figcaption { position: static; width: auto; padding: 18px 18px 6px; align-items: flex-start; text-align: left; }
+    .card.top figcaption p { max-width: none; }
+    .card figcaption .icon { width: 44px; height: 44px; border-radius: 11px; }
+    .card .pill { font-size: 12px; padding: 3px 10px; margin: 10px 0 8px; }
+    .card h3 { font-size: 24px; margin-bottom: 6px; }
+    .card figcaption p { font-size: 15px; }
+    .card:not(.top) .pic > img { aspect-ratio: 5 / 4; object-fit: cover; object-position: right; }
+    .speed { grid-template-columns: 1fr; gap: 2px; }
+    .card .label { white-space: normal; width: 24%; text-align: center; line-height: 1.2; }
+    .card .label.head { width: 46%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <details class="lang"><summary aria-label="Language">LV</summary><ul><li><a href="bg.html" hreflang="bg" lang="bg">Български</a></li><li><a href="cs.html" hreflang="cs" lang="cs">Čeština</a></li><li><a href="da.html" hreflang="da" lang="da">Dansk</a></li><li><a href="de.html" hreflang="de" lang="de">Deutsch</a></li><li><a href="el.html" hreflang="el" lang="el">Ελληνικά</a></li><li><a href="index.html" hreflang="en" lang="en">English</a></li><li><a href="es.html" hreflang="es" lang="es">Español</a></li><li><a href="et.html" hreflang="et" lang="et">Eesti</a></li><li><a href="fi.html" hreflang="fi" lang="fi">Suomi</a></li><li><a href="fr.html" hreflang="fr" lang="fr">Français</a></li><li><a href="ga.html" hreflang="ga" lang="ga">Gaeilge</a></li><li><a href="hr.html" hreflang="hr" lang="hr">Hrvatski</a></li><li><a href="hu.html" hreflang="hu" lang="hu">Magyar</a></li><li><a href="it.html" hreflang="it" lang="it">Italiano</a></li><li><a href="lt.html" hreflang="lt" lang="lt">Lietuvių</a></li><li><a href="lv.html" hreflang="lv" lang="lv" aria-current="page">Latviešu</a></li><li><a href="mt.html" hreflang="mt" lang="mt">Malti</a></li><li><a href="nl.html" hreflang="nl" lang="nl">Nederlands</a></li><li><a href="pl.html" hreflang="pl" lang="pl">Polski</a></li><li><a href="pt.html" hreflang="pt" lang="pt">Português</a></li><li><a href="ro.html" hreflang="ro" lang="ro">Română</a></li><li><a href="sk.html" hreflang="sk" lang="sk">Slovenčina</a></li><li><a href="sl.html" hreflang="sl" lang="sl">Slovenščina</a></li><li><a href="sv.html" hreflang="sv" lang="sv">Svenska</a></li></ul></details>
+  <div class="wrap">
+    <img class="logo" src="img/tetra.png" alt="">
+    <h1>Tetra</h1>
+    <p class="lead">Viena privāta superlietotne jūsu tālrunim, planšetdatoram un datoram. Brīvā programmatūra, bez konta, bez mākoņa: nekas neatstāj jūsu ierīces.</p>
+    <div class="buttons">
+      <div class="group"><h3><img src="img/android.svg" alt="">Android</h3>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Lejupielādēt Android</b><span>APK · 0.6.0 beta 4 · Android 11+</span></div></a>
+        <div class="qr"><img src="img/qr-android.svg" alt="QR kods Android lejupielādei"><p>Vai noskenējiet to ar tālruni.<br><a href="#faq-install">Kā to instalēt</a></p></div></div>
+      <div class="group"><h3><img src="img/linux.svg" alt="">Linux</h3>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>Linux AppImage</b><span>0.6.0 beta 32 · vairums izplatījumu</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>Linux .deb</b><span>Debian, Ubuntu, Mint</span></div></a></div>
+    </div>
+    <img class="hero" src="img/tetra-devices.jpg" alt="Tetra datorā, planšetdatorā un tālrunī">
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Ko Tetra dara jūsu labā</h2>
+    <div class="tiles">
+      <div class="tile" style="--c:#177BFC"><img src="img/icons/files.png" alt=""><h3>Faili uz datoru un no tā sekundē</h3><p>Kopīgojiet jebko ar <b>Sūtīt uz datoru</b> tālrunī vai ar <b>Sūtīt uz tālruni</b> datorā. Tas iet pa jūsu Wi-Fi: bez kabeļa, bez mākoņa. Ja dators ir prom, fails tiks nosūtīts, kad tas atgriezīsies.</p></div>
+      <div class="tile" style="--c:#1A9AA8"><img src="img/icons/phone.png" alt=""><h3>Zvaniet no datora</h3><p>Datora Kontaktos noklikšķiniet uz numura, un jūsu tālrunis to izsauks. Zvana burbulis ekrānā ļauj atbildēt, turēt, izslēgt skaņu, beigt sarunu un pārslēgt skaņu uz tālruņa skaļruni.</p></div>
+      <div class="tile" style="--c:#25C4FE"><img src="img/icons/maps.png" alt=""><h3>Jebkuras valsts kartes bezsaistē</h3><p>Izvēlieties valsti datorā: Tetra izveido tās karti, meklēšanu un maršrutus no OpenStreetMap un nosūta tos uz jūsu tālruni un planšetdatoru. Maršruti šķērso robežas īstajos robežpunktos, ar norādēm jūsu valodā.</p></div>
+      <div class="tile" style="--c:#8E99A6"><img src="img/icons/settings.png" alt=""><h3>Jūsu valodā, ar ceļvedi</h3><p>Visas 24 ES oficiālās valodas. Ceļvedis pirmajā palaišanā un jebkurā laikā sadaļā Iestatījumi parāda, kur pieskarties un kāpēc, soli pa solim.</p></div>
+      <div class="tile" style="--c:#9AD01E"><img src="img/icons/data.png" alt=""><h3>Jūsu datu plāns – uzraudzīts</h3><p>Pastāstiet Tetra savu plānu vienreiz. Tā jūs paziņos, kad sasniegti 50 %, 80 % un 100 % vai citi jūsu izvēlēti soļi, un jau iepriekš prognozēs mēneša beigas.</p></div>
+      <div class="tile" style="--c:#F41879"><img src="img/icons/calendar.png" alt=""><h3>Kalendārs un taimeri ar MI</h3><p>Iebūvētās prasmes ļauj Claude, ChatGPT vai jebkuram asistentam, kas var izmantot jūsu datoru, importēt stundu sarakstu, plānot nedēļu vai palaist taimeri. Tās vienkārši rediģē kalendāra un taimeru failus.</p></div>
+      <div class="tile" style="--c:#FED00A"><img src="img/icons/notes.png" alt=""><h3>Piezīmes un saraksti, sakārtoti</h3><p>Piezīmes un iepirkumu sarakstus kārtojiet ar birkām un sinhronizējiet starp tālruni un datoru. Katra piezīme ir vienkāršs fails jūsu Tetra mapē.</p></div>
+      <div class="tile" style="--c:#95DF6B"><img src="img/icons/gallery.png" alt=""><h3>Fotogrāfijas, kas zina, kas un kur</h3><p>Birkas, dzīvās fotogrāfijas un Cilvēku un Dokumentu kolekcijas no sejas atpazīšanas, kas darbojas ierīcē. Atrodiet fotogrāfijas pēc vietas*, un pārnesiet savas Google Photos fotogrāfijas (Takeout imports datorā).</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/scanner.png" alt=""><h3>Noskenējiet jebkuru lappusi tīru</h3><p>Filtri un automātiska apgriešana atrod un iztaisno lappusi: visi rīki, kas vajadzīgi ideālai digitālai kopijai, cik lappušu vien vēlaties.</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/pdf.png" alt=""><h3>Paslēpiet, kam jāpaliek privātam</h3><p>Aizklājiet PDF failus un fotogrāfijas tā, lai paslēptā daļa tiktu noņemta no paša faila, nevis tikai pārklāta. Tetra fotogrāfijā atrod acis un tās pārklāj ar melnām joslām vai zvaigznītēm, kā arī atrod tekstu, ko paslēpt.</p></div>
+      <div class="tile" style="--c:#FD7D12"><img src="img/icons/office.png" alt=""><h3>Office un PDF, pietiekami labi</h3><p>Word, Excel un PowerPoint atveras un saglabājas kā paši, pietiekami saderīgi ikdienas darbam. PDF rediģē tāpat kā Dokumenti, un dokumentos iegultās filmas un skaņas tiek atskaņotas. Tālruņa izkārtojums, ko var īsti lietot.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/drive.png" alt=""><h3>Iekšējais SSD paliek brīvs</h3><p>Savienojiet ārēju disku ar Tetra, un tā automātiski dublēs visu vai pārvietos vecākas fotogrāfijas uz to, lai paša datora disks paliktu pēc iespējas tukšāks.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/sync.png" alt=""><h3>Vairāk nekā viena kopija, bez abonementa</h3><p>Tetra parāda, cik vietās glabājas katrs fails: tālrunī, planšetdatorā, datorā vai USB diskā, un kas vēl atrodas tikai vienā vietā. Jūsu pašu dublējumi bez maksas mākoņa plāna.</p></div>
+    </div>
+    <p class="note">*Fotogrāfiju meklēšana pēc vietas pagaidām aptver tikai Grieķiju.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Katra lietotne, katrā ekrānā</h2>
+    <p class="sub">Viens Sākums, viena mape, tās pašas lietotnes Android un Linux. Iekšā arī: Skeneris, Kodi un Teksta redaktors.</p>
+    <div class="island" role="tablist" aria-label="Lietotnes">
+      <button role="tab" id="tab-home" aria-controls="panel-home" aria-selected="true" tabindex="0" style="--c:#8E99A6;--on:#111">Sākums</button>
+      <button role="tab" id="tab-maps" aria-controls="panel-maps" aria-selected="false" tabindex="-1" style="--c:#25C4FE;--on:#111">Kartes</button>
+      <button role="tab" id="tab-photos" aria-controls="panel-photos" aria-selected="false" tabindex="-1" style="--c:#95DF6B;--on:#111">Fotoattēli</button>
+      <button role="tab" id="tab-files" aria-controls="panel-files" aria-selected="false" tabindex="-1" style="--c:#177BFC;--on:#fff">Faili</button>
+      <button role="tab" id="tab-notes" aria-controls="panel-notes" aria-selected="false" tabindex="-1" style="--c:#FED00A;--on:#111">Piezīmes</button>
+      <button role="tab" id="tab-office" aria-controls="panel-office" aria-selected="false" tabindex="-1" style="--c:#FD7D12;--on:#111">Office</button>
+      <button role="tab" id="tab-calendar" aria-controls="panel-calendar" aria-selected="false" tabindex="-1" style="--c:#F41879;--on:#fff">Kalendārs · Taimeris</button>
+      <button role="tab" id="tab-contacts" aria-controls="panel-contacts" aria-selected="false" tabindex="-1" style="--c:#BE7E4D;--on:#fff">Kontakti</button>
+      <button role="tab" id="tab-phone" aria-controls="panel-phone" aria-selected="false" tabindex="-1" style="--c:#1A9AA8;--on:#fff">Tālrunis</button>
+      <button role="tab" id="tab-backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1" style="--c:#2E9D4F;--on:#fff">Dublēšana</button>
+      <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1" style="--c:#9AD01E;--on:#111">Dati</button>
+      <button role="tab" id="tab-guide" aria-controls="panel-guide" aria-selected="false" tabindex="-1" style="--c:#8E99A6;--on:#111">Ceļvedis · Iestatījumi</button>
+    </div>
+    <div role="tabpanel" id="panel-home" aria-labelledby="tab-home">
+      <figure class="card top"><div class="pic"><img src="img/art/home.jpg" alt="" loading="lazy">
+        <span class="label" style="left:15.3%;top:94.5%">Grupas</span><span class="label" style="left:38%;top:94.5%">Jaukts</span>
+        <span class="label" style="left:60.9%;top:94.5%">Tikai ikonas</span><span class="label" style="left:83.7%;top:94.5%">Rediģēšanas režīms</span></div>
+        <figcaption><h3>Sākums, kā jums patīk</h3><p>Grupas, jaukts vai tikai ikonas. Velciet daļu uz jebkuru šūnu, padariet to lielu, vidēju vai mazu, vai paslēpiet to.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-maps" aria-labelledby="tab-maps" hidden>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/builder.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Kartes</span><h3>Jebkuras valsts kartes, ko izveido jūsu dators</h3><p>Izvēlieties valsti vai reģionu sadaļā Iestatījumi › Kartes. Jūsu dators izveido tās karti, meklēšanu un maršrutus no OpenStreetMap, un sinhronizācija tos nogādā jūsu tālrunī un planšetdatorā. Kad karte ir trīs mēnešus veca, Tetra piedāvā to izveidot no jauna.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/borders.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Kartes</span><h3>Pāri robežām</h3><p>Ar kaimiņvalsts karti maršruts šķērso robežu arī īstajos robežpunktos, pa galveno ceļu. Norādes jūsu valodā, kilometros vai jūdzēs.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/maps.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Kartes</span><h3>Bezsaistē, ar navigāciju</h3><p>Meklēšana un vietas, maršruti ar automašīnu, kājām vai ar velosipēdu un balsī vadāma navigācija pa pagriezieniem, viss ierīcē. Bez konta, bez izsekošanas.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-photos" aria-labelledby="tab-photos" hidden>
+      <figure class="card" style="--c:#95DF6B"><div class="pic"><img src="img/art/photos.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/gallery.png" alt=""><span class="pill">Fotoattēli</span><h3>Jūsu galerija jūsu ierīcēs</h3><p>Laika līnija, kolekcijas, cilvēki, jums atrasti dokumenti, karte un redaktors. Sejas un birkas ierīcē aprēķina paši.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-files" aria-labelledby="tab-files" hidden>
+      <figure class="card" style="--c:#177BFC"><div class="pic"><img src="img/art/files.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/files.png" alt=""><span class="pill">Faili</span><h3>Faili, ar ikonu katram veidam</h3><p>Failu pārvaldnieks jūsu Tetra mapei: birkas, izlase, mapju krāsas, Miskaste, sīkattēli un sistēmas mapes.</p></figcaption></figure>
+      <figure class="card top"><div class="pic"><img src="img/art/send.jpg" alt="" loading="lazy">
+        <span class="label head" style="left:25.6%;top:24.7%">No tālruņa uz datoru</span>
+        <span class="label head" style="left:74.4%;top:24.7%">No datora uz tālruni</span>
+        <span class="label" style="left:10.4%;top:89.1%">1. Kopīgot › Sūtīt uz datoru</span><span class="label" style="left:35.6%;top:77.8%">2. Datorā: Faili › From phone</span>
+        <span class="label" style="left:64.4%;top:77.8%">1. Datorā: Sūtīt uz tālruni</span><span class="label" style="left:89.6%;top:89.1%">2. Faili › From computer</span></div>
+        <figcaption><h3>Faili abos virzienos sekundē</h3><p>Pa jūsu Wi-Fi: bez kabeļa, bez mākoņa, bez konta. Ja otra puse ir prom, fails gaida un tiek nosūtīts, kad tā atgriezīsies.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" hidden>
+      <figure class="card" style="--c:#FED00A"><div class="pic"><img src="img/art/notes.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/notes.png" alt=""><span class="pill">Piezīmes</span><h3>Piezīmes un kontrolsaraksti</h3><p>Krāsas, etiķetes, piespraudes un katras piezīmes vēsture. Īsinājumtaustiņi planšetdatorā. Tās sinhronizējas ar datoru.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-office" aria-labelledby="tab-office" hidden>
+      <figure class="card" style="--c:#FD7D12"><div class="pic"><img src="img/art/office.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/office.png" alt=""><span class="pill">Office</span><h3>Word, Excel, PowerPoint un PDF</h3><p>Īstas lappuses ar lineāliem, lenti, diagrammām un motīviem. Faili atveras un saglabājas kā paši. PDF rediģē tāpat kā Dokumenti: ar piezīmēm, parakstiem, veidlapām un aizklāšanu; dokumentos iegultās filmas un skaņas tiek atskaņotas.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-calendar" aria-labelledby="tab-calendar" hidden>
+      <figure class="card" style="--c:#F41879;--on:#fff;--x:37%"><div class="pic"><img src="img/art/calendar.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/calendar.png" alt=""><span class="pill">Kalendārs · Taimeris</span><h3>Kalendārs un taimeri</h3><p>Vienkārši iCalendar faili: diena, nedēļa, mēnesis un dienaskārtība, atgādinājumi, dzimšanas dienas no Kontaktiem. Taimeri skan visās ierīcēs.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-contacts" aria-labelledby="tab-contacts" hidden>
+      <figure class="card" style="--c:#BE7E4D;--on:#fff"><div class="pic"><img src="img/art/people.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/contacts.png" alt=""><span class="pill">Kontakti · Tālrunis</span><h3>Kontakti un zvani</h3><p>Jūsu kontakti kā vCard faili, ar sejām no Fotoattēliem. Numura izsaukšana ar Nesenie un mēstuļu pārbaudi; zvaniet no datora caur tālruni.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" hidden>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/bubble.jpg" alt="" loading="lazy">
+        <span class="label" style="left:56.2%;top:69.3%">Kāds zvana</span><span class="label" style="left:83.1%;top:86.1%">Sarunas laikā, tastatūra atvērta</span></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Tālrunis</span><h3>Zvani datorā</h3><p>Noklikšķiniet uz numura Kontaktos, un jūsu tālrunis to izsauks. Kad kāds zvana, burbulis ekrānā ļauj atbildēt, turēt, izslēgt skaņu, ievadīt ciparus, pārslēgt skaņu uz tālruņa skaļruni vai beigt sarunu, kamēr tālrunis paliek jūsu kabatā.</p></figcaption></figure>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/phone-tablet.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Tālrunis</span><h3>Planšetdatorā – divi paneļi</h3><p>Nesenie pa kreisi, tastatūra vienmēr atvērta pa labi. Numurus atpazīst pēc jūsu valsts koda, stacionārie tālruņi tiek nosaukti pēc vietas no jūsu kartēm, un Zvanu bloķēšana glabā savu sarakstu.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-backup" aria-labelledby="tab-backup" hidden>
+      <figure class="card" style="--c:#2E9D4F;--on:#fff;--x:34%"><div class="pic"><img src="img/art/safety.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/sync.png" alt=""><span class="pill">Ierīces · Diski</span><h3>Vairāk nekā viena kopija, bez abonementa</h3><p>Tetra parāda, cik vietās glabājas katra fotogrāfija un kas vēl atrodas tikai vienā. Savienojiet USB disku automātiskām dublēšanām vai pārvietojiet vecās fotogrāfijas uz to, lai datora SSD paliktu viegls.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-data" aria-labelledby="tab-data" hidden>
+      <figure class="card" style="--c:#9AD01E"><div class="pic"><img src="img/art/data.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/data.png" alt=""><span class="pill">Dati</span><h3>Dati, Wi-Fi un signāls</h3><p>Cik katra lietotne patērē mobilajos datos un Wi-Fi, brīdinājumi par plānu, pirms tas beidzas, un tālrunis, planšetdators un dators kopā.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-guide" aria-labelledby="tab-guide" hidden>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/guide.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Ceļvedis</span><h3>Ceļvedis, kas parāda</h3><p>Pirmajā palaišanā un sadaļā Iestatījumi › Ceļvedis: kur pieskarties un kāpēc, soli pa solim. Attēli kustas, lai parādītu, kas notiek, un Izmēģināt rāda soli, kamēr to veicat patiesi.</p></figcaption></figure>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/languages.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Iestatījumi</span><h3>Jūsu valodā</h3><p>Visas 24 ES oficiālās valodas tālrunī un datorā. Tetra seko jūsu sistēmas valodai, ja vien sadaļā Iestatījumi › Izskats neizvēlaties citu.</p></figcaption></figure>
+    </div>
+    <p class="note">Ekrānuzņēmumos izmantoti izdomāti paraugdati.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Ātra, tīšām</h2>
+    <p class="sub">Katra lietotne tika izmērīta tālrunī un pārstrādāta, līdz tā atveras mirklī. Laiks, līdz ekrānā redzams saturs, pirms un tagad:</p>
+    <div class="speed">
+      <b>Kontakti, tūlīt pēc palaišanas</b><div class="bar" style="--b:100%;--a:5.8%"><i></i><i></i><span>3.3 s → 190 ms</span></div>
+      <b>Tālrunis, tūlīt pēc palaišanas</b><div class="bar" style="--b:75.8%;--a:7.6%"><i></i><i></i><span>2.5 s → 250 ms</span></div>
+      <b>Dati</b><div class="bar" style="--b:72.7%;--a:5.3%"><i></i><i></i><span>2.4 s → 175 ms</span></div>
+      <b>Tetra sākums</b><div class="bar" style="--b:28%;--a:6.2%"><i></i><i></i><span>924 ms → 205 ms</span></div>
+      <b>Office sākums</b><div class="bar" style="--b:24.1%;--a:1.9%"><i></i><i></i><span>796 ms → 62 ms</span></div>
+      <b>Fotoattēli</b><div class="bar" style="--b:19.5%;--a:9.7%"><i></i><i></i><span>643 ms → 320 ms</span></div>
+      <b>Piezīmes</b><div class="bar" style="--b:11.5%;--a:1.7%"><i></i><i></i><span>378 ms → 55 ms</span></div>
+      <b>Kalendārs</b><div class="bar" style="--b:8.5%;--a:1%"><i></i><i></i><span>280 ms → 34 ms</span></div>
+      <b>Taimeris</b><div class="bar" style="--b:7.2%;--a:1.4%"><i></i><i></i><span>236 ms → 45 ms</span></div>
+      <b>Faili</b><div class="bar" style="--b:5%;--a:1.3%"><i></i><i></i><span>166 ms → 43 ms</span></div>
+    </div>
+    <p class="note">Pelēks: pirms · krāsa: tagad. Datorā Fotoattēli atkal atveras 71 ms, nevis 741 ms.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Iegūt Tetra</h2>
+    <p class="sub">Instalējiet to tālrunī un datorā, vienreiz savienojiet tos ar QR kodu, un tie sinhronizējas pa jūsu Wi-Fi.</p>
+    <div class="two">
+      <div class="panel">
+        <h3>Tetra Android ierīcēm</h3>
+        <p>Tālruņi un planšetdatori ar Android 11 vai jaunāku versiju.</p>
+        <a href="https://github.com/kalotrapezis/Tetra-mobile">Avots un sīkāka informācija GitHub</a>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Lejupielādēt APK</b><span>0.6.0 beta 4</span></div></a>
+      </div>
+      <div class="panel">
+        <h3>Tetra datoram</h3>
+        <p>Linux: AppImage vairumam izplatījumu vai .deb Debian, Ubuntu un Mint. Tas gaida jūsu tālruni sistēmas teknē.</p>
+        <a href="https://github.com/kalotrapezis/Tetra">Avots un sīkāka informācija GitHub</a>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>AppImage</b><span>0.6.0 beta 32</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>.deb</b><span>0.6.0 beta 32</span></div></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Jautājumi</h2>
+    <div class="faq">
+      <details id="faq-install" open><summary>Kā instalēt Tetra ārpus Play Store?</summary><ol><li>Tālrunī atveriet šo lapu vai nolasiet QR kodu un pieskarieties <b>Lejupielādēt Android</b>.</li><li>Kad lejupielāde ir pabeigta, pieskarieties tās paziņojumam vai atveriet <b>Faili › Lejupielādes</b> un pieskarieties <b>Tetra-…-arm64.apk</b>.</li><li>Pirmoreiz Android paziņo, ka jūsu pārlūkprogrammai (vai Failiem) nav atļauts instalēt lietotnes. Pieskarieties <b>Iestatījumi</b>, ieslēdziet <b>Atļaut no šī avota</b> un atgriezieties.</li><li>Pieskarieties <b>Instalēt</b>. Ja Play Protect brīdina par nezināmu lietotni, pieskarieties <b>Sīkāka informācija</b>, tad <b>Tomēr instalēt</b>.</li><li>Pieskarieties <b>Atvērt</b>. Tetra ceļvedis sākas un parāda, kā viss darbojas.</li></ol><p>Katrs tālruņa ražotājs šos soļus formulē nedaudz citādi, bet soļi ir tie paši. Atjauninājumi instalējas tādā pašā veidā, pār veco versiju, un viss saglabājas.</p></details>
+      <details id="faq-safe"><summary>Vai ir droši instalēt šādu APK?</summary><p>Lejupielādējiet Tetra tikai no šīs lapas vai no tās GitHub laidieniem. Katrs laidiens ir parakstīts ar to pašu atslēgu, un Android instalē atjauninājumu tikai tad, ja tam ir šis paraksts. Pirmkods ir publiski pieejams ikvienam lasīšanai.</p></details>
+      <details id="faq-linux"><summary>Kā palaist AppImage Linux?</summary><p>Lejupielādējiet to, ar peles labo pogu noklikšķiniet uz tā › <b>Rekvizīti</b> › <b>Atļaujas</b> › <b>Atļaut faila izpildi kā programmu</b> (vai palaidiet <code>chmod +x Tetra-*.AppImage</code>), tad divreiz noklikšķiniet uz tā. Debian, Ubuntu un Mint .deb atveras jūsu programmatūras instalētājā vai instalējas ar <code>sudo apt install ./local-drive-desktop_*_amd64.deb</code>.</p></details>
+      <details id="faq-computer"><summary>Vai man vajag datoru?</summary><p>Nē. Tetra darbojas pati tālrunī vai planšetdatorā. Ar datora lietotni jūsu faili sinhronizējas pa jūsu Wi-Fi, un dators izveido jebkuras valsts kartes.</p></details>
+      <details id="faq-free"><summary>Vai tas maksā, vai vajag kontu?</summary><p>Nē. Tetra ir brīvā programmatūra (GPL 3.0): bez konta, bez reklāmām, bez izsekošanas. Nekas neatstāj jūsu ierīces.</p></details>
+      <details id="faq-files"><summary>Kur ir mani faili?</summary><p>Vienā mapē: <b>Tetra</b> tālruņa krātuvē un <b>~/Tetra</b> datorā. Tie ir vienkārši faili: fotogrāfijas, dokumenti, piezīmes, kalendāri (.ics) un kontakti (.vcf), ko var atvērt arī citas lietotnes.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Tetra ir brīvā programmatūra (GPL 3.0) un beta versija: glabājiet savas dublējumu kopijas. Ekrānuzņēmumos izmantoti izdomāti paraugdati. Avots: <a href="https://github.com/kalotrapezis/Tetra-mobile">Android</a> · <a href="https://github.com/kalotrapezis/Tetra">datora</a></div>
+</footer>
+<script>
+  // The language: the one picked in the menu (remembered), else, on the English page, the browser's first language the
+  // site has. The browser's languages, not the country: no address leaves the visitor's computer, and a country can have several.
+  const langs = [...document.querySelectorAll('.lang a')].map(a => a.hreflang)
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { try { localStorage.setItem('lang', a.hreflang) } catch {} }))
+  let chosen = null; try { chosen = localStorage.getItem('lang') } catch {}
+  if (document.documentElement.lang === 'en' && !chosen) {
+    const want = navigator.languages.map(l => l.slice(0, 2).toLowerCase()).find(l => langs.includes(l))
+    if (want && want !== 'en') location.replace(want + '.html' + location.hash)
+  }
+  // The applet tabs: click, arrow keys, and #name in the address keep the chosen one; the language switch keeps it too.
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function show(tab, focus) {
+    tabs.forEach(t => { const on = t === tab; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on; });
+    if (focus) tab.focus();
+    history.replaceState(null, '', '#' + tab.id.slice(4));
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => show(t));
+    t.addEventListener('keydown', e => {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (d) { e.preventDefault(); show(tabs[(i + d + tabs.length) % tabs.length], true); }
+    });
+  });
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { a.href = a.getAttribute('href').split('#')[0] + location.hash }));
+  // a link to a question opens its answer
+  const open = () => { const d = document.getElementById(location.hash.slice(1)); if (d?.tagName === 'DETAILS') d.open = true }
+  addEventListener('hashchange', open); open()
+  const start = document.getElementById('tab-' + location.hash.slice(1));
+  if (start) show(start);
+</script>
+</body>
+</html>

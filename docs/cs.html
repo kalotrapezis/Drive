@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tetra</title>
+<meta name="description" content="Tetra: jedna soukromá superaplikace pro váš telefon, tablet a počítač. Svobodný software; nic neopouští vaše zařízení.">
+<meta property="og:title" content="Tetra">
+<meta property="og:description" content="Jedna soukromá superaplikace pro váš telefon, tablet a počítač. Nic neopouští vaše zařízení.">
+<meta property="og:image" content="img/tetra-devices.jpg">
+<link rel="alternate" hreflang="bg" href="bg.html">
+<link rel="alternate" hreflang="cs" href="cs.html">
+<link rel="alternate" hreflang="da" href="da.html">
+<link rel="alternate" hreflang="de" href="de.html">
+<link rel="alternate" hreflang="el" href="el.html">
+<link rel="alternate" hreflang="en" href="index.html">
+<link rel="alternate" hreflang="es" href="es.html">
+<link rel="alternate" hreflang="et" href="et.html">
+<link rel="alternate" hreflang="fi" href="fi.html">
+<link rel="alternate" hreflang="fr" href="fr.html">
+<link rel="alternate" hreflang="ga" href="ga.html">
+<link rel="alternate" hreflang="hr" href="hr.html">
+<link rel="alternate" hreflang="hu" href="hu.html">
+<link rel="alternate" hreflang="it" href="it.html">
+<link rel="alternate" hreflang="lt" href="lt.html">
+<link rel="alternate" hreflang="lv" href="lv.html">
+<link rel="alternate" hreflang="mt" href="mt.html">
+<link rel="alternate" hreflang="nl" href="nl.html">
+<link rel="alternate" hreflang="pl" href="pl.html">
+<link rel="alternate" hreflang="pt" href="pt.html">
+<link rel="alternate" hreflang="ro" href="ro.html">
+<link rel="alternate" hreflang="sk" href="sk.html">
+<link rel="alternate" hreflang="sl" href="sl.html">
+<link rel="alternate" hreflang="sv" href="sv.html">
+<link rel="icon" href="img/tetra.png">
+<style>
+  :root { --bg: #0f1113; --card: #191c20; --line: #2a2e34; --text: #f4f6f8; --muted: #b0b7c0; --teal: #04d5cc;
+          --phone: #02505b; --violet: #822ad1; --blue: #177bfc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 system-ui, "Noto Sans", "Segoe UI", sans-serif; }
+  a { color: var(--teal); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 56px 0 24px; text-align: center;
+           /* the four corners lit in Tetra's colours, the icon in the middle */
+           background: radial-gradient(800px 520px at 0% 0%, rgba(149, 223, 107, .30) 0%, transparent 70%),
+                       radial-gradient(800px 520px at 100% 0%, rgba(23, 123, 252, .36) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 0% 100%, rgba(227, 20, 31, .30) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 100% 100%, rgba(254, 208, 10, .26) 0%, transparent 70%); }
+  header img.logo { width: 128px; height: 128px; filter: drop-shadow(0 0 28px rgba(255, 255, 255, .18)); }
+  h1 { font-size: clamp(40px, 7vw, 72px); margin: 8px 0 4px; letter-spacing: -1px; }
+  .lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; margin: 0 auto 28px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 0 0 32px; }
+  .btn { display: flex; align-items: center; gap: 14px; padding: 14px 22px 14px 14px; border-radius: 22px; color: #fff;
+         text-decoration: none; min-width: 270px; text-align: left; transition: transform .15s, filter .15s; }
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
+  .btn img { width: 52px; height: 52px; border-radius: 13px; }
+  .btn b { display: block; font-size: 20px; } .btn span { font-size: 14px; opacity: .85; }
+  .android { background: var(--phone); } .appimage { background: var(--violet); } .deb { background: var(--blue); }
+  .hero { width: 100%; border-radius: 22px; display: block; border: 1px solid var(--line); }
+  section { padding: 56px 0 8px; }
+  h2 { font-size: clamp(28px, 4vw, 40px); margin: 0 0 8px; text-align: center; }
+  .sub { color: var(--muted); max-width: 760px; margin: 0 auto; text-align: center; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 26px; }
+  .tile { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 22%, var(--card)) 0%, var(--card) 55%);
+          border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .tile img { width: 56px; height: 56px; border-radius: 14px; }
+  .tile h3 { margin: 12px 0 6px; font-size: 21px; } .tile p { margin: 0; color: var(--muted); font-size: 16px; }
+  .tile b { color: var(--text); }
+  .island { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; background: #000; border: 1px solid var(--line);
+            border-radius: 30px; padding: 8px; margin: 26px auto 22px; width: fit-content; max-width: 100%; }
+  .island button { font: inherit; font-size: 15px; font-weight: 600; color: var(--text); background: transparent; border: 0;
+                   border-radius: 999px; padding: 9px 18px; cursor: pointer; }
+  .island button:hover { background: #22262b; }
+  .island button[aria-selected="true"] { background: var(--c); color: var(--on); }
+  .island button:focus-visible { outline: 2px solid var(--c); outline-offset: 2px; }
+  [role="tabpanel"] > p { text-align: center; color: var(--muted); max-width: 760px; margin: 0 auto 18px; }
+  .shots { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; align-items: flex-start; }
+  .shots figure { margin: 0; text-align: center; }
+  .shots figure.phone { flex: 0 1 230px; }
+  .shots figure.wide { flex: 1 1 560px; max-width: 900px; }
+  .shots img { width: 100%; display: block; border-radius: 16px; border: 1px solid var(--line); background: #000; }
+  .shots figure.phone img { border-radius: 26px; border: 6px solid #08090a; outline: 1px solid var(--line); }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .note { text-align: center; color: #7d858f; font-size: 14px; }
+  .grid { display: grid; gap: 18px; margin-top: 22px; }
+  .grid img, .wide-img { width: 100%; border-radius: 18px; display: block; border: 1px solid var(--line); margin-top: 22px; }
+  /* A card: a picture without words and its words as HTML on it, so a translation changes only text. The text column
+     ends where the devices start (--x); cqi keeps it the picture's size. On a phone the words go above the picture. */
+  .card { position: relative; margin: 22px 0 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+          background: #0f1113; container-type: inline-size; }
+  .card .pic { position: relative; }
+  .card .pic > img { display: block; width: 100%; aspect-ratio: 16 / 9; }
+  .card figcaption { position: absolute; top: 0; bottom: 0; left: 5%; width: calc(var(--x, 40%) - 9%);
+                     display: flex; flex-direction: column; justify-content: center; }
+  .card figcaption .icon { width: 6cqi; height: 6cqi; border-radius: 1.4cqi; }
+  .card .pill { align-self: flex-start; margin: 1.6cqi 0 1.4cqi; padding: .35cqi 1.1cqi; border-radius: 999px; background: var(--c);
+                color: var(--on, #111); font-size: 1.3cqi; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+  .card h3 { margin: 0 0 1.2cqi; font-size: 3.5cqi; line-height: 1.12; hyphens: auto; overflow-wrap: break-word; }  /* long words (et, fi, de) */
+  .card figcaption p { margin: 0; color: var(--muted); font-size: 1.6cqi; line-height: 1.5; }
+  .card.top figcaption { bottom: auto; left: 0; width: 100%; top: 3%; align-items: center; text-align: center; }
+  .card.top figcaption p { max-width: 80%; }
+  .card .label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--text); font-weight: 700;
+                 font-size: max(10px, 1.6cqi); text-shadow: 0 1px 3px #000; }
+  .card .label.head { font-size: max(11px, 2.2cqi); }
+  .speed { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; margin-top: 22px;
+           display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; font-size: 15px; }
+  .speed b { font-weight: 600; }
+  .speed .bar { position: relative; height: 22px; margin-right: 9.5em; }  /* room for the numbers after the longest bar */
+  .speed .bar i { position: absolute; left: 0; top: 4px; height: 14px; border-radius: 7px; background: #3a4048; width: var(--b); }
+  .speed .bar i + i { background: var(--teal); width: var(--a); }
+  .speed .bar span { position: absolute; left: calc(var(--b) + 10px); top: 0; color: var(--muted); white-space: nowrap; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; margin-top: 26px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .panel h3 { margin: 0 0 6px; font-size: 24px; } .panel p { color: var(--muted); margin: 0 0 6px; }
+  .panel .btn { min-width: 0; margin-top: 12px; }
+  .lang { position: absolute; top: 16px; right: 16px; z-index: 2; text-align: left; }
+  .lang summary { list-style: none; cursor: pointer; background: rgba(0, 0, 0, .55); border: 1px solid var(--line); border-radius: 999px;
+                  padding: 6px 14px; font-size: 14px; font-weight: 700; }
+  .lang summary::-webkit-details-marker { display: none; }
+  .lang summary::after { content: " ▾"; }
+  .lang ul { position: absolute; right: 0; margin: 6px 0 0; padding: 6px; list-style: none; columns: 2; column-gap: 4px; width: max-content;
+             max-width: calc(100vw - 32px); background: #15181b; border: 1px solid var(--line); border-radius: 14px; }
+  .lang a { display: block; color: var(--text); text-decoration: none; font-size: 14px; padding: 5px 12px; border-radius: 8px; }
+  .lang a:hover { background: #22262b; }
+  .lang a[aria-current="page"] { background: var(--text); color: #111; }
+  header { position: relative; }
+  .buttons { align-items: stretch; }
+  .group { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 28px; background: rgba(0, 0, 0, .35);
+           border: 1px solid var(--line); }
+  .group h3 { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 18px; }
+  .group h3 img { width: 30px; height: 30px; }
+  .qr { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; text-align: left; }
+  .qr img { width: 92px; height: 92px; border-radius: 10px; }
+  .qr p { margin: 0; }
+  .btn img[src$=".svg"] { background: rgba(255, 255, 255, .1); padding: 6px; }
+  .faq { max-width: 820px; margin: 24px auto 0; display: grid; gap: 10px; }
+  .faq details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px; }
+  .faq summary { cursor: pointer; font-weight: 700; font-size: 18px; }
+  .faq ol, .faq p { color: var(--muted); margin: 10px 0 0; }
+  .faq li { margin: 4px 0; }
+  .faq b, .faq code { color: var(--text); }
+  footer { color: #7d858f; font-size: 14px; padding: 48px 0 40px; text-align: center; }
+  @media (max-width: 700px) {  /* a phone: the tabs would not fit, so every card one under the other, the words above */
+    .qr { display: none; }  /* already on the phone */
+    .island { display: none; }
+    [role="tabpanel"] { display: block !important; }
+    .card { display: flex; flex-direction: column-reverse; }
+    .card figcaption, .card.top figcaption { position: static; width: auto; padding: 18px 18px 6px; align-items: flex-start; text-align: left; }
+    .card.top figcaption p { max-width: none; }
+    .card figcaption .icon { width: 44px; height: 44px; border-radius: 11px; }
+    .card .pill { font-size: 12px; padding: 3px 10px; margin: 10px 0 8px; }
+    .card h3 { font-size: 24px; margin-bottom: 6px; }
+    .card figcaption p { font-size: 15px; }
+    .card:not(.top) .pic > img { aspect-ratio: 5 / 4; object-fit: cover; object-position: right; }
+    .speed { grid-template-columns: 1fr; gap: 2px; }
+    .card .label { white-space: normal; width: 24%; text-align: center; line-height: 1.2; }
+    .card .label.head { width: 46%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <details class="lang"><summary aria-label="Language">CS</summary><ul><li><a href="bg.html" hreflang="bg" lang="bg">Български</a></li><li><a href="cs.html" hreflang="cs" lang="cs" aria-current="page">Čeština</a></li><li><a href="da.html" hreflang="da" lang="da">Dansk</a></li><li><a href="de.html" hreflang="de" lang="de">Deutsch</a></li><li><a href="el.html" hreflang="el" lang="el">Ελληνικά</a></li><li><a href="index.html" hreflang="en" lang="en">English</a></li><li><a href="es.html" hreflang="es" lang="es">Español</a></li><li><a href="et.html" hreflang="et" lang="et">Eesti</a></li><li><a href="fi.html" hreflang="fi" lang="fi">Suomi</a></li><li><a href="fr.html" hreflang="fr" lang="fr">Français</a></li><li><a href="ga.html" hreflang="ga" lang="ga">Gaeilge</a></li><li><a href="hr.html" hreflang="hr" lang="hr">Hrvatski</a></li><li><a href="hu.html" hreflang="hu" lang="hu">Magyar</a></li><li><a href="it.html" hreflang="it" lang="it">Italiano</a></li><li><a href="lt.html" hreflang="lt" lang="lt">Lietuvių</a></li><li><a href="lv.html" hreflang="lv" lang="lv">Latviešu</a></li><li><a href="mt.html" hreflang="mt" lang="mt">Malti</a></li><li><a href="nl.html" hreflang="nl" lang="nl">Nederlands</a></li><li><a href="pl.html" hreflang="pl" lang="pl">Polski</a></li><li><a href="pt.html" hreflang="pt" lang="pt">Português</a></li><li><a href="ro.html" hreflang="ro" lang="ro">Română</a></li><li><a href="sk.html" hreflang="sk" lang="sk">Slovenčina</a></li><li><a href="sl.html" hreflang="sl" lang="sl">Slovenščina</a></li><li><a href="sv.html" hreflang="sv" lang="sv">Svenska</a></li></ul></details>
+  <div class="wrap">
+    <img class="logo" src="img/tetra.png" alt="">
+    <h1>Tetra</h1>
+    <p class="lead">Jedna soukromá superaplikace pro váš telefon, tablet a počítač. Svobodný software, bez účtu, bez cloudu: nic neopouští vaše zařízení.</p>
+    <div class="buttons">
+      <div class="group"><h3><img src="img/android.svg" alt="">Android</h3>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Stáhnout pro Android</b><span>APK · 0.6.0 beta 4 · Android 11+</span></div></a>
+        <div class="qr"><img src="img/qr-android.svg" alt="QR kód pro stažení pro Android"><p>Nebo ji naskenujte telefonem.<br><a href="#faq-install">Jak ji nainstalovat</a></p></div></div>
+      <div class="group"><h3><img src="img/linux.svg" alt="">Linux</h3>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>Linux AppImage</b><span>0.6.0 beta 32 · většina distribucí</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>Linux .deb</b><span>Debian, Ubuntu, Mint</span></div></a></div>
+    </div>
+    <img class="hero" src="img/tetra-devices.jpg" alt="Tetra na počítači, tabletu a telefonu">
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Co pro vás Tetra dělá</h2>
+    <div class="tiles">
+      <div class="tile" style="--c:#177BFC"><img src="img/icons/files.png" alt=""><h3>Soubory z počítače a do něj za vteřinu</h3><p>Cokoli sdílejte přes <b>Odeslat do počítače</b> v telefonu, nebo přes <b>Odeslat do telefonu</b> v PC. Jde to přes vaši vlastní síť Wi-Fi: bez kabelu, bez cloudu. Pokud je počítač pryč, odešle se, až se vrátí.</p></div>
+      <div class="tile" style="--c:#1A9AA8"><img src="img/icons/phone.png" alt=""><h3>Volání z počítače</h3><p>Klikněte v PC na číslo v Kontaktech a váš telefon ho vytočí. Bublina hovoru na obrazovce přijme, podrží, ztlumí, ukončí hovor a přepne zvuk do reproduktoru telefonu.</p></div>
+      <div class="tile" style="--c:#25C4FE"><img src="img/icons/maps.png" alt=""><h3>Mapy každé země, offline</h3><p>Vyberte na počítači zemi: Tetra z OpenStreetMap vytvoří její mapu, vyhledávání a trasy a pošle je do vašeho telefonu a tabletu. Trasy přecházejí hranice na skutečných přechodech, s pokyny ve vašem jazyce.</p></div>
+      <div class="tile" style="--c:#8E99A6"><img src="img/icons/settings.png" alt=""><h3>Ve vašem jazyce, s průvodcem</h3><p>Všech 24 úředních jazyků EU. Průvodce při prvním spuštění a kdykoli v Nastavení ukazuje krok za krokem, kam klepnout a proč.</p></div>
+      <div class="tile" style="--c:#9AD01E"><img src="img/icons/data.png" alt=""><h3>Váš datový tarif pod dohledem</h3><p>Řekněte Tetře svůj tarif jednou. Upozorní vás na 50 %, 80 % a 100 %, nebo na kroky, které zvolíte, a předpoví konec měsíce dřív, než tam dojdete.</p></div>
+      <div class="tile" style="--c:#F41879"><img src="img/icons/calendar.png" alt=""><h3>Kalendář a časovače, s AI</h3><p>Vestavěné dovednosti (skills) umožní Claude, ChatGPT nebo jakémukoli asistentovi, který umí pracovat s vaším počítačem, naimportovat rozvrh, naplánovat týden nebo spustit časovač. Jen upravují soubory kalendáře a časovačů.</p></div>
+      <div class="tile" style="--c:#FED00A"><img src="img/icons/notes.png" alt=""><h3>Poznámky a seznamy, uspořádané</h3><p>Poznámky a nákupní seznamy udržujte uspořádané pomocí štítků a synchronizované mezi telefonem a počítačem. Každá poznámka je obyčejný soubor ve vaší složce Tetra.</p></div>
+      <div class="tile" style="--c:#95DF6B"><img src="img/icons/gallery.png" alt=""><h3>Fotky, které vědí kdo a kde</h3><p>Štítky, živé fotky a kolekce Lidé a Dokumenty z rozpoznávání obličejů, které běží v zařízení. Najděte fotky podle místa*, a přeneste své Google Photos (import Takeout v počítači).</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/scanner.png" alt=""><h3>Čistě naskenujte každou stránku</h3><p>Filtry a automatické ořezávání najdou a narovnají stránku: všechny nástroje, které potřebujete k dokonalé digitální kopii, pro kolik stránek chcete.</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/pdf.png" alt=""><h3>Skryjte, co má zůstat soukromé</h3><p>Utajte PDF a fotky tak, aby se skrytá část odstranila ze samotného souboru, ne jen přikryla. Tetra najde oči na fotce a zakryje je černými pruhy nebo hvězdičkami a najde text k ukrytí.</p></div>
+      <div class="tile" style="--c:#FD7D12"><img src="img/icons/office.png" alt=""><h3>Office a PDF, dost dobré</h3><p>Word, Excel a PowerPoint se otevírají a ukládají jako ony samy, dostatečně kompatibilně pro každodenní práci. PDF se upravují jako v Dokumentech a filmy a zvuky uvnitř dokumentů se přehrávají. Rozložení pro telefon, které opravdu využijete.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/drive.png" alt=""><h3>Vnitřní SSD zůstane lehký</h3><p>Připojte externí disk k Tetře a ten zálohuje všechno automaticky, nebo na něj přesune starší fotky, aby vlastní disk počítače zůstal co nejprázdnější.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/sync.png" alt=""><h3>Víc než jedna kopie, bez předplatného</h3><p>Tetra ukazuje, na kolika místech je každý soubor: v telefonu, tabletu, počítači nebo na USB disku, a co je jen na jednom místě. Vaše vlastní zálohy, bez tarifu cloudu, za který byste platili.</p></div>
+    </div>
+    <p class="note">*Hledání fotek podle místa zatím pokrývá jen Řecko.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Každá aplikace, na každé obrazovce</h2>
+    <p class="sub">Jeden Domů, jedna složka, stejné aplikace na Androidu i Linuxu. Uvnitř také: Skener, Kódy a Textový editor.</p>
+    <div class="island" role="tablist" aria-label="Aplikace">
+      <button role="tab" id="tab-home" aria-controls="panel-home" aria-selected="true" tabindex="0" style="--c:#8E99A6;--on:#111">Domů</button>
+      <button role="tab" id="tab-maps" aria-controls="panel-maps" aria-selected="false" tabindex="-1" style="--c:#25C4FE;--on:#111">Mapy</button>
+      <button role="tab" id="tab-photos" aria-controls="panel-photos" aria-selected="false" tabindex="-1" style="--c:#95DF6B;--on:#111">Fotky</button>
+      <button role="tab" id="tab-files" aria-controls="panel-files" aria-selected="false" tabindex="-1" style="--c:#177BFC;--on:#fff">Soubory</button>
+      <button role="tab" id="tab-notes" aria-controls="panel-notes" aria-selected="false" tabindex="-1" style="--c:#FED00A;--on:#111">Poznámky</button>
+      <button role="tab" id="tab-office" aria-controls="panel-office" aria-selected="false" tabindex="-1" style="--c:#FD7D12;--on:#111">Office</button>
+      <button role="tab" id="tab-calendar" aria-controls="panel-calendar" aria-selected="false" tabindex="-1" style="--c:#F41879;--on:#fff">Kalendář · Časovač</button>
+      <button role="tab" id="tab-contacts" aria-controls="panel-contacts" aria-selected="false" tabindex="-1" style="--c:#BE7E4D;--on:#fff">Kontakty</button>
+      <button role="tab" id="tab-phone" aria-controls="panel-phone" aria-selected="false" tabindex="-1" style="--c:#1A9AA8;--on:#fff">Telefon</button>
+      <button role="tab" id="tab-backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1" style="--c:#2E9D4F;--on:#fff">Záloha</button>
+      <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1" style="--c:#9AD01E;--on:#111">Data</button>
+      <button role="tab" id="tab-guide" aria-controls="panel-guide" aria-selected="false" tabindex="-1" style="--c:#8E99A6;--on:#111">Průvodce · Nastavení</button>
+    </div>
+    <div role="tabpanel" id="panel-home" aria-labelledby="tab-home">
+      <figure class="card top"><div class="pic"><img src="img/art/home.jpg" alt="" loading="lazy">
+        <span class="label" style="left:15.3%;top:94.5%">Skupiny</span><span class="label" style="left:38%;top:94.5%">Směs</span>
+        <span class="label" style="left:60.9%;top:94.5%">Jen ikony</span><span class="label" style="left:83.7%;top:94.5%">Režim úprav</span></div>
+        <figcaption><h3>Domů, po vašem</h3><p>Skupiny, směs, nebo jen ikony. Přetáhněte část do libovolného pole, udělejte ji velkou, střední nebo malou, nebo ji skryjte.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-maps" aria-labelledby="tab-maps" hidden>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/builder.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Mapy</span><h3>Mapy každé země, vytvořené vaším počítačem</h3><p>Vyberte zemi nebo oblast v Nastavení › Mapy. Počítač z OpenStreetMap vytvoří mapu, vyhledávání a trasy a synchronizace je přinese do telefonu a tabletu. Když je mapa tři měsíce stará, Tetra nabídne její nové vytvoření.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/borders.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Mapy</span><h3>Přes hranice</h3><p>S mapou sousední země trasa přejde hranici na skutečném přechodu, po hlavní silnici. Pokyny ve vašem jazyce, v kilometrech nebo mílích.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/maps.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Mapy</span><h3>Offline, s navigací</h3><p>Vyhledávání a místa, trasy autem, pěšky nebo na kole a hlasové navádění odbočku po odbočce, vše v zařízení. Bez účtu, bez sledování.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-photos" aria-labelledby="tab-photos" hidden>
+      <figure class="card" style="--c:#95DF6B"><div class="pic"><img src="img/art/photos.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/gallery.png" alt=""><span class="pill">Fotky</span><h3>Vaše galerie, na vašich zařízeních</h3><p>Časová osa, kolekce, lidé, dokumenty nalezené pro vás, mapa a editor. Obličeje a štítky se rozpoznávají v zařízení.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-files" aria-labelledby="tab-files" hidden>
+      <figure class="card" style="--c:#177BFC"><div class="pic"><img src="img/art/files.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/files.png" alt=""><span class="pill">Soubory</span><h3>Soubory, s ikonou pro každý druh</h3><p>Správce souborů pro vaši složku Tetra: štítky, oblíbené, barvy složek, Koš, náhledy a systémové složky.</p></figcaption></figure>
+      <figure class="card top"><div class="pic"><img src="img/art/send.jpg" alt="" loading="lazy">
+        <span class="label head" style="left:25.6%;top:24.7%">Z telefonu do počítače</span>
+        <span class="label head" style="left:74.4%;top:24.7%">Z počítače do telefonu</span>
+        <span class="label" style="left:10.4%;top:89.1%">1. Sdílet › Odeslat do počítače</span><span class="label" style="left:35.6%;top:77.8%">2. V PC: Soubory › From phone</span>
+        <span class="label" style="left:64.4%;top:77.8%">1. V PC: Odeslat do telefonu</span><span class="label" style="left:89.6%;top:89.1%">2. Soubory › From computer</span></div>
+        <figcaption><h3>Soubory oběma směry, za vteřinu</h3><p>Přes vaši vlastní síť Wi-Fi: bez kabelu, bez cloudu, bez účtu. Pokud je druhá strana pryč, soubor počká a odejde, až se vrátí.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" hidden>
+      <figure class="card" style="--c:#FED00A"><div class="pic"><img src="img/art/notes.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/notes.png" alt=""><span class="pill">Poznámky</span><h3>Poznámky a seznamy úkolů</h3><p>Barvy, štítky, připínáčky a historie každé poznámky. Klávesové zkratky na tabletu. Synchronizují se s počítačem.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-office" aria-labelledby="tab-office" hidden>
+      <figure class="card" style="--c:#FD7D12"><div class="pic"><img src="img/art/office.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/office.png" alt=""><span class="pill">Office</span><h3>Word, Excel, PowerPoint a PDF</h3><p>Skutečné stránky s pravítky, panelem nástrojů, grafy a motivy. Soubory se otevírají a ukládají jako ony samy. PDF se upravují jako v Dokumentech, s poznámkami, podpisy, formuláři a utajením; filmy a zvuky uvnitř dokumentů se přehrávají.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-calendar" aria-labelledby="tab-calendar" hidden>
+      <figure class="card" style="--c:#F41879;--on:#fff;--x:37%"><div class="pic"><img src="img/art/calendar.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/calendar.png" alt=""><span class="pill">Kalendář · Časovač</span><h3>Kalendář a časovače</h3><p>Jednoduché soubory iCalendar: den, týden, měsíc a agenda, připomínky, narozeniny z Kontaktů. Časovače zvoní na každém zařízení.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-contacts" aria-labelledby="tab-contacts" hidden>
+      <figure class="card" style="--c:#BE7E4D;--on:#fff"><div class="pic"><img src="img/art/people.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/contacts.png" alt=""><span class="pill">Kontakty · Telefon</span><h3>Kontakty a hovory</h3><p>Vaše kontakty jako soubory vCard, s obličeji z Fotek. Číselník s Nedávnými a kontrolou spamu; volejte z počítače přes telefon.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" hidden>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/bubble.jpg" alt="" loading="lazy">
+        <span class="label" style="left:56.2%;top:69.3%">Někdo volá</span><span class="label" style="left:83.1%;top:86.1%">Během hovoru, s otevřenou klávesnicí</span></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Telefon</span><h3>Hovory z počítače</h3><p>Klikněte na číslo v Kontaktech a váš telefon ho vytočí. Když někdo volá, bublina na obrazovce vám umožní přijmout, podržet, ztlumit, zadat číslice, přepnout zvuk do reproduktoru telefonu nebo položit, zatímco telefon zůstane ve vaší kapse.</p></figcaption></figure>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/phone-tablet.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Telefon</span><h3>Na tabletu, dva panely</h3><p>Nedávné vlevo, klávesnice vždy otevřená vpravo. Čísla se čtou podle kódu vaší země, pevné linky se pojmenují podle místa z vašich map a Blokování hovorů vede vlastní seznam.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-backup" aria-labelledby="tab-backup" hidden>
+      <figure class="card" style="--c:#2E9D4F;--on:#fff;--x:34%"><div class="pic"><img src="img/art/safety.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/sync.png" alt=""><span class="pill">Zařízení · Disky</span><h3>Víc než jedna kopie, bez předplatného</h3><p>Tetra ukazuje, na kolika místech je každá fotka a co je jen na jednom místě. Připojte USB disk pro automatické zálohy, nebo na něj přesuňte staré fotky, aby SSD počítače zůstal lehký.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-data" aria-labelledby="tab-data" hidden>
+      <figure class="card" style="--c:#9AD01E"><div class="pic"><img src="img/art/data.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/data.png" alt=""><span class="pill">Data</span><h3>Data, Wi-Fi a signál</h3><p>Kolik dat každá aplikace spotřebuje na mobilních datech a přes Wi-Fi, upozornění před vyčerpáním tarifu a telefon, tablet a počítač dohromady.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-guide" aria-labelledby="tab-guide" hidden>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/guide.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Průvodce</span><h3>Průvodce, který vás provede</h3><p>Při prvním spuštění a v Nastavení › Průvodce: kam klepnout a proč, krok za krokem. Obrázky se pohybují, aby ukázaly, co se děje, a Vyzkoušet drží krok na očích, když to děláte doopravdy.</p></figcaption></figure>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/languages.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Nastavení</span><h3>Ve vašem jazyce</h3><p>Všech 24 úředních jazyků EU, v telefonu i počítači. Tetra následuje jazyk systému, pokud v Nastavení › Vzhled nevyberete jiný.</p></figcaption></figure>
+    </div>
+    <p class="note">Snímky obrazovky používají vymyšlená ukázková data.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Rychlý, schválně</h2>
+    <p class="sub">Každá aplikace se měřila v telefonu a přepracovala se, až se otevře v mžiku. Čas do zobrazení obsahu na obrazovce, předtím a teď:</p>
+    <div class="speed">
+      <b>Kontakty, hned po spuštění</b><div class="bar" style="--b:100%;--a:5.8%"><i></i><i></i><span>3.3 s → 190 ms</span></div>
+      <b>Telefon, hned po spuštění</b><div class="bar" style="--b:75.8%;--a:7.6%"><i></i><i></i><span>2.5 s → 250 ms</span></div>
+      <b>Data</b><div class="bar" style="--b:72.7%;--a:5.3%"><i></i><i></i><span>2.4 s → 175 ms</span></div>
+      <b>Spuštění Tetry</b><div class="bar" style="--b:28%;--a:6.2%"><i></i><i></i><span>924 ms → 205 ms</span></div>
+      <b>Office domů</b><div class="bar" style="--b:24.1%;--a:1.9%"><i></i><i></i><span>796 ms → 62 ms</span></div>
+      <b>Fotky</b><div class="bar" style="--b:19.5%;--a:9.7%"><i></i><i></i><span>643 ms → 320 ms</span></div>
+      <b>Poznámky</b><div class="bar" style="--b:11.5%;--a:1.7%"><i></i><i></i><span>378 ms → 55 ms</span></div>
+      <b>Kalendář</b><div class="bar" style="--b:8.5%;--a:1%"><i></i><i></i><span>280 ms → 34 ms</span></div>
+      <b>Časovač</b><div class="bar" style="--b:7.2%;--a:1.4%"><i></i><i></i><span>236 ms → 45 ms</span></div>
+      <b>Soubory</b><div class="bar" style="--b:5%;--a:1.3%"><i></i><i></i><span>166 ms → 43 ms</span></div>
+    </div>
+    <p class="note">Šedě: předtím · barva: teď. Na počítači se Fotky znovu otevřou za 71 ms místo 741.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Získat Tetru</h2>
+    <p class="sub">Nainstalujte ho do telefonu a počítače, spárujte je jednou pomocí QR kódu a synchronizují se přes vaši vlastní síť Wi-Fi.</p>
+    <div class="two">
+      <div class="panel">
+        <h3>Tetra pro Android</h3>
+        <p>Telefony a tablety s Androidem 11 nebo novějším.</p>
+        <a href="https://github.com/kalotrapezis/Tetra-mobile">Zdroj a podrobnosti na GitHubu</a>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Stáhnout APK</b><span>0.6.0 beta 4</span></div></a>
+      </div>
+      <div class="panel">
+        <h3>Tetra pro počítač</h3>
+        <p>Linux: AppImage pro většinu distribucí, nebo .deb pro Debian, Ubuntu a Mint. Čeká v oznamovací oblasti na váš telefon.</p>
+        <a href="https://github.com/kalotrapezis/Tetra">Zdroj a podrobnosti na GitHubu</a>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>AppImage</b><span>0.6.0 beta 32</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>.deb</b><span>0.6.0 beta 32</span></div></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Otázky</h2>
+    <div class="faq">
+      <details id="faq-install" open><summary>Jak nainstaluji Tetru mimo Play Store?</summary><ol><li>V telefonu otevřete tuto stránku nebo naskenujte QR kód a klepněte na <b>Stáhnout pro Android</b>.</li><li>Až stahování skončí, klepněte na jeho oznámení, nebo otevřete <b>Soubory › Stažené</b> a klepněte na <b>Tetra-…-arm64.apk</b>.</li><li>Poprvé Android řekne, že váš prohlížeč (nebo Soubory) nesmí instalovat aplikace. Klepněte na <b>Nastavení</b>, zapněte <b>Povolit z tohoto zdroje</b> a vraťte se zpět.</li><li>Klepněte na <b>Instalovat</b>. Pokud Play Protect varuje před neznámou aplikací, klepněte na <b>Další podrobnosti</b> a pak na <b>Přesto instalovat</b>.</li><li>Klepněte na <b>Otevřít</b>. Průvodce Tetry se spustí a ukáže vám, co je kde.</li></ol><p>Každý výrobce telefonů tyto kroky formuluje trochu jinak, ale kroky jsou stejné. Aktualizace se instalují stejně, přes starou verzi, a vše si ponechají.</p></details>
+      <details id="faq-safe"><summary>Je bezpečné instalovat APK takto?</summary><p>Tetra stahujte jen z této stránky nebo z jejích vydání na GitHubu. Každé vydání je podepsáno stejným klíčem a Android nainstaluje aktualizaci, jen pokud nese tento podpis. Zdrojový kód je veřejný a kdokoli ho může číst.</p></details>
+      <details id="faq-linux"><summary>Jak spustím AppImage na Linuxu?</summary><p>Stáhněte ho, klikněte na něj pravým tlačítkem › <b>Vlastnosti</b> › <b>Oprávnění</b> › <b>Povolit spuštění souboru jako programu</b> (nebo spusťte <code>chmod +x Tetra-*.AppImage</code>) a pak na něj dvakrát klikněte. Na Debianu, Ubuntu a Mintu se .deb otevře ve vaší správě softwaru, nebo se nainstaluje příkazem <code>sudo apt install ./local-drive-desktop_*_amd64.deb</code>.</p></details>
+      <details id="faq-computer"><summary>Potřebuji počítač?</summary><p>Ne. Tetra funguje samostatně v telefonu nebo tabletu. S aplikací pro počítač se vaše soubory synchronizují přes vaši vlastní síť Wi-Fi a počítač vytváří mapy kterékoli země.</p></details>
+      <details id="faq-free"><summary>Stojí to něco, nebo potřebuji účet?</summary><p>Ne. Tetra je svobodný software (GPL 3.0): bez účtu, bez reklam, bez sledování. Nic neopouští vaše zařízení.</p></details>
+      <details id="faq-files"><summary>Kde jsou moje soubory?</summary><p>V jedné složce: <b>Tetra</b> v úložišti telefonu a <b>~/Tetra</b> v počítači. Jsou to obyčejné soubory, fotky, dokumenty, poznámky, kalendáře (.ics) a kontakty (.vcf), které mohou otevřít i jiné aplikace.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Tetra je svobodný software (GPL 3.0) a beta: vytvářejte si vlastní zálohy. Snímky obrazovky používají vymyšlená ukázková data. Zdroj: <a href="https://github.com/kalotrapezis/Tetra-mobile">Android</a> · <a href="https://github.com/kalotrapezis/Tetra">počítač</a></div>
+</footer>
+<script>
+  // The language: the one picked in the menu (remembered), else, on the English page, the browser's first language the
+  // site has. The browser's languages, not the country: no address leaves the visitor's computer, and a country can have several.
+  const langs = [...document.querySelectorAll('.lang a')].map(a => a.hreflang)
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { try { localStorage.setItem('lang', a.hreflang) } catch {} }))
+  let chosen = null; try { chosen = localStorage.getItem('lang') } catch {}
+  if (document.documentElement.lang === 'en' && !chosen) {
+    const want = navigator.languages.map(l => l.slice(0, 2).toLowerCase()).find(l => langs.includes(l))
+    if (want && want !== 'en') location.replace(want + '.html' + location.hash)
+  }
+  // The applet tabs: click, arrow keys, and #name in the address keep the chosen one; the language switch keeps it too.
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function show(tab, focus) {
+    tabs.forEach(t => { const on = t === tab; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on; });
+    if (focus) tab.focus();
+    history.replaceState(null, '', '#' + tab.id.slice(4));
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => show(t));
+    t.addEventListener('keydown', e => {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (d) { e.preventDefault(); show(tabs[(i + d + tabs.length) % tabs.length], true); }
+    });
+  });
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { a.href = a.getAttribute('href').split('#')[0] + location.hash }));
+  // a link to a question opens its answer
+  const open = () => { const d = document.getElementById(location.hash.slice(1)); if (d?.tagName === 'DETAILS') d.open = true }
+  addEventListener('hashchange', open); open()
+  const start = document.getElementById('tab-' + location.hash.slice(1));
+  if (start) show(start);
+</script>
+</body>
+</html>

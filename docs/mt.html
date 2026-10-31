@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="mt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tetra</title>
+<meta name="description" content="Tetra: superapplikazzjoni privata waħda għat-telefon, it-tablet u l-kompjuter tiegħek. Software ħieles; xejn ma jitlaq mill-apparati tiegħek.">
+<meta property="og:title" content="Tetra">
+<meta property="og:description" content="Superapplikazzjoni privata waħda għat-telefon, it-tablet u l-kompjuter tiegħek. Xejn ma jitlaq mill-apparati tiegħek.">
+<meta property="og:image" content="img/tetra-devices.jpg">
+<link rel="alternate" hreflang="bg" href="bg.html">
+<link rel="alternate" hreflang="cs" href="cs.html">
+<link rel="alternate" hreflang="da" href="da.html">
+<link rel="alternate" hreflang="de" href="de.html">
+<link rel="alternate" hreflang="el" href="el.html">
+<link rel="alternate" hreflang="en" href="index.html">
+<link rel="alternate" hreflang="es" href="es.html">
+<link rel="alternate" hreflang="et" href="et.html">
+<link rel="alternate" hreflang="fi" href="fi.html">
+<link rel="alternate" hreflang="fr" href="fr.html">
+<link rel="alternate" hreflang="ga" href="ga.html">
+<link rel="alternate" hreflang="hr" href="hr.html">
+<link rel="alternate" hreflang="hu" href="hu.html">
+<link rel="alternate" hreflang="it" href="it.html">
+<link rel="alternate" hreflang="lt" href="lt.html">
+<link rel="alternate" hreflang="lv" href="lv.html">
+<link rel="alternate" hreflang="mt" href="mt.html">
+<link rel="alternate" hreflang="nl" href="nl.html">
+<link rel="alternate" hreflang="pl" href="pl.html">
+<link rel="alternate" hreflang="pt" href="pt.html">
+<link rel="alternate" hreflang="ro" href="ro.html">
+<link rel="alternate" hreflang="sk" href="sk.html">
+<link rel="alternate" hreflang="sl" href="sl.html">
+<link rel="alternate" hreflang="sv" href="sv.html">
+<link rel="icon" href="img/tetra.png">
+<style>
+  :root { --bg: #0f1113; --card: #191c20; --line: #2a2e34; --text: #f4f6f8; --muted: #b0b7c0; --teal: #04d5cc;
+          --phone: #02505b; --violet: #822ad1; --blue: #177bfc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 system-ui, "Noto Sans", "Segoe UI", sans-serif; }
+  a { color: var(--teal); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+  header { padding: 56px 0 24px; text-align: center;
+           /* the four corners lit in Tetra's colours, the icon in the middle */
+           background: radial-gradient(800px 520px at 0% 0%, rgba(149, 223, 107, .30) 0%, transparent 70%),
+                       radial-gradient(800px 520px at 100% 0%, rgba(23, 123, 252, .36) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 0% 100%, rgba(227, 20, 31, .30) 0%, transparent 70%),
+                       radial-gradient(800px 560px at 100% 100%, rgba(254, 208, 10, .26) 0%, transparent 70%); }
+  header img.logo { width: 128px; height: 128px; filter: drop-shadow(0 0 28px rgba(255, 255, 255, .18)); }
+  h1 { font-size: clamp(40px, 7vw, 72px); margin: 8px 0 4px; letter-spacing: -1px; }
+  .lead { font-size: clamp(18px, 2.4vw, 22px); color: var(--muted); max-width: 720px; margin: 0 auto 28px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 0 0 32px; }
+  .btn { display: flex; align-items: center; gap: 14px; padding: 14px 22px 14px 14px; border-radius: 22px; color: #fff;
+         text-decoration: none; min-width: 270px; text-align: left; transition: transform .15s, filter .15s; }
+  .btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
+  .btn img { width: 52px; height: 52px; border-radius: 13px; }
+  .btn b { display: block; font-size: 20px; } .btn span { font-size: 14px; opacity: .85; }
+  .android { background: var(--phone); } .appimage { background: var(--violet); } .deb { background: var(--blue); }
+  .hero { width: 100%; border-radius: 22px; display: block; border: 1px solid var(--line); }
+  section { padding: 56px 0 8px; }
+  h2 { font-size: clamp(28px, 4vw, 40px); margin: 0 0 8px; text-align: center; }
+  .sub { color: var(--muted); max-width: 760px; margin: 0 auto; text-align: center; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 26px; }
+  .tile { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 22%, var(--card)) 0%, var(--card) 55%);
+          border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .tile img { width: 56px; height: 56px; border-radius: 14px; }
+  .tile h3 { margin: 12px 0 6px; font-size: 21px; } .tile p { margin: 0; color: var(--muted); font-size: 16px; }
+  .tile b { color: var(--text); }
+  .island { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; background: #000; border: 1px solid var(--line);
+            border-radius: 30px; padding: 8px; margin: 26px auto 22px; width: fit-content; max-width: 100%; }
+  .island button { font: inherit; font-size: 15px; font-weight: 600; color: var(--text); background: transparent; border: 0;
+                   border-radius: 999px; padding: 9px 18px; cursor: pointer; }
+  .island button:hover { background: #22262b; }
+  .island button[aria-selected="true"] { background: var(--c); color: var(--on); }
+  .island button:focus-visible { outline: 2px solid var(--c); outline-offset: 2px; }
+  [role="tabpanel"] > p { text-align: center; color: var(--muted); max-width: 760px; margin: 0 auto 18px; }
+  .shots { display: flex; flex-wrap: wrap; gap: 18px; justify-content: center; align-items: flex-start; }
+  .shots figure { margin: 0; text-align: center; }
+  .shots figure.phone { flex: 0 1 230px; }
+  .shots figure.wide { flex: 1 1 560px; max-width: 900px; }
+  .shots img { width: 100%; display: block; border-radius: 16px; border: 1px solid var(--line); background: #000; }
+  .shots figure.phone img { border-radius: 26px; border: 6px solid #08090a; outline: 1px solid var(--line); }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .note { text-align: center; color: #7d858f; font-size: 14px; }
+  .grid { display: grid; gap: 18px; margin-top: 22px; }
+  .grid img, .wide-img { width: 100%; border-radius: 18px; display: block; border: 1px solid var(--line); margin-top: 22px; }
+  /* A card: a picture without words and its words as HTML on it, so a translation changes only text. The text column
+     ends where the devices start (--x); cqi keeps it the picture's size. On a phone the words go above the picture. */
+  .card { position: relative; margin: 22px 0 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+          background: #0f1113; container-type: inline-size; }
+  .card .pic { position: relative; }
+  .card .pic > img { display: block; width: 100%; aspect-ratio: 16 / 9; }
+  .card figcaption { position: absolute; top: 0; bottom: 0; left: 5%; width: calc(var(--x, 40%) - 9%);
+                     display: flex; flex-direction: column; justify-content: center; }
+  .card figcaption .icon { width: 6cqi; height: 6cqi; border-radius: 1.4cqi; }
+  .card .pill { align-self: flex-start; margin: 1.6cqi 0 1.4cqi; padding: .35cqi 1.1cqi; border-radius: 999px; background: var(--c);
+                color: var(--on, #111); font-size: 1.3cqi; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+  .card h3 { margin: 0 0 1.2cqi; font-size: 3.5cqi; line-height: 1.12; hyphens: auto; overflow-wrap: break-word; }  /* long words (et, fi, de) */
+  .card figcaption p { margin: 0; color: var(--muted); font-size: 1.6cqi; line-height: 1.5; }
+  .card.top figcaption { bottom: auto; left: 0; width: 100%; top: 3%; align-items: center; text-align: center; }
+  .card.top figcaption p { max-width: 80%; }
+  .card .label { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; color: var(--text); font-weight: 700;
+                 font-size: max(10px, 1.6cqi); text-shadow: 0 1px 3px #000; }
+  .card .label.head { font-size: max(11px, 2.2cqi); }
+  .speed { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px; margin-top: 22px;
+           display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; font-size: 15px; }
+  .speed b { font-weight: 600; }
+  .speed .bar { position: relative; height: 22px; margin-right: 9.5em; }  /* room for the numbers after the longest bar */
+  .speed .bar i { position: absolute; left: 0; top: 4px; height: 14px; border-radius: 7px; background: #3a4048; width: var(--b); }
+  .speed .bar i + i { background: var(--teal); width: var(--a); }
+  .speed .bar span { position: absolute; left: calc(var(--b) + 10px); top: 0; color: var(--muted); white-space: nowrap; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 18px; margin-top: 26px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 22px; }
+  .panel h3 { margin: 0 0 6px; font-size: 24px; } .panel p { color: var(--muted); margin: 0 0 6px; }
+  .panel .btn { min-width: 0; margin-top: 12px; }
+  .lang { position: absolute; top: 16px; right: 16px; z-index: 2; text-align: left; }
+  .lang summary { list-style: none; cursor: pointer; background: rgba(0, 0, 0, .55); border: 1px solid var(--line); border-radius: 999px;
+                  padding: 6px 14px; font-size: 14px; font-weight: 700; }
+  .lang summary::-webkit-details-marker { display: none; }
+  .lang summary::after { content: " ▾"; }
+  .lang ul { position: absolute; right: 0; margin: 6px 0 0; padding: 6px; list-style: none; columns: 2; column-gap: 4px; width: max-content;
+             max-width: calc(100vw - 32px); background: #15181b; border: 1px solid var(--line); border-radius: 14px; }
+  .lang a { display: block; color: var(--text); text-decoration: none; font-size: 14px; padding: 5px 12px; border-radius: 8px; }
+  .lang a:hover { background: #22262b; }
+  .lang a[aria-current="page"] { background: var(--text); color: #111; }
+  header { position: relative; }
+  .buttons { align-items: stretch; }
+  .group { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 28px; background: rgba(0, 0, 0, .35);
+           border: 1px solid var(--line); }
+  .group h3 { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; font-size: 18px; }
+  .group h3 img { width: 30px; height: 30px; }
+  .qr { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 14px; text-align: left; }
+  .qr img { width: 92px; height: 92px; border-radius: 10px; }
+  .qr p { margin: 0; }
+  .btn img[src$=".svg"] { background: rgba(255, 255, 255, .1); padding: 6px; }
+  .faq { max-width: 820px; margin: 24px auto 0; display: grid; gap: 10px; }
+  .faq details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 18px; }
+  .faq summary { cursor: pointer; font-weight: 700; font-size: 18px; }
+  .faq ol, .faq p { color: var(--muted); margin: 10px 0 0; }
+  .faq li { margin: 4px 0; }
+  .faq b, .faq code { color: var(--text); }
+  footer { color: #7d858f; font-size: 14px; padding: 48px 0 40px; text-align: center; }
+  @media (max-width: 700px) {  /* a phone: the tabs would not fit, so every card one under the other, the words above */
+    .qr { display: none; }  /* already on the phone */
+    .island { display: none; }
+    [role="tabpanel"] { display: block !important; }
+    .card { display: flex; flex-direction: column-reverse; }
+    .card figcaption, .card.top figcaption { position: static; width: auto; padding: 18px 18px 6px; align-items: flex-start; text-align: left; }
+    .card.top figcaption p { max-width: none; }
+    .card figcaption .icon { width: 44px; height: 44px; border-radius: 11px; }
+    .card .pill { font-size: 12px; padding: 3px 10px; margin: 10px 0 8px; }
+    .card h3 { font-size: 24px; margin-bottom: 6px; }
+    .card figcaption p { font-size: 15px; }
+    .card:not(.top) .pic > img { aspect-ratio: 5 / 4; object-fit: cover; object-position: right; }
+    .speed { grid-template-columns: 1fr; gap: 2px; }
+    .card .label { white-space: normal; width: 24%; text-align: center; line-height: 1.2; }
+    .card .label.head { width: 46%; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <details class="lang"><summary aria-label="Language">MT</summary><ul><li><a href="bg.html" hreflang="bg" lang="bg">Български</a></li><li><a href="cs.html" hreflang="cs" lang="cs">Čeština</a></li><li><a href="da.html" hreflang="da" lang="da">Dansk</a></li><li><a href="de.html" hreflang="de" lang="de">Deutsch</a></li><li><a href="el.html" hreflang="el" lang="el">Ελληνικά</a></li><li><a href="index.html" hreflang="en" lang="en">English</a></li><li><a href="es.html" hreflang="es" lang="es">Español</a></li><li><a href="et.html" hreflang="et" lang="et">Eesti</a></li><li><a href="fi.html" hreflang="fi" lang="fi">Suomi</a></li><li><a href="fr.html" hreflang="fr" lang="fr">Français</a></li><li><a href="ga.html" hreflang="ga" lang="ga">Gaeilge</a></li><li><a href="hr.html" hreflang="hr" lang="hr">Hrvatski</a></li><li><a href="hu.html" hreflang="hu" lang="hu">Magyar</a></li><li><a href="it.html" hreflang="it" lang="it">Italiano</a></li><li><a href="lt.html" hreflang="lt" lang="lt">Lietuvių</a></li><li><a href="lv.html" hreflang="lv" lang="lv">Latviešu</a></li><li><a href="mt.html" hreflang="mt" lang="mt" aria-current="page">Malti</a></li><li><a href="nl.html" hreflang="nl" lang="nl">Nederlands</a></li><li><a href="pl.html" hreflang="pl" lang="pl">Polski</a></li><li><a href="pt.html" hreflang="pt" lang="pt">Português</a></li><li><a href="ro.html" hreflang="ro" lang="ro">Română</a></li><li><a href="sk.html" hreflang="sk" lang="sk">Slovenčina</a></li><li><a href="sl.html" hreflang="sl" lang="sl">Slovenščina</a></li><li><a href="sv.html" hreflang="sv" lang="sv">Svenska</a></li></ul></details>
+  <div class="wrap">
+    <img class="logo" src="img/tetra.png" alt="">
+    <h1>Tetra</h1>
+    <p class="lead">Superapplikazzjoni privata waħda għat-telefon, it-tablet u l-kompjuter tiegħek. Software ħieles, mingħajr kont, mingħajr cloud: xejn ma jitlaq mill-apparati tiegħek.</p>
+    <div class="buttons">
+      <div class="group"><h3><img src="img/android.svg" alt="">Android</h3>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Niżżel għal Android</b><span>APK · 0.6.0 beta 4 · Android 11+</span></div></a>
+        <div class="qr"><img src="img/qr-android.svg" alt="Kodiċi QR għat-tniżżil ta’ Android"><p>Jew skennjaha bit-telefon tiegħek.<br><a href="#faq-install">Kif tinstallaha</a></p></div></div>
+      <div class="group"><h3><img src="img/linux.svg" alt="">Linux</h3>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>Linux AppImage</b><span>0.6.0 beta 32 · l-aktar distribuzzjonijiet</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>Linux .deb</b><span>Debian, Ubuntu, Mint</span></div></a></div>
+    </div>
+    <img class="hero" src="img/tetra-devices.jpg" alt="Tetra fuq kompjuter, tablet u telefon">
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>Dak li Tetra tagħmel għalik</h2>
+    <div class="tiles">
+      <div class="tile" style="--c:#177BFC"><img src="img/icons/files.png" alt=""><h3>Fajls lejn u mill-PC tiegħek f’sekonda</h3><p>Aqsam kull ħaġa ma’ <b>Ibgħat lill-kompjuter</b> fuq it-telefon, jew ma’ <b>Ibgħat lit-telefon</b> fuq il-PC. Jgħaddi mill-Wi-Fi tiegħek: mingħajr kejbil, mingħajr cloud. Jekk il-kompjuter ma jkunx hemm, jintbagħat meta jerġa’ jkun hemm.</p></div>
+      <div class="tile" style="--c:#1A9AA8"><img src="img/icons/phone.png" alt=""><h3>Ċempel mill-kompjuter tiegħek</h3><p>Ikklikkja numru f’Kuntatti fuq il-PC u t-telefon tiegħek jċempel. Burbuja tas-sejħa fuq l-iskrin tilqa’ s-sejħa, iżżommha, tnaqqas leħinha, ittemmha u tgħaddi l-ħoss għall-loudspeaker tat-telefon.</p></div>
+      <div class="tile" style="--c:#25C4FE"><img src="img/icons/maps.png" alt=""><h3>Mappi ta’ kull pajjiż, offline</h3><p>Agħżel pajjiż fuq il-kompjuter: Tetra tagħmel il-mappa, it-tfittix u r-rotot tiegħu minn OpenStreetMap u tibgħathom lit-telefon u t-tablet tiegħek. Ir-rotot jgħaddu mill-fruntieri fil-punti reali, bl-indikazzjonijiet fil-lingwa tiegħek.</p></div>
+      <div class="tile" style="--c:#8E99A6"><img src="img/icons/settings.png" alt=""><h3>Fil-lingwa tiegħek, b’gwida</h3><p>Il-24 lingwa uffiċjali kollha tal-UE. Gwida fl-ewwel bidu, u kull meta trid fis-Settings, turi fejn tikklikkja u għalfejn, pass pass.</p></div>
+      <div class="tile" style="--c:#9AD01E"><img src="img/icons/data.png" alt=""><h3>Il-pjan tad-dejta tiegħek, osservat</h3><p>Għid lil Tetra l-pjan tiegħek darba. Tinnotifikalek fi 50 %, 80 % u 100 %, jew f’kull pass li tagħżel, u tbassar it-tmiem tax-xahar qabel ma tasal għalih.</p></div>
+      <div class="tile" style="--c:#F41879"><img src="img/icons/calendar.png" alt=""><h3>Kalendarju u tajmers, bl-AI</h3><p>Il-ħiliet integrati jħallu lil Claude, lil ChatGPT jew lil kull assistent li jista’ juża l-kompjuter tiegħek jimpurtaw skeda, jippjanaw il-ġimgħa tiegħek jew jibdew tajmer. Jeditjaw sempliċement il-fajls tal-kalendarju u tat-tajmers.</p></div>
+      <div class="tile" style="--c:#FED00A"><img src="img/icons/notes.png" alt=""><h3>Noti u listi, organizzati</h3><p>Żomm in-noti u l-listi tax-xiri organizzati bit-tikketti u sinkronizzati bejn it-telefon u l-kompjuter. Kull nota hija fajl sempliċi fil-folder Tetra tiegħek.</p></div>
+      <div class="tile" style="--c:#95DF6B"><img src="img/icons/gallery.png" alt=""><h3>Ritratti li jafu min u fejn</h3><p>Tikketti, ritratti ħajjin, u kollezzjonijiet ta’ Nies u Dokumenti mir-rikonoxximent tal-wiċċ li jaħdem fuq l-apparat. Sib ritratti skont il-post*, u ġib ir-ritratti tiegħek ta’ Google Photos (import ta’ Takeout fuq il-kompjuter).</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/scanner.png" alt=""><h3>Skennja kull paġna nadifa</h3><p>Il-filtri u l-qtugħ awtomatiku jsibu u jiddritta l-paġna: l-għodod kollha li jeħtieġ biex tagħmel kopja diġitali perfetta, għal kemm trid paġni.</p></div>
+      <div class="tile" style="--c:#E3141F"><img src="img/icons/pdf.png" alt=""><h3>Aħbi dak li għandu jibqa’ privat</h3><p>Oskura PDF u ritratti sabiex il-parti moħbija titneħħa mill-fajl innifsu, mhux biss tiġi mgħottija. Tetra ssib l-għajnejn f’ritratt u tgħattihom b’xrubriet sewdin jew b’stilel, u ssib it-test li trid taħbi.</p></div>
+      <div class="tile" style="--c:#FD7D12"><img src="img/icons/office.png" alt=""><h3>Office u PDF, tajjeb biżżejjed</h3><p>Word, Excel u PowerPoint jinfetħu u jinħażnu kif inhuma, biżżejjed kompatibbli għax-xogħol ta’ kuljum. Il-PDF jiġu editjati bl-istess mod kif jiġi editjat fid-Dokumenti, u l-vidjows u l-ħsejjes ġewwa d-dokumenti jaħdmu. Tqassim tat-telefon li tista’ tuża tassew.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/drive.png" alt=""><h3>Żomm l-SSD intern ħafif</h3><p>Ikkonnettja disk estern ma’ Tetra u dan jagħmel backup tal-kollox awtomatikament, jew jgħaddi ritratti iktar qodma fuqu, sabiex id-disk tal-kompjuter innifsu jibqa’ kemm jista’ jkun vojt.</p></div>
+      <div class="tile" style="--c:#2E9D4F"><img src="img/icons/sync.png" alt=""><h3>Iktar minn kopja waħda, mingħajr abbonament</h3><p>Tetra turi kemm postijiet iżommu kull fajl, it-telefon, it-tablet, il-kompjuter jew disk USB, u dak li jibqa’ f’post wieħed biss. Il-backup tiegħek stess, mingħajr pjan cloud li tħallas.</p></div>
+    </div>
+    <p class="note">*It-tfittix tar-ritratti skont il-post jkopri l-Greċja biss għalissa.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Kull applet, fuq kull skrin</h2>
+    <p class="sub">Dar waħda, folder wieħed, l-istess applets fuq Android u Linux. Ukoll ġewwa: Skannjer, Kodiċi u Editur tat-test.</p>
+    <div class="island" role="tablist" aria-label="Applets">
+      <button role="tab" id="tab-home" aria-controls="panel-home" aria-selected="true" tabindex="0" style="--c:#8E99A6;--on:#111">Dar</button>
+      <button role="tab" id="tab-maps" aria-controls="panel-maps" aria-selected="false" tabindex="-1" style="--c:#25C4FE;--on:#111">Mappi</button>
+      <button role="tab" id="tab-photos" aria-controls="panel-photos" aria-selected="false" tabindex="-1" style="--c:#95DF6B;--on:#111">Ritratti</button>
+      <button role="tab" id="tab-files" aria-controls="panel-files" aria-selected="false" tabindex="-1" style="--c:#177BFC;--on:#fff">Fajls</button>
+      <button role="tab" id="tab-notes" aria-controls="panel-notes" aria-selected="false" tabindex="-1" style="--c:#FED00A;--on:#111">Noti</button>
+      <button role="tab" id="tab-office" aria-controls="panel-office" aria-selected="false" tabindex="-1" style="--c:#FD7D12;--on:#111">Office</button>
+      <button role="tab" id="tab-calendar" aria-controls="panel-calendar" aria-selected="false" tabindex="-1" style="--c:#F41879;--on:#fff">Kalendarju · Tajmer</button>
+      <button role="tab" id="tab-contacts" aria-controls="panel-contacts" aria-selected="false" tabindex="-1" style="--c:#BE7E4D;--on:#fff">Kuntatti</button>
+      <button role="tab" id="tab-phone" aria-controls="panel-phone" aria-selected="false" tabindex="-1" style="--c:#1A9AA8;--on:#fff">Telefon</button>
+      <button role="tab" id="tab-backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1" style="--c:#2E9D4F;--on:#fff">Backup</button>
+      <button role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1" style="--c:#9AD01E;--on:#111">Dejta</button>
+      <button role="tab" id="tab-guide" aria-controls="panel-guide" aria-selected="false" tabindex="-1" style="--c:#8E99A6;--on:#111">Gwida · Settings</button>
+    </div>
+    <div role="tabpanel" id="panel-home" aria-labelledby="tab-home">
+      <figure class="card top"><div class="pic"><img src="img/art/home.jpg" alt="" loading="lazy">
+        <span class="label" style="left:15.3%;top:94.5%">Gruppi</span><span class="label" style="left:38%;top:94.5%">Taħlita</span>
+        <span class="label" style="left:60.9%;top:94.5%">Ikoni biss</span><span class="label" style="left:83.7%;top:94.5%">Modalità tal-editjar</span></div>
+        <figcaption><h3>Dar, bil-mod tiegħek</h3><p>Gruppi, taħlita, jew ikoni biss. Iġbed parti f’kull ċellola, agħmilha kbira, medja jew żgħira, jew aħbiha.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-maps" aria-labelledby="tab-maps" hidden>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/builder.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Mappi</span><h3>Mappi ta’ kull pajjiż, magħmula mill-kompjuter tiegħek</h3><p>Agħżel pajjiż jew reġjun fis-Settings › Mappi. Il-kompjuter tiegħek jagħmel il-mappa, it-tfittix u r-rotot tiegħu minn OpenStreetMap, u s-sinkronizzazzjoni tgħaddihom lit-telefon u t-tablet tiegħek. Meta mappa tkun ta’ tliet xhur, Tetra toffri li tagħmilha mill-ġdid.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/borders.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Mappi</span><h3>Mal-fruntieri</h3><p>Bil-mappa tal-pajjiż ġar ukoll, ir-rotta taqsam il-fruntiera fil-punti reali, fuq it-triq ewlenija. Indikazzjonijiet fil-lingwa tiegħek, f’kilometri jew f’mili.</p></figcaption></figure>
+      <figure class="card" style="--c:#25C4FE"><div class="pic"><img src="img/art/maps.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/maps.png" alt=""><span class="pill">Mappi</span><h3>Offline, b’navigazzjoni</h3><p>It-tfittix u l-postijiet, ir-rotot bil-karozza, fuq sieq jew bir-rota, u l-gwida bil-vuċi f’kull dawra, kollox fuq l-apparat. Mingħajr kont, mingħajr traċċar.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-photos" aria-labelledby="tab-photos" hidden>
+      <figure class="card" style="--c:#95DF6B"><div class="pic"><img src="img/art/photos.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/gallery.png" alt=""><span class="pill">Ritratti</span><h3>Il-gallerija tiegħek, fuq l-apparati tiegħek</h3><p>Linja taż-żmien, kollezzjonijiet, nies, dokumenti misjuba għalik, mappa u editur. Il-wiċċ u t-tikketti jiġu stabbiliti fuq l-apparat.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-files" aria-labelledby="tab-files" hidden>
+      <figure class="card" style="--c:#177BFC"><div class="pic"><img src="img/art/files.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/files.png" alt=""><span class="pill">Fajls</span><h3>Fajls, b’ikona għal kull tip</h3><p>Maniġer tal-fajls għall-folder Tetra tiegħek: tikketti, favoriti, kuluri tal-folders, Iskart, thumbnails u folders tas-sistema.</p></figcaption></figure>
+      <figure class="card top"><div class="pic"><img src="img/art/send.jpg" alt="" loading="lazy">
+        <span class="label head" style="left:25.6%;top:24.7%">Mit-telefon lejn il-kompjuter</span>
+        <span class="label head" style="left:74.4%;top:24.7%">Mill-kompjuter lejn it-telefon</span>
+        <span class="label" style="left:10.4%;top:89.1%">1. Aqsam › Ibgħat lill-kompjuter</span><span class="label" style="left:35.6%;top:77.8%">2. Fuq il-PC: Files › From phone</span>
+        <span class="label" style="left:64.4%;top:77.8%">1. Fuq il-PC: Ibgħat lit-telefon</span><span class="label" style="left:89.6%;top:89.1%">2. Files › From computer</span></div>
+        <figcaption><h3>Fajls fiż-żewġ direzzjonijiet, f’sekonda</h3><p>Fuq il-Wi-Fi tiegħek: mingħajr kejbil, mingħajr cloud, mingħajr kont. Jekk in-naħa l-oħra ma tkunx hemm, il-fajl jistenna u jintbagħat meta terġa’ tkun hemm.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" hidden>
+      <figure class="card" style="--c:#FED00A"><div class="pic"><img src="img/art/notes.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/notes.png" alt=""><span class="pill">Noti</span><h3>Noti u listi ta’ kontroll</h3><p>Kuluri, tikketti, pins u storja ta’ kull nota. Shortcuts tal-kastiera fuq tablet. Jissinkronizzaw mal-kompjuter.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-office" aria-labelledby="tab-office" hidden>
+      <figure class="card" style="--c:#FD7D12"><div class="pic"><img src="img/art/office.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/office.png" alt=""><span class="pill">Office</span><h3>Word, Excel, PowerPoint u PDF</h3><p>Paġni reali bil-liniji tal-kejl, ir-ribbon, grafiċi u temi. Il-fajls jinfetħu u jinħażnu kif inhuma. Il-PDF jiġu editjati bl-istess mod kif jiġi editjat fid-Dokumenti, b’noti, firem, formoli u oskurar; il-vidjows u l-ħsejjes ġewwa d-dokumenti jaħdmu.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-calendar" aria-labelledby="tab-calendar" hidden>
+      <figure class="card" style="--c:#F41879;--on:#fff;--x:37%"><div class="pic"><img src="img/art/calendar.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/calendar.png" alt=""><span class="pill">Kalendarju · Tajmer</span><h3>Kalendarju u tajmers</h3><p>Fajls sempliċi iCalendar: ġurnata, ġimgħa, xahar u aġenda, tfakkir, għeluq is-sena minn Kuntatti. It-tajmers jdoqqu fuq kull apparat.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-contacts" aria-labelledby="tab-contacts" hidden>
+      <figure class="card" style="--c:#BE7E4D;--on:#fff"><div class="pic"><img src="img/art/people.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/contacts.png" alt=""><span class="pill">Kuntatti · Telefon</span><h3>Kuntatti u sejħiet</h3><p>Il-kuntatti tiegħek bħala fajls vCard, bil-wiċċ minn Ritratti. Dialer b’Reċenti u tfittix tal-ispam; ċempel mill-kompjuter permezz tat-telefon.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" hidden>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/bubble.jpg" alt="" loading="lazy">
+        <span class="label" style="left:56.2%;top:69.3%">Xi ħadd qed iċempel</span><span class="label" style="left:83.1%;top:86.1%">Waqt sejħa, it-tastiera miftuħa</span></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Telefon</span><h3>Sejħiet fuq il-kompjuter tiegħek</h3><p>Ikklikkja numru f’Kuntatti u t-telefon tiegħek jċempel. Meta xi ħadd jċempel, burbuja fuq l-iskrin tħallik tilqa’, iżżomm, tnaqqas leħinha, tikteb diġits, tgħaddi l-ħoss għall-loudspeaker tat-telefon jew ittemm, filwaqt li t-telefon jibqa’ fil-kiesa tiegħek.</p></figcaption></figure>
+      <figure class="card" style="--c:#1A9AA8;--on:#fff"><div class="pic"><img src="img/art/phone-tablet.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/phone.png" alt=""><span class="pill">Telefon</span><h3>Fuq tablet, żewġ pannelli</h3><p>Reċenti fuq ix-xellug, it-tastiera dejjem miftuħa fuq il-lemin. In-numri jinqraw skont il-kodiċi tal-pajjiż tiegħek, it-telefons fissi jitqiegħdu isem il-post mill-mappi tiegħek, u Imblukkar tas-sejħiet iżomm lista tiegħu stess.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-backup" aria-labelledby="tab-backup" hidden>
+      <figure class="card" style="--c:#2E9D4F;--on:#fff;--x:34%"><div class="pic"><img src="img/art/safety.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/sync.png" alt=""><span class="pill">Apparati · Diski</span><h3>Iktar minn kopja waħda, mingħajr abbonament</h3><p>Tetra turi kemm postijiet iżommu kull ritratt, u dak li jibqa’ f’post wieħed biss. Ikkonnettja disk USB għal backups awtomatiċi, jew għaddi ritratti qodma fuqu biex l-SSD tal-kompjuter jibqa’ ħafif.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-data" aria-labelledby="tab-data" hidden>
+      <figure class="card" style="--c:#9AD01E"><div class="pic"><img src="img/art/data.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/data.png" alt=""><span class="pill">Dejta</span><h3>Dejta, Wi-Fi u sinjal</h3><p>Kemm kull app tuża fuq id-dejta mobbli u l-Wi-Fi, allarmi tal-pjan qabel jispiċċa, u t-telefon, it-tablet u l-kompjuter flimkien.</p></figcaption></figure>
+    </div>
+    <div role="tabpanel" id="panel-guide" aria-labelledby="tab-guide" hidden>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/guide.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Gwida</span><h3>Gwida li turik</h3><p>Fl-ewwel bidu u fis-Settings › Gwida: fejn tikklikkja u għalfejn, pass pass. L-istampi jiċċaqilqu biex juru x’jiġri, u Ipprova żżomm il-pass fil-vista waqt li tagħmlu għal kollox.</p></figcaption></figure>
+      <figure class="card" style="--c:#8E99A6"><div class="pic"><img src="img/art/languages.jpg" alt="" loading="lazy"></div>
+        <figcaption><img class="icon" src="img/icons/settings.png" alt=""><span class="pill">Settings</span><h3>Fil-lingwa tiegħek</h3><p>Il-24 lingwa uffiċjali kollha tal-UE, fuq it-telefon u l-kompjuter. Tetra ssegwi l-lingwa tas-sistema tiegħek sakemm ma tagħżilx waħda oħra fis-Settings › Dehra.</p></figcaption></figure>
+    </div>
+    <p class="note">L-istampi tal-iskrin jużaw dejta ta’ eżempju mistħajla.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Mgħaġġla, bl-intenzjoni</h2>
+    <p class="sub">Kull applet ġiet imkejla fuq it-telefon u ttejjbet sakemm tinfetaħ f’daqqa t’għajn. Il-ħin sa ma l-iskrin juri l-kontenut tiegħu, qabel u issa:</p>
+    <div class="speed">
+      <b>Kuntatti, minnufih wara l-bidu</b><div class="bar" style="--b:100%;--a:5.8%"><i></i><i></i><span>3.3 s → 190 ms</span></div>
+      <b>Telefon, minnufih wara l-bidu</b><div class="bar" style="--b:75.8%;--a:7.6%"><i></i><i></i><span>2.5 s → 250 ms</span></div>
+      <b>Dejta</b><div class="bar" style="--b:72.7%;--a:5.3%"><i></i><i></i><span>2.4 s → 175 ms</span></div>
+      <b>L-ewwel bidu ta’ Tetra</b><div class="bar" style="--b:28%;--a:6.2%"><i></i><i></i><span>924 ms → 205 ms</span></div>
+      <b>Dar ta’ Office</b><div class="bar" style="--b:24.1%;--a:1.9%"><i></i><i></i><span>796 ms → 62 ms</span></div>
+      <b>Ritratti</b><div class="bar" style="--b:19.5%;--a:9.7%"><i></i><i></i><span>643 ms → 320 ms</span></div>
+      <b>Noti</b><div class="bar" style="--b:11.5%;--a:1.7%"><i></i><i></i><span>378 ms → 55 ms</span></div>
+      <b>Kalendarju</b><div class="bar" style="--b:8.5%;--a:1%"><i></i><i></i><span>280 ms → 34 ms</span></div>
+      <b>Tajmer</b><div class="bar" style="--b:7.2%;--a:1.4%"><i></i><i></i><span>236 ms → 45 ms</span></div>
+      <b>Fajls</b><div class="bar" style="--b:5%;--a:1.3%"><i></i><i></i><span>166 ms → 43 ms</span></div>
+    </div>
+    <p class="note">Griż: qabel · kulur: issa. Fuq il-kompjuter, Ritratti jerġa’ jinfetaħ f’71 ms minflok 741.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Ikseb Tetra</h2>
+    <p class="sub">Installaha fuq it-telefon u l-kompjuter tiegħek, waħħalhom darba b’kodiċi QR, u jissinkronizzaw permezz tal-Wi-Fi tiegħek.</p>
+    <div class="two">
+      <div class="panel">
+        <h3>Tetra għal Android</h3>
+        <p>Telefons u tablets b’Android 11 jew aktar ġdid.</p>
+        <a href="https://github.com/kalotrapezis/Tetra-mobile">Is-sors u d-dettalji fuq GitHub</a>
+        <a class="btn android" href="https://github.com/kalotrapezis/Tetra-mobile/releases/download/v0.6.0-beta.4/Tetra-0.6.0-beta.4-arm64.apk"><img src="img/android.svg" alt=""><div><b>Niżżel APK</b><span>0.6.0 beta 4</span></div></a>
+      </div>
+      <div class="panel">
+        <h3>Tetra għad-desktop</h3>
+        <p>Linux: AppImage għall-biċċa l-kbira tad-distribuzzjonijiet, jew .deb għal Debian, Ubuntu u Mint. Tistenna fil-tray għat-telefon tiegħek.</p>
+        <a href="https://github.com/kalotrapezis/Tetra">Is-sors u d-dettalji fuq GitHub</a>
+        <a class="btn appimage" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/Tetra-0.6.0-beta.32.AppImage"><img src="img/linux.svg" alt=""><div><b>AppImage</b><span>0.6.0 beta 32</span></div></a>
+        <a class="btn deb" href="https://github.com/kalotrapezis/Tetra/releases/download/desktop-v0.6.0-beta.32/local-drive-desktop_0.6.0-beta.32_amd64.deb"><img src="img/linux.svg" alt=""><div><b>.deb</b><span>0.6.0 beta 32</span></div></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Mistoqsijiet</h2>
+    <div class="faq">
+      <details id="faq-install" open><summary>Kif niinstalla Tetra minn barra l-Play Store?</summary><ol><li>Fuq it-telefon tiegħek, iftaħ din il-paġna jew skennja l-kodiċi QR, u ikklikkja <b>Niżżel għal Android</b>.</li><li>Meta t-tniżżil jispiċċa, ikklikkja n-notifika tiegħu, jew iftaħ <b>Files › Downloads</b> u ikklikkja <b>Tetra-…-arm64.apk</b>.</li><li>L-ewwel darba, Android jgħidlek li l-browser tiegħek (jew Files) m’għandux permess jinstalla applikazzjonijiet. Ikklikkja <b>Settings</b>, ixgħel <b>Ippermetti minn din is-sors</b>, u erġa’ lura.</li><li>Ikklikkja <b>Installa</b>. Jekk Play Protect jagħti twissija dwar applikazzjoni mhux magħrufa, ikklikkja <b>Aktar dettalji</b>, imbagħad <b>Installa xorta</b>.</li><li>Ikklikkja <b>Iftaħ</b>. Il-gwida ta’ Tetra tibda u turik madwar.</li></ol><p>Kull manifattur tat-telefon jgħid dawn il-passi b’mod xi ftit differenti, imma l-passi huma l-istess. L-aġġornamenti jitqiegħdu bl-istess mod, fuq il-verżjoni l-qadima, u jżommu kollox.</p></details>
+      <details id="faq-safe"><summary>Hu sigur li niinstalla APK bħal dan?</summary><p>Niżżel Tetra biss minn din il-paġna jew mill-GitHub releases tagħha. Kull release hija ffirmata bl-istess ċavetta, u Android jinstalla aġġornament biss jekk ikollu dik il-firma. Il-kodiċi sors huwa pubbliku għal kulħadd li jaqrah.</p></details>
+      <details id="faq-linux"><summary>Kif nibda l-AppImage fuq Linux?</summary><p>Niżżel dan, ikklikkja bil-lemin fuqu › <b>Proprjetajiet</b> › <b>Permessi</b> › <b>Ħalli l-fajl jitmexxa bħala programm</b> (jew ħaddem <code>chmod +x Tetra-*.AppImage</code>), imbagħad ikklikkja darbtejn fuqu. Fuq Debian, Ubuntu u Mint il-.deb jinfetaħ fl-installatur tas-softwer tiegħek, jew jinstalla b’<code>sudo apt install ./local-drive-desktop_*_amd64.deb</code>.</p></details>
+      <details id="faq-computer"><summary>Għandi bżonn kompjuter?</summary><p>Le. Tetra taħdem waħedha fuq telefon jew tablet. Bl-app tal-desktop, il-fajls tiegħek jissinkronizzaw permezz tal-Wi-Fi tiegħek, u l-kompjuter jagħmel il-mappi ta’ kull pajjiż.</p></details>
+      <details id="faq-free"><summary>Tiswa xi ħaġa, jew teħtieġ kont?</summary><p>Le. Tetra hija software ħieles (GPL 3.0): mingħajr kont, mingħajr reklami, mingħajr traċċar. Xejn ma jitlaq mill-apparati tiegħek.</p></details>
+      <details id="faq-files"><summary>Fejn huma l-fajls tiegħi?</summary><p>F’folder wieħed: <b>Tetra</b> fuq il-ħażna tat-telefon u <b>~/Tetra</b> fuq il-kompjuter. Huma fajls sempliċi, ritratti, dokumenti, noti, kalendarji (.ics) u kuntatti (.vcf), li applikazzjonijiet oħra jistgħu jiftħu wkoll.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Tetra hija software ħieles (GPL 3.0) u beta: żomm il-backups tiegħek stess. L-istampi tal-iskrin jużaw dejta ta’ eżempju mistħajla. Sors: <a href="https://github.com/kalotrapezis/Tetra-mobile">Android</a> · <a href="https://github.com/kalotrapezis/Tetra">desktop</a></div>
+</footer>
+<script>
+  // The language: the one picked in the menu (remembered), else, on the English page, the browser's first language the
+  // site has. The browser's languages, not the country: no address leaves the visitor's computer, and a country can have several.
+  const langs = [...document.querySelectorAll('.lang a')].map(a => a.hreflang)
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { try { localStorage.setItem('lang', a.hreflang) } catch {} }))
+  let chosen = null; try { chosen = localStorage.getItem('lang') } catch {}
+  if (document.documentElement.lang === 'en' && !chosen) {
+    const want = navigator.languages.map(l => l.slice(0, 2).toLowerCase()).find(l => langs.includes(l))
+    if (want && want !== 'en') location.replace(want + '.html' + location.hash)
+  }
+  // The applet tabs: click, arrow keys, and #name in the address keep the chosen one; the language switch keeps it too.
+  const tabs = [...document.querySelectorAll('[role="tab"]')];
+  function show(tab, focus) {
+    tabs.forEach(t => { const on = t === tab; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on; });
+    if (focus) tab.focus();
+    history.replaceState(null, '', '#' + tab.id.slice(4));
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => show(t));
+    t.addEventListener('keydown', e => {
+      const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+      if (d) { e.preventDefault(); show(tabs[(i + d + tabs.length) % tabs.length], true); }
+    });
+  });
+  document.querySelectorAll('.lang a').forEach(a => a.addEventListener('click', () => { a.href = a.getAttribute('href').split('#')[0] + location.hash }));
+  // a link to a question opens its answer
+  const open = () => { const d = document.getElementById(location.hash.slice(1)); if (d?.tagName === 'DETAILS') d.open = true }
+  addEventListener('hashchange', open); open()
+  const start = document.getElementById('tab-' + location.hash.slice(1));
+  if (start) show(start);
+</script>
+</body>
+</html>
