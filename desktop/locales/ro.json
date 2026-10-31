@@ -2067,7 +2067,7 @@
  "assistant.scCopy": "Copiază comanda ({arg})",
  "assistant.scCopied": "Copiat",
  "mail.welcome": "Poșta ta, păstrată pe acest calculator",
- "mail.welcomeHint": "Fiecare mesaj și fiecare atașament este salvat aici ca fișier pe care îl poate citi și AI Assist. Deocamdată Tetra doar citește: pe server nu se trimite, nu se mută și nu se șterge nimic.",
+ "mail.welcomeHint": "Fiecare mesaj și fiecare atașament este salvat aici ca fișier pe care îl poate citi și AI Assist. Ce faci aici (citești, ♥, arhivezi, ștergi) se întâmplă și pe server; copia de aici se păstrează mereu.",
  "mail.addAccount": "Adaugă cont",
  "mail.sync": "Sincronizează",
  "mail.filter": "Filtru",
@@ -2143,5 +2143,16 @@
  "mail.notifications": "Notificări",
  "mail.folders": "Dosare",
  "mail.badServer": "Datele serverului nu sunt corecte.",
- "mail.fileGone": "Acest fișier nu mai este în arhivă."
+ "mail.fileGone": "Acest fișier nu mai este în arhivă.",
+ "mail.archive": "Arhivează",
+ "mail.spam": "Spam",
+ "mail.notSpam": "Nu e spam",
+ "mail.markRead": "Marchează ca citit",
+ "mail.markUnread": "Marchează ca necitit",
+ "mail.moveTo": "Mută în…",
+ "mail.archiveBy": "Arhivează",
+ "mail.byYear": "în dosare pe ani",
+ "mail.byMonth": "în dosare pe luni",
+ "mail.byNone": "într-un singur dosar",
+ "mail.err_noFolder": "Acest cont nu are un asemenea dosar pe server."
 }

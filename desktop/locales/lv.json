@@ -2067,7 +2067,7 @@
  "assistant.scCopy": "Kopēt komandu ({arg})",
  "assistant.scCopied": "Nokopēts",
  "mail.welcome": "Jūsu pasts, saglabāts šajā datorā",
- "mail.welcomeHint": "Katra vēstule un pielikums šeit tiek saglabāts kā fails, ko var lasīt arī AI Assist. Pagaidām Tetra tikai lasa: serverī nekas netiek sūtīts, pārvietots vai dzēsts.",
+ "mail.welcomeHint": "Katra vēstule un pielikums šeit tiek saglabāts kā fails, ko var lasīt arī AI Assist. Viss, ko darāt šeit (lasāt, ♥, arhivējat, dzēšat), notiek arī serverī; kopija šeit vienmēr paliek.",
  "mail.addAccount": "Pievienot kontu",
  "mail.sync": "Sinhronizēt",
  "mail.filter": "Filtrs",
@@ -2143,5 +2143,16 @@
  "mail.notifications": "Paziņojumi",
  "mail.folders": "Mapes",
  "mail.badServer": "Servera dati nav pareizi.",
- "mail.fileGone": "Šī faila arhīvā vairs nav."
+ "mail.fileGone": "Šī faila arhīvā vairs nav.",
+ "mail.archive": "Arhivēt",
+ "mail.spam": "Mēstule",
+ "mail.notSpam": "Nav mēstule",
+ "mail.markRead": "Atzīmēt kā lasītu",
+ "mail.markUnread": "Atzīmēt kā nelasītu",
+ "mail.moveTo": "Pārvietot uz…",
+ "mail.archiveBy": "Arhivēt",
+ "mail.byYear": "mapēs pēc gada",
+ "mail.byMonth": "mapēs pēc mēneša",
+ "mail.byNone": "vienā mapē",
+ "mail.err_noFolder": "Šim kontam serverī nav tādas mapes."
 }

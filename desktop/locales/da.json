@@ -1980,7 +1980,7 @@
  "assistant.scCopy": "Kopiér kommandoen ({arg})",
  "assistant.scCopied": "Kopieret",
  "mail.welcome": "Din mail, gemt på denne computer",
- "mail.welcomeHint": "Hver mail og vedhæftet fil bliver gemt her som en fil, som AI Assist kan læse. Indtil videre læser Tetra kun: der bliver ikke sendt, flyttet eller slettet noget på serveren.",
+ "mail.welcomeHint": "Hver mail og vedhæftet fil bliver gemt her som en fil, som AI Assist kan læse. Det, du gør her (læser, ♥, arkiverer, sletter), sker også på serveren; kopien her bliver altid beholdt.",
  "mail.addAccount": "Tilføj konto",
  "mail.sync": "Synkroniser",
  "mail.filter": "Filter",
@@ -2055,5 +2055,16 @@
  "mail.notifications": "Notifikationer",
  "mail.folders": "Mapper",
  "mail.badServer": "Serverens oplysninger er ikke rigtige.",
- "mail.fileGone": "Denne fil er ikke længere i arkivet."
+ "mail.fileGone": "Denne fil er ikke længere i arkivet.",
+ "mail.archive": "Arkivér",
+ "mail.spam": "Spam",
+ "mail.notSpam": "Ikke spam",
+ "mail.markRead": "Marker som læst",
+ "mail.markUnread": "Marker som ulæst",
+ "mail.moveTo": "Flyt til…",
+ "mail.archiveBy": "Arkivér",
+ "mail.byYear": "i mapper efter år",
+ "mail.byMonth": "i mapper efter måned",
+ "mail.byNone": "i én mappe",
+ "mail.err_noFolder": "Denne konto har ingen sådan mappe på serveren."
 }

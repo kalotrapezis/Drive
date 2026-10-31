@@ -139,3 +139,104 @@ test('mail: a sync writes <account>/<Folder>/<yyyy>/… .eml with its attachment
     mail.index.flush()
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
+
+/** A small IMAP server in memory, as imapflow sees it: folders of uid → { source, flags, messageId }. */
+function memoryServer(folders) {
+  let open = null
+  const box = () => folders[open]
+  const pick = range => String(range).split(',').map(Number)
+  const env = m => ({ date: new Date('2026-10-31T07:12:00Z'), subject: m.subject, messageId: m.messageId, from: [{ name: 'Γραμματεία', address: 's@x.gr' }], to: [] })
+  const c = {
+    calls: [],
+    async connect() {}, async logout() {}, close() {}, usable: true,
+    async list() { return Object.keys(folders).map(p => ({ path: p, delimiter: '/', specialUse: folders[p].use })) },
+    get mailbox() { return { uidValidity: BigInt(box().validity), exists: Object.keys(box().msgs).length } },
+    async mailboxOpen(p) { open = p },
+    async getMailboxLock(p) { open = p; return { release() {} } },
+    async search() { return Object.keys(box().msgs).map(Number) },
+    async *fetch(range, query) {
+      for (const uid of range === '1:*' ? Object.keys(box().msgs).map(Number) : pick(range)) {
+        const m = box().msgs[uid]
+        yield { uid, flags: m.flags, size: m.source.length, envelope: env(m), bodyStructure: {}, internalDate: new Date('2026-10-31T07:12:00Z') }
+      }
+    },
+    async fetchOne(uid) { c.calls.push(['fetchOne', open, uid]); return { source: box().msgs[uid].source } },
+    async messageFlagsAdd(range, flags) { for (const u of pick(range)) for (const f of flags) box().msgs[u].flags.add(f) },
+    async messageFlagsRemove(range, flags) { for (const u of pick(range)) for (const f of flags) box().msgs[u].flags.delete(f) },
+    async mailboxCreate(p) { c.calls.push(['create', p]); folders[p] = { validity: 9, next: 1, msgs: {} } },
+    async messageMove(range, dest) {
+      c.calls.push(['move', open, range, dest])
+      for (const u of pick(range)) { const to = folders[dest]; to.msgs[to.next++] = box().msgs[u]; delete box().msgs[u] }
+    },
+    async messageDelete(range) { for (const u of pick(range)) delete box().msgs[u] },
+  }
+  return c
+}
+const message = (subject, id) => ({ subject, messageId: `<${id}@x>`, flags: new Set(), source: raw(subject) })
+
+test('mail: the Archive\'s year folders are synced as Archive', () => {
+  const list = [{ path: 'INBOX' }, { path: 'Archive', specialUse: '\\Archive', delimiter: '/' }, { path: 'Archive/2026', delimiter: '/' }, { path: 'Archived', delimiter: '/' }]
+  const { places } = require('../mail')
+  assert.deepEqual(places(list, roles(list)), [['Inbox', 'INBOX'], ['Archive', 'Archive'], ['Archive', 'Archive/2026']])
+})
+
+test('mail: actions go to the server and the index; an archived mail\'s file follows it into Archive/<year> without a new download', async () => {
+  const dir = tmp()
+  try {
+    const folders = { INBOX: { validity: 7, next: 3, msgs: { 1: message('Deadline', 'a'), 2: message('Hi', 'b') } }, Trash: { use: '\\Trash', validity: 8, next: 1, msgs: {} } }
+    const c = memoryServer(folders)
+    const mail = new Mail(dir, { secret: () => 'x', connect: () => c })
+    const acc = { id: 'me@sch.gr', server: {}, archiveBy: 'year' }
+    mail.saveAccounts([acc])
+    const run = { stop: false }
+    await mail.headers(c, acc, 'Inbox', 'INBOX'); await mail.bodies(c, acc, 'Inbox', 'INBOX', run)
+    const [a, b] = ['me@sch.gr/Inbox/7/1', 'me@sch.gr/Inbox/7/2']
+
+    await mail.act({ op: 'read', ids: [a] }); await mail.act({ op: 'favorite', ids: [a, b] })
+    assert.equal(mail.index.get(a).seen, true)
+    assert.ok(folders.INBOX.msgs[1].flags.has('\\Seen') && folders.INBOX.msgs[2].flags.has('\\Flagged'))
+
+    const before = mail.index.get(a).file
+    await mail.act({ op: 'archive', ids: [a] })
+    const y = String(new Date(mail.index.get(a).date).getFullYear())
+    assert.deepEqual(c.calls.filter(x => x[0] !== 'fetchOne'), [['create', 'Archive'], ['create', `Archive/${y}`], ['move', 'INBOX', '1', `Archive/${y}`]])
+    assert.equal(mail.list('Inbox').length, 1, 'gone from the Inbox at once')
+
+    const fetched = c.calls.filter(x => x[0] === 'fetchOne').length
+    await mail.headers(c, acc, 'Archive', `Archive/${y}`, 'Archive'); await mail.bodies(c, acc, 'Archive', `Archive/${y}`, run, 'Archive')
+    const moved = mail.list('Archive')[0]
+    assert.equal(moved.id, `me@sch.gr/Archive/Archive/${y}/9/1`)
+    assert.equal(c.calls.filter(x => x[0] === 'fetchOne').length, fetched, 'not downloaded again')
+    assert.match(moved.file, new RegExp(`^me@sch\\.gr/Archive/${y}/`))
+    assert.ok(fs.existsSync(path.join(dir, moved.file)) && !fs.existsSync(path.join(dir, before)), 'the file moved with it')
+    assert.equal(moved.saved, true)
+
+    await mail.act({ op: 'delete', ids: [b] })
+    assert.deepEqual(Object.keys(folders.Trash.msgs), ['1'])
+    await assert.rejects(mail.act({ op: 'spam', ids: [moved.id] }), /no Spam folder/)
+    await assert.rejects(mail.act({ op: 'explode', ids: [] }), /Unknown/)
+    mail.index.flush()
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('mail: a phone\'s requests are carried out oldest first and removed; one that can never be done is dropped', async () => {
+  const dir = tmp()
+  try {
+    const folders = { INBOX: { validity: 7, next: 2, msgs: { 1: message('Hi', 'a') } } }
+    const c = memoryServer(folders)
+    const mail = new Mail(dir, { secret: () => 'x', connect: () => c })
+    const acc = { id: 'me@sch.gr', server: {} }
+    mail.saveAccounts([acc])
+    await mail.headers(c, acc, 'Inbox', 'INBOX')
+    const req = path.join(dir, 'requests')
+    fs.mkdirSync(req)
+    fs.writeFileSync(path.join(req, 'tablet-2.json'), JSON.stringify({ op: 'unfavorite', ids: ['me@sch.gr/Inbox/7/1'], at: 2 }))
+    fs.writeFileSync(path.join(req, 'phone-1.json'), JSON.stringify({ op: 'favorite', ids: ['me@sch.gr/Inbox/7/1'], at: 1 }))
+    fs.writeFileSync(path.join(req, 'phone-3.json'), JSON.stringify({ op: 'explode', ids: [], at: 3 }))
+    fs.writeFileSync(path.join(req, 'phone-4.json'), '{"op":"rea') // still arriving
+    await mail.requests()
+    assert.deepEqual(fs.readdirSync(req), ['phone-4.json'])
+    assert.equal(mail.index.get('me@sch.gr/Inbox/7/1').flagged, false, 'the later one wins')
+    mail.index.flush()
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})

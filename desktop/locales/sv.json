@@ -1980,7 +1980,7 @@
  "assistant.scCopy": "Kopiera kommandot ({arg})",
  "assistant.scCopied": "Kopierat",
  "mail.welcome": "Din mejl, sparad på den här datorn",
- "mail.welcomeHint": "Varje mejl och varje bilaga sparas här som en fil som AI Assist också kan läsa. Än så länge läser Tetra bara: ingenting skickas, flyttas eller raderas på servern.",
+ "mail.welcomeHint": "Varje mejl och varje bilaga sparas här som en fil som AI Assist också kan läsa. Det du gör här (läser, ♥, arkiverar, raderar) sker också på servern; kopian här behålls alltid.",
  "mail.addAccount": "Lägg till konto",
  "mail.sync": "Synkronisera",
  "mail.filter": "Filter",
@@ -2055,5 +2055,16 @@
  "mail.notifications": "Aviseringar",
  "mail.folders": "Mappar",
  "mail.badServer": "Serverns uppgifter stämmer inte.",
- "mail.fileGone": "Den här filen finns inte kvar i arkivet."
+ "mail.fileGone": "Den här filen finns inte kvar i arkivet.",
+ "mail.archive": "Arkivera",
+ "mail.spam": "Skräppost",
+ "mail.notSpam": "Inte skräppost",
+ "mail.markRead": "Markera som läst",
+ "mail.markUnread": "Markera som oläst",
+ "mail.moveTo": "Flytta till…",
+ "mail.archiveBy": "Arkivera",
+ "mail.byYear": "i mappar per år",
+ "mail.byMonth": "i mappar per månad",
+ "mail.byNone": "i en mapp",
+ "mail.err_noFolder": "Det här kontot har ingen sådan mapp på servern."
 }

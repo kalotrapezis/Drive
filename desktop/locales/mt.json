@@ -2154,7 +2154,7 @@
  "assistant.scCopy": "Ikkopja l-kmand ({arg})",
  "assistant.scCopied": "Ikkopjat",
  "mail.welcome": "Il-posta tiegħek, maħżuna fuq dan il-kompjuter",
- "mail.welcomeHint": "Kull imejl u kull anness jinħażen hawn bħala fajl li AI Assist jista' jaqra wkoll. Għalissa Tetra taqra biss: ma jintbagħat, ma jiċċaqlaq u ma jitħassar xejn fuq is-server.",
+ "mail.welcomeHint": "Kull imejl u kull anness jinħażen hawn bħala fajl li AI Assist jista' jaqra wkoll. Dak li tagħmel hawn (taqra, ♥, tarkivja, tneħħi) jiġri wkoll fuq is-server; il-kopja hawn tinżamm dejjem.",
  "mail.addAccount": "Żid kont",
  "mail.sync": "Sinkronizza",
  "mail.filter": "Filtru",
@@ -2231,5 +2231,16 @@
  "mail.notifications": "Notifiki",
  "mail.folders": "Folders",
  "mail.badServer": "Id-dettalji tas-server mhumiex tajbin.",
- "mail.fileGone": "Dan il-fajl m'għadux fl-arkivju."
+ "mail.fileGone": "Dan il-fajl m'għadux fl-arkivju.",
+ "mail.archive": "Arkivja",
+ "mail.spam": "Spam",
+ "mail.notSpam": "Mhux spam",
+ "mail.markRead": "Immarka bħala moqri",
+ "mail.markUnread": "Immarka bħala mhux moqri",
+ "mail.moveTo": "Mexxi lejn…",
+ "mail.archiveBy": "Arkivja",
+ "mail.byYear": "f'folders skont is-sena",
+ "mail.byMonth": "f'folders skont ix-xahar",
+ "mail.byNone": "f'folder wieħed",
+ "mail.err_noFolder": "Dan il-kont m'għandux folder bħal dan fuq is-server."
 }

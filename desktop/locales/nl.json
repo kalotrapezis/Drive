@@ -1980,7 +1980,7 @@
  "assistant.scCopy": "De opdracht kopiëren ({arg})",
  "assistant.scCopied": "Gekopieerd",
  "mail.welcome": "Je mail, bewaard op deze computer",
- "mail.welcomeHint": "Elke mail en elke bijlage wordt hier bewaard als bestand dat ook AI Assist kan lezen. Voorlopig leest Tetra alleen: op de server wordt niets verstuurd, verplaatst of verwijderd.",
+ "mail.welcomeHint": "Elke mail en elke bijlage wordt hier bewaard als bestand dat ook AI Assist kan lezen. Wat je hier doet (lezen, ♥, archiveren, verwijderen) gebeurt ook op de server; de kopie hier blijft altijd bewaard.",
  "mail.addAccount": "Account toevoegen",
  "mail.sync": "Synchroniseren",
  "mail.filter": "Filter",
@@ -2055,5 +2055,16 @@
  "mail.notifications": "Meldingen",
  "mail.folders": "Mappen",
  "mail.badServer": "De gegevens van de server kloppen niet.",
- "mail.fileGone": "Dit bestand staat niet meer in het archief."
+ "mail.fileGone": "Dit bestand staat niet meer in het archief.",
+ "mail.archive": "Archiveren",
+ "mail.spam": "Spam",
+ "mail.notSpam": "Geen spam",
+ "mail.markRead": "Markeren als gelezen",
+ "mail.markUnread": "Markeren als ongelezen",
+ "mail.moveTo": "Verplaatsen naar…",
+ "mail.archiveBy": "Archiveren",
+ "mail.byYear": "in mappen per jaar",
+ "mail.byMonth": "in mappen per maand",
+ "mail.byNone": "in één map",
+ "mail.err_noFolder": "Dit account heeft zo'n map niet op de server."
 }

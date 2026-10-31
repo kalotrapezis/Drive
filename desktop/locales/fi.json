@@ -1980,7 +1980,7 @@
  "assistant.scCopy": "Kopioi komento ({arg})",
  "assistant.scCopied": "Kopioitu",
  "mail.welcome": "Postisi, tallennettuna tälle tietokoneelle",
- "mail.welcomeHint": "Jokainen viesti ja liite tallennetaan tänne tiedostona, jota myös AI Assist voi lukea. Toistaiseksi Tetra vain lukee: palvelimella ei lähetetä, siirretä eikä poisteta mitään.",
+ "mail.welcomeHint": "Jokainen viesti ja liite tallennetaan tänne tiedostona, jota myös AI Assist voi lukea. Se, mitä teet täällä (luet, ♥, arkistoit, poistat), tapahtuu myös palvelimella; täällä oleva kopio säilyy aina.",
  "mail.addAccount": "Lisää tili",
  "mail.sync": "Synkronoi",
  "mail.filter": "Suodatin",
@@ -2055,5 +2055,16 @@
  "mail.notifications": "Ilmoitukset",
  "mail.folders": "Kansiot",
  "mail.badServer": "Palvelimen tiedot eivät ole oikein.",
- "mail.fileGone": "Tämä tiedosto ei ole enää arkistossa."
+ "mail.fileGone": "Tämä tiedosto ei ole enää arkistossa.",
+ "mail.archive": "Arkistoi",
+ "mail.spam": "Roskaposti",
+ "mail.notSpam": "Ei roskaposti",
+ "mail.markRead": "Merkitse luetuksi",
+ "mail.markUnread": "Merkitse lukemattomaksi",
+ "mail.moveTo": "Siirrä…",
+ "mail.archiveBy": "Arkistoi",
+ "mail.byYear": "kansioihin vuoden mukaan",
+ "mail.byMonth": "kansioihin kuukauden mukaan",
+ "mail.byNone": "yhteen kansioon",
+ "mail.err_noFolder": "Tilillä ei ole tällaista kansiota palvelimella."
 }

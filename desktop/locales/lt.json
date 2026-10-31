@@ -2154,7 +2154,7 @@
  "assistant.scCopy": "Kopijuoti komandą ({arg})",
  "assistant.scCopied": "Nukopijuota",
  "mail.welcome": "Jūsų paštas, saugomas šiame kompiuteryje",
- "mail.welcomeHint": "Kiekvienas laiškas ir priedas čia išsaugomas kaip failas, kurį gali skaityti ir AI Assist. Kol kas Tetra tik skaito: serveryje niekas nesiunčiama, neperkeliama ir netrinama.",
+ "mail.welcomeHint": "Kiekvienas laiškas ir priedas čia išsaugomas kaip failas, kurį gali skaityti ir AI Assist. Viskas, ką čia darote (skaitote, ♥, archyvuojate, trinate), vyksta ir serveryje; čia esanti kopija visada paliekama.",
  "mail.addAccount": "Pridėti paskyrą",
  "mail.sync": "Sinchronizuoti",
  "mail.filter": "Filtras",
@@ -2231,5 +2231,16 @@
  "mail.notifications": "Pranešimai",
  "mail.folders": "Aplankai",
  "mail.badServer": "Serverio duomenys neteisingi.",
- "mail.fileGone": "Šio failo archyve jau nebėra."
+ "mail.fileGone": "Šio failo archyve jau nebėra.",
+ "mail.archive": "Archyvuoti",
+ "mail.spam": "Šlamštas",
+ "mail.notSpam": "Ne šlamštas",
+ "mail.markRead": "Pažymėti kaip perskaitytą",
+ "mail.markUnread": "Pažymėti kaip neperskaitytą",
+ "mail.moveTo": "Perkelti į…",
+ "mail.archiveBy": "Archyvuoti",
+ "mail.byYear": "į aplankus pagal metus",
+ "mail.byMonth": "į aplankus pagal mėnesį",
+ "mail.byNone": "į vieną aplanką",
+ "mail.err_noFolder": "Šioje paskyroje serveryje tokio aplanko nėra."
 }

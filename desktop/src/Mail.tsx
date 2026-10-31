@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { MailAccount, MailEntry, MailFolder, MailOpened, MailRole, MailServer, MailState } from './drive'
+import type { MailAccount, MailEntry, MailFolder, MailOp, MailOpened, MailRole, MailServer, MailState } from './drive'
 import { arrange, dayKey, DEFAULT_VIEW, type MailView } from './mailView'
 import { Confirm, Modal, errorText } from './Dialogs'
 import { Icon, type IconName } from './Icon'
 import { locale, t } from './i18n'
 
 // Tetra Mail, step 1 (Tetra-mobile's MAIL_PLAN.md, the desktop layout of §9): the action bar on top, then three columns —
-// the unified folders expanding into the accounts, the list, the open mail. Read-only: nothing changes on a server yet,
-// so the ♥ shows the server's flag and the actions that write (New, Reply, Archive, Delete) are not here.
+// the unified folders expanding into the accounts, the list, the open mail. Read, ♥, archive, delete, spam and move go to
+// the server (step 3); writing (New, Reply) is step 4.
 
 type Data = { accounts: MailAccount[]; folders: MailFolder[]; status: Record<string, MailState> }
 const ROLE_ICON: Record<MailRole, IconName> = { Inbox: 'mail', Drafts: 'edit', Sent: 'arrowRight', Archive: 'archive', Spam: 'warning', Trash: 'trash' }
@@ -65,6 +65,20 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
   const groups = useMemo(() => arrange(mails, view, query), [mails, view, query])
   const filtered = JSON.stringify({ ...view, sort: 0, descending: 0, group: 0, unreadFirst: 0, favoritesFirst: 0, attachmentsFirst: 0 }) !== JSON.stringify({ ...DEFAULT_VIEW, sort: 0, descending: 0, group: 0, unreadFirst: 0, favoritesFirst: 0, attachmentsFirst: 0 })
 
+  const flat = groups.flatMap(g => g.mails), current = flat.find(m => m.id === openId) ?? mails.find(m => m.id === openId)
+  const act = (op: MailOp, ids: string[], to?: MailRole) => window.drive.mail.act(op, ids, to).then(() => { reload(); return true }, e => { say(errorText(e)); return false })
+  /** An action that takes the open mail out of this folder: the next one opens, as in Thunderbird. */
+  const away = async (op: MailOp, to?: MailRole) => {
+    if (!current) return
+    const i = flat.indexOf(current), next = flat[i + 1] ?? flat[i - 1]
+    if (await act(op, [current.id], to)) setOpenId(next?.id ?? null)
+  }
+  const open = (m: MailEntry) => { setOpenId(m.id); if (!m.seen) act('read', [m.id]) }
+  const moveTo = () => current && setDialog(<Modal onClose={close}>
+    <h3>{t('mail.moveTo')}</h3>
+    {(['Inbox', 'Archive', 'Spam', 'Trash', 'Drafts', 'Sent'] as MailRole[]).filter(r => r !== current.folder).map(r =>
+      <button key={r} className="sheet-row" onClick={() => { close(); away('move', r) }}><Icon name={ROLE_ICON[r]} />{t(`mail.role${r}`)}</button>)}
+  </Modal>)
   const addAccount = () => setDialog(<AddAccount onClose={close} onDone={() => { close(); reload() }} />)
   const manage = () => data && setDialog(<Accounts data={data} onClose={close} onAdd={addAccount}
     onRemove={a => setDialog(<Confirm title={t('mail.removeTitle', { name: a.name })} body={t('mail.removeBody')} action={t('common.remove')} danger onClose={close}
@@ -88,6 +102,16 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
         <button className="mail-bar-item" onClick={() => window.drive.mail.sync()}><Icon name="refresh" size={20} /><span>{t('mail.sync')}</span></button>
         <button className={`mail-bar-item ${filtered ? 'on' : ''}`} onClick={filter}><Icon name="filter" size={20} /><span>{t('mail.filter')}</span></button>
         <button className="mail-bar-item" onClick={manage}><Icon name="person" size={20} /><span>{t('mail.accounts')}</span></button>
+        {current && <>
+          <span className="mail-bar-sep" />
+          {current.folder !== 'Archive' && <button className="mail-bar-item act" title={t('mail.archive')} onClick={() => away('archive')}><Icon name="archive" size={20} /><span>{t('mail.archive')}</span></button>}
+          <button className="mail-bar-item act" title={t('common.delete')} onClick={() => away('delete')}><Icon name="trash" size={20} /><span>{t('common.delete')}</span></button>
+          {current.folder === 'Spam'
+            ? <button className="mail-bar-item act" title={t('mail.notSpam')} onClick={() => away('notSpam')}><Icon name="mail" size={20} /><span>{t('mail.notSpam')}</span></button>
+            : <button className="mail-bar-item act" title={t('mail.spam')} onClick={() => away('spam')}><Icon name="warning" size={20} /><span>{t('mail.spam')}</span></button>}
+          <button className="mail-bar-item act" title={t(current.seen ? 'mail.markUnread' : 'mail.markRead')} onClick={() => act(current.seen ? 'unread' : 'read', [current.id])}><Icon name={current.seen ? 'visibilityOff' : 'visibility'} size={20} /><span>{t(current.seen ? 'mail.markUnread' : 'mail.markRead')}</span></button>
+          <button className="mail-bar-item act" title={t('common.move')} onClick={moveTo}><Icon name="moveTo" size={20} /><span>{t('common.move')}</span></button>
+        </>}
         <label className="mail-search"><Icon name="search" size={18} />
           <input value={query} placeholder={t('mail.search')} onChange={e => { setQuery(e.target.value); setLimit(PAGE) }} /></label>
       </div>
@@ -127,7 +151,7 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
             shown += rows.length
             return <section key={g.key}>
               <h4 className="mail-group">{view.group === 'day' ? dayText(g.key) : view.group === 'account' ? accounts.get(g.key)?.name ?? g.key : g.key}</h4>
-              {rows.map(m => <MailRow key={m.id} m={m} on={m.id === openId} color={where.account ? null : accounts.get(m.account)?.color ?? null} onOpen={() => setOpenId(m.id)} />)}
+              {rows.map(m => <MailRow key={m.id} m={m} on={m.id === openId} color={where.account ? null : accounts.get(m.account)?.color ?? null} onOpen={() => open(m)} onHeart={() => act(m.flagged ? 'unfavorite' : 'favorite', [m.id])} />)}
             </section>
           })}
           {groups.reduce((n, g) => n + g.mails.length, 0) > limit && <button className="text-button mail-more" onClick={() => setLimit(l => l + PAGE)}>{t('mail.more')}</button>}
@@ -140,9 +164,11 @@ export function MailPage({ setDialog, say }: { setDialog: (d: ReactNode) => void
   )
 }
 
-function MailRow({ m, on, color, onOpen }: { m: MailEntry; on: boolean; color: string | null; onOpen: () => void }) {
+function MailRow({ m, on, color, onOpen, onHeart }: { m: MailEntry; on: boolean; color: string | null; onOpen: () => void; onHeart: () => void }) {
+  // a row holds the ♥ button, so it is not a <button> itself
   return (
-    <button className={`mail-row ${on ? 'on' : ''} ${m.seen ? '' : 'unread'}`} onClick={onOpen} style={color ? { borderLeftColor: color } : undefined}>
+    <div role="button" tabIndex={0} className={`mail-row ${on ? 'on' : ''} ${m.seen ? '' : 'unread'}`} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } }}
+      style={color ? { borderLeftColor: color } : undefined}>
       <span className="mail-row-top">
         <span className="mail-from">{m.from || m.fromAddress}</span>
         {m.attachments > 0 && <Icon name="attach" size={15} />}
@@ -151,8 +177,8 @@ function MailRow({ m, on, color, onOpen }: { m: MailEntry; on: boolean; color: s
       </span>
       <span className="mail-subject">{m.subject || t('mail.noSubject')}</span>
       {m.snippet && <span className="mail-snippet">{m.snippet}</span>}
-      <span className={`mail-heart ${m.flagged ? 'on' : ''}`} title={m.flagged ? t('mail.favorite') : undefined}><Icon name={m.flagged ? 'heartFill' : 'heart'} size={18} /></span>
-    </button>
+      <button className={`mail-heart ${m.flagged ? 'on' : ''}`} title={t('mail.favorite')} aria-pressed={m.flagged} onClick={e => { e.stopPropagation(); onHeart() }}><Icon name={m.flagged ? 'heartFill' : 'heart'} size={18} /></button>
+    </div>
   )
 }
 
@@ -238,7 +264,11 @@ function Accounts({ data, onAdd, onRemove, onClose }: { data: Data; onAdd: () =>
         const s = data.status[a.id] ?? {}
         return <div key={a.id} className="sheet-row">
           <span className="mail-dot" style={{ background: a.color }} />
-          <span className="mail-acc-text"><strong>{a.name}</strong><small>{a.address}{s.error ? ` · ${t(`mail.err_${s.error}`)}` : ''}</small></span>
+          <span className="mail-acc-text"><strong>{a.name}</strong><small>{a.address}{s.error ? ` · ${t(`mail.err_${s.error}`)}` : ''}</small>
+            <label className="mail-archive-by">{t('mail.archiveBy')}
+              <select defaultValue={a.archiveBy ?? 'year'} onChange={e => window.drive.mail.setAccount(a.id, { archiveBy: e.target.value as 'year' })}>
+                <option value="year">{t('mail.byYear')}</option><option value="month">{t('mail.byMonth')}</option><option value="none">{t('mail.byNone')}</option>
+              </select></label></span>
           <button className="round flat" title={t('common.remove')} onClick={() => onRemove(a)}><Icon name="trash" size={20} /></button>
         </div>
       })}

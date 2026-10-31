@@ -1336,3 +1336,12 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .mail-summary > div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--hover); }
 .mail-summary > div:last-child { border-bottom: 0; }
 .mail-summary > div > span:last-child { color: var(--muted); text-align: right; display: flex; align-items: center; gap: 6px; }
+.mail-bar { overflow-x: auto; scrollbar-width: none; }
+.mail-bar-sep { width: 1px; height: 24px; background: var(--island-2); margin: 0 6px; flex: none; }
+.mail-bar-item { flex: none; }
+@media (max-width: 1500px) { .mail-bar-item.act span { display: none; } }
+.mail-row { cursor: pointer; }
+.mail-heart { border-radius: 50%; width: 32px; height: 32px; display: grid; place-items: center; right: 4px; }
+.mail-heart:hover { background: var(--hover); opacity: 1; }
+.mail-archive-by { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 13px; color: var(--muted); }
+.mail-archive-by select { background: var(--island-2); color: var(--text); border: 0; border-radius: 8px; padding: 2px 6px; font: inherit; }

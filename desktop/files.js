@@ -61,7 +61,7 @@ const isEvent = rel => rel.startsWith('Calendar/') && rel.toLowerCase().endsWith
 /** A part of Drive that syncs on its own, at once (the Calendar, 18 Oct): its folders, and its kinds of file in the Trash. */
 const SCOPES = { calendar: { dirs: ['Calendar'], trashExts: ['.ics'] }, timer: { dirs: ['Timer'], trashExts: [] }, contacts: { dirs: ['Contacts'], trashExts: ['.vcf'] }, phone: { dirs: ['Phone'], trashExts: [] }, data: { dirs: ['Data'], trashExts: [] } }
 /** The Calendar's, the Timer's, Maps' and Contacts' folders: synced as files, kept out of Files' lists, search and Move (the user, 18 Oct). */
-const APP_FOLDERS = ['Calendar', 'Timer', 'Maps', 'Contacts', 'Phone', 'Data']
+const APP_FOLDERS = ['Calendar', 'Timer', 'Maps', 'Contacts', 'Phone', 'Data', 'Mail']
 function scopeTest(scope) {
   if (!scope) return () => true
   const s = SCOPES[scope]

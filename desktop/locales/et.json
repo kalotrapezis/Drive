@@ -1980,7 +1980,7 @@
  "assistant.scCopy": "Kopeeri käsk ({arg})",
  "assistant.scCopied": "Kopeeritud",
  "mail.welcome": "Sinu post, salvestatud sellesse arvutisse",
- "mail.welcomeHint": "Iga kiri ja manus salvestatakse siia failina, mida AI Assist saab lugeda. Praegu Tetra ainult loeb: serveris ei saadeta, teisaldata ega kustutata midagi.",
+ "mail.welcomeHint": "Iga kiri ja manus salvestatakse siia failina, mida AI Assist saab lugeda. Mida sa siin teed (lugemine, ♥, arhiveerimine, kustutamine), juhtub ka serveris; siinne koopia jääb alati alles.",
  "mail.addAccount": "Lisa konto",
  "mail.sync": "Sünkrooni",
  "mail.filter": "Filter",
@@ -2055,5 +2055,16 @@
  "mail.notifications": "Teavitused",
  "mail.folders": "Kaustad",
  "mail.badServer": "Serveri andmed ei ole õiged.",
- "mail.fileGone": "Seda faili pole enam arhiivis."
+ "mail.fileGone": "Seda faili pole enam arhiivis.",
+ "mail.archive": "Arhiveeri",
+ "mail.spam": "Rämpspost",
+ "mail.notSpam": "Pole rämpspost",
+ "mail.markRead": "Märgi loetuks",
+ "mail.markUnread": "Märgi lugemata",
+ "mail.moveTo": "Teisalda…",
+ "mail.archiveBy": "Arhiveeri",
+ "mail.byYear": "kaustadesse aasta kaupa",
+ "mail.byMonth": "kaustadesse kuu kaupa",
+ "mail.byNone": "ühte kausta",
+ "mail.err_noFolder": "Sellel kontol pole serveris sellist kausta."
 }

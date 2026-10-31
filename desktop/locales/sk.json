@@ -2154,7 +2154,7 @@
  "assistant.scCopy": "Kopírovať príkaz ({arg})",
  "assistant.scCopied": "Skopírované",
  "mail.welcome": "Vaša pošta, uložená v tomto počítači",
- "mail.welcomeHint": "Každý e-mail a príloha sa tu uloží ako súbor, ktorý vie čítať aj AI Assist. Zatiaľ Tetra iba číta: na serveri sa nič neodosiela, nepresúva ani nemaže.",
+ "mail.welcomeHint": "Každý e-mail a príloha sa tu uloží ako súbor, ktorý vie čítať aj AI Assist. Čo tu urobíte (prečítanie, ♥, archivácia, zmazanie), stane sa aj na serveri; kópia tu sa vždy zachová.",
  "mail.addAccount": "Pridať účet",
  "mail.sync": "Synchronizovať",
  "mail.filter": "Filter",
@@ -2231,5 +2231,16 @@
  "mail.notifications": "Oznámenia",
  "mail.folders": "Priečinky",
  "mail.badServer": "Údaje o serveri nie sú správne.",
- "mail.fileGone": "Tento súbor už nie je v archíve."
+ "mail.fileGone": "Tento súbor už nie je v archíve.",
+ "mail.archive": "Archivovať",
+ "mail.spam": "Spam",
+ "mail.notSpam": "Nie je spam",
+ "mail.markRead": "Prečítané",
+ "mail.markUnread": "Neprečítané",
+ "mail.moveTo": "Presunúť do…",
+ "mail.archiveBy": "Archivovať",
+ "mail.byYear": "do priečinkov podľa roka",
+ "mail.byMonth": "do priečinkov podľa mesiaca",
+ "mail.byNone": "do jedného priečinka",
+ "mail.err_noFolder": "Tento účet nemá na serveri taký priečinok."
 }

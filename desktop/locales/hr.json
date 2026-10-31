@@ -2066,7 +2066,7 @@
  "assistant.scCopy": "Kopiraj naredbu ({arg})",
  "assistant.scCopied": "Kopirano",
  "mail.welcome": "Vaša pošta, spremljena na ovom računalu",
- "mail.welcomeHint": "Svaka poruka i privitak sprema se ovdje kao datoteka koju AI Assist može čitati. Za sada Tetra samo čita: na poslužitelju se ništa ne šalje, ne premješta i ne briše.",
+ "mail.welcomeHint": "Svaka poruka i privitak sprema se ovdje kao datoteka koju AI Assist može čitati. Što god učinite ovdje (čitanje, ♥, arhiviranje, brisanje), događa se i na poslužitelju; kopija ovdje uvijek ostaje.",
  "mail.addAccount": "Dodaj račun",
  "mail.sync": "Sinkroniziraj",
  "mail.filter": "Filtar",
@@ -2142,5 +2142,16 @@
  "mail.notifications": "Obavijesti",
  "mail.folders": "Mape",
  "mail.badServer": "Podaci o poslužitelju nisu ispravni.",
- "mail.fileGone": "Ove datoteke više nema u arhivi."
+ "mail.fileGone": "Ove datoteke više nema u arhivi.",
+ "mail.archive": "Arhiviraj",
+ "mail.spam": "Neželjeno",
+ "mail.notSpam": "Nije neželjeno",
+ "mail.markRead": "Označi kao pročitano",
+ "mail.markUnread": "Označi kao nepročitano",
+ "mail.moveTo": "Premjesti u…",
+ "mail.archiveBy": "Arhiviraj",
+ "mail.byYear": "u mape po godini",
+ "mail.byMonth": "u mape po mjesecu",
+ "mail.byNone": "u jednu mapu",
+ "mail.err_noFolder": "Ovaj račun nema takvu mapu na poslužitelju."
 }

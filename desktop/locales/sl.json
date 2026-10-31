@@ -2154,7 +2154,7 @@
  "assistant.scCopy": "Kopiraj ukaz ({arg})",
  "assistant.scCopied": "Kopirano",
  "mail.welcome": "Vaša pošta, shranjena v tem računalniku",
- "mail.welcomeHint": "Vsako sporočilo in priponka se tukaj shrani kot datoteka, ki jo lahko bere tudi AI Assist. Zaenkrat Tetra samo bere: na strežniku se nič ne pošlje, premakne ali izbriše.",
+ "mail.welcomeHint": "Vsako sporočilo in priponka se tukaj shrani kot datoteka, ki jo lahko bere tudi AI Assist. Kar naredite tukaj (branje, ♥, arhiviranje, brisanje), se zgodi tudi na strežniku; kopija tukaj ostane vedno.",
  "mail.addAccount": "Dodaj račun",
  "mail.sync": "Sinhroniziraj",
  "mail.filter": "Filter",
@@ -2231,5 +2231,16 @@
  "mail.notifications": "Obvestila",
  "mail.folders": "Mape",
  "mail.badServer": "Podatki o strežniku niso pravilni.",
- "mail.fileGone": "Te datoteke ni več v arhivu."
+ "mail.fileGone": "Te datoteke ni več v arhivu.",
+ "mail.archive": "Arhiviraj",
+ "mail.spam": "Neželeno",
+ "mail.notSpam": "Ni neželeno",
+ "mail.markRead": "Označi kot prebrano",
+ "mail.markUnread": "Označi kot neprebrano",
+ "mail.moveTo": "Premakni v…",
+ "mail.archiveBy": "Arhiviraj",
+ "mail.byYear": "v mape po letu",
+ "mail.byMonth": "v mape po mesecu",
+ "mail.byNone": "v eno mapo",
+ "mail.err_noFolder": "Ta račun na strežniku nima take mape."
 }

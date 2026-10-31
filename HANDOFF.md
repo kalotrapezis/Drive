@@ -7,8 +7,12 @@
 > line per id wins; compacted at start when twice too big). Headers of every folder first (orange), then bodies newest
 > first (green when the bytes match the server's size); IDLE in the Inbox; everything again every 15 min. `src/Mail.tsx`:
 > action bar, folders · list · open mail (HTML in a sandboxed frame; the page's CSP blocks remote images), Filter modal
-> (`src/mailView.ts`). Tests: `test/mail.test.js`, `src/mailView.test.ts`. Not yet: sending, flags/moves on the server,
-> the server/local clean-up (the defaults are stored, nothing deletes), extra folders (Gmail labels), phone sync of the folder.
+> (`src/mailView.ts`). Tests: `test/mail.test.js`, `src/mailView.test.ts`.
+> **Step 3 (same day, same branch):** `Mail` is in `system.SHARED` (synced as `Mail/…`, hidden in Files; `GET /mail/file?path=`
+> for one file on demand). `mail.act()`: read/unread, ♥, archive (Archive/<year|month>, `archiveBy`), delete (Trash; from
+> the Trash for good on the server), move, spam/not spam, each on its own short connection; a moved mail's file follows it
+> by Message-ID. Phones ask through `Mail/requests/<device>-<ms>.json` (MAIL_PLAN §11). Not yet: sending, the
+> server/local clean-up (defaults stored, nothing deletes), Gmail's other labels, multi-select.
 
 > **Calendar (18 Oct 2026, branch `calendar`, worktree Drive-worktrees/calendar; not merged, not pushed).** The plan is
 > Drive-Android's Plan.md § Calendar. The desktop part: `desktop/calendar.js` reads and writes `~/Tetra/Files/Calendar`

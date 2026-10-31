@@ -1286,6 +1286,10 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('mail:remove', (_, id) => { mail.remove(String(id)); db.prepare('DELETE FROM settings WHERE key = ?').run('mailSecret:' + id) })
   ipcMain.handle('mail:sync', () => mail.syncNow())
+  ipcMain.handle('mail:act', async (_, op, ids, to) => {
+    try { await mail.act({ op, ids, to }) } catch (e) { throw new Error(e.reason && e.reason !== 'other' ? t(`mail.err_${e.reason}`) : e.message) }
+  })
+  ipcMain.handle('mail:setAccount', (_, id, changes) => mail.setAccount(String(id), changes))
   ipcMain.handle('mail:openFile', async (_, rel) => {
     const full = mail.inside(rel)
     if (!full) throw new Error(t('mail.fileGone'))

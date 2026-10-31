@@ -231,6 +231,8 @@ contextBridge.exposeInMainWorld('drive', {
     add: (address, server, pass) => ipcRenderer.invoke('mail:add', address, server, pass),
     remove: id => ipcRenderer.invoke('mail:remove', id),
     sync: () => ipcRenderer.invoke('mail:sync'),
+    act: (op, ids, to) => ipcRenderer.invoke('mail:act', op, ids, to),
+    setAccount: (id, changes) => ipcRenderer.invoke('mail:setAccount', id, changes),
     openFile: rel => ipcRenderer.invoke('mail:openFile', rel),
     openLink: url => ipcRenderer.invoke('mail:openLink', url),
     appPasswords: () => ipcRenderer.invoke('mail:appPasswords'),

@@ -1980,7 +1980,7 @@
  "assistant.scCopy": "A parancs másolása ({arg})",
  "assistant.scCopied": "Másolva",
  "mail.welcome": "A leveleid, ezen a számítógépen tárolva",
- "mail.welcomeHint": "Minden levelet és mellékletet itt fájlként mentünk, amelyet az AI Assist is el tud olvasni. Egyelőre a Tetra csak olvas: a szerveren semmi nem kerül elküldésre, áthelyezésre vagy törlésre.",
+ "mail.welcomeHint": "Minden levelet és mellékletet itt fájlként mentünk, amelyet az AI Assist is el tud olvasni. Amit itt teszel (olvasás, ♥, archiválás, törlés), az a szerveren is megtörténik; az itteni másolat mindig megmarad.",
  "mail.addAccount": "Fiók hozzáadása",
  "mail.sync": "Szinkronizálás",
  "mail.filter": "Szűrő",
@@ -2055,5 +2055,16 @@
  "mail.notifications": "Értesítések",
  "mail.folders": "Mappák",
  "mail.badServer": "A szerver adatai nem helyesek.",
- "mail.fileGone": "Ez a fájl már nincs az archívumban."
+ "mail.fileGone": "Ez a fájl már nincs az archívumban.",
+ "mail.archive": "Archiválás",
+ "mail.spam": "Levélszemét",
+ "mail.notSpam": "Nem levélszemét",
+ "mail.markRead": "Olvasottnak jelöl",
+ "mail.markUnread": "Olvasatlannak jelöl",
+ "mail.moveTo": "Áthelyezés ide…",
+ "mail.archiveBy": "Archiválás",
+ "mail.byYear": "mappákba évek szerint",
+ "mail.byMonth": "mappákba hónapok szerint",
+ "mail.byNone": "egy mappába",
+ "mail.err_noFolder": "Ennek a fióknak nincs ilyen mappája a szerveren."
 }

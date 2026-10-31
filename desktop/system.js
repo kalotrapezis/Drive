@@ -29,7 +29,7 @@ const KINDS = ['Data', 'Tools', 'Cache', 'Temp', 'Shared']
  * the name sync uses, so a device on an older version sends and gets the same paths (SYSTEM.md, "Sync"). Android's
  * TetraSystem.SHARED is the same list.
  */
-const SHARED = { Calendar: 'Calendar', Contacts: 'Contacts', Data: 'Data', Phone: 'Phone', Timer: 'Timer', Maps: 'Maps', Trash: 'Trash' }
+const SHARED = { Calendar: 'Calendar', Contacts: 'Contacts', Data: 'Data', Phone: 'Phone', Timer: 'Timer', Maps: 'Maps', Trash: 'Trash', Mail: 'Mail' }
 
 /** ~/Tetra/.System, always beside ~/Tetra/Photos and ~/Tetra/Files. */
 const root = (home = os.homedir()) => path.join(home, 'Tetra', NAME)

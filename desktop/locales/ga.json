@@ -2241,7 +2241,7 @@
  "assistant.scCopy": "Cóipeáil an t-ordú ({arg})",
  "assistant.scCopied": "Cóipeáilte",
  "mail.welcome": "Do phost, sábháilte ar an ríomhaire seo",
- "mail.welcomeHint": "Sábháiltear gach ríomhphost agus gach ceangaltán anseo mar chomhad ar féidir le AI Assist a léamh. Go fóill ní dhéanann Tetra ach léamh: ní sheoltar, ní aistrítear ná ní scriostar tada ar an bhfreastalaí.",
+ "mail.welcomeHint": "Sábháiltear gach ríomhphost agus gach ceangaltán anseo mar chomhad ar féidir le AI Assist a léamh. Cibé rud a dhéanann tú anseo (léamh, ♥, cartlannú, scriosadh), tarlaíonn sé ar an bhfreastalaí freisin; coinnítear an chóip anseo i gcónaí.",
  "mail.addAccount": "Cuir cuntas leis",
  "mail.sync": "Sioncrónaigh",
  "mail.filter": "Scagaire",
@@ -2319,5 +2319,16 @@
  "mail.notifications": "Fógraí",
  "mail.folders": "Fillteáin",
  "mail.badServer": "Níl sonraí an fhreastalaí ceart.",
- "mail.fileGone": "Níl an comhad seo sa chartlann a thuilleadh."
+ "mail.fileGone": "Níl an comhad seo sa chartlann a thuilleadh.",
+ "mail.archive": "Cartlannaigh",
+ "mail.spam": "Turscar",
+ "mail.notSpam": "Ní turscar é",
+ "mail.markRead": "Marcáil léite",
+ "mail.markUnread": "Marcáil gan léamh",
+ "mail.moveTo": "Bog go…",
+ "mail.archiveBy": "Cartlannaigh",
+ "mail.byYear": "i bhfillteáin de réir bliana",
+ "mail.byMonth": "i bhfillteáin de réir míosa",
+ "mail.byNone": "in aon fhillteán amháin",
+ "mail.err_noFolder": "Níl a leithéid d'fhillteán ag an gcuntas seo ar an bhfreastalaí."
 }

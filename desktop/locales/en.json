@@ -1980,7 +1980,7 @@
  "assistant.scCopy": "Copy the command ({arg})",
  "assistant.scCopied": "Copied",
  "mail.welcome": "Your mail, kept on this computer",
- "mail.welcomeHint": "Every mail and attachment is saved here as a file that AI Assist can read. For now Tetra only reads: nothing is sent, moved or deleted on the server.",
+ "mail.welcomeHint": "Every mail and attachment is saved here as a file that AI Assist can read. What you do here (read, ♥, archive, delete) happens on the server too; the copy here is always kept.",
  "mail.addAccount": "Add account",
  "mail.sync": "Sync",
  "mail.filter": "Filter",
@@ -2055,5 +2055,16 @@
  "mail.notifications": "Notifications",
  "mail.folders": "Folders",
  "mail.badServer": "The server's details are not right.",
- "mail.fileGone": "This file is no longer in the archive."
+ "mail.fileGone": "This file is no longer in the archive.",
+ "mail.archive": "Archive",
+ "mail.spam": "Spam",
+ "mail.notSpam": "Not spam",
+ "mail.markRead": "Mark read",
+ "mail.markUnread": "Mark unread",
+ "mail.moveTo": "Move to…",
+ "mail.archiveBy": "Archive into folders by",
+ "mail.byYear": "year",
+ "mail.byMonth": "month",
+ "mail.byNone": "one folder",
+ "mail.err_noFolder": "This account has no such folder on the server."
 }

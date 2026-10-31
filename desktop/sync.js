@@ -1448,6 +1448,15 @@ class SyncServer {
       const direction = this.connection(device.id, 'files').direction
       return this.send(res, 200, direction === 'send' || direction === 'off' ? { ...answer, have: [], moveTo: [] } : answer)
     }
+    // One file of the mail archive by its path alone (Mail/<address>/…): a phone keeps only recent mail and fetches an older
+    // one, or one it let go to free space (then sync no longer offers it), when it is opened (MAIL_PLAN §2).
+    if (req.method === 'GET' && url.pathname === '/mail/file') {
+      const rel = url.searchParams.get('path') ?? ''
+      if (!this.files || !safeRel(rel) || !rel.startsWith('Mail/')) return this.send(res, 400, { error: 'Invalid path.' })
+      const absolute = this.files.resolve(rel, false)
+      if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) return this.send(res, 404, { error: 'Not in the archive.' })
+      return this.sendFile(res, absolute)
+    }
     const file = /^\/file\/([0-9a-f]{64})$/.exec(url.pathname)
     if (req.method === 'GET' && file) {
       const rel = url.searchParams.get('path') ?? ''

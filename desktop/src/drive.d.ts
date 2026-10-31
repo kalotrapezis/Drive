@@ -3,8 +3,9 @@ import type { Media } from './timeline'
 
 /** Mail (mail.js): accounts.json, a line of index.jsonl, the unified folders' counts, an opened mail. */
 export type MailRole = 'Inbox' | 'Drafts' | 'Sent' | 'Archive' | 'Spam' | 'Trash'
+export type MailOp = 'read' | 'unread' | 'favorite' | 'unfavorite' | 'archive' | 'delete' | 'move' | 'spam' | 'notSpam'
 export interface MailServer { host: string; port: number; secure: boolean; users: string[]; provider: 'google' | 'microsoft' | null }
-export interface MailAccount { id: string; address: string; name: string; color: string; provider: string | null; archive: boolean; notify: boolean
+export interface MailAccount { id: string; address: string; name: string; color: string; provider: string | null; archive: boolean; archiveBy?: 'year' | 'month' | 'none'; notify: boolean
   serverClean: { on: boolean; attachmentsMonths: number; otherMonths: number }; localClean: { on: boolean } }
 export interface MailEntry { id: string; account: string; folder: MailRole; uid: number; date: number; from: string; fromAddress: string; to: string[]
   subject: string; seen: boolean; flagged: boolean; size: number; attachments: number; snippet: string; saved: boolean; file?: string }
@@ -243,6 +244,8 @@ declare global {
         add(address: string, server: MailServer, pass: string): Promise<MailAddResult>
         remove(id: string): Promise<void>
         sync(): Promise<void>
+        act(op: MailOp, ids: string[], to?: MailRole): Promise<void>
+        setAccount(id: string, changes: { archiveBy?: 'year' | 'month' | 'none' }): Promise<void>
         openFile(rel: string): Promise<void>
         openLink(url: string): Promise<void>
         appPasswords(): Promise<void>

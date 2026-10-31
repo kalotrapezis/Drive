@@ -2067,7 +2067,7 @@
  "assistant.scCopy": "Copia il comando ({arg})",
  "assistant.scCopied": "Copiato",
  "mail.welcome": "La tua posta, conservata su questo computer",
- "mail.welcomeHint": "Ogni messaggio e ogni allegato viene salvato qui come file che anche AI Assist può leggere. Per ora Tetra si limita a leggere: sul server non viene inviato, spostato o eliminato nulla.",
+ "mail.welcomeHint": "Ogni messaggio e ogni allegato viene salvato qui come file che anche AI Assist può leggere. Quello che fai qui (leggere, ♥, archiviare, eliminare) succede anche sul server; la copia qui resta sempre.",
  "mail.addAccount": "Aggiungi account",
  "mail.sync": "Sincronizza",
  "mail.filter": "Filtro",
@@ -2143,5 +2143,16 @@
  "mail.notifications": "Notifiche",
  "mail.folders": "Cartelle",
  "mail.badServer": "I dati del server non sono corretti.",
- "mail.fileGone": "Questo file non è più nell'archivio."
+ "mail.fileGone": "Questo file non è più nell'archivio.",
+ "mail.archive": "Archivia",
+ "mail.spam": "Spam",
+ "mail.notSpam": "Non è spam",
+ "mail.markRead": "Segna come letto",
+ "mail.markUnread": "Segna come da leggere",
+ "mail.moveTo": "Sposta in…",
+ "mail.archiveBy": "Archivia",
+ "mail.byYear": "in cartelle per anno",
+ "mail.byMonth": "in cartelle per mese",
+ "mail.byNone": "in una sola cartella",
+ "mail.err_noFolder": "Questo account non ha una cartella simile sul server."
 }
