@@ -2306,5 +2306,8 @@
  "mail.moveHow": "Nu ia nimic de pe calculator și își lasă propriile mesaje de îndată ce le are calculatorul.",
  "mail.keepUpTo": "Păstrează până la",
  "mail.everything": "Tot",
- "mail.uses": "Poșta ocupă {size}"
+ "mail.uses": "Poșta ocupă {size}",
+ "assistant.mailSend": "Trimite către {to}",
+ "assistant.mailSent": "Trimis către {to}.",
+ "assistant.mailKept": "Netrimis: rămâne în Ciorne."
 }

@@ -2217,5 +2217,8 @@
  "mail.moveHow": "Ei võta arvutist midagi ja laseb oma kirjad lahti, kui arvutil need juba on.",
  "mail.keepUpTo": "Hoia kuni",
  "mail.everything": "Kõik",
- "mail.uses": "Post võtab {size}"
+ "mail.uses": "Post võtab {size}",
+ "assistant.mailSend": "Saada: {to}",
+ "assistant.mailSent": "Saadetud: {to}.",
+ "assistant.mailKept": "Ei saadetud: jääb Mustandite hulka."
 }

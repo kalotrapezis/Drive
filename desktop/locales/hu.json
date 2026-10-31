@@ -2217,5 +2217,8 @@
  "mail.moveHow": "Nem vesz át semmit a számítógéptől, és elengedi a saját leveleit, amint a számítógép megkapta őket.",
  "mail.keepUpTo": "Megtartás legfeljebb",
  "mail.everything": "Minden",
- "mail.uses": "A levelek {size} helyet foglalnak"
+ "mail.uses": "A levelek {size} helyet foglalnak",
+ "assistant.mailSend": "Küldés ide: {to}",
+ "assistant.mailSent": "Elküldve ide: {to}.",
+ "assistant.mailKept": "Nem lett elküldve: a Piszkozatok között marad."
 }

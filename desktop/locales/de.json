@@ -2217,5 +2217,8 @@
  "mail.moveHow": "Nimmt nichts vom Computer und gibt eigene E-Mails frei, sobald der Computer sie hat.",
  "mail.keepUpTo": "Behalten bis",
  "mail.everything": "Alles",
- "mail.uses": "E-Mails belegen {size}"
+ "mail.uses": "E-Mails belegen {size}",
+ "assistant.mailSend": "An {to} senden",
+ "assistant.mailSent": "An {to} gesendet.",
+ "assistant.mailKept": "Nicht gesendet: Sie bleibt in Entwürfe."
 }

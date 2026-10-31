@@ -2484,5 +2484,8 @@
  "mail.moveHow": "Ní thógann sé aon rud ón ríomhaire agus scaoileann sé a phost féin chomh luath agus atá sé ag an ríomhaire.",
  "mail.keepUpTo": "Coinnigh suas le",
  "mail.everything": "Gach rud",
- "mail.uses": "Tógann an ríomhphost {size}"
+ "mail.uses": "Tógann an ríomhphost {size}",
+ "assistant.mailSend": "Seol chuig {to}",
+ "assistant.mailSent": "Seolta chuig {to}.",
+ "assistant.mailKept": "Níor seoladh: fanann sé i nDréachtaí."
 }

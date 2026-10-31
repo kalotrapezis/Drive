@@ -2217,5 +2217,8 @@
  "mail.moveHow": "Tager intet fra computeren og slipper sine egne mails, så snart computeren har dem.",
  "mail.keepUpTo": "Behold op til",
  "mail.everything": "Alt",
- "mail.uses": "Mail fylder {size}"
+ "mail.uses": "Mail fylder {size}",
+ "assistant.mailSend": "Send til {to}",
+ "assistant.mailSent": "Sendt til {to}.",
+ "assistant.mailKept": "Ikke sendt: den bliver liggende i Kladder."
 }

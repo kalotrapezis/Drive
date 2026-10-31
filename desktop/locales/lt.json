@@ -2395,5 +2395,8 @@
  "mail.moveHow": "Nieko neima iš kompiuterio ir paleidžia savo laiškus, kai tik kompiuteris juos turi.",
  "mail.keepUpTo": "Laikyti iki",
  "mail.everything": "Viską",
- "mail.uses": "Paštas užima {size}"
+ "mail.uses": "Paštas užima {size}",
+ "assistant.mailSend": "Siųsti: {to}",
+ "assistant.mailSent": "Išsiųsta: {to}.",
+ "assistant.mailKept": "Neišsiųsta: lieka Juodraščiuose."
 }

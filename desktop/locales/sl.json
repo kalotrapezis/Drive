@@ -2395,5 +2395,8 @@
  "mail.moveHow": "Iz računalnika ne vzame ničesar in svoja sporočila sprosti, ko jih računalnik ima.",
  "mail.keepUpTo": "Obdrži do",
  "mail.everything": "Vse",
- "mail.uses": "Pošta zaseda {size}"
+ "mail.uses": "Pošta zaseda {size}",
+ "assistant.mailSend": "Pošlji: {to}",
+ "assistant.mailSent": "Poslano: {to}.",
+ "assistant.mailKept": "Ni poslano: ostane v Osnutkih."
 }

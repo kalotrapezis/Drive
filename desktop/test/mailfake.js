@@ -1,6 +1,6 @@
 'use strict'
 // Stand-ins for the mail tests: a raw mail, a small IMAP server in memory as imapflow sees it, an SMTP that keeps what it is given.
-const raw = (subject, { attach = false } = {}) => Buffer.from([
+const raw = (subject, { attach = false, body = 'Dear students,   the deadline is 15 November.' } = {}) => Buffer.from([
   'From: =?UTF-8?B?zpPPgc6xzrzOvM6xz4TOtc6vzrEgzpzOoM6j?= <secretariat@nup.ac.cy>',
   'To: t@nup.ac.cy',
   `Subject: ${subject}`,
@@ -11,7 +11,7 @@ const raw = (subject, { attach = false } = {}) => Buffer.from([
   '--b',
   'Content-Type: text/plain; charset=utf-8',
   '',
-  'Dear students,   the deadline is 15 November.',
+  body,
   ...(attach ? ['--b', 'Content-Type: application/pdf; name="Guide.pdf"', 'Content-Disposition: attachment; filename="Guide.pdf"', 'Content-Transfer-Encoding: base64', '', Buffer.from('%PDF-1.4 x').toString('base64')] : []),
   '--b--', '',
 ].join('\r\n'))

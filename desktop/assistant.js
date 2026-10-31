@@ -220,12 +220,18 @@ const SCHEMA = [
   fn('navigate', 'Show a place in Tetra Maps (offline map on this computer), to plan the way there: a place, an address or a contact\'s saved address.', [],
     { place: p('string', 'A place, a town or an address ("Ερμού 10, Αθήνα").'), contact: p('string', 'A contact\'s name, to go to their address.') }),
   fn('youtube', 'Open YouTube in the browser on a search for a song or a video.', ['query'], { query: p('string', 'The song or video, with the artist if said.') }),
-  fn('mail_search', 'Find mail in the user\'s mail archive (every account) by words in the sender, subject or first lines; answers a numbered list, newest first.', [],
-    { query: p('string', 'Words to look for; leave out to list the latest.'), days: p('integer', 'Only the last N days.'), folder: p('string', 'Inbox, Sent, Archive, Spam, Trash or Drafts.'),
-      unread: p('boolean', 'Only unread mail.') }),
+  fn('mail_new', 'New mail: what is unread in the Inbox of every account, newest first; a numbered list.', [], { days: p('integer', 'How many days back; 2 if not said.') }),
+  fn('mail_important', 'Mail the user should look at or act on: from people and not answered yet, ♥ favourites, or speaking of a deadline, a payment, an appointment, a confirmation or a document to send; a numbered list. Then mail_read the ones that matter and say what each wants.', [],
+    { days: p('integer', 'How many days back; 7 if not said.') }),
+  fn('mail_search', 'Find mail in the user\'s mail archive (every account) by words in the sender, subject or first lines, or from and to a contact; answers a numbered list, newest first.', [],
+    { query: p('string', 'Words to look for; leave out to list the latest.'), contact: p('string', 'A contact\'s name or an email address: mail from or to them (their addresses come from Contacts).'),
+      days: p('integer', 'Only the last N days.'), folder: p('string', 'Inbox, Sent, Archive, Spam, Trash or Drafts.'), unread: p('boolean', 'Only unread mail.') }),
   fn('mail_read', 'Read a mail from the last mail_search or mail_needs_answer list: its whole text and its attachments\' names. Use it to summarise a mail or find a date in it.', ['choice'], CHOICE),
   fn('mail_needs_answer', 'Mail from people (not newsletters or no-reply senders) in the Inbox of the last days that the user has not answered yet, newest first; a numbered list.', [],
     { days: p('integer', 'How many days back; 7 if not said.') }),
+  fn('mail_send', 'Write a mail and make it ready to send. Tetra keeps it as a draft and shows it with a Send button: it goes only when the user presses Send or says yes. Before that, read back to the user who it goes to, the subject and the text.', ['text'],
+    { to: STRINGS('Who it goes to: contacts\' names or email addresses.'), subject: p('string', 'The subject; leave out for a reply.'), text: p('string', 'The mail\'s text, as the user wants it, in their language; greeting and closing included.'),
+      reply_to: p('integer', 'To answer a mail from the last mail list: its number (then "to" and "subject" may be left out).'), from: p('string', 'The user\'s own address to send from, if said.') }),
   fn('mail_status', 'Each mail account: unread mail in the Inbox, mail not yet saved on this computer, and whether syncing works.', []),
   fn('web_search', 'Search the web for current facts, news, opening hours, prices.', ['query'], { query: p('string', 'What to search for.') }),
   fn('make_image', 'Draw a picture from a description.', ['prompt'], { prompt: p('string', 'What the picture shows, in detail.') }),
@@ -341,7 +347,10 @@ class Tools {
   mail_search(a) {
     if (!this.mail) return { forModel: 'Mail is not set up in Tetra.' }
     const q = plain(a.query ?? ''), since = a.days ? this.now() - Number(a.days) * 86_400_000 : 0, folder = String(a.folder ?? '').toLowerCase()
+    const people = a.contact ? new Set(this.addressesFor(a.contact).map(x => x.address.toLowerCase())) : null
+    if (people && !people.size) return { forModel: `No email address for ${a.contact} in Contacts.` }
     const hits = this.mail.accountsMails().filter(e => (!folder || e.folder.toLowerCase() === folder) && (!a.unread || !e.seen) && e.date >= since
+      && (!people || people.has(String(e.fromAddress).toLowerCase()) || (e.to ?? []).some(x => people.has(String(x).toLowerCase())))
       && (!q || q.split(/\s+/).every(w => plain(`${e.from} ${e.fromAddress} ${e.subject} ${e.snippet}`).includes(w)))).sort((x, y) => y.date - x.date).slice(0, 15)
     return this.mailList(hits, 'No mail found.')
   }
@@ -356,6 +365,51 @@ class Tools {
     })
   }
   /** From people, in the Inbox, recent, and no mail sent to them since (a newsletter or a no-reply sender needs no answer). */
+  mail_new(a) {
+    if (!this.mail) return { forModel: 'Mail is not set up in Tetra.' }
+    const since = this.now() - (Number(a.days) || 2) * 86_400_000
+    return this.mailList(this.mail.accountsMails().filter(e => e.folder === 'Inbox' && !e.seen && e.date >= since).sort((x, y) => y.date - x.date).slice(0, 15), 'No new mail.')
+  }
+  /** Worth a look: from people and not answered, ♥, or a word of something to do (a deadline, a payment, an appointment). */
+  mail_important(a) {
+    if (!this.mail) return { forModel: 'Mail is not set up in Tetra.' }
+    const since = this.now() - (Number(a.days) || 7) * 86_400_000, waiting = new Set(this.mail_needs_answer({ days: a.days ?? 7 }).ids)
+    const todo = /προθεσμ|deadline|λήξη|ληγει|πληρωμ|payment|invoice|τιμολογ|λογαριασμ|οφειλ|ραντεβου|appointment|επιβεβαιω|confirm|υπενθυμ|reminder|urgent|επειγ|αιτηση|application|υπογραφ|sign|παραδοσ|submit|υποβολ|εξετασ|exam|συνεδριασ|meeting/
+    const hits = this.mail.accountsMails().filter(e => e.folder === 'Inbox' && e.date >= since
+      && (waiting.has(e.id) || e.flagged || todo.test(plain(`${e.subject} ${e.snippet}`)))).sort((x, y) => y.date - x.date).slice(0, 15)
+    return this.mailList(hits, 'Nothing looks like it needs a look or an action.')
+  }
+  /** A contact's email addresses ("Μαρία Κ.", a relation saved on the user's card), or a typed address. */
+  addressesFor(who) {
+    const w = String(who ?? '').trim()
+    if (/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(w)) return [{ name: '', address: w }]
+    if (!this.contacts || !w) return []
+    let found = this.named(w)
+    if (!found.length) { const card = this.myCard(); if (card) found = card.info.related.filter(r => plain(r.label) === plain(w)).flatMap(r => this.named(r.value)) }
+    return found.flatMap(i => i.emails.map(e => ({ name: i.name, address: e.value })))
+  }
+  /** Ready to send, never sent here: kept as a draft and shown with a Send button; Tetra hears the user's yes, not the model. */
+  async mail_send(a) {
+    if (!this.mail?.accounts().length) return { forModel: 'There is no mail account on this computer to send from.' }
+    const reply = a.reply_to ? this.lists.mail[Number(a.reply_to) - 1] : null
+    if (a.reply_to && !reply) return { forModel: `No choice ${a.reply_to}: the last mail list had ${this.lists.mail.length}.` }
+    const to = [], missing = []
+    for (const w of (Array.isArray(a.to) ? a.to : a.to ? [a.to] : [])) { const f = this.addressesFor(w); if (f.length) to.push(f[0]); else missing.push(w) }
+    if (missing.length) return { forModel: `No email address for ${missing.join(', ')} in Contacts. Ask the user for the address.` }
+    if (!reply && !to.length) return { forModel: 'Say who the mail goes to.' }
+    const text = String(a.text ?? '').trim()
+    if (!text) return { forModel: 'Say what the mail says.' }
+    const from = a.from ? this.mail.accounts().find(x => x.address === String(a.from).toLowerCase().trim()) : null
+    let d = reply ? await this.mail.draftFor(reply.id, 'reply') : await this.mail.draftFor(null, 'new', from?.id ?? null)
+    if (from) d = { ...d, account: from.id }
+    const esc = x => x.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+    const html = text.split(/\n{2,}/).map(par => `<p>${esc(par).replace(/\n/g, '<br>')}</p>`).join('')
+    d = { ...d, to: to.length ? to : d.to, subject: a.subject ? String(a.subject) : d.subject, html: html + d.html.replace(/^<p><br><\/p>/, '') }
+    d.messageId = (await this.mail.saveDraft(d)).messageId
+    const names = d.to.map(x => x.name || x.address).join(', ')
+    return { forModel: `The mail to ${names}, subject "${d.subject}", from ${d.account}, is kept as a draft and waits for the user's yes (the Send button, or a spoken yes). It is not sent yet.`,
+      send: { draft: d, to: names, subject: d.subject, preview: text.slice(0, 300) } }
+  }
   mail_needs_answer(a) {
     if (!this.mail) return { forModel: 'Mail is not set up in Tetra.' }
     const since = this.now() - (Number(a.days) || 7) * 86_400_000, all = this.mail.accountsMails(), mine = new Set(this.mail.accounts().map(x => x.address))
@@ -364,7 +418,7 @@ class Tools {
     const hits = all.filter(e => e.folder === 'Inbox' && e.date >= since && !mine.has(String(e.fromAddress).toLowerCase())
       && !/no-?reply|newsletter|notifications?@|mailer|bounce|marketing|info@|news@/i.test(e.fromAddress) && (answered.get(String(e.fromAddress).toLowerCase()) ?? 0) < e.date)
       .sort((x, y) => y.date - x.date).slice(0, 15)
-    return this.mailList(hits, 'Nothing waits for an answer.')
+    return { ...this.mailList(hits, 'Nothing waits for an answer.'), ids: hits.map(e => e.id) }
   }
   mail_status() {
     if (!this.mail) return { forModel: 'Mail is not set up in Tetra.' }
@@ -529,7 +583,9 @@ Someone known by a job or role ("πάρε την κομμώτρια"): contacts_
 "Κλείσε ραντεβού" without a time: calendar_free first, offer two or three times, then calendar_add the one chosen.
 "Πάμε εκεί", "βάλε προορισμό": navigate; "there" is the last place in this conversation; for a contact's home, navigate with contact.
 A song or a video: youtube. "Κάνε σημείωση": note_new.
-Mail ("τι ήρθε από το πανεπιστήμιο", "τι θέλει απάντηση", "βρες το τιμολόγιο"): mail_search, mail_needs_answer, then mail_read to read or summarise one. You only read mail; you never send, move or delete it.
+Mail: "νέα μηνύματα;" mail_new. "Τι σημαντικό έχω", "τι θέλει απάντηση ή κάποια ενέργεια": mail_important, then mail_read the ones that matter and say in a few words what each wants.
+"Βρες το μέιλ από τη Μαρία": mail_search with contact; "βρες το τιμολόγιο": mail_search with query. To read or summarise one: mail_read.
+"Στείλε μέιλ στον Νίκο ότι…": mail_send. Read back who, subject and text in one or two sentences; it goes only after the user's yes, which Tetra hears itself. Never say it was sent. You never move or delete mail.
 Work out dates yourself from today's date ("αύριο", "την Πέμπτη").`
 
 const ROUNDS = 5 // tool rounds in one turn at most: find, then act, with room to spare
@@ -542,7 +598,7 @@ class Chat {
   /** The user's [text] answered, the tools run on the way; [onText] gets the answer's words as they come. */
   async ask(text, onText = null) {
     this.messages.push({ role: 'user', content: text })
-    const out = { text: '', choices: [], call: null, images: [], open: null, go: null }
+    const out = { text: '', choices: [], call: null, send: null, images: [], open: null, go: null }
     for (let round = 0; round < ROUNDS; round++) {
       const m = await this.api.chat([{ role: 'system', content: system(this.now()) }, ...this.messages], SCHEMA, onText)
       const calls = m.tool_calls ?? []
@@ -554,6 +610,7 @@ class Chat {
         const r = await this.tools.run(c.function.name, args ?? {})
         if (r.choices?.length) out.choices = r.choices
         if (r.call) out.call = r.call
+        if (r.send) out.send = r.send
         if (r.image) out.images.push(r.image)
         if (r.open) out.open = r.open
         if (r.go) out.go = r.go
@@ -623,7 +680,7 @@ class Live {
  * The mail report (MAIL_PLAN §8): the prompt a scheduled brief (after the alarm, at a time) runs through the chat, the
  * same tools as any question. Kept here so the briefs and a "mail report" question say the same thing.
  */
-const MAIL_REPORT = `Give me my mail report. Call mail_status, then mail_needs_answer for the last 3 days, then mail_search for unread mail of the last day.
+const MAIL_REPORT = `Give me my mail report. Call mail_status, then mail_new for the last day, then mail_important for the last 3 days.
 Read (mail_read) the ones that look important: from people, the school, the university, banks, deadlines.
 Then say, briefly and in Greek: what came that matters, what needs an answer (who and about what), any deadline or date found in a mail,
 and any account that cannot sync or has mail not yet saved on this computer. No markdown; it may be read aloud.`

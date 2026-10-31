@@ -2306,5 +2306,8 @@
  "mail.moveHow": "Não leva nada do computador e larga as suas próprias mensagens assim que o computador as tem.",
  "mail.keepUpTo": "Guardar até",
  "mail.everything": "Tudo",
- "mail.uses": "O correio ocupa {size}"
+ "mail.uses": "O correio ocupa {size}",
+ "assistant.mailSend": "Enviar para {to}",
+ "assistant.mailSent": "Enviado para {to}.",
+ "assistant.mailKept": "Não enviado: fica em Rascunhos."
 }

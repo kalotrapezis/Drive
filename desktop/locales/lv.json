@@ -2306,5 +2306,8 @@
  "mail.moveHow": "Neņem neko no datora un atlaiž savas vēstules, tiklīdz dators tās ir saņēmis.",
  "mail.keepUpTo": "Glabāt līdz",
  "mail.everything": "Visu",
- "mail.uses": "Pasts aizņem {size}"
+ "mail.uses": "Pasts aizņem {size}",
+ "assistant.mailSend": "Sūtīt: {to}",
+ "assistant.mailSent": "Nosūtīts: {to}.",
+ "assistant.mailKept": "Nav nosūtīts: paliek Melnrakstos."
 }

@@ -2217,5 +2217,8 @@
  "mail.moveHow": "Ei ota mitään tietokoneelta ja päästää omat viestinsä irti heti, kun tietokoneella ne ovat.",
  "mail.keepUpTo": "Säilytä enintään",
  "mail.everything": "Kaikki",
- "mail.uses": "Posti vie {size}"
+ "mail.uses": "Posti vie {size}",
+ "assistant.mailSend": "Lähetä: {to}",
+ "assistant.mailSent": "Lähetetty: {to}.",
+ "assistant.mailKept": "Ei lähetetty: se jää Luonnoksiin."
 }

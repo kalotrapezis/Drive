@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AssistCall, AssistChoice, AssistGo, AssistSettings } from './drive'
+import type { AssistCall, AssistChoice, AssistGo, AssistSend, AssistSettings } from './drive'
 import { Icon } from './Icon'
 import { t } from './i18n'
 import { errorText } from './Dialogs'
@@ -8,7 +8,7 @@ import { FRAME, RATE, Vad, clock, money, yesNo } from './assist'
 // AI Assist (the phone's AssistantScreen.kt, ported; assistant.js has the why): the chat, walkie-talkie on the mic button,
 // live on the waveform one. Mistral and Tetra's tools run in main; the microphone, the voice and the record here.
 
-type Bubble = { mine: boolean; text: string; choices?: AssistChoice[]; call?: AssistCall | null; images?: string[]; error?: boolean }
+type Bubble = { mine: boolean; text: string; choices?: AssistChoice[]; call?: AssistCall | null; send?: AssistSend | null; images?: string[]; error?: boolean }
 type Phase = 'idle' | 'listening' | 'thinking'
 type LivePhase = 'connecting' | 'listening' | 'thinking' | 'speaking' | 'stopping'
 const TURN: Record<LivePhase, number> = { connecting: 20, listening: 40, thinking: 90, speaking: 200, stopping: 0 } // the record's degrees a second
@@ -91,6 +91,7 @@ export function AssistantPage({ go, command }: { go: (g: AssistGo) => void; comm
   const [phase, setPhase] = useState<Phase>('idle')
   const [hearing, setHearing] = useState(false)
   const [pending, setPending] = useState<AssistCall | null>(null)
+  const [pendingMail, setPendingMail] = useState<AssistSend | null>(null) // a mail written, waiting for the user's Send
   const [spent, setSpent] = useState(0)
   const [typed, setTyped] = useState('')
   const [keyText, setKeyText] = useState('')
@@ -121,6 +122,12 @@ export function AssistantPage({ go, command }: { go: (g: AssistGo) => void; comm
     say(r.error ?? t('assistant.calling', { name: c.name }), !!r.error)
   }
   function cancelCall() { setPendingCall(null); say(t('assistant.callCancelled')) }
+  async function sendMail(m: AssistSend) {
+    setPendingMail(null)
+    const error = await window.drive.mail.send(m.draft).then(() => null, e => errorText(e))
+    say(error ?? t('assistant.mailSent', { to: m.to }), !!error)
+  }
+  function keepMail() { setPendingMail(null); say(t('assistant.mailKept')) }
   function choose(c: AssistChoice) {
     if (c.call) call(c.call)
     if (c.open) window.drive.files.open(c.open).catch(() => say(t('assistant.cannotOpen'), true))
@@ -135,6 +142,9 @@ export function AssistantPage({ go, command }: { go: (g: AssistGo) => void; comm
     if (inLive) { setLiveYou(text); setLiveAi('') }
     // a yes or no to a waiting call is heard by Tetra, never decided by the model
     if (pending) { const yes = yesNo(text); if (yes != null) { if (yes) call(pending); else cancelCall(); if (inLive) listenAgain(); return } }
+    // and to a mail waiting to be sent, the same way
+    // (a short yes only: "ναι, αλλά άλλαξε το θέμα" goes to the model, which writes it again)
+    if (pendingMail) { const yes = text.trim().split(/\s+/).length <= 3 ? yesNo(text) : null; if (yes != null) { if (yes) sendMail(pendingMail); else keepMail(); if (inLive) listenAgain(); return } }
     setPhase('thinking')
     if (inLive) { live.current!.muted = true; window.drive.assistant.liveMute(true); setLivePhase('thinking') }
     hush()
@@ -142,8 +152,9 @@ export function AssistantPage({ go, command }: { go: (g: AssistGo) => void; comm
     const offWords = window.drive.assistant.onWords(w => { setDraft(d => (d ?? '') + w); if (inLive) setLiveAi(a => a + w) })
     try {
       const r = await window.drive.assistant.ask(text, s.aloud || inLive)
-      setBubbles(b => [...b, { mine: false, text: r.text, choices: r.choices, call: r.call, images: r.images }])
+      setBubbles(b => [...b, { mine: false, text: r.text, choices: r.choices, call: r.call, send: r.send, images: r.images }])
       setPendingCall(r.call)
+      setPendingMail(r.send)
       if (inLive && r.text) setLiveAi(r.text)
       setSpent(r.spent)
       if (r.open) window.drive.files.open(r.open).catch(() => say(t('assistant.cannotOpen'), true))
@@ -278,7 +289,8 @@ export function AssistantPage({ go, command }: { go: (g: AssistGo) => void; comm
           <div className="reset-actions"><button className="filled-button" disabled={!keyText.trim()} onClick={saveKey}>{t('common.save')}</button></div>
         </section>}
         {s?.hasKey && !bubbles.length && <div className="assist-hello muted">{t('assistant.hello')}</div>}
-        {bubbles.map((b, i) => <BubbleView key={i} b={b} pending={i === bubbles.length - 1 ? pending : null} choose={choose} call={call} cancel={cancelCall} />)}
+        {bubbles.map((b, i) => <BubbleView key={i} b={b} pending={i === bubbles.length - 1 ? pending : null} choose={choose} call={call} cancel={cancelCall}
+          mail={i === bubbles.length - 1 ? pendingMail : null} sendMail={sendMail} keepMail={keepMail} />)}
         {draft != null && <div className="assist-bubble">{draft || '…'}</div>}
       </div>
       {status && <p className="assist-status">{status}</p>}
@@ -305,6 +317,10 @@ export function AssistantPage({ go, command }: { go: (g: AssistGo) => void; comm
             <button className="filled-button" onClick={() => call(pending)}>{t('assistant.call', { name: pending.name })}</button>
             <button className="text-button" onClick={cancelCall}>{t('common.cancel')}</button>
           </div>}
+          {pendingMail && <div className="reset-actions">
+            <button className="filled-button" onClick={() => sendMail(pendingMail)}>{t('assistant.mailSend', { to: pendingMail.to })}</button>
+            <button className="text-button" onClick={keepMail}>{t('common.cancel')}</button>
+          </div>}
         </div>
         <div className="assist-livebar">
           <button className="round assist-end" disabled={livePhase === 'stopping'} title={t('assistant.liveEnd')} onClick={() => endLive()}><Icon name="close" size={28} /></button>
@@ -315,7 +331,8 @@ export function AssistantPage({ go, command }: { go: (g: AssistGo) => void; comm
   )
 }
 
-function BubbleView({ b, pending, choose, call, cancel }: { b: Bubble; pending: AssistCall | null; choose: (c: AssistChoice) => void; call: (c: AssistCall) => void; cancel: () => void }) {
+function BubbleView({ b, pending, choose, call, cancel, mail, sendMail, keepMail }: { b: Bubble; pending: AssistCall | null; choose: (c: AssistChoice) => void; call: (c: AssistCall) => void; cancel: () => void
+  mail: AssistSend | null; sendMail: (m: AssistSend) => void; keepMail: () => void }) {
   return (
     <div className={`assist-bubble ${b.mine ? 'mine' : ''} ${b.error ? 'error' : ''}`}>
       {b.text && <p>{b.text}</p>}
@@ -324,6 +341,14 @@ function BubbleView({ b, pending, choose, call, cancel }: { b: Bubble; pending: 
       {pending && <div className="reset-actions">
         <button className="filled-button" onClick={() => call(pending)}><Icon name="call" size={18} /> {t('assistant.call', { name: pending.name })}</button>
         <button className="text-button" onClick={cancel}>{t('common.cancel')}</button>
+      </div>}
+      {mail && <div className="assist-mail">
+        <small>{t('mail.toField')}: {mail.to} · {mail.subject}</small>
+        <p>{mail.preview}</p>
+        <div className="reset-actions">
+          <button className="filled-button" onClick={() => sendMail(mail)}><Icon name="send" size={18} /> {t('assistant.mailSend', { to: mail.to })}</button>
+          <button className="text-button" onClick={keepMail}>{t('common.cancel')}</button>
+        </div>
       </div>}
     </div>
   )

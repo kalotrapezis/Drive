@@ -2306,5 +2306,8 @@
  "mail.moveHow": "Non prende nulla dal computer e lascia andare i propri messaggi appena il computer li ha.",
  "mail.keepUpTo": "Tieni fino a",
  "mail.everything": "Tutto",
- "mail.uses": "La posta occupa {size}"
+ "mail.uses": "La posta occupa {size}",
+ "assistant.mailSend": "Invia a {to}",
+ "assistant.mailSent": "Inviato a {to}.",
+ "assistant.mailKept": "Non inviato: resta in Bozze."
 }

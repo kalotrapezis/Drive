@@ -2217,5 +2217,8 @@
  "mail.moveHow": "Δεν παίρνει τίποτα από τον υπολογιστή, και αφήνει τα δικά της μόλις τα έχει ο υπολογιστής.",
  "mail.keepUpTo": "Κράτα έως",
  "mail.everything": "Όλα",
- "mail.uses": "Η αλληλογραφία πιάνει {size}"
+ "mail.uses": "Η αλληλογραφία πιάνει {size}",
+ "assistant.mailSend": "Αποστολή σε {to}",
+ "assistant.mailSent": "Στάλθηκε σε {to}.",
+ "assistant.mailKept": "Δεν στάλθηκε· έμεινε στα Πρόχειρα."
 }

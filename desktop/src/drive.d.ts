@@ -33,7 +33,9 @@ export type MailAddResult = { account: MailAccount; roles: MailRole[]; error?: u
 export interface AssistCall { name: string; number: string }
 export interface AssistChoice { label: string; call?: AssistCall; open?: string; go?: AssistGo }
 export type AssistGo = { note?: string; maps?: string; youtube?: string }
-export interface AssistReply { text: string; choices: AssistChoice[]; call: AssistCall | null; images: string[]; open: string | null; go: AssistGo | null; spent: number }
+/** A mail AI Assist wrote: kept as a draft, sent only by the user's Send or spoken yes. */
+export interface AssistSend { draft: MailDraft; to: string; subject: string; preview: string }
+export interface AssistReply { text: string; choices: AssistChoice[]; call: AssistCall | null; send: AssistSend | null; images: string[]; open: string | null; go: AssistGo | null; spent: number }
 export interface AssistShortcuts { toggle: string; talk: string; live: string }
 export interface AssistSettings {
   hasKey: boolean; keyring: boolean; words: string; contactWords: boolean; voice: string; voiceName: string; pause: number; aloud: boolean; cassette: boolean

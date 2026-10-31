@@ -2395,5 +2395,8 @@
  "mail.moveHow": "Ma jieħu xejn mill-kompjuter u jħalli l-imejls tiegħu stess hekk kif il-kompjuter ikollu.",
  "mail.keepUpTo": "Żomm sa",
  "mail.everything": "Kollox",
- "mail.uses": "Il-posta tieħu {size}"
+ "mail.uses": "Il-posta tieħu {size}",
+ "assistant.mailSend": "Ibgħat lil {to}",
+ "assistant.mailSent": "Intbagħat lil {to}.",
+ "assistant.mailKept": "Ma ntbagħatx: jibqa' fl-Abbozzi."
 }

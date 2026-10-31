@@ -41,8 +41,52 @@ test('assistant: finds mail, reads it whole, says what waits for an answer and h
     assert.match((await tools.run('mail_status')).forModel, /me@sch\.gr: 4 unread in the Inbox, 0 not yet saved here/)
     assert.equal((await tools.run('mail_search', { days: 3, folder: 'sent' })).forModel.split('\n').length, 1)
 
-    assert.ok(['mail_status', 'mail_needs_answer', 'mail_search', 'mail_read'].every(n => MAIL_REPORT.includes(n) && SCHEMA.some(s => s.function.name === n)), 'the report uses only tools that exist')
+    assert.ok(['mail_status', 'mail_new', 'mail_important', 'mail_read'].every(n => MAIL_REPORT.includes(n) && SCHEMA.some(s => s.function.name === n)), 'the report uses only tools that exist')
     assert.match((await new Tools({}).run('mail_search', {})).forModel, /not set up/)
+    mail.index.flush()
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('assistant: new mail, what is important, mail from a contact, and a mail to send that waits for the user\'s yes', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mailassist-'))
+  try {
+    const day = n => new Date(Date.now() - n * 86_400_000)
+    const folders = { INBOX: { validity: 7, next: 4, msgs: {
+      1: message('Πληρωμή λογαριασμού έως Παρασκευή', 'a', { date: day(1), from: { name: 'ΔΕΗ', address: 'noreply@dei.gr' } }),
+      2: message('Καλημέρα', 'b', { date: day(1), body: 'Τι κάνεις;', from: { name: 'Μαρία', address: 'maria@x.gr' } }),
+      3: message('Newsletter', 'c', { date: day(1), body: 'New shoes!', from: { name: 'Shop', address: 'news@shop.gr' } }) } },
+      Drafts: { use: '\\Drafts', validity: 4, next: 1, msgs: {} } }
+    folders.INBOX.msgs[3].flags.add('\\Seen')
+    const c = memoryServer(folders), sent = []
+    const mail = new Mail(dir, { secret: () => 'x', connect: () => c, smtp: () => ({ async sendMail(m) { sent.push(m) }, close() {} }) })
+    const acc = { id: 'me@sch.gr', address: 'me@sch.gr', server: {}, smtp: { host: 'h', port: 465, secure: true } }
+    mail.saveAccounts([acc])
+    await mail.headers(c, acc, 'Inbox', 'INBOX'); await mail.bodies(c, acc, 'Inbox', 'INBOX', { stop: false })
+    const card = (name, address) => ({ info: { uid: name, formatted: name, emails: address ? [{ value: address }] : [], phones: [], related: [], categories: [] } })
+    const contacts = { all: () => [card('Μαρία Κωνσταντίνου', 'maria@x.gr'), card('Νίκος Χωρίς Μέιλ', null)] }
+    const tools = new Tools({ mail, contacts })
+
+    const fresh = (await tools.run('mail_new', {})).forModel
+    assert.match(fresh, /Πληρωμή/); assert.match(fresh, /Καλημέρα/); assert.doesNotMatch(fresh, /Newsletter/, 'read already')
+    const important = (await tools.run('mail_important', {})).forModel
+    assert.match(important, /Πληρωμή/, 'a payment to make, even from a no-reply sender')
+    assert.match(important, /Καλημέρα/, 'a person waiting for an answer')
+    assert.doesNotMatch(important, /Newsletter/)
+    assert.match((await tools.run('mail_search', { contact: 'Μαρία' })).forModel, /^1\. .*Καλημέρα/)
+    assert.match((await tools.run('mail_search', { contact: 'Νίκος' })).forModel, /No email address/)
+
+    const r = await tools.run('mail_send', { to: ['Μαρία Κωνσταντίνου'], subject: 'Αύριο', text: 'Γεια σου Μαρία,\n\nτα λέμε αύριο.' })
+    assert.equal(sent.length, 0, 'never sent by the model')
+    assert.equal(r.send.to, 'Μαρία Κωνσταντίνου'); assert.match(r.forModel, /waits for the user's yes/)
+    assert.deepEqual(r.send.draft.to, [{ name: 'Μαρία Κωνσταντίνου', address: 'maria@x.gr' }])
+    assert.match(r.send.draft.html, /^<p>Γεια σου Μαρία,<\/p><p>τα λέμε αύριο\.<\/p>/)
+    assert.equal(Object.keys(folders.Drafts.msgs).length, 1, 'kept as a draft on the server')
+    await mail.send(r.send.draft) // what the Send button does
+    assert.equal(sent.length, 1); assert.equal(Object.keys(folders.Drafts.msgs).length, 0, 'and the draft goes')
+    assert.match((await tools.run('mail_send', { to: ['Νίκος Χωρίς Μέιλ'], text: 'x' })).forModel, /No email address for Νίκος/)
+    tools.lists.mail = mail.list('Inbox').filter(e => e.subject === 'Καλημέρα')
+    const reply = await tools.run('mail_send', { reply_to: 1, text: 'Καλημέρα!' })
+    assert.equal(reply.send.subject, 'Re: Καλημέρα'); assert.deepEqual(reply.send.draft.to.map(x => x.address), ['secretariat@nup.ac.cy'], 'to the sender in the mail itself')
     mail.index.flush()
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })

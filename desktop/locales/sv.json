@@ -2217,5 +2217,8 @@
  "mail.moveHow": "Tar inget från datorn och släpper sina egna mejl så fort datorn har dem.",
  "mail.keepUpTo": "Behåll upp till",
  "mail.everything": "Allt",
- "mail.uses": "Mejl tar {size}"
+ "mail.uses": "Mejl tar {size}",
+ "assistant.mailSend": "Skicka till {to}",
+ "assistant.mailSent": "Skickat till {to}.",
+ "assistant.mailKept": "Inte skickat: det ligger kvar i Utkast."
 }

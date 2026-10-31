@@ -2305,5 +2305,8 @@
  "mail.moveHow": "Ne uzima ništa s računala i otpušta vlastite poruke čim ih računalo ima.",
  "mail.keepUpTo": "Zadrži do",
  "mail.everything": "Sve",
- "mail.uses": "Pošta zauzima {size}"
+ "mail.uses": "Pošta zauzima {size}",
+ "assistant.mailSend": "Pošalji: {to}",
+ "assistant.mailSent": "Poslano: {to}.",
+ "assistant.mailKept": "Nije poslano: ostaje u Skicama."
 }

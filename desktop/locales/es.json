@@ -2276,5 +2276,8 @@
  "mail.moveHow": "No toma nada del ordenador y suelta su propio correo en cuanto el ordenador lo tiene.",
  "mail.keepUpTo": "Conservar hasta",
  "mail.everything": "Todo",
- "mail.uses": "El correo ocupa {size}"
+ "mail.uses": "El correo ocupa {size}",
+ "assistant.mailSend": "Enviar a {to}",
+ "assistant.mailSent": "Enviado a {to}.",
+ "assistant.mailKept": "No enviado: se queda en Borradores."
 }

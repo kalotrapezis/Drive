@@ -2395,5 +2395,8 @@
  "mail.moveHow": "Nie bierze niczego z komputera i puszcza własne wiadomości, gdy tylko komputer je ma.",
  "mail.keepUpTo": "Zachowuj do",
  "mail.everything": "Wszystko",
- "mail.uses": "Poczta zajmuje {size}"
+ "mail.uses": "Poczta zajmuje {size}",
+ "assistant.mailSend": "Wyślij: {to}",
+ "assistant.mailSent": "Wysłano: {to}.",
+ "assistant.mailKept": "Nie wysłano: zostaje w Szkicach."
 }

@@ -2217,5 +2217,8 @@
  "mail.moveHow": "Takes nothing from the computer, and lets go of its own mail once the computer has it.",
  "mail.keepUpTo": "Keep up to",
  "mail.everything": "Everything",
- "mail.uses": "Mail takes {size}"
+ "mail.uses": "Mail takes {size}",
+ "assistant.mailSend": "Send to {to}",
+ "assistant.mailSent": "Sent to {to}.",
+ "assistant.mailKept": "Not sent: it stays in Drafts."
 }

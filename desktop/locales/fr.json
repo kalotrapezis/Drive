@@ -2306,5 +2306,8 @@
  "mail.moveHow": "Ne prend rien à l'ordinateur et libère ses propres messages dès que l'ordinateur les a.",
  "mail.keepUpTo": "Garder jusqu'à",
  "mail.everything": "Tout",
- "mail.uses": "Le courrier prend {size}"
+ "mail.uses": "Le courrier prend {size}",
+ "assistant.mailSend": "Envoyer à {to}",
+ "assistant.mailSent": "Envoyé à {to}.",
+ "assistant.mailKept": "Non envoyé : il reste dans Brouillons."
 }

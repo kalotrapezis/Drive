@@ -2217,5 +2217,8 @@
  "mail.moveHow": "Не взима нищо от компютъра и пуска собствените си имейли, щом компютърът ги има.",
  "mail.keepUpTo": "Пази до",
  "mail.everything": "Всичко",
- "mail.uses": "Пощата заема {size}"
+ "mail.uses": "Пощата заема {size}",
+ "assistant.mailSend": "Изпращане до {to}",
+ "assistant.mailSent": "Изпратено до {to}.",
+ "assistant.mailKept": "Не е изпратено: остава в Чернови."
 }

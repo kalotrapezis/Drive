@@ -2395,5 +2395,8 @@
  "mail.moveHow": "Nič z počítača neberie a svoje vlastné e-maily uvoľní, len čo ich má počítač.",
  "mail.keepUpTo": "Uchovávať až",
  "mail.everything": "Všetko",
- "mail.uses": "Pošta zaberá {size}"
+ "mail.uses": "Pošta zaberá {size}",
+ "assistant.mailSend": "Odoslať: {to}",
+ "assistant.mailSent": "Odoslané: {to}.",
+ "assistant.mailKept": "Neodoslané: zostáva v Konceptoch."
 }
