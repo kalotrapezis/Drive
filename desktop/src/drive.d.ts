@@ -1,6 +1,18 @@
 /// <reference types="vite/client" />
 import type { Media } from './timeline'
 
+/** Mail (mail.js): accounts.json, a line of index.jsonl, the unified folders' counts, an opened mail. */
+export type MailRole = 'Inbox' | 'Drafts' | 'Sent' | 'Archive' | 'Spam' | 'Trash'
+export interface MailServer { host: string; port: number; secure: boolean; users: string[]; provider: 'google' | 'microsoft' | null }
+export interface MailAccount { id: string; address: string; name: string; color: string; provider: string | null; archive: boolean; notify: boolean
+  serverClean: { on: boolean; attachmentsMonths: number; otherMonths: number }; localClean: { on: boolean } }
+export interface MailEntry { id: string; account: string; folder: MailRole; uid: number; date: number; from: string; fromAddress: string; to: string[]
+  subject: string; seen: boolean; flagged: boolean; size: number; attachments: number; snippet: string; saved: boolean; file?: string }
+export interface MailFolder { role: MailRole; accounts: { id: string; unread: number; total: number; orange: number }[] }
+export interface MailState { busy?: boolean; error?: string | null; detail?: string | null; synced?: number }
+export interface MailOpened extends Omit<MailEntry, 'to'> { missing?: boolean; to: string; cc: string; html: string; attachments: { name: string; size: number; file: string }[] }
+export type MailAddResult = { account: MailAccount; roles: MailRole[]; error?: undefined } | { error: 'auth' | 'appPassword' | 'unreachable' | 'keyring' | 'other'; detail?: string }
+
 /** AI Assist (assistant.js): an answer, and what its tools left for the screen. */
 export interface AssistCall { name: string; number: string }
 export interface AssistChoice { label: string; call?: AssistCall; open?: string; go?: AssistGo }
@@ -223,6 +235,20 @@ declare global {
         last(): Promise<number>
       }
       onTimerChanged(cb: () => void): () => void
+      mail: {
+        accounts(): Promise<{ accounts: MailAccount[]; folders: MailFolder[]; status: Record<string, MailState> }>
+        list(role: MailRole, account: string | null): Promise<MailEntry[]>
+        open(id: string): Promise<MailOpened | null>
+        detect(address: string): Promise<{ server: MailServer; how: string } | null>
+        add(address: string, server: MailServer, pass: string): Promise<MailAddResult>
+        remove(id: string): Promise<void>
+        sync(): Promise<void>
+        openFile(rel: string): Promise<void>
+        openLink(url: string): Promise<void>
+        appPasswords(): Promise<void>
+        pasteAppPassword(): Promise<string | null>
+        onChange(fn: () => void): () => void
+      }
       assistant: {
         ask(text: string, aloud: boolean): Promise<AssistReply>
         transcribe(pcm: Int16Array): Promise<{ text: string; spent: number }>

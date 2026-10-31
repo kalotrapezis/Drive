@@ -22,7 +22,7 @@ const os = require('node:os')
 const path = require('node:path')
 
 const NAME = '.System'
-const APPS = ['Photos', 'Files', 'Notes', 'Calendar', 'Timer', 'Contacts', 'Phone', 'Maps', 'Office', 'Sync', 'Backups', 'Data', 'Trash']
+const APPS = ['Photos', 'Files', 'Notes', 'Calendar', 'Timer', 'Contacts', 'Phone', 'Maps', 'Office', 'Sync', 'Backups', 'Data', 'Trash', 'Mail']
 const KINDS = ['Data', 'Tools', 'Cache', 'Temp', 'Shared']
 /**
  * The folders of Files that were Tetra's own until 29 Oct 2026 → the app whose Shared holds them now. Their name stays

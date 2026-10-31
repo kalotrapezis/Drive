@@ -15,6 +15,7 @@ import { Editor, type Hide } from './Editor'
 import { OffloadDialog, SyncPage } from './Sync'
 import { NotesPage } from './Notes'
 import { CalendarPage } from './Calendar'
+import { MailPage } from './Mail'
 import { TimerBell, TimerPage } from './Timer'
 import { MapsPage } from './Maps'
 import { ContactsPage, preloadContacts } from './Contacts'
@@ -28,7 +29,7 @@ import { shownName } from './People'
 import { t, tr } from './i18n'
 
 type Page = { kind: 'photos' } | { kind: 'collections' } | { kind: 'collection'; id: string; name: string } | { kind: 'files'; mode: FilesMode; folder: string } | { kind: 'photoTrash' }
-  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes'; open?: string } | { kind: 'calendar' } | { kind: 'timer' } | { kind: 'maps'; query?: string; at?: number } | { kind: 'assistant' } | { kind: 'contacts' } | { kind: 'phone' } | { kind: 'data' } | { kind: 'notifications' } | { kind: 'settings'; start?: string; at?: number }
+  | { kind: 'people' } | { kind: 'person'; id: string; name: string } | { kind: 'review' } | { kind: 'map'; focus?: string } | { kind: 'hidden' } | { kind: 'sync' } | { kind: 'notes'; open?: string } | { kind: 'calendar' } | { kind: 'mail' } | { kind: 'timer' } | { kind: 'maps'; query?: string; at?: number } | { kind: 'assistant' } | { kind: 'contacts' } | { kind: 'phone' } | { kind: 'data' } | { kind: 'notifications' } | { kind: 'settings'; start?: string; at?: number }
 
 const SYSTEM: { id: string; key: string; icon: IconName; test: (m: Media) => boolean }[] = [
   { id: 'favorites', key: 'files.favorites', icon: 'heart', test: m => !!m.favorite },
@@ -318,6 +319,7 @@ export function App() {
   else if (page.kind === 'assistant') content = <AssistantPage command={assistCommand}
     go={g => setPage(g.note ? { kind: 'notes', open: g.note } : { kind: 'maps', query: g.maps, at: Date.now() })} />
   else if (page.kind === 'calendar') content = <CalendarPage setDialog={setDialog} say={say} />
+  else if (page.kind === 'mail') content = <MailPage setDialog={setDialog} say={say} />
   else if (page.kind === 'timer') content = <TimerPage say={say} />
   // Maps with no map: Settings › Maps with the builder open
   else if (page.kind === 'maps') content = <MapsPage key={page.at} initial={page.query} say={say} onMakeMap={() => {
@@ -408,6 +410,7 @@ export function App() {
         {/* One entry each; their parts are an island at the bottom of the page (asked 2026-09-26). */}
         {nav({ kind: 'photos' }, section === 'photos', 'photos', t('app.photos'))}
         {nav({ kind: 'files', mode: 'browse', folder: '' }, section === 'files', 'drive', t('app.files'))}
+        {nav({ kind: 'mail' }, page.kind === 'mail', 'mail', t('app.mail'))}
         {nav({ kind: 'notes' }, page.kind === 'notes', 'notes', t('app.notes'))}
         {nav({ kind: 'calendar' }, page.kind === 'calendar', 'calendar', t('app.calendar'))}
         {nav({ kind: 'timer' }, page.kind === 'timer', 'timer', t('app.timer'))}

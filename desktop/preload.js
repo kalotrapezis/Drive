@@ -222,6 +222,21 @@ contextBridge.exposeInMainWorld('drive', {
     answer: (faceId, personId, answer) => ipcRenderer.invoke('people:answer', faceId, personId, answer),
     onProgress: fn => { const l = (_, p) => fn(p); ipcRenderer.on('people-progress', l); return () => ipcRenderer.off('people-progress', l) },
   },
+  // Mail (mail.js), read-only: the passwords never come here, the window only hands a new one over once
+  mail: {
+    accounts: () => ipcRenderer.invoke('mail:accounts'),
+    list: (role, account) => ipcRenderer.invoke('mail:list', role, account),
+    open: id => ipcRenderer.invoke('mail:open', id),
+    detect: address => ipcRenderer.invoke('mail:detect', address),
+    add: (address, server, pass) => ipcRenderer.invoke('mail:add', address, server, pass),
+    remove: id => ipcRenderer.invoke('mail:remove', id),
+    sync: () => ipcRenderer.invoke('mail:sync'),
+    openFile: rel => ipcRenderer.invoke('mail:openFile', rel),
+    openLink: url => ipcRenderer.invoke('mail:openLink', url),
+    appPasswords: () => ipcRenderer.invoke('mail:appPasswords'),
+    pasteAppPassword: () => ipcRenderer.invoke('mail:pasteAppPassword'),
+    onChange: fn => { const l = () => fn(); ipcRenderer.on('mail-changed', l); return () => ipcRenderer.off('mail-changed', l) },
+  },
   // AI Assist (assistant.js): Mistral and the tools in main, the key never here
   assistant: {
     ask: (text, aloud) => ipcRenderer.invoke('assistant:ask', text, aloud),

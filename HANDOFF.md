@@ -1,3 +1,15 @@
+> **Mail, step 1 (31 Oct 2026, branch `mail`, worktree Tetra-worktrees/mail; not merged, not pushed).** The plan is
+> Tetra-mobile's MAIL_PLAN.md (§10 step 1). `desktop/mail.js`: accounts (address → known provider / Thunderbird's
+> autoconfig / the domain's autoconfig / MX / imap.·mail. guesses), the password checked against the server, then kept
+> encrypted (safeStorage) in library.db's settings as `mailSecret:<address>`, never in the synced folder. Read-only IMAP
+> (imapflow, EXAMINE): Inbox, Drafts, Sent, Archive, Spam, Trash by SPECIAL-USE → `.System/Mail/Shared/<address>/<Role>/
+> <yyyy>/<yyyy-mm-dd hhmm> <from> - <subject>.eml`, attachments (mailparser) in `<same>.files/`, `index.jsonl` (last
+> line per id wins; compacted at start when twice too big). Headers of every folder first (orange), then bodies newest
+> first (green when the bytes match the server's size); IDLE in the Inbox; everything again every 15 min. `src/Mail.tsx`:
+> action bar, folders · list · open mail (HTML in a sandboxed frame; the page's CSP blocks remote images), Filter modal
+> (`src/mailView.ts`). Tests: `test/mail.test.js`, `src/mailView.test.ts`. Not yet: sending, flags/moves on the server,
+> the server/local clean-up (the defaults are stored, nothing deletes), extra folders (Gmail labels), phone sync of the folder.
+
 > **Calendar (18 Oct 2026, branch `calendar`, worktree Drive-worktrees/calendar; not merged, not pushed).** The plan is
 > Drive-Android's Plan.md § Calendar. The desktop part: `desktop/calendar.js` reads and writes `~/Tetra/Files/Calendar`
 > itself — a folder per calendar (`color` file), one `.ics` per event — on every look, with **no database copy**, so a

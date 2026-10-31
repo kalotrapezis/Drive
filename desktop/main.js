@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification, nativeTheme, dialog, powerMonitor, safeStorage, globalShortcut } = require('electron')
+const { app, BrowserWindow, ipcMain, protocol, net, shell, Tray, Menu, Notification, nativeTheme, dialog, powerMonitor, safeStorage, globalShortcut, clipboard } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const os = require('node:os')
@@ -32,6 +32,8 @@ const { MapBuilder } = require('./mapbuild')
 const { Thumbs } = require('./thumbs')
 const importer = require('./importer')
 const assistant = require('./assistant')
+const { Mail, detect: detectMail, check: checkMail } = require('./mail')
+let mail = null
 const i18n = require('./i18n')
 const { t } = i18n
 
@@ -513,6 +515,13 @@ app.whenReady().then(() => {
   contacts.chosen = setting('contactsBirthdays') || null // the calendar birthdays go into (Γενέθλια when none chosen)
   try { fs.mkdirSync(contacts.root, { recursive: true }) } catch {}
   timers = new timer.Timers(files.disk('Timer'), os.hostname() || 'Computer')
+  // Mail (mail.js): the archive in .System/Mail/Shared; each account's password only in this computer's keyring
+  mail = new Mail(system.dir('Mail', 'Shared', files.system), {
+    secret: id => { try { const s = setting('mailSecret:' + id); return s ? safeStorage.decryptString(Buffer.from(s, 'base64')) : null } catch { return null } },
+  })
+  mail.on('changed', () => win?.webContents.send('mail-changed'))
+  mail.on('new', e => notify(e.from || e.fromAddress, e.subject || t('common.noTitle')))
+  if (!process.env.DRIVE_HIDDEN) mail.startAll() // a hidden QA copy fetches nothing
   // sync's old copies of timers that are over (timer.js clean; the phone clears its own the same way)
   try { const n = timers.clean(); if (n) console.log(`Timer: cleared ${n} old copies`) } catch {}
   // Maps: deleting a place goes to Files' Trash, so the deletion reaches the phone (as the Calendar's)
@@ -1256,6 +1265,37 @@ app.whenReady().then(() => {
   }
   registerShortcuts()
   const meterNow = () => { const m = assistant.Meter.of(setting('assistantMeter')); return { total: m.total, trip: m.trip, since: m.since, past: m.past } }
+  // Mail, read-only (mail.js). The password is checked against the server before it is kept, encrypted, in settings.
+  const isAddress = a => typeof a === 'string' && a.length < 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)
+  ipcMain.handle('mail:accounts', () => ({ accounts: mail.accounts(), folders: mail.folders(), status: mail.status() }))
+  ipcMain.handle('mail:list', (_, role, account) => mail.list(String(role), account ? String(account) : null))
+  ipcMain.handle('mail:open', (_, id) => mail.open(String(id)))
+  ipcMain.handle('mail:detect', (_, address) => isAddress(address) ? detectMail(address.trim().toLowerCase()) : null)
+  ipcMain.handle('mail:add', async (_, address, server, pass) => {
+    const s = server ?? {}
+    if (!isAddress(address) || typeof s.host !== 'string' || !/^[a-z0-9.-]{1,253}$/i.test(s.host) || !Number.isInteger(s.port) || s.port < 1 || s.port > 65535
+      || !Array.isArray(s.users) || !s.users.every(u => typeof u === 'string' && u.length < 255) || typeof pass !== 'string' || !pass) throw new Error(t('mail.badServer'))
+    if (!safeStorage.isEncryptionAvailable()) return { error: 'keyring' }
+    address = address.trim().toLowerCase()
+    const found = { host: s.host, port: s.port, secure: !!s.secure, users: s.users, provider: s.provider === 'google' ? 'google' : null }
+    try {
+      const { user, roles } = await checkMail(found, address, pass)
+      setSetting('mailSecret:' + address, safeStorage.encryptString(pass).toString('base64'))
+      return { account: mail.add({ address, server: found, user }), roles: Object.keys(roles) }
+    } catch (e) { return { error: e.reason ?? 'other', detail: e.message } }
+  })
+  ipcMain.handle('mail:remove', (_, id) => { mail.remove(String(id)); db.prepare('DELETE FROM settings WHERE key = ?').run('mailSecret:' + id) })
+  ipcMain.handle('mail:sync', () => mail.syncNow())
+  ipcMain.handle('mail:openFile', async (_, rel) => {
+    const full = mail.inside(rel)
+    if (!full) throw new Error(t('mail.fileGone'))
+    const error = await shell.openPath(full)
+    if (error) throw new Error(error)
+  })
+  ipcMain.handle('mail:openLink', (_, url) => { if (typeof url === 'string' && /^(https?:|mailto:)/i.test(url)) return shell.openExternal(url) })
+  ipcMain.handle('mail:appPasswords', () => shell.openExternal('https://myaccount.google.com/apppasswords'))
+  // Google's 16 letters, read from the clipboard when the user comes back (MAIL_PLAN §9b); anything else is not read out
+  ipcMain.handle('mail:pasteAppPassword', () => { const s = clipboard.readText().trim().toLowerCase(); return /^[a-z]{4}( ?[a-z]{4}){3}$/.test(s) ? s.replace(/ /g, '') : null })
   ipcMain.handle('assistant:settings', () => ({
     hasKey: !!assistKey(), keyring: safeStorage.isEncryptionAvailable(), words: assistWords(), contactWords: setting('assistantContactWords') === '1',
     voice: setting('assistantVoice') || '', voiceName: setting('assistantVoiceName') || '', pause: assistPause(), aloud: setting('assistantAloud') !== '0',
@@ -1359,7 +1399,7 @@ function assistantCommand(what) {
 }
 app.on('will-quit', () => globalShortcut.unregisterAll())
 app.on('window-all-closed', () => app.quit())
-app.on('before-quit', () => { quitting = true; mapBuilder?.cancel(); calls?.quit(); dataCounter?.stop(); vault?.lock(); analyzer?.terminate(); stopRouters() })
+app.on('before-quit', () => { quitting = true; mail?.stopAll(); mapBuilder?.cancel(); calls?.quit(); dataCounter?.stop(); vault?.lock(); analyzer?.terminate(); stopRouters() })
 process.on('exit', stopRouters) // a Tetra stopped without quitting leaves no routing server behind
 
 /** The phone's calls, newest first (at most 1000): the lines the phone writes into Phone/calls-YYYY-MM.jsonl. */
