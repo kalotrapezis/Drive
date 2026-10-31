@@ -2387,5 +2387,13 @@
  "mail.badClient": "Dan mhuwiex ID ta' app: jidher bħal 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Idħol Microsoft",
  "mail.msClientHow": "Għal Hotmail, Outlook u Microsoft 365: l-Application (client) ID tal-app li rreġistrajt darba ma' Microsoft (il-passi huma f'MAIL_PLAN.md).",
- "mail.msSaved": "Maħżun."
+ "mail.msSaved": "Maħżun.",
+ "mail.storageTitle": "Posta fuq l-apparati",
+ "mail.copyMode": "Ikkopja",
+ "mail.moveMode": "Mexxi",
+ "mail.copyHow": "Iżomm l-imejls l-aktar reċenti sal-limitu, anke dawk li waslu fuq il-kompjuter.",
+ "mail.moveHow": "Ma jieħu xejn mill-kompjuter u jħalli l-imejls tiegħu stess hekk kif il-kompjuter ikollu.",
+ "mail.keepUpTo": "Żomm sa",
+ "mail.everything": "Kollox",
+ "mail.uses": "Il-posta tieħu {size}"
 }

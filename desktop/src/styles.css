@@ -1403,3 +1403,8 @@ button.link.risk { color: #d8663f; font-weight: 600; }
 .mail-folder.sub.shadow { opacity: .6; }
 .mail-shadow { font-size: 11px; color: var(--muted); border: 1px solid var(--island-2); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
 .mail-heart:disabled { cursor: default; }
+.mail-storage { display: flex; flex-direction: column; gap: 6px; padding: 10px 0 4px; border-top: 1px solid var(--island-2); margin-top: 8px; font-size: 14px; }
+.mail-storage strong { display: flex; align-items: center; gap: 6px; }
+.mail-storage .segmented { align-self: flex-start; }
+.mail-devices { padding: 16px 20px; margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+.mail-devices h3 { margin: 0; }

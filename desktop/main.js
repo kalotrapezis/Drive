@@ -1334,6 +1334,9 @@ app.whenReady().then(() => {
     } catch (e) { return { error: e.reason ?? 'other', detail: e.message } }
   })
   ipcMain.handle('mail:msClient', () => msClient())
+  // each device's mail storage on the Devices page (MAIL_PLAN §14); this computer only says what it uses
+  ipcMain.handle('mail:devices', () => ({ here: mail.usedHere(), devices: mail.devices() }))
+  ipcMain.handle('mail:setDevice', (_, device, changes) => mail.setDevice(String(device), changes ?? {}))
   ipcMain.handle('mail:setMsClient', (_, id) => {
     const v = String(id ?? '').trim()
     if (v && !msauth.isClientId(v)) throw new Error(t('mail.badClient'))

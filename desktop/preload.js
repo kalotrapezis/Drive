@@ -231,6 +231,8 @@ contextBridge.exposeInMainWorld('drive', {
     add: (address, server, pass) => ipcRenderer.invoke('mail:add', address, server, pass),
     addMicrosoft: address => ipcRenderer.invoke('mail:addMicrosoft', address),
     msClient: () => ipcRenderer.invoke('mail:msClient'),
+    devices: () => ipcRenderer.invoke('mail:devices'),
+    setDevice: (device, changes) => ipcRenderer.invoke('mail:setDevice', device, changes),
     setMsClient: id => ipcRenderer.invoke('mail:setMsClient', id),
     remove: id => ipcRenderer.invoke('mail:remove', id),
     sync: () => ipcRenderer.invoke('mail:sync'),

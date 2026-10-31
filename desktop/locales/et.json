@@ -2209,5 +2209,13 @@
  "mail.badClient": "See pole rakenduse ID: see näeb välja nagu 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Microsofti sisselogimine",
  "mail.msClientHow": "Hotmaili, Outlooki ja Microsoft 365 jaoks: Application (client) ID rakendusel, mille registreerisid kord Microsoftis (sammud on failis MAIL_PLAN.md).",
- "mail.msSaved": "Salvestatud."
+ "mail.msSaved": "Salvestatud.",
+ "mail.storageTitle": "Post seadmetes",
+ "mail.copyMode": "Kopeeri",
+ "mail.moveMode": "Teisalda",
+ "mail.copyHow": "Hoiab uusimaid kirju kuni piirini, ka neid, mis arvutisse jõudsid.",
+ "mail.moveHow": "Ei võta arvutist midagi ja laseb oma kirjad lahti, kui arvutil need juba on.",
+ "mail.keepUpTo": "Hoia kuni",
+ "mail.everything": "Kõik",
+ "mail.uses": "Post võtab {size}"
 }

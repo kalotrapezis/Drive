@@ -2297,5 +2297,13 @@
  "mail.badClient": "To nije ID aplikacije: izgleda kao 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Microsoftova prijava",
  "mail.msClientHow": "Za Hotmail, Outlook i Microsoft 365: Application (client) ID aplikacije koju ste jednom registrirali kod Microsofta (koraci su u MAIL_PLAN.md).",
- "mail.msSaved": "Spremljeno."
+ "mail.msSaved": "Spremljeno.",
+ "mail.storageTitle": "Pošta na uređajima",
+ "mail.copyMode": "Kopiraj",
+ "mail.moveMode": "Premjesti",
+ "mail.copyHow": "Čuva najnovije poruke do ograničenja, također i one koje su stigle na računalo.",
+ "mail.moveHow": "Ne uzima ništa s računala i otpušta vlastite poruke čim ih računalo ima.",
+ "mail.keepUpTo": "Zadrži do",
+ "mail.everything": "Sve",
+ "mail.uses": "Pošta zauzima {size}"
 }

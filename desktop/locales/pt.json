@@ -2298,5 +2298,13 @@
  "mail.badClient": "Isto não é um ID de aplicação: parece-se com 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Início de sessão Microsoft",
  "mail.msClientHow": "Para Hotmail, Outlook e Microsoft 365: o Application (client) ID da aplicação que registou uma vez na Microsoft (os passos estão em MAIL_PLAN.md).",
- "mail.msSaved": "Guardado."
+ "mail.msSaved": "Guardado.",
+ "mail.storageTitle": "Correio nos dispositivos",
+ "mail.copyMode": "Copiar",
+ "mail.moveMode": "Mover",
+ "mail.copyHow": "Guarda as mensagens mais recentes até ao limite, também as que chegaram ao computador.",
+ "mail.moveHow": "Não leva nada do computador e larga as suas próprias mensagens assim que o computador as tem.",
+ "mail.keepUpTo": "Guardar até",
+ "mail.everything": "Tudo",
+ "mail.uses": "O correio ocupa {size}"
 }

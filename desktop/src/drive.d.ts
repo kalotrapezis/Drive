@@ -20,6 +20,7 @@ export interface MailCleanPlan { archive: MailPart; server: MailPart; local: Mai
 type MailHeap = { count: number; sample: string[] }
 export interface MailGarbage { orphans: MailHeap; missing: MailHeap; lonely: MailHeap; partial: MailHeap; empty: MailHeap; leftovers: MailHeap; duplicates: MailHeap; bytes: number }
 export interface MailFilter { id: string; name: string; on: boolean; match: 'all' | 'any'; conditions: { field: string; op: string; value: string | number | boolean }[]; actions: { type: string; to?: string; folder?: string }[] }
+export interface MailDevice { device: string; name: string; mode: 'copy' | 'move'; limit: number; setAt?: number; setBy?: string; usage: { used: number; files: number; at: number } | null }
 export interface MailPrivacy { images: 'ask' | 'always'; senders: string[] }
 export interface MailEntry { id: string; account: string; folder: MailRole; uid: number; date: number; from: string; fromAddress: string; to: string[]
   subject: string; seen: boolean; flagged: boolean; size: number; attachments: number; snippet: string; saved: boolean; file?: string }
@@ -258,6 +259,8 @@ declare global {
         add(address: string, server: MailServer, pass: string): Promise<MailAddResult>
         addMicrosoft(address: string): Promise<MailAddResult>
         msClient(): Promise<string>
+        devices(): Promise<{ here: { used: number; files: number }; devices: MailDevice[] }>
+        setDevice(device: string, changes: { mode?: 'copy' | 'move'; limit?: number }): Promise<MailDevice>
         setMsClient(id: string): Promise<void>
         remove(id: string): Promise<void>
         sync(): Promise<void>

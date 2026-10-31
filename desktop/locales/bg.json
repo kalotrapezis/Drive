@@ -2209,5 +2209,13 @@
  "mail.badClient": "Това не е идентификатор на приложение: изглежда като 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Вход с Microsoft",
  "mail.msClientHow": "За Hotmail, Outlook и Microsoft 365: Application (client) ID на приложението, което веднъж сте регистрирали в Microsoft (стъпките са в MAIL_PLAN.md).",
- "mail.msSaved": "Запазено."
+ "mail.msSaved": "Запазено.",
+ "mail.storageTitle": "Поща на устройствата",
+ "mail.copyMode": "Копиране",
+ "mail.moveMode": "Преместване",
+ "mail.copyHow": "Пази най-новите имейли до лимита, включително и тези, дошли на компютъра.",
+ "mail.moveHow": "Не взима нищо от компютъра и пуска собствените си имейли, щом компютърът ги има.",
+ "mail.keepUpTo": "Пази до",
+ "mail.everything": "Всичко",
+ "mail.uses": "Пощата заема {size}"
 }

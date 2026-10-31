@@ -2298,5 +2298,13 @@
  "mail.badClient": "Acesta nu este un ID de aplicație: arată ca 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Conectare Microsoft",
  "mail.msClientHow": "Pentru Hotmail, Outlook și Microsoft 365: Application (client) ID al aplicației pe care ai înregistrat-o o dată la Microsoft (pașii sunt în MAIL_PLAN.md).",
- "mail.msSaved": "Salvat."
+ "mail.msSaved": "Salvat.",
+ "mail.storageTitle": "Poșta pe dispozitive",
+ "mail.copyMode": "Copiază",
+ "mail.moveMode": "Mută",
+ "mail.copyHow": "Păstrează cele mai noi mesaje până la limită, inclusiv pe cele care au ajuns pe calculator.",
+ "mail.moveHow": "Nu ia nimic de pe calculator și își lasă propriile mesaje de îndată ce le are calculatorul.",
+ "mail.keepUpTo": "Păstrează până la",
+ "mail.everything": "Tot",
+ "mail.uses": "Poșta ocupă {size}"
 }

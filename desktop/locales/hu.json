@@ -2209,5 +2209,13 @@
  "mail.badClient": "Ez nem alkalmazásazonosító: így néz ki: 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Microsoft-bejelentkezés",
  "mail.msClientHow": "Hotmailhez, Outlookhoz és Microsoft 365-höz: annak az alkalmazásnak az Application (client) ID-ja, amelyet egyszer regisztráltál a Microsoftnál (a lépések a MAIL_PLAN.md fájlban vannak).",
- "mail.msSaved": "Mentve."
+ "mail.msSaved": "Mentve.",
+ "mail.storageTitle": "Levelek az eszközökön",
+ "mail.copyMode": "Másolás",
+ "mail.moveMode": "Áthelyezés",
+ "mail.copyHow": "Megtartja a legújabb leveleket a korlátig, azokat is, amelyek a számítógépre érkeztek.",
+ "mail.moveHow": "Nem vesz át semmit a számítógéptől, és elengedi a saját leveleit, amint a számítógép megkapta őket.",
+ "mail.keepUpTo": "Megtartás legfeljebb",
+ "mail.everything": "Minden",
+ "mail.uses": "A levelek {size} helyet foglalnak"
 }

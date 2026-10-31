@@ -2209,5 +2209,13 @@
  "mail.badClient": "Tuo ei ole sovellustunnus: se näyttää tältä 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Microsoft-kirjautuminen",
  "mail.msClientHow": "Hotmailia, Outlookia ja Microsoft 365:tä varten: Application (client) ID sovellukselle, jonka rekisteröit kerran Microsoftille (vaiheet ovat tiedostossa MAIL_PLAN.md).",
- "mail.msSaved": "Tallennettu."
+ "mail.msSaved": "Tallennettu.",
+ "mail.storageTitle": "Posti laitteilla",
+ "mail.copyMode": "Kopioi",
+ "mail.moveMode": "Siirrä",
+ "mail.copyHow": "Säilyttää uusimmat viestit rajaan asti, myös ne, jotka tulivat tietokoneelle.",
+ "mail.moveHow": "Ei ota mitään tietokoneelta ja päästää omat viestinsä irti heti, kun tietokoneella ne ovat.",
+ "mail.keepUpTo": "Säilytä enintään",
+ "mail.everything": "Kaikki",
+ "mail.uses": "Posti vie {size}"
 }

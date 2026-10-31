@@ -2298,5 +2298,13 @@
  "mail.badClient": "Tas nav lietotnes ID: tas izskatās kā 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Pieteikšanās Microsoft",
  "mail.msClientHow": "Hotmail, Outlook un Microsoft 365: tās lietotnes Application (client) ID, ko reizi reģistrējāt Microsoft (soļi ir failā MAIL_PLAN.md).",
- "mail.msSaved": "Saglabāts."
+ "mail.msSaved": "Saglabāts.",
+ "mail.storageTitle": "Pasts ierīcēs",
+ "mail.copyMode": "Kopēt",
+ "mail.moveMode": "Pārvietot",
+ "mail.copyHow": "Glabā jaunākās vēstules līdz ierobežojumam, arī tās, kas ienākušas datorā.",
+ "mail.moveHow": "Neņem neko no datora un atlaiž savas vēstules, tiklīdz dators tās ir saņēmis.",
+ "mail.keepUpTo": "Glabāt līdz",
+ "mail.everything": "Visu",
+ "mail.uses": "Pasts aizņem {size}"
 }

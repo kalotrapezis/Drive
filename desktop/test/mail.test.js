@@ -325,3 +325,20 @@ test('mail: what a phone fetches itself is read here — its own accounts as sha
     mail.index.flush()
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
+
+test('mail: each device\'s mail storage is read and set here in the phone\'s own format; this computer says what it uses', () => {
+  const dir = tmp()
+  try {
+    const mail = new Mail(dir, { secret: () => null })
+    fs.mkdirSync(path.join(dir, 'devices'))
+    fs.writeFileSync(path.join(dir, 'devices', 'Xiaomi_15.usage.json'), JSON.stringify({ used: 812e6, files: 4000, at: 1 }))
+    fs.writeFileSync(path.join(dir, 'index.Tab_7_Pro.jsonl'), '')
+    assert.deepEqual(mail.devices().map(d => [d.device, d.mode, d.limit, d.usage?.used ?? null]), [['Tab_7_Pro', 'copy', 1e9, null], ['Xiaomi_15', 'copy', 1e9, 812e6]], 'no file: copy, 1 GB')
+    const v = mail.setDevice('Xiaomi_15', { mode: 'move', limit: 5e9 })
+    assert.deepEqual([v.mode, v.limit, v.setBy], ['move', 5e9, 'desktop']); assert.ok(v.setAt > 0)
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'devices', 'Xiaomi_15.json'), 'utf8')).mode, 'move')
+    assert.equal(mail.setDevice('Xiaomi_15', { limit: 123 }).limit, 5e9, 'only the offered limits')
+    assert.throws(() => mail.setDevice('../x', {}))
+    assert.ok(mail.usedHere().used > 0)
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})

@@ -248,6 +248,39 @@ class Mail extends EventEmitter {
     return [...out.values()]
   }
   allAccounts() { return [...this.accounts(), ...this.shadows()] }
+
+  /**
+   * Mail on each device (MAIL_PLAN §14): devices/<device>.json — { mode: copy | move, limit (bytes, -1 everything) },
+   * written whole by whichever side the user changed it on, the later setAt winning — and devices/<device>.usage.json,
+   * written by the device itself. No file is copy, 1 GB. A device is known by any of its files here.
+   */
+  devices() {
+    const dir = path.join(this.root, 'devices'), ids = new Set()
+    let names = []
+    try { names = fs.readdirSync(dir) } catch {}
+    for (const n of names) { const m = /^([A-Za-z0-9_-]{1,64})(\.usage)?\.json$/.exec(n); if (m) ids.add(m[1]) }
+    for (const id of this.foreignDevices()) ids.add(id)
+    const read = f => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) } catch { return null } }
+    return [...ids].sort().map(device => ({ mode: 'copy', limit: 1e9, name: device, ...read(`${device}.json`), device, usage: read(`${device}.usage.json`) }))
+  }
+  foreignDevices() { try { return fs.readdirSync(this.root).map(n => /^(?:index|accounts)\.([A-Za-z0-9_-]{1,64})\.jsonl?$/.exec(n)?.[1]).filter(Boolean) } catch { return [] } }
+  setDevice(device, { mode, limit } = {}) {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(device))) throw new Error(`Not a device: ${device}`)
+    const was = this.devices().find(d => d.device === device) ?? { mode: 'copy', limit: 1e9, name: device }
+    const value = { device, name: was.name ?? device, mode: ['copy', 'move'].includes(mode) ? mode : was.mode,
+      limit: [5e8, 1e9, 2e9, 5e9, 1e10, -1].includes(limit) ? limit : was.limit, setAt: Date.now(), setBy: 'desktop' }
+    const file = path.join(this.root, 'devices', `${device}.json`)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(part(file), JSON.stringify(value, null, 2)); fs.renameSync(part(file), file)
+    return value
+  }
+  /** How much the archive takes on this computer (the full copy: no limit, no move here). */
+  usedHere() {
+    let used = 0, files = 0
+    const walk = dir => { let es = []; try { es = fs.readdirSync(dir, { withFileTypes: true }) } catch {} for (const e of es) { const f = path.join(dir, e.name); if (e.isDirectory()) walk(f); else if (e.isFile()) { files++; try { used += fs.statSync(f).size } catch {} } } }
+    walk(this.root)
+    return { used, files }
+  }
   /** A mail as this computer knows it: its own line (with a phone's file when it has none here), else a phone's line. */
   entry(id) {
     const e = this.index.get(id)

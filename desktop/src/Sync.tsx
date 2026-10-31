@@ -7,6 +7,8 @@ import { Icon } from './Icon'
 import { Confirm, Modal } from './Dialogs'
 import { lang, t, tr } from './i18n'
 import { ClientCard, PairingKey } from './Role'
+import { MailStorage } from './Mail'
+import type { MailDevice } from './drive'
 
 const LOCALE = lang() === 'en' ? 'en-GB' : lang()
 const when = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -735,6 +737,12 @@ function ServerPage({ setDialog, client }: { setDialog: (d: ReactNode) => void; 
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const load = () => window.drive.sync.status().then(setStatus)
   useEffect(() => { load(); const off = window.drive.sync.onReceived(load); const t = setInterval(load, 3000); return () => { off(); clearInterval(t) } }, [])
+  // Mail on each device (MAIL_PLAN §14): matched to a card by the device's name; the rest listed under the cards
+  const [mail, setMail] = useState<{ here: { used: number }; devices: MailDevice[] } | null>(null)
+  const loadMail = () => window.drive.mail.devices().then(setMail, () => {})
+  useEffect(() => { loadMail(); const t = setInterval(loadMail, 30_000); return () => clearInterval(t) }, [])
+  const key = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const mailOf = (d: SyncDevice) => mail?.devices.find(m => key(m.name) === key(d.name) || key(m.device) === key(d.name))
   const close = () => { setDialog(null); load() }
   const add = () => setDialog(client ? <AddDrive onClose={() => setDialog(null)} onDone={close} /> : <AddDevice onClose={() => setDialog(null)} onDone={close} setDialog={setDialog} />)
   const forget = (d: SyncDevice) => setDialog(<Confirm title={t('sync.forgetTitle', { name: d.name })} action={t('sync.forgetDevice')} danger onClose={close}
@@ -757,6 +765,7 @@ function ServerPage({ setDialog, client }: { setDialog: (d: ReactNode) => void; 
               {status?.counts && <span className="device-tally inline">
                 <span title={t('sync.photosOnHere', { here })}><Icon name="photos" size={16} />{status.counts.photos.toLocaleString()}</span>
                 <span title={t('sync.filesOnHere', { here })}><Icon name="folder" size={16} />{status.counts.files.toLocaleString()}</span>
+                {!!mail?.here.used && <span title={t('mail.uses', { size: formatBytes(mail.here.used) })}><Icon name="mail" size={16} />{formatBytes(mail.here.used)}</span>}
               </span>}
             </button>
             <button className="round small" title={t('sync.hubButtonTitle')}
@@ -797,6 +806,7 @@ function ServerPage({ setDialog, client }: { setDialog: (d: ReactNode) => void; 
                 {d.volume_uuid && d.rules ? <DriveCard device={d} disk={status?.disk ?? null} onChange={load} setDialog={setDialog} />
                   : d.connections?.map(c => <Rules key={c.content} device={d} connection={c} here={here} setDialog={setDialog}
                   onChange={async () => { if (!d.set_up_at) await window.drive.sync.completeSetup(d.id); load() }} />)}
+                {(m => m && <MailStorage dev={m} onChange={loadMail} />)(mailOf(d))}
                 <footer className="device-foot">
                   <small>{t('sync.paired', { when: when.format(d.paired_at) })}</small>
                   <button className="text-button" onClick={() => forget(d)}>{t('sync.forget')}</button>
@@ -811,6 +821,10 @@ function ServerPage({ setDialog, client }: { setDialog: (d: ReactNode) => void; 
           </button>
         </div>
       )}
+      {(rest => rest.length > 0 && <div className="island mail-devices">
+        <h3>{t('mail.storageTitle')}</h3>
+        {rest.map(m => <div key={m.device}><strong>{m.name}</strong><MailStorage dev={m} onChange={loadMail} /></div>)}
+      </div>)((mail?.devices ?? []).filter(m => !devices.some(d => mailOf(d) === m)))}
       {!client && status && !status.error && <p className="hint">{t('sync.listening', { addresses: status.addresses.join(', ') || t('sync.thisComputer'), port: status.port })}</p>}
     </div>
   )

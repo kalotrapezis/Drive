@@ -2298,5 +2298,13 @@
  "mail.badClient": "Ce n'est pas un identifiant d'application : il ressemble à 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Connexion Microsoft",
  "mail.msClientHow": "Pour Hotmail, Outlook et Microsoft 365 : l'Application (client) ID de l'application que vous avez enregistrée une fois chez Microsoft (les étapes sont dans MAIL_PLAN.md).",
- "mail.msSaved": "Enregistré."
+ "mail.msSaved": "Enregistré.",
+ "mail.storageTitle": "Courrier sur les appareils",
+ "mail.copyMode": "Copier",
+ "mail.moveMode": "Déplacer",
+ "mail.copyHow": "Garde les messages les plus récents jusqu'à la limite, y compris ceux arrivés sur l'ordinateur.",
+ "mail.moveHow": "Ne prend rien à l'ordinateur et libère ses propres messages dès que l'ordinateur les a.",
+ "mail.keepUpTo": "Garder jusqu'à",
+ "mail.everything": "Tout",
+ "mail.uses": "Le courrier prend {size}"
 }

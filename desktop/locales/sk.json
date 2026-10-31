@@ -2387,5 +2387,13 @@
  "mail.badClient": "Toto nie je ID aplikácie: vyzerá ako 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Prihlásenie do Microsoftu",
  "mail.msClientHow": "Pre Hotmail, Outlook a Microsoft 365: Application (client) ID aplikácie, ktorú ste raz zaregistrovali v Microsofte (postup je v MAIL_PLAN.md).",
- "mail.msSaved": "Uložené."
+ "mail.msSaved": "Uložené.",
+ "mail.storageTitle": "Pošta v zariadeniach",
+ "mail.copyMode": "Kopírovať",
+ "mail.moveMode": "Presunúť",
+ "mail.copyHow": "Uchováva najnovšie e-maily až do limitu, aj tie, ktoré prišli do počítača.",
+ "mail.moveHow": "Nič z počítača neberie a svoje vlastné e-maily uvoľní, len čo ich má počítač.",
+ "mail.keepUpTo": "Uchovávať až",
+ "mail.everything": "Všetko",
+ "mail.uses": "Pošta zaberá {size}"
 }

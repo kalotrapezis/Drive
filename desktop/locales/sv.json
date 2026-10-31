@@ -2209,5 +2209,13 @@
  "mail.badClient": "Det är inte ett app-id: det ser ut som 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Microsoft-inloggning",
  "mail.msClientHow": "För Hotmail, Outlook och Microsoft 365: Application (client) ID för appen som du en gång har registrerat hos Microsoft (stegen finns i MAIL_PLAN.md).",
- "mail.msSaved": "Sparat."
+ "mail.msSaved": "Sparat.",
+ "mail.storageTitle": "Mejl på enheterna",
+ "mail.copyMode": "Kopiera",
+ "mail.moveMode": "Flytta",
+ "mail.copyHow": "Behåller de nyaste mejlen upp till gränsen, även de som kommit till datorn.",
+ "mail.moveHow": "Tar inget från datorn och släpper sina egna mejl så fort datorn har dem.",
+ "mail.keepUpTo": "Behåll upp till",
+ "mail.everything": "Allt",
+ "mail.uses": "Mejl tar {size}"
 }

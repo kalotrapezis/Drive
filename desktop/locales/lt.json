@@ -2387,5 +2387,13 @@
  "mail.badClient": "Tai nėra programos ID: jis atrodo kaip 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Prisijungimas prie Microsoft",
  "mail.msClientHow": "Hotmail, Outlook ir Microsoft 365: programos, kurią kartą užregistravote Microsoft, Application (client) ID (veiksmai aprašyti MAIL_PLAN.md).",
- "mail.msSaved": "Išsaugota."
+ "mail.msSaved": "Išsaugota.",
+ "mail.storageTitle": "Paštas įrenginiuose",
+ "mail.copyMode": "Kopijuoti",
+ "mail.moveMode": "Perkelti",
+ "mail.copyHow": "Laiko naujausius laiškus iki ribos, taip pat ir tuos, kurie atėjo į kompiuterį.",
+ "mail.moveHow": "Nieko neima iš kompiuterio ir paleidžia savo laiškus, kai tik kompiuteris juos turi.",
+ "mail.keepUpTo": "Laikyti iki",
+ "mail.everything": "Viską",
+ "mail.uses": "Paštas užima {size}"
 }

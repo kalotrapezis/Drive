@@ -2209,5 +2209,13 @@
  "mail.badClient": "That is not an app id: it looks like 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Microsoft sign-in",
  "mail.msClientHow": "For Hotmail, Outlook and Microsoft 365: the Application (client) ID of the app you registered with Microsoft once (the steps are in MAIL_PLAN.md).",
- "mail.msSaved": "Saved."
+ "mail.msSaved": "Saved.",
+ "mail.storageTitle": "Mail on the devices",
+ "mail.copyMode": "Copy",
+ "mail.moveMode": "Move",
+ "mail.copyHow": "Keeps the newest mail, up to the limit, also what came to the computer.",
+ "mail.moveHow": "Takes nothing from the computer, and lets go of its own mail once the computer has it.",
+ "mail.keepUpTo": "Keep up to",
+ "mail.everything": "Everything",
+ "mail.uses": "Mail takes {size}"
 }

@@ -2476,5 +2476,13 @@
  "mail.badClient": "Ní ID feidhmchláir é sin: tá cuma air mar 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Síniú isteach Microsoft",
  "mail.msClientHow": "Do Hotmail, Outlook agus Microsoft 365: Application (client) ID an fheidhmchláir a chlárú tú uair amháin le Microsoft (tá na céimeanna i MAIL_PLAN.md).",
- "mail.msSaved": "Sábháilte."
+ "mail.msSaved": "Sábháilte.",
+ "mail.storageTitle": "Ríomhphost ar na feistí",
+ "mail.copyMode": "Cóipeáil",
+ "mail.moveMode": "Bog",
+ "mail.copyHow": "Coinníonn sé na ríomhphoist is nuaí suas go dtí an teorainn, agus iad siúd a tháinig chuig an ríomhaire freisin.",
+ "mail.moveHow": "Ní thógann sé aon rud ón ríomhaire agus scaoileann sé a phost féin chomh luath agus atá sé ag an ríomhaire.",
+ "mail.keepUpTo": "Coinnigh suas le",
+ "mail.everything": "Gach rud",
+ "mail.uses": "Tógann an ríomhphost {size}"
 }

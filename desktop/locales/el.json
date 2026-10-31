@@ -2209,5 +2209,13 @@
  "mail.badClient": "Αυτό δεν είναι κωδικός εφαρμογής: μοιάζει με 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Σύνδεση Microsoft",
  "mail.msClientHow": "Για Hotmail, Outlook και Microsoft 365: το Application (client) ID της εφαρμογής που καταχώρισες μία φορά στη Microsoft (τα βήματα είναι στο MAIL_PLAN.md).",
- "mail.msSaved": "Αποθηκεύτηκε."
+ "mail.msSaved": "Αποθηκεύτηκε.",
+ "mail.storageTitle": "Αλληλογραφία στις συσκευές",
+ "mail.copyMode": "Αντιγραφή",
+ "mail.moveMode": "Μετακίνηση",
+ "mail.copyHow": "Κρατά τα νεότερα μηνύματα ως το όριο, και όσα ήρθαν στον υπολογιστή.",
+ "mail.moveHow": "Δεν παίρνει τίποτα από τον υπολογιστή, και αφήνει τα δικά της μόλις τα έχει ο υπολογιστής.",
+ "mail.keepUpTo": "Κράτα έως",
+ "mail.everything": "Όλα",
+ "mail.uses": "Η αλληλογραφία πιάνει {size}"
 }

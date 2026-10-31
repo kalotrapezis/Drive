@@ -2209,5 +2209,13 @@
  "mail.badClient": "Dat is geen app-id: hij ziet eruit als 1a2b3c4d-1234-5678-9abc-def012345678.",
  "mail.msTitle": "Microsoft-login",
  "mail.msClientHow": "Voor Hotmail, Outlook en Microsoft 365: de Application (client) ID van de app die je eenmalig bij Microsoft hebt geregistreerd (de stappen staan in MAIL_PLAN.md).",
- "mail.msSaved": "Opgeslagen."
+ "mail.msSaved": "Opgeslagen.",
+ "mail.storageTitle": "Mail op de apparaten",
+ "mail.copyMode": "Kopiëren",
+ "mail.moveMode": "Verplaatsen",
+ "mail.copyHow": "Bewaart de nieuwste mail tot de limiet, ook wat naar de computer is gekomen.",
+ "mail.moveHow": "Neemt niets van de computer en laat zijn eigen mail los zodra de computer die heeft.",
+ "mail.keepUpTo": "Bewaar tot",
+ "mail.everything": "Alles",
+ "mail.uses": "Mail neemt {size} in beslag"
 }
